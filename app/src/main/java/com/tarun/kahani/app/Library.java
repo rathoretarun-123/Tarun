@@ -41,15 +41,70 @@ public final class Library {
 
     private final Context ctx;
     private final File dir, index;
-    public final List<Item> items = new ArrayList<Item>();
+    public final List<Item> items = new java.util.concurrent.CopyOnWriteArrayList<Item>();
 
-    public Library(Context c) {
+    private static Library shared;
+
+    /**
+     * The one library of the app. Screens and the background film maker share it, so nothing added in one place
+     * can ever be overwritten by another (everything is saved on the phone at once and stays after closing).
+     */
+    public static synchronized Library get(Context c) {
+        if (shared == null) shared = new Library(c);
+        return shared;
+    }
+
+    private Library(Context c) {
         ctx = c.getApplicationContext();
         dir = new File(ctx.getFilesDir(), "library");
         dir.mkdirs();
         index = new File(dir, "index.json");
         load();
+        recoverOrphans();
         addBuiltIns();
+    }
+
+    /** Files in the library folders that the list does not know (e.g. after a crash) are taken back in. */
+    private void recoverOrphans() {
+        java.util.Set<String> known = new java.util.HashSet<String>();
+        for (Item it : items) known.add(new File(it.path).getAbsolutePath());
+        boolean changed = false;
+        for (String type : new String[]{PIC, VOICE, SOUND}) {
+            File[] fs = new File(dir, type).listFiles();
+            if (fs == null) continue;
+            for (File f : fs) {
+                if (f.getName().endsWith(".json") || known.contains(f.getAbsolutePath()) || f.length() == 0) continue;
+                Item it = new Item();
+                it.type = type;
+                it.path = f.getAbsolutePath();
+                it.id = f.getName().replaceAll("\\.[A-Za-z0-9]+$", "");
+                readSidecar(it);
+                if (it.name.length() == 0) it.name = "recovered " + it.id.substring(Math.max(0, it.id.length() - 6));
+                items.add(it);
+                changed = true;
+            }
+        }
+        if (changed) save();
+    }
+
+    static File sidecar(Item it) { return new File(it.path + ".json"); }
+
+    private void readSidecar(Item it) {
+        try {
+            File sc = sidecar(it);
+            if (!sc.exists()) return;
+            Object x = Json.parseLoose(new String(AudioIO.readFile(sc), "UTF-8"));
+            it.kind = Json.str(x, "kind", ""); it.name = Json.str(x, "name", ""); it.tags = Json.str(x, "tags", "");
+            it.source = Json.str(x, "source", ""); it.meta = Json.str(x, "meta", "");
+        } catch (Exception ignored) {
+        }
+    }
+
+    static String describe(Item it) {
+        Map<String, Object> m = new LinkedHashMap<String, Object>();
+        m.put("id", it.id); m.put("type", it.type); m.put("kind", it.kind); m.put("name", it.name);
+        m.put("tags", it.tags); m.put("source", it.source); m.put("meta", it.meta); m.put("file", new File(it.path).getName());
+        return Json.write(m);
     }
 
     public File dir() { return dir; }
@@ -84,9 +139,23 @@ public final class Library {
             File tmp = new File(dir, "index.tmp");
             FileOutputStream o = new FileOutputStream(tmp);
             o.write(Json.write(arr).getBytes("UTF-8"));
+            o.getFD().sync();
             o.close();
-            tmp.renameTo(index);
+            if (!tmp.renameTo(index)) { index.delete(); tmp.renameTo(index); }
         } catch (IOException ignored) {
+        }
+        // a small description next to every file, so the library can always be rebuilt from the files alone
+        for (Item it : items) {
+            if (it.builtIn) continue;
+            try {
+                String d = describe(it);
+                File sc = sidecar(it);
+                if (sc.exists() && new String(AudioIO.readFile(sc), "UTF-8").equals(d)) continue;
+                FileOutputStream o = new FileOutputStream(sc);
+                o.write(d.getBytes("UTF-8"));
+                o.close();
+            } catch (IOException ignored) {
+            }
         }
     }
 
@@ -133,6 +202,7 @@ public final class Library {
         if (type.equals(PIC)) analysePicture(it);
         items.add(0, it);
         save();
+        Backup.copy(ctx, it);
         return it;
     }
 
@@ -205,6 +275,22 @@ public final class Library {
         }
     }
 
+    /** Puts a backed-up item back with its original id (used by restore). */
+    synchronized Item restoreItem(String type, String id, byte[] data, String ext) throws IOException {
+        Item it = new Item();
+        it.id = id;
+        it.type = type;
+        File sub = new File(dir, type);
+        sub.mkdirs();
+        File dst = new File(sub, id + ext);
+        FileOutputStream o = new FileOutputStream(dst);
+        o.write(data);
+        o.close();
+        it.path = dst.getAbsolutePath();
+        items.add(0, it);
+        return it;
+    }
+
     public synchronized Item addBytes(String type, String kind, String name, String tags, byte[] data, String ext, String source) throws IOException {
         File tmp = new File(dir, "incoming" + ext);
         FileOutputStream o = new FileOutputStream(tmp);
@@ -217,6 +303,7 @@ public final class Library {
         if (it.builtIn) return;
         items.remove(it);
         new File(it.path).delete();
+        sidecar(it).delete();
         save();
     }
 
@@ -250,7 +337,7 @@ public final class Library {
         return s;
     }
 
-    public Item byId(String id) {
+    public synchronized Item byId(String id) {
         if (id == null) return null;
         for (Item it : items) if (it.id.equals(id)) return it;
         return null;

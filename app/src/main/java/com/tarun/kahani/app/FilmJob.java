@@ -149,7 +149,7 @@ public final class FilmJob implements Runnable {
             if (!ttsOk && !aiVoices && !natural) warning = "No Text-to-Speech engine found on this phone — check Settings > Text-to-speech.";
             else if (ttsOk && !voices.languageOk && !aiVoices && !natural) warning = (story.hindi ? "Hindi" : "English") + " voice is not downloaded on this phone — download it in Settings > Text-to-speech.";
             Map<Story.CharacterDef, Voices.Cast> cast = voices.castAll(story, project);
-            Library lib = new Library(ctx);
+            Library lib = Library.get(ctx);
             int ci = 0;
             for (Story.CharacterDef c : story.characters) {
                 Voices.Cast k = cast.get(c);
@@ -338,7 +338,7 @@ public final class FilmJob implements Runnable {
         }
         java.util.List<Runnable> jobs = new java.util.ArrayList<Runnable>();
         final Cloud cloud = Prefs.cloud(ctx);
-        final Library lib = new Library(ctx);
+        final Library lib = Library.get(ctx);
         final int seed = Math.abs(story.title.hashCode() % 100000);
         final int[] fails = {0};
         final int[] made = {0};

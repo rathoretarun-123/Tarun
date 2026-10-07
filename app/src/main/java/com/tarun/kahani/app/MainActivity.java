@@ -81,7 +81,7 @@ import java.util.Set;
 public class MainActivity extends Activity {
 
     static final int REQ_LOGIN = 11, REQ_SCRIPT = 12, REQ_IMAGE = 13, REQ_CAMERA = 14, REQ_AUDIO = 15, REQ_BULK = 16,
-            REQ_SAVE_TEXT = 17, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22;
+            REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22;
     static final int S_HOME = 0, S_STORY = 1, S_STUDIO = 2, S_FACE = 3, S_PROGRESS = 4, S_PLAYER = 5, S_LIBRARY = 6,
             S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9;
 
@@ -114,7 +114,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Ui.BG);
         setContentView(root);
         getWindow().setStatusBarColor(Ui.PRIMARY_DARK);
-        library = new Library(this);
+        library = Library.get(this);
         if (b != null) {
             String pd = b.getString("project");
             if (pd != null && new File(pd).isDirectory()) project = new Project(new File(pd));
@@ -307,6 +307,7 @@ public class MainActivity extends Activity {
         p.add(Manifest.permission.RECORD_AUDIO);
         p.add(Manifest.permission.CAMERA);
         if (Build.VERSION.SDK_INT >= 33) p.add("android.permission.POST_NOTIFICATIONS");
+        if (Build.VERSION.SDK_INT < 29) p.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);   // backup copy in Downloads
         // pictures and sounds are picked with the system file chooser, which needs no storage permission
         List<String> missing = new ArrayList<String>();
         for (String s : p) if (checkSelfPermission(s) != PackageManager.PERMISSION_GRANTED) missing.add(s);
@@ -1773,6 +1774,21 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        if (code == REQ_RESTORE) {
+            if (result == RESULT_OK && data != null && data.getData() != null) {
+                final Uri tree = data.getData();
+                background("Restoring your library…", new Work() {
+                    public Object run() throws Exception { return Backup.restore(MainActivity.this, tree, library); }
+                }, new Done() {
+                    public void done(Object r, Exception e) {
+                        if (e != null) { toast("Could not restore: " + e.getMessage()); return; }
+                        toast("✅ " + r + " items restored to your library");
+                        showLibrary();
+                    }
+                });
+            }
+            return;
+        }
         if (code == REQ_SAVE_TEXT) {
             if (result == RESULT_OK && data != null && data.getData() != null && pendingText == null) {
                 toast("Please tap \"Download\" again");
@@ -2501,6 +2517,20 @@ public class MainActivity extends Activity {
             add.addView(r);
         }
         body.addView(add);
+        LinearLayout safe = Ui.card(this);
+        safe.addView(Ui.text(this, "🔒 Everything you add stays saved on this phone, even when the app is closed. A backup copy is also kept in Downloads/KahaniFilm/Library — it stays even if the app is removed.", 13, Ui.SUB, false));
+        safe.addView(Ui.small(this, "♻ Restore from backup", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                    startActivityForResult(i, REQ_RESTORE);
+                    toast("Choose the folder Downloads › KahaniFilm › Library");
+                } catch (Exception e) {
+                    toast("No folder picker found on this phone");
+                }
+            }
+        }));
+        body.addView(safe);
         List<Library.Item> items = library.find(libTab, null, null);
         LinearLayout row = null;
         int i = 0;

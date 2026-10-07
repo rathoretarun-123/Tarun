@@ -164,6 +164,29 @@ public final class AndroidGfx implements Gfx {
     public int imageWidth(Object im) { return ((Bitmap) im).getWidth(); }
     public int imageHeight(Object im) { return ((Bitmap) im).getHeight(); }
 
+    public void layerLow(String key, float w, float h, float scale, Painter painter) {
+        Bitmap l = layers.get(key);
+        if (l == null || l.isRecycled()) {
+            int lw = Math.max(8, Math.round(bmp.getWidth() * scale)), lh = Math.max(8, Math.round(bmp.getHeight() * scale));
+            l = Bitmap.createBitmap(lw, lh, Bitmap.Config.ARGB_8888);
+            Canvas saved = c;
+            float sa = alpha;
+            Shader ss = shader;
+            int sc = color;
+            int depth = alphaStack.size();
+            c = new Canvas(l);
+            alpha = 1f;
+            c.scale(lw / w, lh / h);
+            painter.paint(this);
+            while (alphaStack.size() > depth) restore();
+            c = saved; alpha = sa; shader = ss; color = sc;
+            layers.put(key, l);
+        }
+        img.setAlpha((int) (255 * alpha));
+        rf.set(0, 0, w, h);
+        c.drawBitmap(l, null, rf, img);
+    }
+
     public void layer(String key, float w, float h, Painter painter) {
         Bitmap l = layers.get(key);
         if (l == null || l.isRecycled()) {

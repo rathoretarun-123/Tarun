@@ -13,6 +13,7 @@ public final class Story {
     public final List<PlaceDef> places = new ArrayList<PlaceDef>();
     public final List<Scene> scenes = new ArrayList<Scene>();
     public final List<String> warnings = new ArrayList<String>();
+    public boolean hasNarrator;
 
     public static final class CharacterDef {
         public String id;            // stable key
@@ -46,6 +47,7 @@ public final class Story {
         public CharacterDef speaker;
         public String manner = "";       // text inside parentheses after speaker
         public String text = "";
+        public boolean narrator;         // voice-over line (no character on screen)
         public static Beat direction(String t) { Beat b = new Beat(); b.type = DIRECTION; b.text = t; return b; }
     }
 

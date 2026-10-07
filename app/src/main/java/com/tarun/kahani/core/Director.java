@@ -16,8 +16,10 @@ public final class Director {
 
     public static final class Options {
         public boolean narrator = false;     // speak stage directions aloud
-        public boolean narrateTitle = true;  // speak the title on the title page
-        public boolean subtitles = true;
+        public boolean narrateTitle = false; // speak the title on the title page
+        public boolean subtitles = false;    // can be switched on later from the command box
+        public boolean sceneCards = false;   // "दृश्य N" cards between scenes (off: scenes flow like a film)
+        public float pace = 1f;              // >1 = tighter pauses
     }
 
     private final Story story;
@@ -143,7 +145,10 @@ public final class Director {
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
             Story.Scene sc = story.scenes.get(si);
-            // scene card "दृश्य N"
+            if (!opt.sceneCards) {
+                // no title cards: a soft "whoosh" transition into the next scene
+                if (si > 0) film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH_CARD, t - 0.3f, 1.0f, 0.35f));
+            } else {
             Film.Seg card = new Film.Seg();
             card.type = Film.S_CARD;
             card.scene = si;
@@ -159,6 +164,7 @@ public final class Director {
             film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH_CARD, t + 0.2f, 1.2f, 0.7f));
             film.sfx.add(new Film.Sfx(Film.SFX_CHIME, t + 0.5f, 1.6f, 0.5f));
             t = card.t1;
+            }
 
             // split into parts at "दृश्य बदलता है"
             List<int[]> parts = new ArrayList<int[]>();
@@ -331,6 +337,7 @@ public final class Director {
         }
         seg.t1 = tc + 0.8f;
         film.music.add(new Film.Music(mood, seg.t0, seg.t1));
+        film.ambience.add(new Film.Amb(seg.t0, seg.t1, where + " " + Sets.name(seg.set) + " " + ambWords(seg)));
         film.notes.set(noteIdx, sc.heading + (nParts > 1 ? " (भाग " + (pi + 1) + ")" : "") + ": " + Sets.name(seg.set)
                 + (seg.backdrop != null ? " [आपका चित्र]" : "") + ", पात्र: " + names(lineup));
         // remember persistent flags
@@ -1166,6 +1173,20 @@ public final class Director {
     }
 
     // ------------------------------------------------------------------ sound design
+
+    static String ambWords(Film.Seg s) {
+        String w;
+        switch (s.set) {
+            case Sets.CAVE_IN: case Sets.CAVE_MOUTH: w = "cave गुफा"; break;
+            case Sets.FOREST: w = s.tod == Sets.NIGHT || s.tod == Sets.EVENING ? "jungle night जंगल रात" : "forest जंगल birds"; break;
+            case Sets.CELEBRATION: w = "festival crowd mela उत्सव"; break;
+            case Sets.HALL: w = "palace hall महल"; break;
+            case Sets.VILLAGE: w = "village गाँव"; break;
+            case Sets.GATE: case Sets.COURTYARD: w = "palace महल " + (s.tod == Sets.NIGHT ? "night" : "birds"); break;
+            default: w = s.tod == Sets.NIGHT ? "night रात crickets" : "garden बगीचा birds morning";
+        }
+        return w;
+    }
 
     private void ambience(String where, float t) {
         if (Txt.has(where, "झरन", "कल-कल")) film.sfx.add(new Film.Sfx(Film.SFX_STREAM, t, 8, 0.25f));

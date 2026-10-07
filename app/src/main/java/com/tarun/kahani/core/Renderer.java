@@ -11,6 +11,8 @@ public final class Renderer {
 
     private final Film film;
     private final Art art;
+    /** Screen in stage units: always 720 high, width follows the output aspect (1280 for 16:9, 405 for 9:16). */
+    private float vw = W, vh = H;
     private final Pose pose = new Pose();
 
     public Renderer(Film film, Art art) {
@@ -30,11 +32,13 @@ public final class Renderer {
     // ================================================================== frame
 
     public void render(Gfx g, float t) {
+        vh = H;
+        vw = H * g.width() / (float) g.height();
         g.save();
-        g.scale(g.width() / W, g.height() / H);
+        g.scale(g.width() / vw, g.height() / vh);
         Film.Seg s = film.segAt(t);
         g.color(0xFF000000);
-        g.rect(0, 0, W, H);
+        g.rect(0, 0, vw, vh);
         if (s != null) {
             switch (s.type) {
                 case Film.S_TITLE: drawTitle(g, s, t); break;
@@ -45,7 +49,7 @@ public final class Renderer {
             float a = 1f;
             if (s.fadeIn > 0) a = Math.min(a, (t - s.t0) / s.fadeIn);
             if (s.fadeOut > 0) a = Math.min(a, (s.t1 - t) / s.fadeOut);
-            if (a < 1f) { g.color(Puppet.alpha(0xFF000000, 1f - Math.max(0, a))); g.rect(0, 0, W, H); }
+            if (a < 1f) { g.color(Puppet.alpha(0xFF000000, 1f - Math.max(0, a))); g.rect(0, 0, vw, vh); }
         }
         g.restore();
     }
@@ -55,9 +59,9 @@ public final class Renderer {
     private void cover(Gfx g, Art.Backdrop b, float zoom, float panX, float panY) {
         float sx = b.x0 * b.w, sy = b.y0 * b.h, sw = (b.x1 - b.x0) * b.w, sh = (b.y1 - b.y0) * b.h;
         g.save();
-        g.translate(W / 2 + panX, H / 2 + panY);
+        g.translate(vw / 2 + panX, vh / 2 + panY);
         g.scale(zoom, zoom);
-        g.imageRect(b.img, sx, sy, sw, sh, -W / 2, -H / 2, W, H);
+        g.imageRect(b.img, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
         g.restore();
     }
 
@@ -66,15 +70,15 @@ public final class Renderer {
         float ar = b.w / (float) b.h;
         if (ar >= 1.5f) { cover(g, b, zoom, 0, 0); return; }
         g.save();
-        g.translate(W / 2, H / 2);
+        g.translate(vw / 2, vh / 2);
         g.scale(1.6f, 1.6f);
         g.setAlpha(0.55f);
-        g.image(b.img, -W / 2, -W / 2 / ar, W, W / ar);
+        g.image(b.img, -vw / 2, -vw / 2 / ar, vw, vw / ar);
         g.restore();
         g.color(0x88000000);
-        g.rect(0, 0, W, H);
-        float h = H * zoom, w = h * ar;
-        g.image(b.img, (W - w) / 2, (H - h) / 2, w, h);
+        g.rect(0, 0, vw, vh);
+        float h = vh * zoom, w = h * ar;
+        g.image(b.img, (vw - w) / 2, (vh - h) / 2, w, h);
     }
 
     private void drawTitle(Gfx g, Film.Seg s, float t) {
@@ -84,21 +88,21 @@ public final class Renderer {
             contain(g, s.backdrop, 1.0f + 0.05f * u);
         } else {
             g.save();
-            g.translate(W / 2, H / 2); g.scale(1 + 0.05f * u, 1 + 0.05f * u); g.translate(-W / 2, -H / 2);
+            stageView(g, 1 + 0.05f * u);
             g.layer("set:title", W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, Sets.GARDEN, Sets.MORNING); } });
             Sets.paintLive(g, Sets.GARDEN, Sets.MORNING, t);
-            heroesLineup(g, t, 2, 640, Sets.GROUND + 20, 1.0f);
+            heroesLineup(g, t, vw < 900 ? 1 : 2, 640, Sets.GROUND + 20, 1.0f);
             g.restore();
         }
-        sparkles(g, t, 0, 0, W, H, 26, 0xFFFFE082);
+        sparkles(g, t, 0, 0, vw, vh, 26, 0xFFFFE082);
         if (text) {
             float a = Math.min(1, Math.max(0, (t - s.t0 - 0.6f) / 1.2f));
             g.save();
             g.setAlpha(a);
             g.linear(0, 40, 0, 240, 0xAA000000, 0x00000000);
-            g.rect(0, 0, W, 260);
-            bigText(g, s.text1, W / 2, 150, fitSize(g, s.text1, 78, 1180), 0xFFFFD54F, 0xFF5D2E00);
-            if (s.text2.length() > 0) bigText(g, s.text2, W / 2, 210, 34, 0xFFFFFFFF, 0xFF000000);
+            g.rect(0, 0, vw, 260);
+            bigText(g, s.text1, vw / 2, 150, fitSize(g, s.text1, 78, vw - 80), 0xFFFFD54F, 0xFF5D2E00);
+            if (s.text2.length() > 0) bigText(g, s.text2, vw / 2, 210, 34, 0xFFFFFFFF, 0xFF000000);
             g.restore();
         }
     }
@@ -109,25 +113,25 @@ public final class Renderer {
         else {
             final int set = s.set, tod = s.tod;
             g.save();
-            g.translate(W / 2, H / 2); g.scale(1.08f + 0.04f * u, 1.08f + 0.04f * u); g.translate(-W / 2, -H / 2);
+            stageView(g, 1.08f + 0.04f * u);
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
             g.restore();
         }
         g.color(0xB0000000);
-        g.rect(0, 0, W, H);
+        g.rect(0, 0, vw, vh);
         float a = Math.min(1, (t - s.t0) / 0.5f);
         g.save();
         g.setAlpha(a);
         // ornament lines
         g.color(0xFFE5B530);
         float lw = 280 * Math.min(1, (t - s.t0) / 0.8f);
-        g.line(W / 2 - 40 - lw, 300, W / 2 - 40, 300, 3);
-        g.line(W / 2 + 40, 300, W / 2 + 40 + lw, 300, 3);
-        g.oval(W / 2, 300, 7, 7);
-        bigText(g, s.text1, W / 2, 400, 92, 0xFFFFD54F, 0xFF4E2600);
-        if (s.text2.length() > 0) bigText(g, s.text2, W / 2, 478, fitSize(g, s.text2, 46, 1150), 0xFFFFFFFF, 0xFF000000);
+        g.line(vw / 2 - 40 - lw, 300, vw / 2 - 40, 300, 3);
+        g.line(vw / 2 + 40, 300, vw / 2 + 40 + lw, 300, 3);
+        g.oval(vw / 2, 300, 7, 7);
+        bigText(g, s.text1, vw / 2, 400, fitSize(g, s.text1, 92, vw - 80), 0xFFFFD54F, 0xFF4E2600);
+        if (s.text2.length() > 0) bigText(g, s.text2, vw / 2, 478, fitSize(g, s.text2, 46, vw - 80), 0xFFFFFFFF, 0xFF000000);
         g.color(0xFFE5B530);
-        g.line(W / 2 - 40 - lw, 520, W / 2 + 40 + lw, 520, 2);
+        g.line(vw / 2 - 40 - lw, 520, vw / 2 + 40 + lw, 520, 2);
         g.restore();
     }
 
@@ -137,25 +141,33 @@ public final class Renderer {
         if (s.backdrop != null) contain(g, s.backdrop, 1.0f + 0.06f * u);
         else {
             g.save();
-            g.translate(W / 2, H / 2); g.scale(1 + 0.04f * u, 1 + 0.04f * u); g.translate(-W / 2, -H / 2);
+            stageView(g, 1 + 0.04f * u);
             g.layer("set:end", W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, Sets.CELEBRATION, Sets.EVENING); } });
             Sets.paintLive(g, Sets.CELEBRATION, Sets.EVENING, t);
-            heroesLineup(g, t, 6, 640, Sets.GROUND + 30, 0.85f);
+            heroesLineup(g, t, vw < 900 ? 3 : 6, 640, Sets.GROUND + 30, vw < 900 ? 0.75f : 0.85f);
             g.restore();
         }
-        sparkles(g, t, 0, 0, W, H, 40, 0xFFFFE082);
+        sparkles(g, t, 0, 0, vw, vh, 40, 0xFFFFE082);
         if (text) {
             float a = Math.min(1, Math.max(0, (t - s.t0 - 0.8f) / 1.2f));
             float sc = 0.8f + 0.2f * a;
             g.save();
             g.setAlpha(a);
             g.color(0x77000000);
-            g.roundRect(W / 2 - 300, 70, 600, 170, 30);
-            g.translate(W / 2, 200);
+            g.roundRect(vw / 2 - Math.min(300, vw / 2 - 20), 70, Math.min(600, vw - 40), 170, 30);
+            g.translate(vw / 2, 200);
             g.scale(sc, sc);
-            bigText(g, s.text1, 0, 0, 120, 0xFFFFD54F, 0xFF4E2600);
+            bigText(g, s.text1, 0, 0, fitSize(g, s.text1, 120, vw - 60), 0xFFFFD54F, 0xFF4E2600);
             g.restore();
         }
+    }
+
+    /** Maps the 1280x720 stage onto the screen, centre-cropped, with a zoom. */
+    private void stageView(Gfx g, float zoom) {
+        float k = Math.max(vw / W, vh / H) * zoom;
+        g.translate(vw / 2, vh / 2);
+        g.scale(k, k);
+        g.translate(-W / 2, -H / 2);
     }
 
     private void bigText(Gfx g, String s, float x, float y, float size, int fill, int outline) {
@@ -236,7 +248,7 @@ public final class Renderer {
             camZ = prev.zoom + (cur.zoom - prev.zoom) * u;
         } else { camX = cur.cx; camY = cur.cy; camZ = cur.zoom; }
         if (camZ < 1) camZ = 1;
-        float hw = W / 2 / camZ, hh = H / 2 / camZ;
+        float hw = vw / 2 / camZ, hh = vh / 2 / camZ;
         camX = Math.max(hw, Math.min(W - hw, camX));
         camY = Math.max(hh, Math.min(H - hh, camY));
         for (Film.Fx f : s.fx) {
@@ -248,19 +260,73 @@ public final class Renderer {
         }
     }
 
+    /** On vertical / square screens the frame is narrow: keep the speaking (or moving) character in it. */
+    private float followX = -1;
+
+    private void followSpeaker(Film.Seg s, float t) {
+        Film.Actor best = null;
+        for (Film.Actor a : s.actors) {
+            if (!a.stateAt(t).visible) continue;
+            if (speakingAt(a, t) != null) { best = a; break; }
+            if (best == null && moving(a, t) != null) best = a;
+        }
+        if (best == null) {
+            // nobody talking: frame the character nearest to where the director pointed the camera
+            float bd = 1e9f;
+            for (Film.Actor a : s.actors) {
+                if (!a.stateAt(t).visible) continue;
+                float d = Math.abs(Director.xAt(a, t) - camX);
+                if (d < bd) { bd = d; best = a; }
+            }
+        }
+        if (best != null) {
+            float x = Director.xAt(best, t);
+            followX = followX < 0 ? x : followX + (x - followX) * 0.08f;
+        }
+        if (followX >= 0) camX = camX * 0.25f + followX * 0.75f;
+        float hw = vw / 2 / camZ;
+        camX = Math.max(hw, Math.min(W - hw, camX));
+    }
+
+    /** Cinematic finish: vignette and a mood colour grade. */
+    private void grade(Gfx g, Film.Seg s) {
+        int tint;
+        switch (s.mood) {
+            case Film.M_TENSE: case Film.M_VILLAIN: tint = 0x1E102A60; break;
+            case Film.M_SAD: tint = 0x22505A70; break;
+            case Film.M_NIGHT: tint = 0x1A0A1640; break;
+            case Film.M_CELEBRATE: case Film.M_HAPPY: case Film.M_PLAYFUL: tint = 0x10FFB347; break;
+            case Film.M_ACTION: tint = 0x14FF5A2A; break;
+            default: tint = 0;
+        }
+        if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
+        float r = Math.max(vw, vh) * 0.78f;
+        g.radial(vw / 2, vh / 2, r, 0x00000000, 0x70000000);
+        g.rect(0, 0, vw, vh);
+    }
+
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         camera(s, t);
+        if (vw < W * 0.9f) followSpeaker(s, t);
         g.save();
-        g.translate(W / 2, H / 2);
+        g.translate(vw / 2, vh / 2);
         g.scale(camZ, camZ);
         g.translate(-camX, -camY);
         if (s.backdrop != null) {
             final Art.Backdrop b = s.backdrop;
-            g.layer("bd:" + System.identityHashCode(b), W, H, new Gfx.Painter() {
+            Gfx.Painter bp = new Gfx.Painter() {
                 public void paint(Gfx gg) {
                     gg.imageRect(b.img, b.x0 * b.w, b.y0 * b.h, (b.x1 - b.x0) * b.w, (b.y1 - b.y0) * b.h, 0, 0, W, H);
                 }
-            });
+            };
+            g.layer("bd:" + System.identityHashCode(b), W, H, bp);
+            float dof = Math.max(0, Math.min(1, (camZ - 1.35f) / 0.45f));
+            if (dof > 0.02f) {
+                g.save();
+                g.setAlpha(dof);
+                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.09f, bp);
+                g.restore();
+            }
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
             if (s.tod == Sets.NIGHT && s.set != Sets.FOREST) { g.color(0x50101C3A); g.rect(0, 0, W, H); }
             if (s.festive) Sets.celebrationLights(g, t);
@@ -291,8 +357,9 @@ public final class Renderer {
         g.restore();
         if (s.backdrop == null) {
             int tint = Sets.tint(s.set, s.tod);
-            if (tint != 0) { g.color(tint); g.rect(0, 0, W, H); }
+            if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
+        grade(g, s);
         drawScreenFx(g, s, t);
         if (film.subtitles) drawSubs(g, s, t);
     }
@@ -880,7 +947,7 @@ public final class Renderer {
             if (f.type == Film.FX_FLASH) {
                 float k = 1 - u / d;
                 g.color(Puppet.alpha(f.color == 0 ? 0xFFFFFFFF : f.color, 0.55f * k * k));
-                g.rect(0, 0, W, H);
+                g.rect(0, 0, vw, vh);
             } else if (f.type == Film.FX_SHOT && f.pic != null) {
                 float a = Math.min(1, Math.min(u / 0.4f, (f.t1 - t) / 0.4f));
                 g.save();
@@ -1130,7 +1197,7 @@ public final class Renderer {
             if (t < sb.t0 || t >= sb.t1) continue;
             float size = 30;
             String who = sb.who.length() > 0 ? sb.who + ": " : "";
-            List<String> lines = wrap(g, who + Txt.withoutParens(sb.text), size, 1100);
+            List<String> lines = wrap(g, who + Txt.withoutParens(sb.text), size, vw - 70);
             int per = 2;
             int chunks = (lines.size() + per - 1) / per;
             int ci = Math.min(chunks - 1, (int) ((t - sb.t0) / (sb.t1 - sb.t0) * chunks));
@@ -1139,20 +1206,20 @@ public final class Renderer {
             float maxW = 0;
             for (int i = from; i < to; i++) maxW = Math.max(maxW, g.textWidth(lines.get(i), size, true));
             g.color(0x99000000);
-            g.roundRect(W / 2 - maxW / 2 - 24, H - 24 - boxH, maxW + 48, boxH, 14);
+            g.roundRect(vw / 2 - maxW / 2 - 24, vh - 24 - boxH, maxW + 48, boxH, 14);
             for (int i = from; i < to; i++) {
-                float y = H - 24 - boxH + 42 + (i - from) * 42 - 6;
+                float y = vh - 24 - boxH + 42 + (i - from) * 42 - 6;
                 String l = lines.get(i);
                 if (i == 0 && who.length() > 0 && l.startsWith(who)) {
                     float ww = g.textWidth(l, size, true);
-                    float x0 = W / 2 - ww / 2;
+                    float x0 = vw / 2 - ww / 2;
                     g.color(0xFFFFD54F);
                     g.text(who, x0, y, size, true, 0);
                     g.color(0xFFFFFFFF);
                     g.text(l.substring(who.length()), x0 + g.textWidth(who, size, true), y, size, true, 0);
                 } else {
                     g.color(0xFFFFFFFF);
-                    g.text(l, W / 2, y, size, true, 1);
+                    g.text(l, vw / 2, y, size, true, 1);
                 }
             }
         }

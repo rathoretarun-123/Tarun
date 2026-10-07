@@ -168,5 +168,28 @@ public class AwtGfx implements Gfx {
         g.drawImage(l, 0, 0, Math.round(w), Math.round(h), null);
     }
 
+    public void layerLow(String key, float w, float h, float scale, Painter painter) {
+        BufferedImage l = layers.get(key);
+        if (l == null) {
+            int lw = Math.max(8, Math.round(img.getWidth() * scale)), lh = Math.max(8, Math.round(img.getHeight() * scale));
+            l = new BufferedImage(lw, lh, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D lg = l.createGraphics();
+            setup(lg);
+            Graphics2D saved = g;
+            ArrayDeque<Object[]> savedStack = new ArrayDeque<Object[]>(stack);
+            Paint sp = paint; float sa = alpha;
+            g = lg; alpha = 1f;
+            lg.scale(lw / w, lh / h);
+            painter.paint(this);
+            lg.dispose();
+            g = saved; paint = sp; alpha = sa;
+            stack.clear(); stack.addAll(savedStack);
+            layers.put(key, l);
+        }
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.drawImage(l, 0, 0, Math.round(w), Math.round(h), null);
+    }
+
     public void clearLayers() { layers.clear(); }
 }

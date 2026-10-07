@@ -265,6 +265,11 @@ public final class ScriptParser {
 
     // ------------------------------------------------------------------ speakers & aliases
 
+    /** "कथावाचक", "सूत्रधार", "Narrator", "वाचक" … speak as a voice-over, never stand on screen. */
+    public static boolean isNarrator(String who) {
+        return Txt.has(who, "कथावाचक", "सूत्रधार", "वाचक", "narrator", "voice over", "voiceover", "वॉयस ओवर", "कथाकार");
+    }
+
     static boolean isTitleWord(String w) {
         String n = Txt.norm(w);
         for (String t : TITLE_WORDS) if (Txt.norm(t).equals(n)) return true;
@@ -317,6 +322,7 @@ public final class ScriptParser {
         for (Story.Scene sc : story.scenes) {
             for (Story.Beat b : sc.beats) {
                 if (b.type != Story.Beat.DIALOGUE) continue;
+                if (isNarrator(b.speakerRaw)) { b.speaker = null; b.narrator = true; story.hasNarrator = true; continue; }
                 Story.CharacterDef c = resolve(story, b.speakerRaw);
                 if (c == null) {
                     c = newChar(story, b.speakerRaw, "", -1);

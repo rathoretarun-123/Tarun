@@ -56,5 +56,8 @@ public interface Gfx {
      */
     void layer(String key, float w, float h, Painter painter);
 
+    /** Like layer() but cached at a fraction of the resolution and drawn scaled up (a cheap blur, for depth of field). */
+    void layerLow(String key, float w, float h, float scale, Painter painter);
+
     interface Painter { void paint(Gfx g); }
 }

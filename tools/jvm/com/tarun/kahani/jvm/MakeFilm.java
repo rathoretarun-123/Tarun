@@ -17,7 +17,8 @@ public class MakeFilm {
         final String assets = a[1];
         String out = a[2];
         int width = Integer.parseInt(a[3]);
-        int height = width * 9 / 16;
+        String aspect = System.getenv().getOrDefault("ASPECT", "16:9");
+        int height = aspect.equals("9:16") ? width * 16 / 9 : aspect.equals("1:1") ? width : width * 9 / 16;
         int fps = Integer.parseInt(a[4]);
         String stills = a.length > 5 ? a[5] : null;
         float maxSec = a.length > 6 ? Float.parseFloat(a[6]) : 1e9f;
@@ -50,7 +51,26 @@ public class MakeFilm {
         for (String n : film.notes) System.out.println("  " + n);
         if (System.getenv("LINES") != null) for (Film.Line l : film.lines)
             System.out.printf("  line %2d @%6.1f +%4.1f %s: %s%n", l.index, l.start, l.dur, l.who == null ? "-" : l.who.displayName, l.text.substring(0, Math.min(30, l.text.length())));
-        short[] pcm = Mixer.mix(film, voices, null);
+        SoundLib lib = new SoundLib(new SoundLib.Decoder() {
+            public float[] decode(String path) {
+                try {
+                    Process p = new ProcessBuilder("ffmpeg", "-loglevel", "error", "-i", path, "-f", "f32le", "-ac", "1", "-ar", String.valueOf(Synth.SR), "-").start();
+                    byte[] b = p.getInputStream().readAllBytes();
+                    p.waitFor();
+                    java.nio.FloatBuffer fb = java.nio.ByteBuffer.wrap(b).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+                    float[] o = new float[fb.remaining()];
+                    fb.get(o);
+                    return o;
+                } catch (Exception e) { return null; }
+            }
+        });
+        File sounds = new File(new File(a[0]).getAbsoluteFile().getParentFile(), "sounds");
+        if (!new File(sounds, "index.json").exists()) sounds = new File("app/src/main/assets/sounds");
+        if (new File(sounds, "index.json").exists())
+            lib.addIndex(new String(Files.readAllBytes(new File(sounds, "index.json").toPath()), "UTF-8"), sounds.getAbsolutePath() + "/");
+        Edits edits = Edits.fromJson(System.getenv().getOrDefault("EDITS", "{}"));
+        film.subtitles = edits.subtitles;
+        short[] pcm = Mixer.mix(film, voices, lib, edits, null);
         File wav = new File(tmp, "mix.wav");
         writeWav(wav, pcm, Synth.SR);
         System.out.println("audio mixed (" + (System.currentTimeMillis() - t0) + "ms)");

@@ -11,6 +11,7 @@ public final class Film {
     public final List<Line> lines = new ArrayList<Line>();
     public final List<Sfx> sfx = new ArrayList<Sfx>();
     public final List<Music> music = new ArrayList<Music>();
+    public final List<Amb> ambience = new ArrayList<Amb>();
     public final List<String> notes = new ArrayList<String>();   // director's notes for the analysis screen
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;
@@ -160,6 +161,13 @@ public final class Film {
 
     public static final int M_TITLE = 0, M_HAPPY = 1, M_TENSE = 2, M_VILLAIN = 3, M_SAD = 4, M_ACTION = 5, M_CELEBRATE = 6,
             M_END = 7, M_NIGHT = 8, M_PLAYFUL = 9;
+
+    /** A bed of real recorded ambience chosen by matching these words (location, time, weather). */
+    public static final class Amb {
+        public float t0, t1;
+        public String words;
+        public Amb(float t0, float t1, String words) { this.t0 = t0; this.t1 = t1; this.words = words; }
+    }
 
     public static final class Music {
         public float t0, t1;

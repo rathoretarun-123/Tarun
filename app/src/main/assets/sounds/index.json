@@ -1,0 +1,331 @@
+[
+{
+"file": "rain.ogg",
+"type": "amb",
+"words": "rain, raining, drizzle, monsoon, बारिश, वर्षा, बरसात",
+"title": "Rain",
+"seconds": 32.0
+},
+{
+"file": "rain_heavy.ogg",
+"type": "amb",
+"words": "heavy rain, storm, downpour, तूफान, मूसलाधार",
+"title": "Heavy rain",
+"seconds": 32.0
+},
+{
+"file": "wind.ogg",
+"type": "amb",
+"words": "wind, breeze, hill, mountain, desert, हवा, पहाड़",
+"title": "Gentle wind",
+"seconds": 32.0
+},
+{
+"file": "wind_storm.ogg",
+"type": "amb",
+"words": "storm, strong wind, gale, आँधी, तूफ़ान",
+"title": "Storm wind",
+"seconds": 32.0
+},
+{
+"file": "ocean.ogg",
+"type": "amb",
+"words": "sea, ocean, beach, waves, shore, coast, समुद्र, सागर, लहरें, किनारा",
+"title": "Ocean waves",
+"seconds": 34.0
+},
+{
+"file": "river.ogg",
+"type": "amb",
+"words": "river, stream, brook, waterfall, water, नदी, झरना, धारा, गंगा",
+"title": "River stream",
+"seconds": 32.0
+},
+{
+"file": "fire.ogg",
+"type": "amb",
+"words": "fire, campfire, bonfire, flames, burning, torch, आग, अग्नि, अलाव, हवन, मशाल",
+"title": "Crackling fire",
+"seconds": 32.0
+},
+{
+"file": "night_crickets.ogg",
+"type": "amb",
+"words": "night, crickets, evening, moon, रात, शाम, झींगुर, चाँदनी",
+"title": "Night crickets",
+"seconds": 32.0
+},
+{
+"file": "forest_birds.ogg",
+"type": "amb",
+"words": "forest, jungle, woods, garden, park, morning, birds, tree, जंगल, वन, बगीचा, सुबह, पेड़, उपवन",
+"title": "Forest birds",
+"seconds": 32.0
+},
+{
+"file": "village_day.ogg",
+"type": "amb",
+"words": "village, field, farm, countryside, hut, गाँव, गांव, खेत, झोपड़ी, आँगन",
+"title": "Village day",
+"seconds": 32.0
+},
+{
+"file": "jungle_night.ogg",
+"type": "amb",
+"words": "jungle night, swamp, pond, frogs, dark forest, तालाब, दलदल, मेंढक",
+"title": "Jungle at night",
+"seconds": 32.0
+},
+{
+"file": "cave.ogg",
+"type": "amb",
+"words": "cave, tunnel, dungeon, underground, mine, गुफा, सुरंग, तहखाना",
+"title": "Cave drips",
+"seconds": 32.0
+},
+{
+"file": "temple.ogg",
+"type": "amb",
+"words": "temple, shrine, puja, prayer, ashram, mandir, मंदिर, पूजा, आश्रम, देवालय, आरती",
+"title": "Temple (tanpura & bells)",
+"seconds": 34.0
+},
+{
+"file": "palace_hall.ogg",
+"type": "amb",
+"words": "palace, hall, court, throne, castle, fort, mahal, महल, दरबार, राजमहल, किला, सिंहासन",
+"title": "Palace hall",
+"seconds": 32.0
+},
+{
+"file": "magic_hum.ogg",
+"type": "amb",
+"words": "magic, magical, enchanted, fairy, heaven, divine, dream, जादू, परी, स्वर्ग, दिव्य, सपना",
+"title": "Magical shimmer",
+"seconds": 32.0
+},
+{
+"file": "desert.ogg",
+"type": "amb",
+"words": "desert, sand, dunes, dry, रेगिस्तान, मरुस्थल, रेत",
+"title": "Desert wind",
+"seconds": 32.0
+},
+{
+"file": "room_tone.ogg",
+"type": "amb",
+"words": "house, home, room, kitchen, school, classroom, inside, घर, कमरा, रसोई, स्कूल, कक्षा",
+"title": "Quiet room",
+"seconds": 32.0
+},
+{
+"file": "crowd_market.ogg",
+"type": "amb",
+"words": "market, bazaar, crowd, fair, mela, festival, city, street, बाज़ार, बाजार, मेला, भीड़, शहर",
+"title": "Busy market murmur",
+"seconds": 32.0
+},
+{
+"file": "thunder.ogg",
+"type": "sfx",
+"words": "thunder, lightning, गरज, बिजली, बादल गरजे, गड़गड़ाहट",
+"title": "Thunder",
+"seconds": 6.0
+},
+{
+"file": "temple_bell.ogg",
+"type": "sfx",
+"words": "bell, temple bell, ghanta, ghanti, घंटा, घंटी, टन",
+"title": "Temple bell",
+"seconds": 6.0
+},
+{
+"file": "small_bells.ogg",
+"type": "sfx",
+"words": "small bells, anklets, ghungroo, chime, घुंघरू, पायल",
+"title": "Little bells",
+"seconds": 3.5
+},
+{
+"file": "gong.ogg",
+"type": "sfx",
+"words": "gong, announcement, royal, court, घड़ियाल",
+"title": "Gong",
+"seconds": 8.0
+},
+{
+"file": "magic_chime.ogg",
+"type": "sfx",
+"words": "magic chime, sparkle, title, appear, magic, spell, wand, जादू, चमक, मंत्र",
+"title": "Magic chime",
+"seconds": 3.5
+},
+{
+"file": "whoosh.ogg",
+"type": "sfx",
+"words": "whoosh, swoosh, fly, flew, arrow, swing, rush, दौड़, उड़ा, तीर, झपटा",
+"title": "Whoosh",
+"seconds": 1.2
+},
+{
+"file": "impact_boom.ogg",
+"type": "sfx",
+"words": "boom, impact, crash, smash, fall, blow, hit, slam, धमाका, टक्कर, गिरा, प्रहार",
+"title": "Impact boom",
+"seconds": 4.0
+},
+{
+"file": "explosion.ogg",
+"type": "sfx",
+"words": "explosion, blast, explode, विस्फोट, धमाका",
+"title": "Explosion",
+"seconds": 6.0
+},
+{
+"file": "door_knock.ogg",
+"type": "sfx",
+"words": "knock, door, knocked, खटखट, दरवाज़ा, दस्तक",
+"title": "Door knock",
+"seconds": 1.6
+},
+{
+"file": "footsteps.ogg",
+"type": "sfx",
+"words": "footsteps, walk, walked, steps, came, कदम, चला, चलते, आया, आहट",
+"title": "Footsteps",
+"seconds": 5.8
+},
+{
+"file": "running_footsteps.ogg",
+"type": "sfx",
+"words": "running, ran, run, rushed, दौड़ा, दौड़ते, भागा, भागे",
+"title": "Running footsteps",
+"seconds": 5.2
+},
+{
+"file": "heartbeat.ogg",
+"type": "sfx",
+"words": "heartbeat, heart, nervous, fear, tension, dhadkan, धड़कन, दिल",
+"title": "Heartbeat",
+"seconds": 7.4
+},
+{
+"file": "clock_tick.ogg",
+"type": "sfx",
+"words": "clock, ticking, tick, time, deadline, घड़ी, टिक",
+"title": "Clock ticking",
+"seconds": 8.0
+},
+{
+"file": "water_splash.ogg",
+"type": "sfx",
+"words": "splash, jumped into water, fell into water, dive, छपाक, छलांग, पानी में",
+"title": "Water splash",
+"seconds": 2.0
+},
+{
+"file": "sword_clash.ogg",
+"type": "sfx",
+"words": "sword, swords clash, blade, fight, duel, तलवार, युद्ध, वार",
+"title": "Sword clash",
+"seconds": 2.5
+},
+{
+"file": "magic_poof.ogg",
+"type": "sfx",
+"words": "poof, vanished, disappeared, smoke, appeared, गायब, धुआँ, प्रकट",
+"title": "Magic poof",
+"seconds": 1.5
+},
+{
+"file": "riser.ogg",
+"type": "sfx",
+"words": "rising, suspense, reveal, approaching, tension, power, उठा, बढ़ता",
+"title": "Tension riser",
+"seconds": 4.0
+},
+{
+"file": "drum_roll.ogg",
+"type": "sfx",
+"words": "drum, drums, dhol, nagada, announcement, नगाड़ा, ढोल, डंका",
+"title": "Drum roll",
+"seconds": 4.0
+},
+{
+"file": "conch_shankh.ogg",
+"type": "sfx",
+"words": "conch, shankh, शंख, battle cry, call",
+"title": "Conch (shankh)",
+"seconds": 4.5
+},
+{
+"file": "monster_growl.ogg",
+"type": "sfx",
+"words": "growl, growled, roar, beast, monster, demon, गुर्राया, राक्षस, दहाड़",
+"title": "Low growl",
+"seconds": 2.2
+},
+{
+"file": "music_calm.ogg",
+"type": "music",
+"words": "calm, peaceful, gentle, soft, morning, शांत, मधुर",
+"title": "Calm (pad & plucks)",
+"seconds": 48.0
+},
+{
+"file": "music_sad.ogg",
+"type": "music",
+"words": "sad, sorrow, emotional, crying, grief, लाचार, दुखी, उदास, भावुक",
+"title": "Sad piano",
+"seconds": 48.0
+},
+{
+"file": "music_tense.ogg",
+"type": "music",
+"words": "tense, suspense, danger, chase, scary, fear, mystery, तनाव, खतरा, डर",
+"title": "Tense pulse",
+"seconds": 48.0
+},
+{
+"file": "music_epic.ogg",
+"type": "music",
+"words": "epic, battle, war, heroic, hero, orchestral, climax, victory, युद्ध, वीर, विजय",
+"title": "Epic drums & brass",
+"seconds": 48.0
+},
+{
+"file": "music_devotional.ogg",
+"type": "music",
+"words": "devotional, divine, indian, temple, flute, bhajan, prayer, भक्ति, दिव्य, बांसुरी, मंदिर",
+"title": "Indian devotional (tanpura & flute)",
+"seconds": 48.0
+},
+{
+"file": "music_happy.ogg",
+"type": "music",
+"words": "happy, cheerful, playful, funny, joyful, fun, खुश, मज़ेदार, खुशनुमा",
+"title": "Happy plucks",
+"seconds": 48.0
+},
+{
+"file": "music_adventure.ogg",
+"type": "music",
+"words": "adventure, exciting, journey, quest, explore, action, रोमांच, यात्रा, साहस",
+"title": "Adventure strings",
+"seconds": 48.0
+},
+{
+"file": "music_mystery.ogg",
+"type": "music",
+"words": "mystery, mysterious, secret, magic, night, strange, रहस्य, रहस्यमय, जादू",
+"title": "Mystery bells",
+"seconds": 48.0
+},
+{
+"file": "music_festive.ogg",
+"type": "music",
+"words": "festive, festival, celebration, wedding, dance, party, mela, diwali, holi, उत्सव, त्योहार, शादी, नाच, दिवाली, होली",
+"title": "Festive dhol",
+"seconds": 48.0
+}
+]

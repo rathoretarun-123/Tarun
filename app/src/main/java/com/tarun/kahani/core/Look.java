@@ -3,7 +3,11 @@ package com.tarun.kahani.core;
 /** Visual design of one cartoon character, derived from the script's description. */
 public final class Look {
     // body kinds
-    public static final int GIRL = 0, WOMAN = 1, MAN = 2, BOY = 3, WITCH = 4, MONSTER = 5, MONKEY = 6, OLD_MAN = 7;
+    public static final int GIRL = 0, WOMAN = 1, MAN = 2, BOY = 3, WITCH = 4, MONSTER = 5, MONKEY = 6, OLD_MAN = 7, ANIMAL = 8, BIRD = 9;
+    // species for ANIMAL / BIRD
+    public static final int SP_FOX = 0, SP_LION = 1, SP_BEAR = 2, SP_ELEPHANT = 3, SP_RABBIT = 4, SP_CAT = 5, SP_DOG = 6, SP_DEER = 7,
+            SP_GOAT = 8, SP_COW = 9, SP_TIGER = 10, SP_WOLF = 11, SP_MOUSE = 12, SP_TORTOISE = 13, SP_HORSE = 14,
+            SP_CROW = 20, SP_SPARROW = 21, SP_PARROT = 22, SP_PEACOCK = 23, SP_OWL = 24, SP_HEN = 25, SP_EAGLE = 26, SP_DUCK = 27;
     // outfits
     public static final int O_LEHENGA = 0, O_SALWAR = 1, O_SAREE = 2, O_ACHKAN = 3, O_UNIFORM = 4, O_CLOAK = 5,
             O_ARMOR = 6, O_JACKET = 7, O_KURTA = 8, O_FROCK = 9;
@@ -38,6 +42,7 @@ public final class Look {
     public boolean bangles, earrings, anklets;
     public int shoeColor = 0xFF5A3A22;
     public int variant;              // small per-character variation (guards)
+    public int species = -1;
     public boolean hero = true;      // villains placed right side
 
     public Look copy() {
@@ -50,10 +55,10 @@ public final class Look {
         l.dimples = dimples; l.longNails = longNails; l.eyeColor = eyeColor; l.furColor = furColor; l.sword = sword;
         l.katar = katar; l.spear = spear; l.shield = shield; l.wand = wand; l.axe = axe; l.mace = mace;
         l.satchel = satchel; l.chains = chains; l.necklace = necklace; l.bangles = bangles; l.earrings = earrings;
-        l.anklets = anklets; l.shoeColor = shoeColor; l.variant = variant; l.hero = hero;
+        l.anklets = anklets; l.shoeColor = shoeColor; l.variant = variant; l.hero = hero; l.species = species;
         return l;
     }
 
     public boolean isChild() { return kind == GIRL || kind == BOY; }
-    public boolean isHumanoid() { return kind != MONKEY; }
+    public boolean isHumanoid() { return kind != MONKEY && kind != ANIMAL && kind != BIRD; }
 }

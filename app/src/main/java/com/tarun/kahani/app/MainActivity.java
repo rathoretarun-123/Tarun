@@ -586,6 +586,8 @@ public class MainActivity extends Activity {
             case Look.WITCH: kind = "चुड़ैल"; break;
             case Look.MONSTER: kind = "राक्षस"; break;
             case Look.MONKEY: kind = "बंदर"; break;
+            case Look.ANIMAL: kind = "जानवर"; break;
+            case Look.BIRD: kind = "पक्षी"; break;
             default: kind = "पुरुष";
         }
         return kind + (c.age > 0 ? ", " + c.age + " वर्ष" : "") + (l.hero ? "" : " • खलनायक") + (c.fromScript ? "" : " • (विवरण नहीं मिला)");

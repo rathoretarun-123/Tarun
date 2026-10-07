@@ -142,6 +142,10 @@ public final class Voices {
             case Look.MONSTER: k.pitch = 0.6f; k.rate = 0.85f; k.shift = 0.86f; break;
             case Look.MONKEY: k.pitch = 1.9f; k.rate = 1.2f; break;
             case Look.OLD_MAN: k.pitch = 0.72f; k.rate = 0.85f; break;
+            case Look.ANIMAL: case Look.BIRD:
+                k.pitch = l.height < 0.3f ? 1.6f : l.height < 0.5f ? 1.25f : l.height < 0.8f ? 0.9f : 0.7f;
+                k.rate = l.height < 0.3f ? 1.1f : 0.95f;
+                break;
             default: k.pitch = l.girth > 1.1f ? 0.88f : 0.8f; k.rate = 0.97f;
         }
         return k;

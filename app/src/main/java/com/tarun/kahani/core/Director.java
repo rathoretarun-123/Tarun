@@ -687,6 +687,9 @@ public final class Director {
             focusSet = true;
             d = Math.max(d, 3.4f);
         }
+        if (subj != null && subj.look.kind == Look.BIRD && Txt.has(s, "पेड़ पर", "डाल पर", "शाखा", "on a tree", "on the branch")) {
+            Film.Key k = subj.at(ts(t)); k.anchor = Film.A_BRANCH; k.x = 260; k.visible = true;
+        }
         if (Txt.has(s, "उल्टा लटक") && subj != null) {
             Film.Key k = subj.at(t); k.visible = true; k.anchor = Film.A_BRANCH; k.body = Pose.HANG; k.x = 260;
         }

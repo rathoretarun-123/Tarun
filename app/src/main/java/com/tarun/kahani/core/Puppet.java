@@ -43,6 +43,8 @@ public final class Puppet {
         if (p.tilt != 0) g.rotate(p.tilt * p.facing);
         if (p.squash != 1f) g.scale(1f / p.squash, p.squash);
         if (l.kind == Look.MONKEY) drawMonkey(g, l, p, H);
+        else if (l.kind == Look.ANIMAL) drawAnimal(g, l, p, H);
+        else if (l.kind == Look.BIRD) drawBird(g, l, p, H);
         else if (l.kind == Look.WITCH && p.disguised) drawHuman(g, disguise(l), p, H * 0.95f);
         else drawHuman(g, l, p, H);
         g.restore();
@@ -1498,6 +1500,281 @@ public final class Puppet {
         g.lineTo(r * 0.55f, -bodyH - r * 0.05f);
         g.lineTo(f * r * 0.1f, -bodyH + r * 0.4f);
         g.close(); g.fillPath();
+        g.restore();
+    }
+
+    // ------------------------------------------------------------------ animals (side view)
+
+    static void drawAnimal(Gfx g, Look l, Pose p, float H) {
+        int sp = l.species, fur = l.furColor, dark = shade(fur, 0.72f), belly = l.skin;
+        g.save();
+        g.scale(p.facing < 0 ? -1 : 1, 1);
+        g.color(0x33000000);
+        g.oval(0, 2, H * 0.62f, H * 0.07f);
+        if (sp == Look.SP_TORTOISE) { tortoise(g, l, p, H); g.restore(); return; }
+        float stride = (float) Math.sin(p.walk) * p.walkAmt;
+        float bodyY = -H * 0.6f, bodyRx = H * 0.52f, bodyRy = H * 0.27f;
+        if (sp == Look.SP_ELEPHANT) { bodyRx = H * 0.55f; bodyRy = H * 0.33f; }
+        if (sp == Look.SP_RABBIT || sp == Look.SP_MOUSE) { bodyRx = H * 0.45f; bodyRy = H * 0.3f; bodyY = -H * 0.45f; }
+        float legTop = bodyY + bodyRy * 0.6f;
+        float legW = sp == Look.SP_ELEPHANT ? H * 0.16f : (sp == Look.SP_HORSE || sp == Look.SP_DEER ? H * 0.06f : H * 0.09f);
+        // far legs
+        g.color(dark);
+        g.line(-bodyRx * 0.55f, legTop, -bodyRx * 0.55f - stride * H * 0.12f, -legW * 0.5f, legW);
+        g.line(bodyRx * 0.55f, legTop, bodyRx * 0.55f + stride * H * 0.12f, -legW * 0.5f, legW);
+        // tail
+        g.color(fur);
+        float tw = (float) Math.sin(p.time * 4) * H * 0.04f;
+        switch (sp) {
+            case Look.SP_FOX: case Look.SP_WOLF:
+                g.begin(); g.moveTo(-bodyRx * 0.9f, bodyY - bodyRy * 0.1f);
+                g.quadTo(-bodyRx * 1.6f, bodyY - bodyRy * 0.4f + tw, -bodyRx * 1.75f, bodyY + bodyRy * 0.5f);
+                g.quadTo(-bodyRx * 1.3f, bodyY + bodyRy * 0.6f, -bodyRx * 0.85f, bodyY + bodyRy * 0.3f); g.close(); g.fillPath();
+                g.color(sp == Look.SP_FOX ? 0xFFFFFFFF : 0xFFBDBDBD);
+                g.oval(-bodyRx * 1.68f, bodyY + bodyRy * 0.45f, H * 0.07f, H * 0.06f);
+                break;
+            case Look.SP_RABBIT: g.color(0xFFFFFFFF); g.oval(-bodyRx * 0.95f, bodyY - bodyRy * 0.2f, H * 0.09f, H * 0.09f); break;
+            default:
+                g.line(-bodyRx * 0.9f, bodyY - bodyRy * 0.2f, -bodyRx * 1.35f, bodyY + bodyRy * 0.6f + tw, H * 0.035f);
+                if (sp == Look.SP_LION || sp == Look.SP_COW) { g.color(dark); g.oval(-bodyRx * 1.37f, bodyY + bodyRy * 0.7f + tw, H * 0.05f, H * 0.07f); }
+                if (sp == Look.SP_HORSE) { g.color(0xFF3E2716); g.begin(); g.moveTo(-bodyRx * 0.9f, bodyY - bodyRy * 0.3f); g.quadTo(-bodyRx * 1.5f, bodyY, -bodyRx * 1.3f, bodyY + bodyRy * 1.2f + tw); g.strokePath(H * 0.06f); }
+        }
+        // body
+        g.color(shade(fur, 0.6f));
+        g.oval(0, bodyY, bodyRx + 2, bodyRy + 2);
+        g.radial(H * 0.1f, bodyY - bodyRy * 0.4f, bodyRx * 1.3f, lighten(fur, 0.12f), shade(fur, 0.88f));
+        g.oval(0, bodyY, bodyRx, bodyRy);
+        g.color(belly);
+        g.oval(H * 0.05f, bodyY + bodyRy * 0.45f, bodyRx * 0.7f, bodyRy * 0.42f);
+        if (sp == Look.SP_TIGER) {
+            g.color(0xFF2A1A12);
+            for (int i = -3; i <= 3; i++) g.line(i * bodyRx * 0.22f, bodyY - bodyRy * 0.95f, i * bodyRx * 0.22f - H * 0.03f, bodyY - bodyRy * 0.2f, H * 0.035f);
+        }
+        if (sp == Look.SP_COW) {
+            g.color(0xFF3E2C22);
+            g.oval(-bodyRx * 0.3f, bodyY - bodyRy * 0.3f, bodyRx * 0.25f, bodyRy * 0.35f);
+            g.oval(bodyRx * 0.35f, bodyY + bodyRy * 0.05f, bodyRx * 0.18f, bodyRy * 0.28f);
+        }
+        if (sp == Look.SP_DEER) {
+            g.color(0xFFF5EBDD);
+            for (int i = 0; i < 6; i++) g.oval(-bodyRx * 0.5f + i * bodyRx * 0.18f, bodyY - bodyRy * 0.35f + (i % 2) * bodyRy * 0.25f, H * 0.018f, H * 0.018f);
+        }
+        if (l.primary != 0 && sp != Look.SP_COW) { // a little scarf / vest colour from the description
+            g.color(l.primary);
+            g.oval(bodyRx * 0.62f, bodyY - bodyRy * 0.55f, H * 0.08f, H * 0.12f);
+        }
+        // near legs
+        g.color(fur);
+        g.line(-bodyRx * 0.45f, legTop, -bodyRx * 0.45f + stride * H * 0.12f, -legW * 0.5f, legW);
+        g.line(bodyRx * 0.62f, legTop, bodyRx * 0.62f - stride * H * 0.12f, -legW * 0.5f, legW);
+        g.color(sp == Look.SP_HORSE || sp == Look.SP_DEER || sp == Look.SP_GOAT || sp == Look.SP_COW ? 0xFF2A1A12 : dark);
+        g.oval(-bodyRx * 0.45f + stride * H * 0.12f + legW * 0.2f, -legW * 0.3f, legW * 0.75f, legW * 0.4f);
+        g.oval(bodyRx * 0.62f - stride * H * 0.12f + legW * 0.2f, -legW * 0.3f, legW * 0.75f, legW * 0.4f);
+        // head
+        float hx = bodyRx * 0.95f, hy = bodyY - bodyRy * 1.05f, hr = H * (sp == Look.SP_ELEPHANT ? 0.25f : sp == Look.SP_MOUSE ? 0.26f : 0.2f);
+        if (sp == Look.SP_RABBIT) { hx = bodyRx * 0.8f; hy = bodyY - bodyRy * 1.1f; hr = H * 0.22f; }
+        hy += p.bob * 0.3f + (float) Math.sin(p.time * 2) * 1.5f;
+        g.save();
+        g.translate(hx, hy);
+        if (p.headTilt != 0) g.rotate(p.headTilt);
+        if (sp == Look.SP_LION) {
+            g.color(0xFF8D5524);
+            for (int i = 0; i < 12; i++) {
+                double a = i * Math.PI / 6;
+                g.oval((float) Math.cos(a) * hr * 1.05f, (float) Math.sin(a) * hr * 1.05f, hr * 0.5f, hr * 0.5f);
+            }
+            g.oval(0, 0, hr * 1.35f, hr * 1.35f);
+        }
+        // ears behind
+        g.color(dark);
+        switch (sp) {
+            case Look.SP_FOX: case Look.SP_WOLF: case Look.SP_CAT: case Look.SP_TIGER:
+                g.begin(); g.moveTo(-hr * 0.55f, -hr * 0.5f); g.lineTo(-hr * 0.35f, -hr * 1.45f); g.lineTo(hr * 0.05f, -hr * 0.75f); g.close(); g.fillPath();
+                g.begin(); g.moveTo(hr * 0.05f, -hr * 0.7f); g.lineTo(hr * 0.35f, -hr * 1.5f); g.lineTo(hr * 0.6f, -hr * 0.5f); g.close(); g.fillPath();
+                break;
+            case Look.SP_RABBIT:
+                g.color(fur);
+                g.oval(-hr * 0.25f, -hr * 1.6f, hr * 0.22f, hr * 0.8f);
+                g.oval(hr * 0.2f, -hr * 1.7f, hr * 0.22f, hr * 0.85f);
+                g.color(0xFFF8BBD0);
+                g.oval(hr * 0.2f, -hr * 1.65f, hr * 0.1f, hr * 0.6f);
+                break;
+            case Look.SP_BEAR: case Look.SP_MOUSE: case Look.SP_LION:
+                g.oval(-hr * 0.55f, -hr * 0.8f, hr * (sp == Look.SP_MOUSE ? 0.5f : 0.3f), hr * (sp == Look.SP_MOUSE ? 0.5f : 0.3f));
+                g.oval(hr * 0.35f, -hr * 0.85f, hr * (sp == Look.SP_MOUSE ? 0.5f : 0.3f), hr * (sp == Look.SP_MOUSE ? 0.5f : 0.3f));
+                break;
+            case Look.SP_ELEPHANT:
+                g.color(shade(fur, 0.85f));
+                g.oval(-hr * 0.7f, hr * 0.05f, hr * 0.75f, hr * 0.95f);
+                break;
+            case Look.SP_DOG: case Look.SP_GOAT: case Look.SP_COW: case Look.SP_DEER: case Look.SP_HORSE:
+                g.oval(-hr * 0.45f, -hr * 0.3f, hr * 0.22f, hr * 0.55f);
+                break;
+            default:
+        }
+        if (sp == Look.SP_DEER) {
+            g.color(0xFF8D6E4A);
+            g.line(-hr * 0.1f, -hr * 0.8f, -hr * 0.3f, -hr * 1.8f, hr * 0.1f);
+            g.line(-hr * 0.25f, -hr * 1.4f, -hr * 0.65f, -hr * 1.7f, hr * 0.08f);
+            g.line(hr * 0.2f, -hr * 0.8f, hr * 0.3f, -hr * 1.8f, hr * 0.1f);
+            g.line(hr * 0.27f, -hr * 1.4f, hr * 0.65f, -hr * 1.65f, hr * 0.08f);
+        }
+        if (sp == Look.SP_GOAT || sp == Look.SP_COW) {
+            g.color(0xFFD7CCC8);
+            g.begin(); g.moveTo(-hr * 0.2f, -hr * 0.8f); g.quadTo(-hr * 0.6f, -hr * 1.5f, -hr * 0.9f, -hr * 1.2f); g.strokePath(hr * 0.15f);
+            g.begin(); g.moveTo(hr * 0.15f, -hr * 0.85f); g.quadTo(hr * 0.2f, -hr * 1.55f, -hr * 0.2f, -hr * 1.45f); g.strokePath(hr * 0.15f);
+        }
+        // head
+        g.color(shade(fur, 0.6f));
+        g.oval(0, 0, hr + 2, hr * 0.95f + 2);
+        g.radial(-hr * 0.2f, -hr * 0.3f, hr * 1.4f, lighten(fur, 0.12f), shade(fur, 0.9f));
+        g.oval(0, 0, hr, hr * 0.95f);
+        if (sp == Look.SP_HORSE) { g.color(0xFF3E2716); g.oval(-hr * 0.5f, -hr * 0.6f, hr * 0.3f, hr * 0.6f); }
+        // snout & mouth (opens while speaking)
+        float open = Math.max(0, Math.min(1, p.mouth)) + (p.emotion == Pose.LAUGH ? 0.35f : 0);
+        float snx = hr * 0.75f, sny = hr * 0.25f;
+        if (sp == Look.SP_ELEPHANT) {
+            g.color(fur);
+            g.begin(); g.moveTo(hr * 0.55f, -hr * 0.1f);
+            g.quadTo(hr * 1.3f, hr * 0.3f, hr * 1.1f + (float) Math.sin(p.time * 2) * hr * 0.15f, hr * 1.4f);
+            g.strokePath(hr * 0.35f);
+            g.color(0xFFF5F0E0);
+            g.begin(); g.moveTo(hr * 0.6f, hr * 0.4f); g.quadTo(hr * 0.95f, hr * 0.6f, hr * 0.8f, hr * 0.85f); g.strokePath(hr * 0.12f);
+            g.color(0xFF5A1A1A);
+            g.oval(hr * 0.45f, hr * 0.55f, hr * 0.2f, hr * (0.06f + 0.18f * open));
+        } else {
+            float snLen = (sp == Look.SP_FOX || sp == Look.SP_WOLF || sp == Look.SP_DOG || sp == Look.SP_HORSE || sp == Look.SP_DEER) ? hr * 0.75f : hr * 0.45f;
+            g.color(sp == Look.SP_FOX ? 0xFFF5EBDD : lighten(fur, 0.2f));
+            g.oval(snx, sny, snLen, hr * 0.38f);
+            if (open > 0.08f) {
+                g.color(0xFF5A1A1A);
+                g.begin(); g.moveTo(snx - snLen * 0.3f, sny + hr * 0.12f);
+                g.lineTo(snx + snLen * 0.95f, sny + hr * 0.05f);
+                g.lineTo(snx + snLen * 0.8f, sny + hr * (0.15f + 0.4f * open));
+                g.close(); g.fillPath();
+                g.color(0xFFFFFFFF);
+                g.line(snx + snLen * 0.2f, sny + hr * 0.12f, snx + snLen * 0.7f, sny + hr * 0.08f, hr * 0.05f);
+            } else {
+                g.color(INK);
+                g.line(snx + snLen * 0.1f, sny + hr * 0.2f, snx + snLen * 0.8f, sny + hr * 0.12f, 2);
+            }
+            g.color(0xFF2A1A12);
+            g.oval(snx + snLen * 0.92f, sny - hr * 0.08f, hr * 0.13f, hr * 0.1f);
+            if (sp == Look.SP_CAT || sp == Look.SP_TIGER || sp == Look.SP_MOUSE || sp == Look.SP_RABBIT || sp == Look.SP_LION) {
+                g.color(0x99FFFFFF);
+                for (int i = -1; i <= 1; i++) g.line(snx + snLen * 0.5f, sny + i * hr * 0.06f, snx + snLen * 1.5f, sny + i * hr * 0.14f, 1.2f);
+            }
+            if (sp == Look.SP_GOAT) { g.color(0xFFEDE7DC); g.begin(); g.moveTo(snx, sny + hr * 0.3f); g.lineTo(snx + hr * 0.1f, sny + hr * 0.8f); g.lineTo(snx + hr * 0.3f, sny + hr * 0.3f); g.close(); g.fillPath(); }
+        }
+        // eye
+        float ex = hr * 0.25f, ey = -hr * 0.18f;
+        float er = hr * 0.17f * (1 - (p.eyesClosed ? 1 : p.blink));
+        g.color(0xFFFFFFFF);
+        g.oval(ex, ey, hr * 0.17f, Math.max(1, er));
+        g.color(0xFF1A120C);
+        g.oval(ex + hr * 0.05f, ey, hr * 0.1f, Math.max(1, Math.min(er, hr * 0.12f)));
+        g.color(0xFFFFFFFF);
+        g.oval(ex + hr * 0.02f, ey - hr * 0.04f, hr * 0.03f, hr * 0.03f);
+        // brow for emotion
+        g.color(shade(fur, 0.5f));
+        float bi = p.emotion == Pose.ANGRY || p.emotion == Pose.EVIL || p.emotion == Pose.DETERMINED ? hr * 0.08f : p.emotion == Pose.SCARED || p.emotion == Pose.SAD ? -hr * 0.08f : 0;
+        g.line(ex - hr * 0.18f, ey - hr * 0.22f - bi * 0.3f, ex + hr * 0.2f, ey - hr * 0.24f + bi, hr * 0.06f);
+        if (p.tears) { g.color(0xCC64B5F6); g.oval(ex, ey + hr * 0.3f + (p.time * 40) % (hr * 0.5f), hr * 0.05f, hr * 0.08f); }
+        g.restore();
+        g.restore();
+    }
+
+    static void tortoise(Gfx g, Look l, Pose p, float H) {
+        float stride = (float) Math.sin(p.walk) * p.walkAmt;
+        g.color(shade(l.skin, 0.9f));
+        for (int i = -1; i <= 1; i += 2) g.oval(i * H * 0.45f + stride * 6 * i, -H * 0.12f, H * 0.14f, H * 0.12f);
+        g.color(0xFF9CCC65);
+        g.oval(H * 0.85f, -H * 0.45f, H * 0.22f, H * 0.18f);
+        g.color(0xFF1A120C);
+        g.oval(H * 0.92f, -H * 0.5f, H * 0.04f, H * 0.04f * (1 - p.blink));
+        if (p.mouth > 0.08f) { g.color(0xFF5A1A1A); g.oval(H * 1.0f, -H * 0.38f, H * 0.06f, H * 0.03f + H * 0.05f * p.mouth); }
+        g.color(shade(l.furColor, 0.65f));
+        g.begin(); g.moveTo(-H * 0.75f, -H * 0.18f); g.cubicTo(-H * 0.7f, -H * 1.05f, H * 0.7f, -H * 1.05f, H * 0.75f, -H * 0.18f); g.close(); g.fillPath();
+        g.color(l.furColor);
+        g.begin(); g.moveTo(-H * 0.68f, -H * 0.22f); g.cubicTo(-H * 0.62f, -H * 0.95f, H * 0.62f, -H * 0.95f, H * 0.68f, -H * 0.22f); g.close(); g.fillPath();
+        g.color(shade(l.furColor, 0.75f));
+        g.strokeOval(0, -H * 0.5f, H * 0.18f, H * 0.14f, 3);
+        g.strokeOval(-H * 0.38f, -H * 0.38f, H * 0.14f, H * 0.11f, 3);
+        g.strokeOval(H * 0.38f, -H * 0.38f, H * 0.14f, H * 0.11f, 3);
+    }
+
+    // ------------------------------------------------------------------ birds (side view)
+
+    static void drawBird(Gfx g, Look l, Pose p, float H) {
+        int sp = l.species, c = l.furColor, belly = l.skin;
+        g.save();
+        g.scale(p.facing < 0 ? -1 : 1, 1);
+        if (p.body != Pose.HANG) { g.color(0x33000000); g.oval(0, 2, H * 0.35f, H * 0.05f); }
+        float by = -H * 0.48f, brx = H * 0.36f, bry = H * 0.28f;
+        if (sp == Look.SP_PEACOCK) {
+            float fan = 0.85f + 0.15f * (float) Math.sin(p.time * 1.5f);
+            for (int i = 0; i < 13; i++) {
+                double a = Math.PI * (0.12 + 0.76 * i / 12.0);
+                float fx = -brx * 0.4f + (float) Math.cos(a) * H * 0.95f * fan, fy = by + (float) -Math.sin(a) * H * 0.85f * fan;
+                g.color(0xFF2E7D32);
+                g.line(-brx * 0.4f, by, fx, fy, H * 0.03f);
+                g.color(0xFF1B5E20); g.oval(fx, fy, H * 0.09f, H * 0.11f);
+                g.color(0xFF00897B); g.oval(fx, fy, H * 0.06f, H * 0.075f);
+                g.color(0xFF0D47A1); g.oval(fx, fy, H * 0.03f, H * 0.04f);
+            }
+        }
+        // legs
+        g.color(sp == Look.SP_CROW ? 0xFF3A3A3A : 0xFFF9A825);
+        float stride = (float) Math.sin(p.walk) * p.walkAmt * H * 0.06f;
+        g.line(-brx * 0.15f, by + bry * 0.7f, -brx * 0.2f + stride, -2, H * 0.025f);
+        g.line(brx * 0.15f, by + bry * 0.7f, brx * 0.15f - stride, -2, H * 0.025f);
+        g.line(-brx * 0.2f + stride, -2, -brx * 0.2f + stride + H * 0.08f, -2, H * 0.02f);
+        g.line(brx * 0.15f - stride, -2, brx * 0.15f - stride + H * 0.08f, -2, H * 0.02f);
+        // tail
+        g.color(shade(c, 0.8f));
+        g.begin(); g.moveTo(-brx * 0.7f, by - bry * 0.1f); g.lineTo(-brx * 1.6f, by - bry * 0.6f); g.lineTo(-brx * 1.5f, by + bry * 0.3f); g.close(); g.fillPath();
+        if (sp == Look.SP_HEN) { g.color(0xFF5D4037); g.begin(); g.moveTo(-brx * 0.7f, by - bry * 0.4f); g.quadTo(-brx * 1.4f, by - bry * 1.8f, -brx * 1.2f, by - bry * 0.2f); g.strokePath(H * 0.05f); }
+        // body
+        g.color(shade(c, 0.6f));
+        g.oval(0, by, brx + 2, bry + 2);
+        g.radial(brx * 0.2f, by - bry * 0.4f, brx * 1.4f, lighten(c, 0.15f), shade(c, 0.9f));
+        g.oval(0, by, brx, bry);
+        g.color(belly);
+        g.oval(brx * 0.25f, by + bry * 0.25f, brx * 0.55f, bry * 0.6f);
+        // wing (flaps when talking or moving)
+        float flap = (p.mouth > 0.1f || p.walkAmt > 0) ? (float) Math.sin(p.time * 18) * 18 : (float) Math.sin(p.time * 2) * 3;
+        g.save();
+        g.translate(-brx * 0.05f, by - bry * 0.2f);
+        g.rotate(-10 - flap);
+        g.color(shade(c, 0.82f));
+        g.begin(); g.moveTo(brx * 0.4f, 0); g.quadTo(-brx * 0.2f, -bry * 0.6f, -brx * 0.95f, bry * 0.35f); g.quadTo(-brx * 0.1f, bry * 0.55f, brx * 0.4f, 0); g.close(); g.fillPath();
+        g.restore();
+        // head
+        float hx = brx * 0.75f, hy = by - bry * 1.0f, hr = H * (sp == Look.SP_OWL ? 0.22f : 0.17f);
+        g.color(sp == Look.SP_PEACOCK ? 0xFF1565C0 : c);
+        g.oval(hx, hy, hr, hr);
+        if (sp == Look.SP_PEACOCK) {
+            g.color(0xFF1565C0);
+            for (int i = -1; i <= 1; i++) { g.line(hx, hy - hr, hx + i * hr * 0.3f, hy - hr * 1.7f, 2); g.oval(hx + i * hr * 0.3f, hy - hr * 1.75f, hr * 0.1f, hr * 0.1f); }
+        }
+        if (sp == Look.SP_HEN) { g.color(0xFFE53935); for (int i = 0; i < 3; i++) g.oval(hx - hr * 0.3f + i * hr * 0.3f, hy - hr * 0.95f, hr * 0.2f, hr * 0.25f); g.oval(hx + hr * 0.75f, hy + hr * 0.55f, hr * 0.12f, hr * 0.2f); }
+        // beak opens with the voice
+        float open = Math.max(0, Math.min(1, p.mouth)) + (p.emotion == Pose.LAUGH ? 0.3f : 0);
+        int beak = sp == Look.SP_PARROT ? 0xFFD32F2F : sp == Look.SP_CROW ? 0xFF4A4A4A : 0xFFF9A825;
+        float bx = hx + hr * 0.8f, byk = hy + hr * 0.1f, bl = hr * (sp == Look.SP_EAGLE || sp == Look.SP_PARROT ? 0.8f : sp == Look.SP_DUCK ? 0.9f : 0.75f);
+        g.color(beak);
+        g.begin(); g.moveTo(bx, byk - hr * 0.22f); g.lineTo(bx + bl, byk - open * hr * 0.15f); g.lineTo(bx, byk + hr * 0.02f); g.close(); g.fillPath();
+        g.color(shade(beak, 0.8f));
+        g.begin(); g.moveTo(bx, byk + hr * 0.05f); g.lineTo(bx + bl * 0.85f, byk + hr * 0.05f + open * hr * 0.45f); g.lineTo(bx, byk + hr * 0.22f); g.close(); g.fillPath();
+        // eye
+        float ex = hx + hr * (sp == Look.SP_OWL ? 0.25f : 0.35f), ey = hy - hr * 0.2f, er = hr * (sp == Look.SP_OWL ? 0.32f : 0.2f);
+        g.color(sp == Look.SP_OWL ? 0xFFFFC107 : 0xFFFFFFFF);
+        g.oval(ex, ey, er, er * (1 - (p.eyesClosed ? 1 : p.blink)) + 0.5f);
+        g.color(0xFF120A06);
+        g.oval(ex + er * 0.2f, ey, er * 0.55f, er * 0.55f * (1 - (p.eyesClosed ? 1 : p.blink)) + 0.5f);
+        g.color(0xFFFFFFFF);
+        g.oval(ex + er * 0.05f, ey - er * 0.2f, er * 0.18f, er * 0.18f);
+        if (p.emotion == Pose.ANGRY || p.emotion == Pose.EVIL) { g.color(shade(c, 0.4f)); g.line(ex - er, ey - er * 1.2f, ex + er, ey - er * 0.6f, hr * 0.08f); }
         g.restore();
     }
 }

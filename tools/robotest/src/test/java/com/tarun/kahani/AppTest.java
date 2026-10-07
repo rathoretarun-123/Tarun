@@ -123,6 +123,33 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /** Whole background job with a short script: no TTS available, fake hardware encoders. Must finish, not hang. */
+    @Test
+    public void filmJobFinishesEndToEnd() throws Exception {
+        org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec copy = new org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec() {
+            public void process(java.nio.ByteBuffer in, java.nio.ByteBuffer out) {
+                int n = Math.min(in.remaining(), out.remaining());
+                for (int i = 0; i < Math.min(n, 64); i++) out.put(in.get());
+                in.position(in.limit());
+            }
+        };
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("video/avc", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(1280 * 720 * 2, 4096, copy));
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("audio/mp4a-latm", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(16384, 4096, copy));
+        Project p = sampleProject();
+        String script = "पात्र:\n1. मीना (8 वर्ष): लड़की, गुलाबी फ्रॉक, दो चोटियाँ\n2. राजू बंदर: लाल बंडी\nछोटी सी कहानी\n"
+                + "दृश्य 1: बगीचे में\n(स्थान: महल का बगीचा। सुबह। मीना तितली के पीछे दौड़ रही है।)\n"
+                + "मीना (हँसते हुए): \"राजू, देखो तितली!\"\n(राजू बंदर पेड़ से छलाँग मार कर आता है।)\n";
+        p.write("script.txt", script);
+        p.setSetting("quality", "360");
+        com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(RuntimeEnvironment.getApplication(), p);
+        long t0 = System.currentTimeMillis();
+        job.run();
+        System.out.println("JOB: done=" + job.done + " failed=" + job.failed + " err=" + job.error + " warn=" + job.warning
+                + " stage=" + job.stage + " secs=" + job.filmSeconds + " took=" + (System.currentTimeMillis() - t0) + "ms");
+        assertTrue("job failed: " + job.error, job.done);
+        assertTrue(p.film().exists());
+    }
+
     @Test
     public void framesRenderThroughAndroidCanvas() throws Exception {
         Project p = sampleProject();

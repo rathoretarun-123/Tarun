@@ -102,6 +102,77 @@ public final class LookDesigner {
         }
     }
 
+    static int speciesOf(String t) {
+        Object[][] sp = {
+                {Look.SP_FOX, "लोमड़ी", "fox"}, {Look.SP_LION, "शेर", "सिंह", "lion"}, {Look.SP_TIGER, "बाघ", "tiger"},
+                {Look.SP_BEAR, "भालू", "रीछ", "bear"}, {Look.SP_ELEPHANT, "हाथी", "elephant"}, {Look.SP_RABBIT, "खरगोश", "rabbit", "hare"},
+                {Look.SP_CAT, "बिल्ली", "cat"}, {Look.SP_DOG, "कुत्ता", "कुत्ते", "dog"}, {Look.SP_DEER, "हिरण", "deer"},
+                {Look.SP_GOAT, "बकरी", "बकरा", "goat"}, {Look.SP_COW, "गाय", "बैल", "cow", "ox"}, {Look.SP_WOLF, "भेड़िया", "wolf"},
+                {Look.SP_MOUSE, "चूहा", "चुहिया", "mouse", "rat"}, {Look.SP_TORTOISE, "कछुआ", "tortoise", "turtle"}, {Look.SP_HORSE, "घोड़ा", "घोड़ी", "horse"},
+                {Look.SP_CROW, "कौआ", "कौवा", "crow"}, {Look.SP_SPARROW, "गौरैया", "चिड़िया", "sparrow"}, {Look.SP_PARROT, "तोता", "मैना", "parrot"},
+                {Look.SP_PEACOCK, "मोर", "peacock"}, {Look.SP_OWL, "उल्लू", "owl"}, {Look.SP_HEN, "मुर्गी", "मुर्गा", "hen", "rooster"},
+                {Look.SP_EAGLE, "चील", "बाज़", "गिद्ध", "eagle", "hawk"}, {Look.SP_DUCK, "बत्तख", "हंस", "duck", "swan"},
+        };
+        // the name decides first (e.g. "चालाक लोमड़ी"), then the description
+        String head = t.length() > 40 ? t.substring(0, 40) : t;
+        for (Object[] e : sp) for (int i = 1; i < e.length; i++) if (wordIn(head, (String) e[i])) return (Integer) e[0];
+        return -1;
+    }
+
+    private static boolean wordIn(String t, String w) {
+        String n = Txt.norm(t), x = Txt.norm(w);
+        int i = n.indexOf(x);
+        while (i >= 0) {
+            boolean l = i == 0 || !Character.isLetter(n.charAt(i - 1)) && !Txt.isDevanagari(n.charAt(i - 1)) || n.charAt(i - 1) == ' ';
+            int e = i + x.length();
+            boolean r = e >= n.length() || n.charAt(e) == ' ' || !Character.isLetterOrDigit(n.charAt(e)) && !(n.charAt(e) >= '\u0900' && n.charAt(e) <= '\u0963');
+            if (l && r) return true;
+            i = n.indexOf(x, i + 1);
+        }
+        return false;
+    }
+
+    /** Colours and size of animals and birds. */
+    static void animal(Look l, String all) {
+        int fur, belly = 0xFFF5EBDD;
+        float h;
+        switch (l.species) {
+            case Look.SP_FOX: fur = 0xFFE07B28; h = 0.42f; break;
+            case Look.SP_LION: fur = 0xFFD9A441; h = 0.62f; break;
+            case Look.SP_TIGER: fur = 0xFFEE8A22; h = 0.6f; break;
+            case Look.SP_BEAR: fur = 0xFF6D4C35; h = 0.75f; belly = 0xFF9C7A5E; break;
+            case Look.SP_ELEPHANT: fur = 0xFF8E8E96; h = 1.05f; belly = 0xFFA8A8B0; break;
+            case Look.SP_RABBIT: fur = 0xFFF4F1EA; h = 0.3f; break;
+            case Look.SP_CAT: fur = 0xFF8D8D8D; h = 0.3f; break;
+            case Look.SP_DOG: fur = 0xFFB07A48; h = 0.4f; break;
+            case Look.SP_DEER: fur = 0xFFC08A55; h = 0.6f; break;
+            case Look.SP_GOAT: fur = 0xFFEDE7DC; h = 0.45f; break;
+            case Look.SP_COW: fur = 0xFFF2EEE6; h = 0.7f; break;
+            case Look.SP_WOLF: fur = 0xFF7D7F86; h = 0.48f; break;
+            case Look.SP_MOUSE: fur = 0xFF9E9E9E; h = 0.16f; break;
+            case Look.SP_TORTOISE: fur = 0xFF6E8B3D; h = 0.22f; belly = 0xFF8D6E4A; break;
+            case Look.SP_HORSE: fur = 0xFF8B5A2B; h = 0.85f; break;
+            case Look.SP_CROW: fur = 0xFF26262B; h = 0.25f; belly = 0xFF3A3A42; break;
+            case Look.SP_SPARROW: fur = 0xFF9C6B3E; h = 0.18f; break;
+            case Look.SP_PARROT: fur = 0xFF3CB043; h = 0.24f; belly = 0xFF7CD657; break;
+            case Look.SP_PEACOCK: fur = 0xFF1F5FBF; h = 0.5f; belly = 0xFF2B8A8A; break;
+            case Look.SP_OWL: fur = 0xFF8D6E4A; h = 0.28f; belly = 0xFFD8C3A0; break;
+            case Look.SP_HEN: fur = 0xFFF5F0E6; h = 0.28f; break;
+            case Look.SP_EAGLE: fur = 0xFF6B4423; h = 0.36f; belly = 0xFFF5F0E6; break;
+            case Look.SP_DUCK: fur = 0xFFF8F8F0; h = 0.26f; break;
+            default: fur = 0xFF9C7A5E; h = 0.45f;
+        }
+        List<Integer> cols = colorsIn(all);
+        if (!cols.isEmpty() && l.species != Look.SP_CROW) fur = cols.get(0);
+        l.furColor = fur;
+        l.skin = belly;
+        l.primary = cols.size() > 1 ? cols.get(1) : 0;
+        l.height = h;
+        l.hair = Look.H_NONE;
+        l.outfit = -1;
+        l.female = Txt.has(all, "मादा", "चिड़िया", "बिल्ली", "गाय", "बकरी", "मुर्गी", "she ", " her ");
+    }
+
     public static Look design(Story.CharacterDef c, Look base) {
         String all = c.fullName + "\n" + c.description;
         String face = section(c.description, "चेहरा", "face", "शरीर", "body", "रूप");
@@ -114,6 +185,7 @@ public final class LookDesigner {
         boolean monster = Txt.has(all, "राक्षस", "दानव", "दैत्य", "असुर", "monster", "demon", "ogre");
         boolean witch = Txt.has(all, "चुड़ैल", "डायन", "witch", "जादूगरनी");
         boolean monkey = Txt.has(all, "बंदर", "वानर", "मकाक", "monkey", "macaque");
+        int species = monkey ? -1 : speciesOf(c.fullName + " " + c.description);
         String noPrincess = Txt.norm(all).replace(Txt.norm("राजकुमारी"), "");
         int fem = 0, mal = 0;
         String[] femW = {"राजकुमारी", "रानी", "लड़की", "बेटी", "सहेली", "माँ", "दादी", "नानी", "बहन", "दीदी", "बिंदी", "साड़ी",
@@ -129,6 +201,8 @@ public final class LookDesigner {
             if (monster) { l.kind = Look.MONSTER; l.female = false; }
             else if (witch) { l.kind = Look.WITCH; l.female = true; }
             else if (monkey) { l.kind = Look.MONKEY; l.female = false; }
+            else if (species >= 20) { l.kind = Look.BIRD; l.species = species; }
+            else if (species >= 0) { l.kind = Look.ANIMAL; l.species = species; }
             else {
                 l.female = fem > mal;
                 boolean child = (age > 0 && age < 14) || Txt.has(all, "बच्ची", "बच्चा", "child", "kid");
@@ -136,9 +210,11 @@ public final class LookDesigner {
                 else if (old && !l.female) l.kind = Look.OLD_MAN;
                 else l.kind = l.female ? Look.WOMAN : Look.MAN;
             }
-            l.hero = !(monster || witch || Txt.has(all, "दुष्ट", "खलनायक", "villain", "evil"));
+            l.hero = !(monster || witch || Txt.has(all, "दुष्ट", "खलनायक", "villain", "evil", "चालाक", "धूर्त", "cunning"));
+            if (species == Look.SP_FOX || species == Look.SP_WOLF) l.hero = !Txt.has(all, "चालाक", "धूर्त", "दुष्ट", "cunning", "wicked", "sly") && l.hero;
         }
 
+        if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) { animal(l, all); return l; }
         // ---- size
         switch (l.kind) {
             case Look.GIRL: case Look.BOY:

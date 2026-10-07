@@ -324,7 +324,7 @@ public final class ScriptParser {
         }
     }
 
-    static Story.CharacterDef resolve(Story story, String speaker) {
+    public static Story.CharacterDef resolve(Story story, String speaker) {
         String s = Txt.norm(speaker);
         Story.CharacterDef best = null;
         int bestScore = 0;

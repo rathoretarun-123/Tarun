@@ -631,6 +631,27 @@ public final class Director {
         }
         sub(start, end, b.speaker.shown(), line.shown);
         camDialogue(sp, to, start, line.emotion);
+        boolean villain = !sp.look.hero;
+        // long line: the camera slowly pushes in (keeps the audience close to the feeling)
+        if (line.dur > 3.2f) {
+            Film.Cam last = seg.cams.get(seg.cams.size() - 1);
+            Film.Cam push = new Film.Cam(start + 0.2f, last.cx, last.cy - 6, Math.min(2.3f, last.zoom * 1.09f), Math.max(1f, line.dur - 0.4f));
+            push.roll = last.roll;
+            seg.cams.add(push);
+        }
+        // reaction shot: after a shocking, angry or frightening line we see the listener's face
+        boolean shock = line.emotion == Pose.SURPRISED || line.emotion == Pose.ANGRY || line.emotion == Pose.EVIL || line.emotion == Pose.SCARED;
+        if (to != null && shock && line.dur > 1.6f && to.stateAt(end).visible && dlgCount % 2 == 0) {
+            float th = heightOf(to), tx = finalX(to, end);
+            Film.Key tk = to.stateAt(end);
+            if (tk.anchor == Film.A_GROUND && tk.body == Pose.STAND) {
+                cam(end - 0.85f, tx, ground - th * 0.78f, 2.0f, 0);
+                Film.Key r = to.at(end - 0.85f);
+                if (r.emotion == Pose.NEUTRAL) r.emotion = villain ? Pose.SCARED : line.emotion == Pose.ANGRY ? Pose.SAD : Pose.SURPRISED;
+                Film.Key back = to.at(end + 0.6f);
+                back.emotion = Pose.NEUTRAL;
+            }
+        }
         lastSpeaker = sp;
         lastSubject = b.speaker;
         dlgCount++;
@@ -705,9 +726,9 @@ public final class Director {
         String text = b.text.replaceFirst("^(स्थान|Location|Place|Setting)\\s*[:：]\\s*", "");
         List<String> sents = sentences(text);
         if (establishing && sents.size() > 0) {
-            // establishing wide shot on the location
-            cam(t0, 640, 360, 1.0f, 0);
-            cam(t0 + 0.1f, 640, 360 + 10, 1.07f, 4.5f);
+            // establishing shot: the camera cranes down from the sky onto the location, then settles wide
+            cam(t0, 640, 300, 1.18f, 0);
+            cam(t0 + 0.1f, 640, 372, 1.06f, 5.0f);
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
         estab = establishing;
@@ -1219,6 +1240,7 @@ public final class Director {
     // ------------------------------------------------------------------ camera
 
     private void cam(float t, float cx, float cy, float zoom, float ease) { seg.cams.add(new Film.Cam(t, cx, cy, zoom, ease)); }
+    private void cam(float t, float cx, float cy, float zoom, float ease, float roll) { Film.Cam c = new Film.Cam(t, cx, cy, zoom, ease); c.roll = roll; seg.cams.add(c); }
 
     private float heightOf(Film.Actor a) { return Renderer.actorHeight(a.look, a.c, art, seg); }
 
@@ -1262,6 +1284,20 @@ public final class Director {
         float tx = finalX(to, t);
         int kind = strong ? 2 : dlgCount % 3;
         if (dlgCount == 0) kind = 0;
+        boolean menace = !sp.look.hero && (emo == Pose.EVIL || emo == Pose.ANGRY);
+        if (menace) {
+            // villain: low angle (the camera looks up at them) and a tilted frame
+            float roll = (dlgCount % 2 == 0 ? 1 : -1) * 2.6f;
+            cam(t, sx, ground - h * 0.52f, 1.65f, 0, roll);
+            cam(t + 0.05f, sx, ground - h * 0.55f, 1.75f, 3f, roll);
+            return;
+        }
+        if (emo == Pose.SCARED && sp.look.isChild()) {
+            // a frightened child: slightly high angle, a little tilt, makes them look small
+            cam(t, sx, ground - h * 0.95f, 1.8f, 0, -1.5f);
+            cam(t + 0.05f, sx, ground - h * 0.92f, 1.9f, 3f, -1.5f);
+            return;
+        }
         switch (kind) {
             case 0: { // two-shot
                 float span = Math.abs(sx - tx) + 460;

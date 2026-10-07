@@ -68,20 +68,20 @@ public final class Bible {
 
     public static String characterPrompt(Story.CharacterDef c) {
         StringBuilder b = new StringBuilder();
-        b.append("Create ONE character for a 2D Indian cartoon film for children (6-15 years). ");
+        b.append("Create ONE character for a premium 3D animated Indian film for children (6-15 years), in the style of a modern 3D animation studio feature (soft global illumination, subsurface skin, detailed fabric). ");
         b.append("Name: ").append(c.displayName);
         if (c.age > 0) b.append(", age ").append(c.age);
         if (c.look != null) b.append(", ").append(kindWord(c.look, false));
         b.append(". Description: ").append(oneLine(c.description));
-        b.append(" Style: colourful hand-drawn cartoon, full body from head to feet, standing straight and facing the camera, ");
-        b.append("mouth closed, eyes open, fully and modestly dressed, plain pure-white background, no text, no other people.");
+        b.append(" Pose: full body from head to feet, standing straight and facing the camera, mouth closed, eyes open, ");
+        b.append("fully and modestly dressed, plain pure-white background, soft studio light, no text, no other people.");
         return b.toString();
     }
 
     public static String placePrompt(String name, String description, String aspect) {
-        return "Background painting for a 2D Indian cartoon film for children, " + (aspect == null ? "16:9" : aspect)
-                + " wide shot, no people, no text. Place: " + name + ". " + oneLine(description)
-                + " Style: colourful, soft light, cinematic depth.";
+        return "Cinematic 3D animated film background for a premium Indian children's film, " + (aspect == null ? "16:9" : aspect)
+                + " wide establishing shot, no people, no text. Place: " + name + ". " + oneLine(description)
+                + " Style: rich 3D render, volumetric light, depth of field, atmospheric perspective, vivid but natural colours.";
     }
 
     public static String oneLine(String s) {
@@ -189,8 +189,8 @@ public final class Bible {
         b.append("\n").append(hi ? "शुरुआत और अंत\n" : "TITLE AND END\n").append("------------------------------------------------------------\n");
         b.append(hi ? "शीर्षक पृष्ठ: \"" : "Title page: \"").append(title).append("\" — ")
                 .append(hi ? "कहानी का मुख्य चित्र + संगीत। Prompt: " : "main picture of the story + music. Prompt: ")
-                .append("Movie poster style title picture for a children's cartoon film named '").append(title)
-                .append("', main characters together, colourful, no text.\n");
+                .append("3D animated movie poster for a children's film named '").append(title)
+                .append("', main characters together, cinematic lighting, depth of field, no text.\n");
         b.append("End page: \"").append(st.hindi ? "समाप्त" : "The End").append("\" — with gentle music.\n");
         return b.toString();
     }

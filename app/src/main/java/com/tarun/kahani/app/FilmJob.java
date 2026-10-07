@@ -125,6 +125,7 @@ public final class FilmJob implements Runnable {
                 throw new IllegalStateException("No dialogue found in the story. Write lines like  Name: \"dialogue\"  — or tap \"Read with AI\".");
             Edits ed = Edits.fromJson(project.read("edits.json"));
 
+            if (Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
             check();
@@ -315,6 +316,80 @@ public final class FilmJob implements Runnable {
             if (voices != null) voices.shutdown();
             MainActivity.deleteDir(tmp);
         }
+    }
+
+    /**
+     * Every character, place, title and end page without a picture is created by the studio with a free AI
+     * image service in a consistent 3D animated-film style, saved to the film and to the library (for reuse).
+     * Without internet the studio's own cartoon drawing is used instead.
+     */
+    private void makeMissingPictures(Story story, Edits ed) {
+        String cast = project.read("cast.txt");
+        java.util.Set<String> haveChar = new java.util.HashSet<String>(), haveScene = new java.util.HashSet<String>();
+        boolean haveTitle = false, haveEnd = false;
+        for (String line : cast.split("\n")) {
+            String[] f = line.trim().split("\\|");
+            if (f.length >= 3 && f[0].equals("char")) {
+                Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                if (c != null && project.has(f[2])) haveChar.add(c.id);
+            } else if (f.length >= 3 && f[0].equals("scene") && project.has(f[2])) haveScene.add(f[1].replaceAll("[a-z]$", ""));
+            else if (f.length >= 2 && f[0].equals("title")) haveTitle = project.has(f[1]);
+            else if (f.length >= 2 && f[0].equals("end")) haveEnd = project.has(f[1]);
+        }
+        java.util.List<Runnable> jobs = new java.util.ArrayList<Runnable>();
+        final Cloud cloud = Prefs.cloud(ctx);
+        final Library lib = new Library(ctx);
+        final int seed = Math.abs(story.title.hashCode() % 100000);
+        final int[] fails = {0};
+        final int[] made = {0};
+        final java.util.List<String[]> todo = new java.util.ArrayList<String[]>();   // {kind, key, prompt, w, h, label, desc}
+        for (Story.CharacterDef c : story.characters) {
+            if (haveChar.contains(c.id)) continue;
+            todo.add(new String[]{"char", c.displayName, com.tarun.kahani.core.Bible.characterPrompt(c), "768", "1152", c.shown(), c.description});
+        }
+        java.util.Map<String, String> placeFile = new java.util.HashMap<String, String>();
+        for (Story.Scene sc : story.scenes) {
+            if (haveScene.contains(String.valueOf(sc.number))) continue;
+            String where = sc.setting.length() > 0 ? sc.setting : sc.title;
+            todo.add(new String[]{"scene", String.valueOf(sc.number), com.tarun.kahani.core.Bible.placePrompt(
+                    com.tarun.kahani.core.Bible.firstClauseOf(where), where, "16:9"), "1280", "720", com.tarun.kahani.core.Bible.firstClauseOf(where), where});
+        }
+        if (!haveTitle) todo.add(new String[]{"title", "title", "3D animated movie poster for a premium Indian children's film named '" + story.title
+                + "', main characters together, cinematic lighting, depth of field, no text, no letters", "1280", "720", "Title", story.title});
+        if (!haveEnd) todo.add(new String[]{"end", "end", "Beautiful calm sunset landscape, cinematic 3D animated film style, volumetric light, "
+                + "for the ending of a children's film, no text, no letters", "1280", "720", "End", "ending"});
+        for (int i = 0; i < todo.size(); i++) {
+            check();
+            if (fails[0] >= 2) { warning = "The free AI picture service could not be reached — the studio drew the missing pictures itself."; break; }
+            String[] t = todo.get(i);
+            step("Studio is creating pictures with AI (" + (i + 1) + "/" + todo.size() + ")…", 0.01f + 0.02f * i / Math.max(1, todo.size()));
+            try {
+                String reuse = t[0].equals("scene") ? findSimilarPlace(placeFile, t[5]) : null;
+                String file;
+                if (reuse != null) file = reuse;
+                else {
+                    byte[] img = cloud.makePicture(t[2], Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
+                    file = project.savePicture(img, "ai_" + t[0]);
+                    try { lib.addBytes(Library.PIC, t[0].equals("char") ? "person" : t[0].equals("scene") ? "place" : t[0], t[5],
+                            t[6].length() > 200 ? t[6].substring(0, 200) : t[6], img, ".jpg", "AI (studio)"); } catch (Exception ignored) {}
+                    if (t[0].equals("scene")) placeFile.put(t[5], file);
+                    made[0]++;
+                }
+                if (t[0].equals("char")) project.setManifest("char", t[1], "char|" + t[1] + "|" + file);
+                else if (t[0].equals("scene")) project.setManifest("scene", t[1], "scene|" + t[1] + "|" + file);
+                else project.setManifest(t[0], t[0], t[0] + "|" + file + "|1");
+                fails[0] = 0;
+            } catch (CancelledException e) {
+                throw e;
+            } catch (Exception e) {
+                fails[0]++;
+            }
+        }
+    }
+
+    static String findSimilarPlace(java.util.Map<String, String> made, String place) {
+        for (java.util.Map.Entry<String, String> e : made.entrySet()) if (com.tarun.kahani.core.Bible.similar(place, e.getKey())) return e.getValue();
+        return null;
     }
 
     static final class CancelledException extends RuntimeException {}

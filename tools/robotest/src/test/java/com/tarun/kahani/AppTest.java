@@ -161,6 +161,7 @@ public class AppTest {
         System.out.println("STUDIO: " + st);
         assertTrue(st.toString().contains("वानुषा"));
         assertTrue(st.toString().contains("Production file"));
+        assertTrue(st.toString().contains("Find pictures in my library"));
         assertTrue(st.toString().contains("Still missing"));
         assertTrue(st.toString().contains("Director's plan"));
 
@@ -216,13 +217,59 @@ public class AppTest {
         TextView status = new TextView(a);
         android.widget.EditText box = new android.widget.EditText(a);
         call(a, "applyCommand", new Class<?>[]{String.class, TextView.class, android.widget.EditText.class},
-                "संगीत धीमा करो और वृंदा की आवाज़ तेज़ करो, subtitles लगाओ", status, box);
+                "the music is too loud, I can't hear Vrinda and please add subtitles", status, box);
         idle();
         System.out.println("COMMAND: " + status.getText());
         String edits = p.read("edits.json");
         System.out.println("EDITS: " + edits);
         assertTrue(edits.contains("\"subtitles\":true"));
         assertTrue(edits.contains("वृंदा"));
+        ac.pause().stop().destroy();
+    }
+
+    /** The director places uploaded pictures (no names given) and they land in the film's cast list. */
+    @Test
+    public void directorPlacesPicturesFromLibrary() throws Exception {
+        RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        Project p = Project.create(RuntimeEnvironment.getApplication());
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        set(a, "project", p);
+        Field libF = MainActivity.class.getDeclaredField("library");
+        libF.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) libF.get(a);
+        Class<?> pc = Class.forName("com.tarun.kahani.app.MainActivity$Placement");
+        java.lang.reflect.Constructor<?> ctor = pc.getDeclaredConstructor();
+        ctor.setAccessible(true);
+        List<Object> ps = new ArrayList<Object>();
+        String[] files = {"char_vrinda.jpg", "char_vanusha.jpg", "bg_forest.jpg", "char_kripa.jpg"};
+        for (String f : files) {
+            byte[] data = Files.readAllBytes(new File(ASSETS, "sample/" + f).toPath());
+            com.tarun.kahani.app.Library.Item it = lib.addBytes("pic", "", "photo" + ps.size(), "", data, ".jpg", "test");
+            assertTrue("picture not analysed: " + it.meta, it.meta.contains("hue="));
+            Object pl = ctor.newInstance();
+            Field fi = pc.getDeclaredField("item"); fi.setAccessible(true); fi.set(pl, it);
+            Field fn = pc.getDeclaredField("fileName"); fn.setAccessible(true); fn.set(pl, "IMG_" + ps.size() + ".jpg");
+            ps.add(pl);
+        }
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        set(a, "castStory", st);
+        call(a, "identify", new Class<?>[]{List.class, Story.class, boolean.class, boolean.class}, ps, st, false, false);
+        Field tf = pc.getDeclaredField("target"); tf.setAccessible(true);
+        Field lf = pc.getDeclaredField("label"); lf.setAccessible(true);
+        Field of = pc.getDeclaredField("options"); of.setAccessible(true);
+        int placed = 0;
+        for (Object pl : ps) {
+            System.out.println("PLACED: " + tf.get(pl) + " (" + lf.get(pl) + ") options=" + ((List<?>) of.get(pl)).size());
+            if (tf.get(pl) != null) placed++;
+            assertTrue(((List<?>) of.get(pl)).size() > 3);
+        }
+        assertTrue(placed >= 3);
+        call(a, "applyPlacements", new Class<?>[]{List.class}, ps);
+        for (int i = 0; i < 50 && p.read("cast.txt").split("\n").length < placed; i++) { Thread.sleep(100); idle(); }
+        System.out.println("CAST: " + p.read("cast.txt"));
+        assertTrue(p.read("cast.txt").contains("char|"));
         ac.pause().stop().destroy();
     }
 
@@ -253,6 +300,7 @@ public class AppTest {
         java.lang.reflect.Method h = com.tarun.kahani.app.FilmJob.class.getDeclaredMethod("hash", String.class);
         h.setAccessible(true);
         com.tarun.kahani.app.AudioIO.writeWav(new File(lines, h.invoke(null, "मीना|" + line) + ".wav"), tone, 32000);
+        RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").commit();
         com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(RuntimeEnvironment.getApplication(), p);
         long t0 = System.currentTimeMillis();
         job.run();

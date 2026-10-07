@@ -234,19 +234,24 @@ public final class Renderer {
 
     // ================================================================== scene
 
-    private float camX, camY, camZ;
+    private float camX, camY, camZ, camRoll;
 
     private void camera(Film.Seg s, float t) {
         Film.Cam cur = null, prev = null;
         for (Film.Cam c : s.cams) { if (c.t <= t) { prev = cur; cur = c; } else break; }
-        if (cur == null) { camX = 640; camY = 360; camZ = 1; }
+        if (cur == null) { camX = 640; camY = 360; camZ = 1; camRoll = 0; }
         else if (cur.ease > 0 && prev != null && t < cur.t + cur.ease) {
             float u = (t - cur.t) / cur.ease;
             u = u * u * (3 - 2 * u);
             camX = prev.cx + (cur.cx - prev.cx) * u;
             camY = prev.cy + (cur.cy - prev.cy) * u;
             camZ = prev.zoom + (cur.zoom - prev.zoom) * u;
-        } else { camX = cur.cx; camY = cur.cy; camZ = cur.zoom; }
+            camRoll = prev.roll + (cur.roll - prev.roll) * u;
+        } else { camX = cur.cx; camY = cur.cy; camZ = cur.zoom; camRoll = cur.roll; }
+        // a living camera: very slow drift and breathing, like a camera operator holding the shot
+        camX += (float) (Math.sin(t * 0.31) * 5 + Math.sin(t * 0.73) * 2) / camZ;
+        camY += (float) (Math.cos(t * 0.27) * 3) / camZ;
+        camZ *= 1f + 0.008f * (float) Math.sin(t * 0.21);
         if (camZ < 1) camZ = 1;
         float hw = vw / 2 / camZ, hh = vh / 2 / camZ;
         camX = Math.max(hw, Math.min(W - hw, camX));
@@ -288,6 +293,103 @@ public final class Renderer {
         camX = Math.max(hw, Math.min(W - hw, camX));
     }
 
+    static boolean outdoor(int set) {
+        return set == Sets.GARDEN || set == Sets.FOREST || set == Sets.VILLAGE || set == Sets.COURTYARD || set == Sets.GATE;
+    }
+
+    /** Light in the air: sun rays through the scene in the morning/day, a warm key light, haze in caves. */
+    private void light(Gfx g, Film.Seg s, float t) {
+        boolean day = s.tod == Sets.MORNING || s.tod == Sets.DAY;
+        if (day && outdoor(s.set)) {
+            // warm key light from the sun's side
+            g.radial(vw * 0.12f - (camX - 640) * 0.1f, -vh * 0.1f, vw * 0.9f, s.tod == Sets.MORNING ? 0x40FFE0A0 : 0x30FFF4D0, 0x00FFF4D0);
+            g.rect(0, 0, vw, vh);
+            // god rays
+            for (int i = 0; i < 5; i++) {
+                float sway = (float) Math.sin(t * 0.25 + i * 1.7) * 18;
+                float x0 = vw * (0.05f + i * 0.13f) - (camX - 640) * 0.15f + sway;
+                float w0 = 26 + i * 9, w1 = 120 + i * 30;
+                g.begin();
+                g.moveTo(x0, -10);
+                g.lineTo(x0 + w0, -10);
+                g.lineTo(x0 + w0 + 330 + w1, vh + 10);
+                g.lineTo(x0 + 330, vh + 10);
+                g.close();
+                g.linear(x0, 0, x0 + 300, vh, 0x22FFF3C8, 0x00FFF3C8);
+                g.fillPath();
+            }
+        } else if (s.set == Sets.CAVE_IN || s.set == Sets.CAVE_MOUTH) {
+            g.linear(0, vh * 0.55f, 0, vh, 0x00203A28, 0x5530584A);
+            g.rect(0, 0, vw, vh);
+        } else if (s.tod == Sets.NIGHT) {
+            g.radial(vw * 0.8f, vh * 0.05f, vw * 0.7f, 0x283050A0, 0x00000000);   // moonlight
+            g.rect(0, 0, vw, vh);
+        }
+    }
+
+    /** Out-of-focus leaves and flowers right in front of the lens: they slide faster than the scene (depth). */
+    private void foreground(Gfx g, final Film.Seg s, float t) {
+        if (!outdoor(s.set) || camZ > 1.75f) return;
+        final boolean night = s.tod == Sets.NIGHT || s.tod == Sets.EVENING;
+        final float W2 = vw, H2 = vh;
+        float a = Math.max(0, Math.min(1, (1.75f - camZ) / 0.45f));
+        g.save();
+        g.setAlpha(a * 0.9f);
+        float px = -(camX - 640) * 0.45f, py = -(camY - 360) * 0.25f;
+        g.translate(px, py);
+        g.layerLow("fg:" + s.set + ":" + night + ":" + (int) W2, W2, H2, 0.1f, new Gfx.Painter() {
+            public void paint(Gfx gg) {
+                int leaf = night ? 0xFF0E2416 : 0xFF2E6B2A, leaf2 = night ? 0xFF16301C : 0xFF4E8F34;
+                // bottom-left bush
+                for (int i = 0; i < 9; i++) {
+                    float x = -60 + i * 38, y = H2 - 30 + (i % 3) * 22;
+                    gg.color(i % 2 == 0 ? leaf : leaf2);
+                    gg.oval(x, y, 70 + (i % 4) * 14, 46 + (i % 3) * 10);
+                }
+                // bottom-right flowers and leaves
+                for (int i = 0; i < 7; i++) {
+                    float x = W2 - 40 - i * 42, y = H2 - 20 + (i % 3) * 18;
+                    gg.color(i % 2 == 0 ? leaf2 : leaf);
+                    gg.oval(x, y, 64, 44);
+                }
+                if (!night) {
+                    gg.color(0xFFE85A8C); gg.oval(W2 - 150, H2 - 60, 26, 22);
+                    gg.color(0xFFF2C230); gg.oval(W2 - 90, H2 - 40, 22, 18);
+                    gg.color(0xFFE8E8F0); gg.oval(150, H2 - 50, 22, 18);
+                }
+            }
+        });
+        g.restore();
+    }
+
+    /** Fine moving film grain (very light) for a cinema finish. */
+    private void grain(Gfx g, float t) {
+        final float W2 = vw, H2 = vh;
+        g.save();
+        g.setAlpha(0.05f);
+        int k = ((int) (t * 24)) % 4;
+        g.translate(-(k % 2) * 3, -(k / 2) * 3);
+        g.layer("grain:" + (int) W2, W2 + 6, H2 + 6, new Gfx.Painter() {
+            public void paint(Gfx gg) {
+                java.util.Random r = new java.util.Random(7);
+                for (int i = 0; i < 2600; i++) {
+                    gg.color(r.nextBoolean() ? 0xFFFFFFFF : 0xFF000000);
+                    gg.rect(r.nextFloat() * (W2 + 6), r.nextFloat() * (H2 + 6), 1.6f, 1.6f);
+                }
+            }
+        });
+        g.restore();
+    }
+
+    /** Slim cinema bars on wide (16:9) films. */
+    private void letterbox(Gfx g) {
+        if (vw / vh < 1.6f) return;
+        float b = vh * 0.055f;
+        g.color(0xFF000000);
+        g.rect(0, 0, vw, b);
+        g.rect(0, vh - b, vw, b);
+    }
+
     /** Cinematic finish: vignette and a mood colour grade. */
     private void grade(Gfx g, Film.Seg s) {
         int tint;
@@ -305,13 +407,30 @@ public final class Renderer {
         g.rect(0, 0, vw, vh);
     }
 
+    /**
+     * Camera transform. depth 1 = characters; depth < 1 = the far background, which zooms and pans less than the
+     * characters (parallax). The far layer pivots on the ground line, so feet always stay on the floor.
+     */
+    private void applyCam(Gfx g, float depth, float ground) {
+        g.translate(vw / 2, vh / 2);
+        if (camRoll != 0) g.rotate(camRoll);
+        g.scale(camZ, camZ);
+        g.translate(-camX, -camY);
+        if (depth < 1) {
+            float k = (1 + (camZ - 1) * depth) / camZ * 1.1f;       // 1.1: a little larger so edges never show
+            float lag = (camX - 640) * (1 - depth) * 0.8f;          // background follows the camera a bit
+            g.translate(camX + lag, ground);
+            g.scale(k, k);
+            g.translate(-camX, -ground);
+        }
+    }
+
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         camera(s, t);
         if (vw < W * 0.9f) followSpeaker(s, t);
+        // ---- far layer: the background (parallax)
         g.save();
-        g.translate(vw / 2, vh / 2);
-        g.scale(camZ, camZ);
-        g.translate(-camX, -camY);
+        applyCam(g, 0.78f, s.ground);
         if (s.backdrop != null) {
             final Art.Backdrop b = s.backdrop;
             Gfx.Painter bp = new Gfx.Painter() {
@@ -335,6 +454,10 @@ public final class Renderer {
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
             Sets.paintLive(g, set, tod, t);
         }
+        g.restore();
+        // ---- near layer: characters and effects
+        g.save();
+        applyCam(g, 1f, s.ground);
         // tree branch for monkeys
         for (Film.Actor a : s.actors) {
             Film.Key k = a.stateAt(t);
@@ -359,8 +482,12 @@ public final class Renderer {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
+        light(g, s, t);
+        foreground(g, s, t);
         grade(g, s);
         drawScreenFx(g, s, t);
+        grain(g, t);
+        letterbox(g);
         if (film.subtitles) drawSubs(g, s, t);
     }
 

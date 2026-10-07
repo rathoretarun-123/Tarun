@@ -23,8 +23,12 @@ aapt2 link -o $B/base.apk -I "$ALL_JAR" --manifest app/src/main/AndroidManifest.
   -A app/src/main/assets --java $B/gen --min-sdk-version 26 --target-sdk-version 34 \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" -0 jpg -0 png $B/res.zip
 echo "[2/6] compile java"
-javac -nowarn -source 8 -target 8 -encoding UTF-8 -bootclasspath "$ALL_JAR:$ANDROID_JAR" -d $B/classes \
-  $(find app/src/main/java -name '*.java') $(find $B/gen -name '*.java') 2>&1 | grep -v "warning\|^Note\|JAVA_TOOL" || true
+if ! javac -nowarn -source 8 -target 8 -encoding UTF-8 -bootclasspath "$ALL_JAR:$ANDROID_JAR" -d $B/classes \
+  $(find app/src/main/java -name '*.java') $(find $B/gen -name '*.java') > $B/javac.log 2>&1; then
+  grep -v "warning\|^Note\|JAVA_TOOL" $B/javac.log
+  echo "BUILD FAILED: java compile errors" >&2
+  exit 1
+fi
 test -f $B/classes/com/tarun/kahani/app/MainActivity.class
 echo "[3/6] dex"
 dalvik-exchange --dex --min-sdk-version=26 --output=$B/classes.dex $B/classes

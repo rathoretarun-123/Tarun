@@ -126,6 +126,7 @@ public final class Film {
 
     public static final class Cam {
         public float t, cx, cy, zoom, ease;   // ease 0 = cut
+        public float roll;                    // degrees: a tilted "Dutch angle" for menace or unease
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

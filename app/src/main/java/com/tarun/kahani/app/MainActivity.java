@@ -643,7 +643,7 @@ public class MainActivity extends Activity {
                 + "\nCharacters: " + st.characters.size() + "   •   Parts: " + st.scenes.size() + "   •   Lines: " + st.dialogueCount()
                 + (st.hasNarrator ? "\nNarrator voice: yes (the story has a narrator)" : ""), 15, Ui.TEXT, false));
         String miss = "Still missing:\n• " + noPic + " character pictures  • " + noVoice + " voice samples  • " + noBg + " backgrounds"
-                + "\nAnything you don't add, the studio makes from its own library.";
+                + "\nAnything you don't add, the studio creates with AI in 3D style when you make the film (internet), or draws itself offline.";
         sum.addView(Ui.text(this, miss, 14, noPic + noVoice + noBg == 0 ? Ui.GREEN : Ui.PRIMARY_DARK, false));
         for (String w : st.warnings) sum.addView(Ui.text(this, "⚠ " + w, 13, Ui.RED, false));
         if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ No dialogue found. Tap \"Read with AI\" or write lines like — Name: \"dialogue\"", 14, Ui.RED, true));
@@ -1245,10 +1245,10 @@ public class MainActivity extends Activity {
             prompt = Bible.placePrompt(targetName(tgt), setting, edits().aspect);
             tall = false;
         } else if ("title".equals(tgt)) {
-            prompt = "Movie poster style title picture for a children's Indian cartoon film named '" + castStory.title + "', main characters together, colourful, no text.";
+            prompt = "3D animated movie poster for a premium Indian children's film named '" + castStory.title + "', main characters together, cinematic lighting, depth of field, no text.";
             tall = false;
         } else {
-            prompt = "Beautiful calm sunset landscape for the end of a children's Indian cartoon film, colourful, no text.";
+            prompt = "Beautiful calm sunset landscape, cinematic 3D animated film style, volumetric light, for the ending of a children's film, no text.";
             tall = false;
         }
         final EditText et = new EditText(this);
@@ -2471,7 +2471,7 @@ public class MainActivity extends Activity {
         LinearLayout body = page(S_LIBRARY, "📚 My library", true);
         LinearLayout tabs = Ui.row(this);
         tabs.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
-        final String[][] t = {{Library.PIC, "🖼 Picture"}, {Library.VOICE, "🎙 Voices"}, {Library.SOUND, "🔊 Sounds"}};
+        final String[][] t = {{Library.PIC, "🖼 Pictures"}, {Library.VOICE, "🎙 Voices"}, {Library.SOUND, "🔊 Sounds"}};
         for (final String[] x : t) {
             tabs.addView(Ui.small(this, x[1], x[0].equals(libTab) ? Ui.PRIMARY : Ui.SUB, new View.OnClickListener() {
                 public void onClick(View v) { libTab = x[0]; showLibrary(); }
@@ -2587,6 +2587,13 @@ public class MainActivity extends Activity {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "online", on ? "1" : "0"); }
         });
         ai.addView(online);
+        CheckBox aa = new CheckBox(this);
+        aa.setText("Studio creates missing characters and backgrounds with free AI in 3D animated style (internet) — recommended");
+        aa.setChecked(Prefs.autoArt(this));
+        aa.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "autoArt", on ? "1" : "0"); }
+        });
+        ai.addView(aa);
         CheckBox nv = new CheckBox(this);
         nv.setText("Natural voices (Microsoft's free neural voices, needs internet, no key) — recommended");
         nv.setChecked(Prefs.naturalVoices(this));

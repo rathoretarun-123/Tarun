@@ -45,10 +45,26 @@ final class Picker {
             while (Math.max(o.outWidth, o.outHeight) / (s * 2) >= max) s *= 2;
             o = new BitmapFactory.Options();
             o.inSampleSize = s;
-            return BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            return b == null ? null : Project.upright(b, data);
         } catch (Throwable e) {
             return null;
         }
+    }
+
+    private static final java.util.concurrent.ExecutorService THUMBS = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    /** Loads a thumbnail on a worker thread and shows it when ready (the screen never freezes). */
+    static void thumbAsync(final Activity a, final ImageView iv, final Library.Item it, final int max) {
+        iv.setTag(it.id);
+        THUMBS.execute(new Runnable() {
+            public void run() {
+                final Bitmap b = thumb(a, it, max);
+                a.runOnUiThread(new Runnable() {
+                    public void run() { if (b != null && it.id.equals(iv.getTag())) iv.setImageBitmap(b); }
+                });
+            }
+        });
     }
 
     static void play(Activity a, String path) {
@@ -60,9 +76,20 @@ final class Picker {
                 mp.setDataSource(fd.getFileDescriptor(), fd.getStartOffset(), fd.getLength());
                 fd.close();
             } else mp.setDataSource(path);
-            mp.prepare();
-            mp.start();
             player = mp;
+            if (path.startsWith("http")) {
+                // internet sounds buffer in the background so the screen never freezes
+                mp.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                    public void onPrepared(MediaPlayer p) { if (p == player) p.start(); }
+                });
+                mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                    public boolean onError(MediaPlayer p, int what, int extra) { return true; }
+                });
+                mp.prepareAsync();
+            } else {
+                mp.prepare();
+                mp.start();
+            }
         } catch (Exception e) {
             android.widget.Toast.makeText(a, "चल नहीं सका", android.widget.Toast.LENGTH_SHORT).show();
         }
@@ -100,8 +127,8 @@ final class Picker {
                         cell.setPadding(Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4));
                         ImageView iv = new ImageView(a);
                         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                        iv.setImageBitmap(thumb(a, it, 300));
                         iv.setBackgroundColor(0xFFEEEEEE);
+                        thumbAsync(a, iv, it, 300);
                         cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(a, 110)));
                         TextView t = Ui.text(a, it.label(), 12, Ui.TEXT, false);
                         t.setMaxLines(1);

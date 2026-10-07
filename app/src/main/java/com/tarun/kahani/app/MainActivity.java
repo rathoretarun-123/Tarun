@@ -98,6 +98,8 @@ public class MainActivity extends Activity {
     private String pendingText, pendingTextName;
     private Voices previewVoices;
     private AudioIO.Recorder recorder;
+    private File recordingFile;       // what the line recorder is writing (deleted if left unfinished)
+    private boolean previewBusy;
     private Runnable afterPermission;
     private boolean askedPerms;
     private String libTab = Library.PIC;
@@ -124,7 +126,7 @@ public class MainActivity extends Activity {
         FilmJob job = FilmJob.current;
         if (Prefs.account(this).length() == 0 && !Prefs.skippedLogin(this)) showLogin();
         else if (job != null && !job.done && !job.failed && !job.cancelled) { project = job.project; showProgress(); }
-        else if (job != null && job.done && project == null) { project = job.project; showPlayer(); }
+        else if (job != null && job.done && !job.seen && project == null && job.project.dir.isDirectory()) { project = job.project; showPlayer(); }
         else if (project != null) showStory();
         else showHome();
         if (crash != null) {
@@ -155,6 +157,7 @@ public class MainActivity extends Activity {
         super.onPause();
         saveScript();
         Picker.stop();
+        stopRecording();
     }
 
     @Override
@@ -176,7 +179,17 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Stops a recording that is still running (leaving the screen or the app) and throws it away. */
+    private void stopRecording() {
+        if (recorder == null) return;
+        recorder.stop();
+        recorder = null;
+        if (recordingFile != null) recordingFile.delete();
+        recordingFile = null;
+    }
+
     private void setScreen(int s, View content) {
+        stopRecording();
         screen = s;
         ui.removeCallbacksAndMessages(null);
         if (s != S_PROGRESS) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -235,7 +248,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     public void run() {
                         try { if (dlg != null) dlg.dismiss(); } catch (Exception ignored) {}
-                        if (!isFinishing()) d.done(fr, fe);
+                        if (!isFinishing() && !isDestroyed()) d.done(fr, fe);
                     }
                 });
             }
@@ -293,11 +306,8 @@ public class MainActivity extends Activity {
         List<String> p = new ArrayList<String>();
         p.add(Manifest.permission.RECORD_AUDIO);
         p.add(Manifest.permission.CAMERA);
-        if (Build.VERSION.SDK_INT >= 33) {
-            p.add("android.permission.POST_NOTIFICATIONS");
-            p.add("android.permission.READ_MEDIA_IMAGES");
-            p.add("android.permission.READ_MEDIA_AUDIO");
-        } else p.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        if (Build.VERSION.SDK_INT >= 33) p.add("android.permission.POST_NOTIFICATIONS");
+        // pictures and sounds are picked with the system file chooser, which needs no storage permission
         List<String> missing = new ArrayList<String>();
         for (String s : p) if (checkSelfPermission(s) != PackageManager.PERMISSION_GRANTED) missing.add(s);
         return missing.toArray(new String[0]);
@@ -1075,6 +1085,7 @@ public class MainActivity extends Activity {
         o.inPreferredConfig = Bitmap.Config.ARGB_8888;
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
         if (b == null) throw new Exception("चित्र पढ़ा नहीं जा सका");
+        b = Project.upright(b, data);
         int w = b.getWidth(), h = b.getHeight();
         int[] px = new int[w * h];
         b.getPixels(px, 0, w, 0, 0, w, h);
@@ -1122,9 +1133,9 @@ public class MainActivity extends Activity {
                                 for (Cloud.Found f : fs) {
                                     try {
                                         byte[] t = c.download(f.thumb.length() > 0 ? f.thumb : f.url);
-                                        Bitmap b = BitmapFactory.decodeByteArray(t, 0, t.length);
+                                        Bitmap b = decodeSmall(t, 400);
                                         if (b != null) out.add(new Object[]{f, b});
-                                    } catch (Exception ignored) {}
+                                    } catch (Throwable ignored) {}
                                 }
                                 if (out.isEmpty()) throw new Exception(c.lastError.length() > 0 ? c.lastError : "कुछ नहीं मिला");
                                 return out;
@@ -1177,7 +1188,10 @@ public class MainActivity extends Activity {
         background("चित्र डाउनलोड हो रहा है…", new Work() {
             public Object run() throws Exception {
                 byte[] b = Prefs.cloud(MainActivity.this).download(f.url);
-                if (BitmapFactory.decodeByteArray(b, 0, b.length) == null) throw new Exception("यह चित्र खुला नहीं");
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(b, 0, b.length, o);
+                if (o.outWidth <= 0) throw new Exception("यह चित्र खुला नहीं");
                 return b;
             }
         }, new Done() {
@@ -1229,7 +1243,7 @@ public class MainActivity extends Activity {
                 final byte[] b = (byte[]) r;
                 ImageView iv = new ImageView(MainActivity.this);
                 iv.setAdjustViewBounds(true);
-                iv.setImageBitmap(BitmapFactory.decodeByteArray(b, 0, b.length));
+                iv.setImageBitmap(decodeSmall(b, 900));
                 new AlertDialog.Builder(MainActivity.this).setTitle("पसंद आया?").setView(iv)
                         .setPositiveButton("✔ इस्तेमाल करें", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) {
@@ -1274,6 +1288,8 @@ public class MainActivity extends Activity {
 
     /** Plays one of the character's lines in the voice the film will use (with the sample applied if any). */
     private void previewVoice(final Story st, final Story.CharacterDef c, final boolean keepVoice) {
+        if (previewBusy) { toast("पिछली आवाज़ बन रही है… रुकिए"); return; }
+        previewBusy = true;
         final Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
         String sample = st.hindi ? "नमस्ते, मैं " + c.displayName + " हूँ।" : "Hello, I am " + c.displayName + ".";
         for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.speaker == c) { sample = b.text; break; }
@@ -1295,7 +1311,7 @@ public class MainActivity extends Activity {
                 int n = previewVoices.voices.size();
                 int choice = 0, choices = 0;
                 if (vs != null) {
-                    float[] pcm = AudioIO.decode(MainActivity.this, vs.path);
+                    float[] pcm = AudioIO.decode(MainActivity.this, vs.path, 60);
                     if (pcm != null) { k.sample = com.tarun.kahani.core.VoiceFx.profile(pcm, com.tarun.kahani.core.Synth.SR); k.sampleId = vs.id; }
                 }
                 if (natural) {
@@ -1334,6 +1350,7 @@ public class MainActivity extends Activity {
             }
         }, new Done() {
             public void done(Object r, Exception e) {
+                previewBusy = false;
                 if (e != null) { toast(e.getMessage()); offerTtsInstall(); return; }
                 Object[] o = (Object[]) r;
                 Picker.play(MainActivity.this, ((File) o[0]).getAbsolutePath());
@@ -1501,12 +1518,14 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 if (recorder == null) {
                     recorder = new AudioIO.Recorder(out);
+                    recordingFile = out;
                     recorder.start();
                     btn.setText("⏹  रोकें और सहेजें");
                     ui.post(tick);
                 } else {
                     AudioIO.Recorder r = recorder;
                     recorder = null;
+                    recordingFile = null;
                     r.stop();
                     d.dismiss();
                     if (r.error != null || out.length() < 32000) { toast("रिकॉर्डिंग नहीं हुई " + (r.error == null ? "(बहुत छोटी)" : r.error)); out.delete(); return; }
@@ -1523,7 +1542,7 @@ public class MainActivity extends Activity {
         });
         d.setOnDismissListener(new DialogInterface.OnDismissListener() {
             public void onDismiss(DialogInterface di) {
-                if (recorder != null) { recorder.stop(); recorder = null; out.delete(); }
+                if (recorder != null) { recorder.stop(); recorder = null; recordingFile = null; out.delete(); }
             }
         });
         d.show();
@@ -1553,23 +1572,27 @@ public class MainActivity extends Activity {
             c.addView(Ui.text(this, who + (l.manner.length() > 0 ? " (" + l.manner + ")" : ""), 15, Ui.TEXT, true));
             c.addView(Ui.text(this, l.shown, 14, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            final Button rec = Ui.small(this, file.exists() ? "🎙 फिर से" : "🎙 रिकॉर्ड", Ui.RED, null);
+            final Button rec = Ui.small(this, file.equals(recordingFile) ? "⏹ रोकें" : file.exists() ? "🎙 फिर से" : "🎙 रिकॉर्ड", Ui.RED, null);
             rec.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     withPermission(Manifest.permission.RECORD_AUDIO, "माइक की अनुमति दें", new Runnable() {
                         public void run() {
-                            if (recorder == null) {
-                                recorder = new AudioIO.Recorder(file);
-                                recorder.start();
-                                rec.setText("⏹ रोकें");
-                            } else {
+                            if (recorder != null && file.equals(recordingFile)) {
+                                // finish this line's recording
                                 AudioIO.Recorder rr = recorder;
                                 recorder = null;
+                                recordingFile = null;
                                 rr.stop();
                                 toast(file.length() > 16000 ? "✅ सहेजा" : "बहुत छोटी रिकॉर्डिंग");
                                 if (file.length() <= 16000) file.delete();
                                 showLines();
+                                return;
                             }
+                            if (recorder != null) { toast("पहले चल रही रिकॉर्डिंग ⏹ से रोकें"); return; }
+                            recordingFile = file;
+                            recorder = new AudioIO.Recorder(file);
+                            recorder.start();
+                            rec.setText("⏹ रोकें");
                         }
                     });
                 }
@@ -1647,6 +1670,9 @@ public class MainActivity extends Activity {
             return;
         }
         if (code == REQ_SAVE_TEXT) {
+            if (result == RESULT_OK && data != null && data.getData() != null && pendingText == null) {
+                toast("फिर से \"डाउनलोड करें\" दबाएँ");
+            }
             if (result == RESULT_OK && data != null && data.getData() != null && pendingText != null) {
                 try {
                     OutputStream o = getContentResolver().openOutputStream(data.getData());
@@ -1677,7 +1703,18 @@ public class MainActivity extends Activity {
                 project.setSetting("useAi", "0");
                 showStory();
             } else if (code == REQ_IMAGE) {
-                incomingPicture(Project.readAll(getContentResolver().openInputStream(uri)), displayName(uri));
+                background("चित्र खुल रहा है…", new Work() {
+                    public Object run() throws Exception {
+                        InputStream in = getContentResolver().openInputStream(uri);
+                        if (in == null) throw new Exception("चित्र नहीं खुला");
+                        return new Object[]{Project.readAll(in), displayName(uri)};
+                    }
+                }, new Done() {
+                    public void done(Object r, Exception e) {
+                        if (e != null) { toast("चित्र नहीं खुला: " + e.getMessage()); return; }
+                        incomingPicture((byte[]) ((Object[]) r)[0], (String) ((Object[]) r)[1]);
+                    }
+                });
             } else if (code == REQ_AUDIO) {
                 final String name = displayName(uri);
                 background("ध्वनि जोड़ी जा रही है…", new Work() {
@@ -1704,7 +1741,7 @@ public class MainActivity extends Activity {
 
     /** Many pictures at once: each is recognised by its file name (or by AI) and put where it belongs. */
     private void bulkPictures(final List<Uri> uris) {
-        if (castStory == null) loadStory();
+        loadStory();
         final Story st = castStory;
         final List<String> names = new ArrayList<String>();
         for (Story.CharacterDef c : st.characters) names.add(c.displayName);
@@ -1755,6 +1792,24 @@ public class MainActivity extends Activity {
                 showStudio();
             }
         });
+    }
+
+    /** Decodes a picture no bigger than about max pixels on its long side (never the full-size photo). */
+    static Bitmap decodeSmall(byte[] data, int max) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            if (o.outWidth <= 0) return null;
+            int s = 1;
+            while (Math.max(o.outWidth, o.outHeight) / (s * 2) >= max) s *= 2;
+            o = new BitmapFactory.Options();
+            o.inSampleSize = s;
+            Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            return b == null ? null : Project.upright(b, data);
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     static byte[] shrink(byte[] data, int max) {
@@ -1856,7 +1911,20 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED && !askedPerms) {
             askPermissions();
         }
-        FilmJob.start(this, project);
+        FilmJob j = FilmJob.start(this, project);
+        if (j == null) {
+            FilmJob cur = FilmJob.current;
+            final Project other = cur != null ? cur.project : null;
+            AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle("एक फ़िल्म पहले से बन रही है")
+                    .setMessage(cur != null && cur.cancelled ? "पिछली फ़िल्म रुक रही है — कुछ सेकंड बाद फिर दबाएँ।"
+                            : "\"" + (other == null ? "" : other.name()) + "\" बन रही है। उसके पूरा होने के बाद यह फ़िल्म बनाएँ, या उसे रोक दें।")
+                    .setPositiveButton("ठीक है", null);
+            if (other != null && !cur.cancelled) b.setNeutralButton("उसकी प्रगति देखें", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface d, int w) { project = other; showProgress(); }
+            });
+            b.show();
+            return;
+        }
         showProgress();
     }
 
@@ -1924,6 +1992,8 @@ public class MainActivity extends Activity {
 
     private void showPlayer() {
         if (project == null || !project.film().exists()) { showStory(); return; }
+        FilmJob fj = FilmJob.current;
+        if (fj != null && fj.done && fj.project.dir.equals(project.dir)) fj.seen = true;
         LinearLayout outer = Ui.column(this);
         outer.setBackgroundColor(0xFF000000);
         FrameLayout fl = new FrameLayout(this);
@@ -1983,7 +2053,7 @@ public class MainActivity extends Activity {
 
     private void applyCommand(final String text, final TextView status, final EditText box) {
         if (text.trim().length() == 0) return;
-        if (castStory == null) loadStory();
+        loadStory();
         final List<String> names = new ArrayList<String>();
         for (Story.CharacterDef c : castStory.characters) names.add(c.displayName);
         final Edits ed = edits();
@@ -2141,7 +2211,8 @@ public class MainActivity extends Activity {
                 cell.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4));
                 ImageView iv = new ImageView(this);
                 iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                iv.setImageBitmap(Picker.thumb(this, it, 300));
+                iv.setBackgroundColor(0xFFEEEEEE);
+                Picker.thumbAsync(this, iv, it, 300);
                 cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 120)));
                 TextView tv = Ui.text(this, it.label() + (it.builtIn ? " (ऐप)" : ""), 12, Ui.TEXT, false);
                 tv.setMaxLines(1);

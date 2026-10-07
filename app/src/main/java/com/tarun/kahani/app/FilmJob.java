@@ -46,13 +46,27 @@ public final class FilmJob implements Runnable {
         this.project = p;
     }
 
+    private static Thread thread;
+    /** Set once the finished film has been shown, so the app does not keep reopening it. */
+    public volatile boolean seen;
+
+    /** True while a job's thread is still working (also during the moments after "stop" is pressed). */
+    public static synchronized boolean busy() { return thread != null && thread.isAlive(); }
+
+    /**
+     * Starts making the film. Returns the running job of the same project if there is one, or null when another
+     * job (or a just-stopped one that is still finishing) is using the studio.
+     */
     public static synchronized FilmJob start(Context ctx, Project p) {
-        if (current != null && !current.done && !current.failed && !current.cancelled) return current;
+        if (busy()) {
+            if (current != null && !current.cancelled && current.project.dir.equals(p.dir)) return current;
+            return null;
+        }
         current = new FilmJob(ctx, p);
         FilmService.start(ctx);
-        Thread t = new Thread(current, "film-job");
-        t.setPriority(Thread.NORM_PRIORITY);
-        t.start();
+        thread = new Thread(current, "film-job");
+        thread.setPriority(Thread.NORM_PRIORITY);
+        thread.start();
         return current;
     }
 
@@ -97,11 +111,12 @@ public final class FilmJob implements Runnable {
 
     public void run() {
         Voices voices = null;
-        File tmp = new File(ctx.getCacheDir(), "film_tmp");
+        // every job has its own working folder; old leftovers (e.g. after the app was killed) are removed
+        File[] stale = ctx.getCacheDir().listFiles();
+        if (stale != null) for (File d : stale) if (d.getName().startsWith("film_tmp")) MainActivity.deleteDir(d);
+        File tmp = new File(ctx.getCacheDir(), "film_tmp_" + startedAt);
         try {
             tmp.mkdirs();
-            File[] old = tmp.listFiles();
-            if (old != null) for (File f : old) f.delete();
             step("कहानी पढ़ी जा रही है…", 0.01f);
             String script = scriptOf(project);
             if (script.trim().length() < 10) throw new IllegalStateException("कहानी खाली है। पहले कहानी लिखें या चिपकाएँ।");
@@ -141,7 +156,7 @@ public final class FilmJob implements Runnable {
                 String sid = project.setting("vsample." + c.displayName, "");
                 Library.Item it = lib.byId(sid);
                 if (it != null) {
-                    float[] pcm = AudioIO.decode(ctx, it.path);
+                    float[] pcm = AudioIO.decode(ctx, it.path, 60);
                     if (pcm != null) { k.sample = VoiceFx.profile(pcm, Synth.SR); k.sampleId = it.id; }
                 }
                 if (natural) {
@@ -161,7 +176,7 @@ public final class FilmJob implements Runnable {
             if (natural) narratorCast.edge = EdgeVoice.narrator(story.hindi);
             Library.Item ns = lib.byId(project.setting("vsample.narrator", ""));
             if (ns != null) {
-                float[] pcm = AudioIO.decode(ctx, ns.path);
+                float[] pcm = AudioIO.decode(ctx, ns.path, 60);
                 if (pcm != null) { narratorCast.sample = VoiceFx.profile(pcm, Synth.SR); narratorCast.sampleId = ns.id; }
                 if (natural && narratorCast.sample != null) narratorCast.edge = EdgeVoice.forSample(narratorCast.sample.pitch, story.hindi);
             }
@@ -298,8 +313,7 @@ public final class FilmJob implements Runnable {
             failed = true;
         } finally {
             if (voices != null) voices.shutdown();
-            File[] fs = tmp.listFiles();
-            if (fs != null) for (File f : fs) f.delete();
+            MainActivity.deleteDir(tmp);
         }
     }
 

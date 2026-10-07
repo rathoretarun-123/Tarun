@@ -53,7 +53,11 @@ public final class Voices {
         } catch (Exception e) {
             return false;
         }
-        if (!success[0]) return false;
+        if (!success[0]) {
+            try { if (tts != null) tts.shutdown(); } catch (Exception ignored) {}
+            tts = null;
+            return false;
+        }
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
             public void onStart(String id) {}
             public void onDone(String id) { finish(id, true); }
@@ -375,11 +379,12 @@ public final class Voices {
     static float[] readWav(File f) throws IOException {
         byte[] b = Project.readAll(new FileInputStream(f));
         if (b.length < 44 || b[0] != 'R' || b[8] != 'W') return null;
-        int pos = 12, channels = 1, sr = 22050, bits = 16, dataPos = -1, dataLen = 0;
+        int pos = 12, channels = 1, sr = 22050, bits = 16, dataPos = -1, dataLen = 0, format = 1;
         while (pos + 8 <= b.length) {
             String id = new String(b, pos, 4, "US-ASCII");
             int len = (b[pos + 4] & 255) | (b[pos + 5] & 255) << 8 | (b[pos + 6] & 255) << 16 | (b[pos + 7] & 255) << 24;
             if (id.equals("fmt ")) {
+                format = (b[pos + 8] & 255) | (b[pos + 9] & 255) << 8;
                 channels = (b[pos + 10] & 255) | (b[pos + 11] & 255) << 8;
                 sr = (b[pos + 12] & 255) | (b[pos + 13] & 255) << 8 | (b[pos + 14] & 255) << 16 | (b[pos + 15] & 255) << 24;
                 bits = (b[pos + 22] & 255) | (b[pos + 23] & 255) << 8;
@@ -391,7 +396,8 @@ public final class Voices {
             if (len < 0 || len > b.length) break;
             pos += 8 + len + (len & 1);
         }
-        if (dataPos < 0 || channels < 1 || sr < 4000) return null;
+        // only plain 8/16-bit PCM here; anything else (24-bit, float…) goes to the phone's decoder
+        if (dataPos < 0 || channels < 1 || sr < 4000 || (bits != 8 && bits != 16) || (format != 1 && format != 0xFFFE)) return null;
         int bytes = bits / 8;
         int frames = dataLen / (bytes * channels);
         float[] o = new float[frames];

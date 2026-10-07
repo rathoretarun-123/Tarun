@@ -28,7 +28,10 @@ public final class AudioIO {
     private AudioIO() {}
 
     /** Decodes an asset ("asset:sounds/x.ogg") or a file path to mono floats at Synth.SR; null when it cannot. */
-    public static float[] decode(Context c, String path) {
+    public static float[] decode(Context c, String path) { return decode(c, path, 180); }
+
+    /** Same, but never more than maxSeconds (long files would only waste memory: sounds are looped anyway). */
+    public static float[] decode(Context c, String path, int maxSeconds) {
         MediaExtractor ex = new MediaExtractor();
         MediaCodec dec = null;
         try {
@@ -37,9 +40,9 @@ public final class AudioIO {
                 ex.setDataSource(fd.getFileDescriptor(), fd.getStartOffset(), fd.getLength());
                 fd.close();
             } else {
-                if (path.toLowerCase().endsWith(".wav")) {
+                if (path.toLowerCase().endsWith(".wav") && new File(path).length() < 64L << 20) {
                     float[] w = Voices.readWav(new File(path));
-                    if (w != null) return w;
+                    if (w != null) return w.length > maxSeconds * Synth.SR ? java.util.Arrays.copyOf(w, maxSeconds * Synth.SR) : w;
                 }
                 ex.setDataSource(path);
             }
@@ -55,11 +58,12 @@ public final class AudioIO {
             int sr = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE);
             int ch = fmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT) ? fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : 1;
             long durUs = fmt.containsKey(MediaFormat.KEY_DURATION) ? fmt.getLong(MediaFormat.KEY_DURATION) : 0;
-            if (durUs > 15L * 60 * 1000000) durUs = 15L * 60 * 1000000;   // never decode more than 15 minutes
+            long maxUs = maxSeconds * 1000000L;
+            if (durUs <= 0 || durUs > maxUs) durUs = maxUs;
             dec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME));
             dec.configure(fmt, null, null, 0);
             dec.start();
-            int cap = durUs > 0 ? (int) (durUs * sr / 1000000L) + sr : sr * 30;
+            int cap = (int) (durUs * sr / 1000000L) + sr;
             float[] out = new float[cap];
             int n = 0;
             MediaCodec.BufferInfo bi = new MediaCodec.BufferInfo();
@@ -93,7 +97,7 @@ public final class AudioIO {
                         ob.limit(bi.offset + bi.size);
                         java.nio.ShortBuffer sb = ob.order(ByteOrder.nativeOrder()).asShortBuffer();
                         int frames = sb.remaining() / Math.max(1, outCh);
-                        if (n + frames > out.length) out = java.util.Arrays.copyOf(out, Math.max(out.length * 3 / 2, n + frames + sr));
+                        frames = Math.min(frames, out.length - n);
                         for (int i = 0; i < frames; i++) {
                             float s = 0;
                             for (int k = 0; k < outCh; k++) s += sb.get(i * outCh + k);

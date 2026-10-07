@@ -169,6 +169,7 @@ public final class Project {
         o.inSampleSize = sample;
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
         if (b == null) throw new IOException("यह चित्र पढ़ा नहीं जा सका");
+        b = upright(b, data);
         boolean png = b.hasAlpha();
         String name = base + "_" + (System.nanoTime() % 100000000L) + (png ? ".png" : ".jpg");
         OutputStream out = new FileOutputStream(new File(dir, name));
@@ -176,6 +177,37 @@ public final class Project {
         out.close();
         b.recycle();
         return name;
+    }
+
+    /** Phone cameras often store portrait photos sideways with a rotation tag; turn the picture upright. */
+    public static Bitmap upright(Bitmap b, byte[] data) {
+        int deg = 0;
+        boolean flip = false;
+        try {
+            android.media.ExifInterface ex = new android.media.ExifInterface(new java.io.ByteArrayInputStream(data));
+            switch (ex.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) {
+                case 2: flip = true; break;
+                case 3: deg = 180; break;
+                case 4: deg = 180; flip = true; break;
+                case 5: deg = 90; flip = true; break;
+                case 6: deg = 90; break;
+                case 7: deg = 270; flip = true; break;
+                case 8: deg = 270; break;
+                default:
+            }
+        } catch (Throwable ignored) {
+        }
+        if (deg == 0 && !flip) return b;
+        android.graphics.Matrix m = new android.graphics.Matrix();
+        if (flip) m.postScale(-1, 1);
+        m.postRotate(deg);
+        try {
+            Bitmap r = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+            if (r != b) b.recycle();
+            return r;
+        } catch (OutOfMemoryError e) {
+            return b;
+        }
     }
 
     public void delete() {

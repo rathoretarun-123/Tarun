@@ -37,8 +37,8 @@ All screens and instructions in the app are in English; the story, dialogue and 
 
    Then choose the quality: 480p, 720p or 1080p.
 5. **🎬 Make film**. You can lock the phone or use other apps meanwhile. The notification shows progress and **time left**.
-6. **Watch and change.** The film plays inside the app. Type changes below it in English, Hindi or Hinglish, e.g.
-   *increase brightness • lower the music • background sounds off • make Vrinda louder • make Khan's voice deeper • add subtitles • smaller file size • make it for Instagram • music thoda kam karo*
+6. **Watch and change.** The film plays inside the app. Describe changes below it in plain English, e.g.
+   *the music is too loud • I can't hear Vrinda • make Khan sound deeper and a bit slower • brighter and warmer • make it black and white • turn the birds down and add captions • the film drags, speed it up • smaller file for WhatsApp • make it for Instagram*
 
    Then tap **🔁 Make again**. Voices are reused, so this is quicker. When you like it, tap **💾 Download** (Gallery → Movies/KahaniFilm) or **📤 Share**.
 
@@ -80,7 +80,7 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * `LookDesigner`, `Director`, `Renderer`, `Puppet` and `Sets` handle design, staging, camera and drawing.
   * `EdgeVoice` is a minimal WebSocket client for the Edge read-aloud neural voices. It handles the Sec-MS-GEC token and per-character/emotion SSML prosody, and returns MP3. It was verified against a protocol mock built from the `edge-tts` reference.
   * `Mixer.mixTo` streams the soundtrack in chunks with a limiter. `SoundLib` provides the recorded sounds. `VoiceFx` does pitch/tempo changes and voice-sample matching. `Grade` applies colour edits.
-  * `Edits` and `CommandParser` handle the post-preview command box in English, Hindi and Hinglish.
+  * `Edits` and `CommandParser` turn the plain-English change requests typed after the preview into edits (an LLM handles anything the rules miss).
   * `Bible` writes the production file. `Toon` turns photos into cartoons.
 * `app/src/main/java/com/tarun/kahani/app` holds the Android side (UI in English):
   * `MainActivity`, `Picker`, `Library`, `AudioIO`, `Voices`

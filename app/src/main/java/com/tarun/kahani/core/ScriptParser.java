@@ -22,22 +22,31 @@ public final class ScriptParser {
     static final String[] TITLE_WORDS = {"बड़ी", "छोटी", "बड़ा", "छोटा", "बाकी", "राजकुमारी", "राजकुमार", "गार्ड", "गार्ड्स",
             "the", "princess", "prince", "guard", "guards", "little", "big", "old", "young", "और", "का", "की", "के"};
 
-    /** Reads a script in Hindi, English or Hinglish (Hindi written in English letters). */
+    /**
+     * Reads a script in Hindi, English, Hinglish (Hindi in English letters) or a mix: every Hinglish line is turned
+     * into Devanagari for the Hindi voices and the director, English lines stay English (spoken by English voices).
+     */
     public static Story parse(String raw) {
-        if (raw != null && Hinglish.isHinglish(raw)) {
-            java.util.Map<String, String> back = new java.util.HashMap<String, String>();
-            Story s = parseText(Hinglish.toDevanagari(raw, back));
+        if (raw == null) raw = "";
+        java.util.Map<String, String> back = new java.util.HashMap<String, String>();
+        List<String> converted = new ArrayList<String>();
+        String text = Hinglish.convertScript(raw, back, converted);
+        Story s = parseText(text);
+        if (!back.isEmpty()) {
             s.hinglish = true;
             s.back = back;
+            s.converted.addAll(converted);
             s.title = Hinglish.back(s.title, back);
             s.subtitle = Hinglish.back(s.subtitle, back);
-            for (Story.CharacterDef c : s.characters) {
-                c.label = Hinglish.back(c.displayName, back);
-                if (!c.aliases.contains(c.label)) c.aliases.add(c.label);
-            }
-            return s;
         }
-        return parseText(raw);
+        // the film's main language: the language most dialogue is in
+        int hi = 0, en = 0;
+        for (Story.Scene sc : s.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type != Story.Beat.DIALOGUE) continue;
+            if (Txt.mostlyHindi(b.text)) hi++; else en++;
+        }
+        if (hi + en > 0) s.hindi = hi >= en;
+        return s;
     }
 
     static Story parseText(String raw) {

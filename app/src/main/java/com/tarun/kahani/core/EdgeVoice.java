@@ -88,6 +88,46 @@ public final class EdgeVoice {
         return out;
     }
 
+    /**
+     * The same character speaking the other language: Swara <-> Indian English (Neerja), Madhur <-> Prabhat,
+     * keeping the character's pitch and speed so they still sound like themselves.
+     */
+    public static Cast forLanguage(Cast c, boolean hindi) {
+        if (c == null) return null;
+        boolean isHindi = c.voice.startsWith("hi-");
+        if (isHindi == hindi) return c;
+        boolean female = c.voice.equals(HINDI_FEMALE[0]) || c.voice.contains("Neerja") || c.voice.contains("Sonia")
+                || c.voice.contains("Jenny") || c.voice.contains("Ana") || c.voice.contains("Maisie") || c.voice.contains("Swara");
+        int pitch = c.pitchHz;
+        if (!hindi) return new Cast(female ? "en-IN-NeerjaNeural" : "en-IN-PrabhatNeural", pitch, c.ratePct);
+        if (c.voice.contains("Ana") || c.voice.contains("Maisie")) pitch += 34;   // child voice -> raised Swara
+        return new Cast(female ? HINDI_FEMALE[0] : HINDI_MALE[0], pitch, c.ratePct);
+    }
+
+    /** The studio's built-in voice library: {key, label}. Hindi stories get Hindi voices first. */
+    public static List<String[]> presets(boolean hindi) {
+        List<String[]> out = new ArrayList<String[]>();
+        String f = HINDI_FEMALE[0], m = HINDI_MALE[0];
+        String[][] hi = {
+                {f, "40", "6", "Swara — little girl (bright, playful)"}, {f, "24", "3", "Swara — girl (sweet, confident)"},
+                {f, "0", "0", "Swara — young woman (warm)"}, {f, "-8", "-4", "Swara — mother / queen (calm)"},
+                {f, "-16", "-10", "Swara — grandmother (gentle, slow)"}, {f, "-14", "-8", "Swara — witch / cunning lady"},
+                {m, "48", "6", "Madhur — little boy (lively)"}, {m, "28", "4", "Madhur — teenage boy"},
+                {m, "0", "0", "Madhur — man (clear)"}, {m, "-12", "-4", "Madhur — king / father (deep, firm)"},
+                {m, "-18", "-12", "Madhur — old man (slow)"}, {m, "-32", "-12", "Madhur — giant / monster (very deep)"},
+                {m, "60", "14", "Madhur — monkey / small animal (squeaky)"}, {m, "-6", "-14", "Madhur — narrator (storyteller)"}};
+        String[][] en = {
+                {"en-US-AnaNeural", "0", "0", "Ana — child girl (US)"}, {"en-GB-MaisieNeural", "0", "0", "Maisie — child girl (UK)"},
+                {"en-US-AnaNeural", "-8", "2", "Ana — child boy (US)"}, {"en-IN-NeerjaNeural", "0", "0", "Neerja — Indian woman"},
+                {"en-GB-SoniaNeural", "0", "0", "Sonia — British woman"}, {"en-US-JennyNeural", "0", "0", "Jenny — American woman"},
+                {"en-IN-PrabhatNeural", "0", "0", "Prabhat — Indian man"}, {"en-GB-RyanNeural", "0", "0", "Ryan — British man"},
+                {"en-US-GuyNeural", "0", "0", "Guy — American man"}, {"en-IN-PrabhatNeural", "-28", "-12", "Prabhat — giant / monster"},
+                {"en-GB-RyanNeural", "-14", "-12", "Ryan — old man"}, {"en-IN-NeerjaNeural", "-14", "-10", "Neerja — grandmother"}};
+        for (String[] e : hindi ? hi : en) out.add(new String[]{e[0] + "|" + e[1] + "|" + e[2], e[3]});
+        for (String[] e : hindi ? en : hi) out.add(new String[]{e[0] + "|" + e[1] + "|" + e[2], e[3]});
+        return out;
+    }
+
     /** Neutral voice that fits a voice sample (by its pitch), so matching the sample needs only a small change. */
     public static Cast forSample(float samplePitch, boolean hindi) {
         boolean high = samplePitch > 165;

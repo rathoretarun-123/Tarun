@@ -37,6 +37,7 @@ public final class Voices {
     private final Map<String, CountDownLatch> waits = new ConcurrentHashMap<String, CountDownLatch>();
     private final Map<String, Boolean> ok = new ConcurrentHashMap<String, Boolean>();
     private Locale locale;
+    private boolean storyHindi = true;
 
     /** Blocks (max ~8 s) until the speech engine is ready. Call from a background thread. */
     public boolean init(Context ctx, boolean hindi) {
@@ -64,6 +65,7 @@ public final class Voices {
             public void onError(String id) { finish(id, false); }
             public void onError(String id, int code) { finish(id, false); }
         });
+        storyHindi = hindi;
         locale = hindi ? new Locale("hi", "IN") : new Locale("en", "IN");
         int r = tts.setLanguage(locale);
         languageOk = r != TextToSpeech.LANG_MISSING_DATA && r != TextToSpeech.LANG_NOT_SUPPORTED;
@@ -201,10 +203,16 @@ public final class Voices {
 
     /** Phone text-to-speech for one line at the given pitch and speed. */
     float[] phoneTts(String text, int voice, float pitch, float rate, File tmpDir, int idx) {
+        return phoneTts(text, voice, pitch, rate, tmpDir, idx, storyHindi);
+    }
+
+    /** Phone voice in the line's own language (a story may mix Hindi and English lines). */
+    float[] phoneTts(String text, int voice, float pitch, float rate, File tmpDir, int idx, boolean hindi) {
         if (!ready || tts == null || text.trim().length() == 0) return null;
         try {
             if (voice >= 0 && voice < voices.size()) tts.setVoice(voices.get(voice));
-            else tts.setLanguage(locale);
+            else if (hindi == storyHindi) tts.setLanguage(locale);
+            else tts.setLanguage(hindi ? new Locale("hi", "IN") : new Locale("en", "IN"));
             tts.setPitch(pitch);
             tts.setSpeechRate(rate);
             File out = new File(tmpDir, "line" + idx + ".wav");
@@ -300,7 +308,7 @@ public final class Voices {
         }
         if (pcm == null && edge != null && !edgeOff && k.edge != null) {
             try {
-                com.tarun.kahani.core.EdgeVoice.Cast ec = k.edge;
+                com.tarun.kahani.core.EdgeVoice.Cast ec = com.tarun.kahani.core.EdgeVoice.forLanguage(k.edge, line.hindi);
                 // with a sample, speak plainly in the matching gender; the sample decides the pitch
                 if (k.sample != null) ec = new com.tarun.kahani.core.EdgeVoice.Cast(ec.voice, 0, ec.ratePct);
                 pcm = edgeSpeak(line.text, ec, k.sample != null ? Pose.NEUTRAL : line.emotion, tmpDir, idx);
@@ -318,7 +326,7 @@ public final class Voices {
             // with a sample the phone voice is only the "words"; pitch comes from the sample
             float pitch = useSample ? 1f : k.pitch * ef[1];
             float rate = k.rate * ef[0];
-            pcm = phoneTts(line.text, k.voice, pitch, rate, tmpDir, idx);
+            pcm = phoneTts(line.text, line.hindi == storyHindi ? k.voice : -1, pitch, rate, tmpDir, idx, line.hindi);
             if (pcm == null) return null;
             lastEngine = "phone";
             if (!useSample && k.shift != 1f) pcm = shift(pcm, k.shift);

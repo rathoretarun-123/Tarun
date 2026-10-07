@@ -18,9 +18,17 @@ public final class Story {
     public boolean hinglish;
     /** Devanagari word -> the user's own spelling (Hinglish stories), for names, title and subtitles. */
     public java.util.Map<String, String> back;
+    /** Lines that were converted from Hinglish (only text from these is shown back in English letters). */
+    public final List<String> converted = new ArrayList<String>();
 
-    /** How the user wrote it (Hinglish stories are shown in English letters again). */
-    public String shown(String devanagari) { return hinglish ? Hinglish.back(devanagari, back) : devanagari; }
+    /** How the user wrote it: text from Hinglish lines is shown in English letters again; Hindi stays Hindi. */
+    public String shown(String text) {
+        if (!hinglish || text == null) return text;
+        String t = text.trim();
+        if (t.length() == 0) return text;
+        for (String line : converted) if (line.contains(t)) return Hinglish.back(text, back);
+        return text;
+    }
 
     public static final class CharacterDef {
         public String id;            // stable key

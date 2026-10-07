@@ -22,18 +22,22 @@ public final class CommandParser {
     }
 
     private static final String[] UP = {"बढ़ा", "बढा", "ज़्यादा", "ज्यादा", "अधिक", "तेज़", "तेज", "ऊँच", "ऊंच", "ऊपर", "increase", "more", "louder",
-            "higher", "raise", "boost", "up", "brighter", "badha", "badhao", "jyada", "zyada", "tez", "bigger", "large"};
+            "higher", "raise", "boost", "up", "brighter", "badha", "badhao", "jyada", "zyada", "tez", "bigger", "large", "larger", "stronger",
+            "amplify", "enhance", "turn up", "pump up", "clearer", "vivid", "punchier"};
     private static final String[] DOWN = {"कम", "घटा", "धीम", "हल्क", "नीच", "decrease", "less", "lower", "reduce", "down", "softer", "quieter",
-            "dim", "darker", "kam", "ghata", "smaller", "small", "compress", "dheema", "halka"};
-    private static final String[] MUCH = {"बहुत", "काफ़ी", "काफी", "ज़्यादा", "a lot", "much", "very", "bahut", "double", "दोगुन"};
-    private static final String[] LITTLE = {"थोड़ा", "थोडा", "थोड़ी", "हल्का सा", "slightly", "little", "bit", "thoda", "थोड़े"};
+            "dim", "darker", "kam", "ghata", "smaller", "small", "compress", "dheema", "halka", "turn down", "tone down", "quiet", "calmer",
+            "weaker", "subtle", "subtler", "gentler", "lighter", "drop", "cut", "shrink"};
+    private static final String[] MUCH = {"बहुत", "काफ़ी", "काफी", "ज़्यादा", "a lot", "much", "very", "bahut", "double", "दोगुन", "way", "really",
+            "significantly", "a great deal"};
+    private static final String[] LITTLE = {"थोड़ा", "थोडा", "थोड़ी", "हल्का सा", "slightly", "little", "bit", "thoda", "थोड़े", "touch", "tad",
+            "somewhat", "a little"};
     private static final String[] OFF = {"हटा", "बंद", "निकाल", "मत", "off", "remove", "no ", "without", "hata", "band", "disable", "mute", "म्यूट"};
     private static final String[] ON = {"लगा", "जोड़", "जोड", "चालू", "दिखा", "add", "show", "on", "enable", "laga", "jod"};
 
     public static Result parse(String text, List<String> characterNames) {
-        if (text != null) text = Hinglish.knownWords(text);   // "music kam karo" -> "music कम करो"
         Result r = new Result();
         if (text == null) return r;
+        text = text.replaceAll("(?i)black\\s*(and|&)\\s*white", "black-white");
         // split into separate requests
         String[] parts = text.split("(?i)\\s+और\\s+|\\s+तथा\\s+|\\s+फिर\\s+|\\s+and\\s+|\\s+then\\s+|,|।|\\.|;|\\n");
         String prev = null;
@@ -52,11 +56,33 @@ public final class CommandParser {
                     continue;
                 }
             }
+            // "make Khan deeper and a bit slower": the second part is about Khan too
+            if (prevCmd != null && prevCmd.containsKey("who") && !mentionsSubject(q, characterNames)) {
+                String who = (String) prevCmd.get("who");
+                boolean sUp = has(q, UP), sDown = has(q, DOWN);
+                if (c != null && "speed".equals(c.get("op"))) { c.put("op", "voice_rate"); c.put("who", who); }
+                else if (c == null && (sUp || sDown || has(q, "louder", "softer", "quieter"))) {
+                    c = cmd(has(q, "slow", "fast", "quick") ? "voice_rate" : has(q, "deep", "high", "squeak") ? "voice_pitch" : "voice_gain");
+                    c.put("who", who);
+                    c.put("factor", (double) (c.get("op").equals("voice_gain") ? amount(q, !sDown) : (has(q, "slow", "deep") ? 0.85f : 1.15f)));
+                }
+            }
+            // "the film drags, speed it up" is one request, not two
+            if (c != null && prevCmd != null && c.get("op").equals(prevCmd.get("op"))
+                    && String.valueOf(c.get("who")).equals(String.valueOf(prevCmd.get("who")))) { prev = q; continue; }
             if (c != null) { r.commands.add(c); prevCmd = c; }
             else { r.unknown.add(q); prevCmd = null; }
             prev = q;
         }
         return r;
+    }
+
+    /** Does this part name its own subject (music, picture, a character…)? */
+    static boolean mentionsSubject(String q, List<String> names) {
+        if (has(q, "music", "song", "film", "video", "movie", "background", "subtitle", "caption", "bright", "colour", "color", "effect",
+                "narrator", "file", "संगीत", "फ़िल्म", "वीडियो")) return true;
+        if (names != null) for (String n : names) if (nameIn(q, n)) return true;
+        return false;
     }
 
     /** Whole-word check (so "बंद" does not match inside "बंदर"). */
@@ -142,6 +168,12 @@ public final class CommandParser {
     private static Map<String, Object> one(String t, List<String> names) {
         boolean up = has(t, UP) && !(has(t, "कम") && Txt.firstIndex(t, "कम") > Txt.firstIndex(t, UP));
         boolean down = has(t, DOWN) && !up;
+        // complaints: "the music is too loud" -> lower it; "I can't hear Vrinda" -> louder
+        String lt = t.toLowerCase();
+        if (lt.matches(".*\\btoo (loud|high|bright|fast|big|large|strong|much|heavy|noisy|saturated|colou?rful|warm|sharp)\\b.*")
+                || lt.matches(".*\\b(overpowering|drowns|drowning|deafening|harsh)\\b.*")) { up = false; down = true; }
+        else if (lt.matches(".*\\btoo (quiet|soft|low|dark|slow|small|weak|faint|dull|cold|pale|little)\\b.*")
+                || lt.matches(".*\\b(can'?t|cannot|can not|hard to|barely) (hear|see)\\b.*") || lt.matches(".*\\bnot (loud|bright|clear) enough\\b.*")) { up = true; down = false; }
         // ---------- reset
         if (has(t, "reset", "पहले जैसा", "पहले जैसी", "undo all", "सब हटा", "original")) return cmd("reset");
         // ---------- platform / aspect
@@ -154,26 +186,28 @@ public final class CommandParser {
         if (res.find() && !has(t, "%")) { Map<String, Object> c = cmd("resolution"); c.put("value", (double) Math.min(1080, Integer.parseInt(res.group(1)))); return c; }
         if (has(t, "full hd", "fullhd", "फुल एचडी")) { Map<String, Object> c = cmd("resolution"); c.put("value", 1080.0); return c; }
         // ---------- subtitles
-        if (has(t, "subtitle", "उपशीर्षक", "caption", "सबटाइटल", "कैप्शन", "likha", "लिखे")) {
+        if (has(t, "subtitle", "उपशीर्षक", "caption", "सबटाइटल", "कैप्शन", "likha", "लिखे", "text on screen", "on-screen text")) {
             Map<String, Object> c = cmd("subtitles");
             c.put("on", !word(t, "हटा", "हटाओ", "बंद", "off", "remove", "नहीं", "मत", "without", "no"));
             return c;
         }
         // ---------- file size
-        if (has(t, "file size", "size", "साइज़", "साइज", "आकार", "mb", "एमबी", "compress", "फ़ाइल", "file")) {
+        if (has(t, "file size", "size", "साइज़", "साइज", "आकार", "mb", "एमबी", "compress", "फ़ाइल", "file", "upload", "whatsapp")) {
             Map<String, Object> c = cmd("file_size");
-            c.put("factor", (double) (has(t, "कम", "छोटा", "छोटी", "small", "reduce", "compress", "decrease", "less", "kam") ? 0.5f : 1.5f));
+            c.put("factor", (double) (has(t, "कम", "छोटा", "छोटी", "small", "reduce", "compress", "decrease", "less", "kam", "too big", "too large",
+                    "upload", "whatsapp", "lighter") || down ? 0.5f : 1.5f));
             return c;
         }
         // ---------- picture
-        if (has(t, "brightness", "चमक", "उजाला", "रोशनी", "bright", "रौशनी", "andhera", "अंधेरा", "dark")) {
+        if (has(t, "brightness", "चमक", "उजाला", "रोशनी", "bright", "रौशनी", "andhera", "अंधेरा", "dark", "dim", "gloomy", "lighting", "exposure")) {
             Map<String, Object> c = cmd("brightness");
             boolean darkWord = has(t, "अंधेरा", "andhera", "dark");
             boolean darker;
             if (darkWord) {
                 // "too dark" / "अंधेरा बहुत है" is a complaint -> brighter; "make it darker" / "अंधेरा करो" -> darker
                 boolean complaint = has(t, "बहुत", "too", "ज़्यादा", "ज्यादा", "zyada", "है", "hai", "लग", "lag", "कम", "less", "reduce");
-                darker = has(t, "darker", "more dark", "अंधेरा करो", "अंधेरा बढ़", "dark करो", "make it dark") || (!complaint && up);
+                darker = has(t, "darker", "more dark", "अंधेरा करो", "अंधेरा बढ़", "dark करो", "make it dark", "moodier") || (!complaint && up);
+                if (has(t, "too dark", "too dim", "too gloomy")) darker = false;
             } else {
                 darker = down && !up;
             }
@@ -182,7 +216,8 @@ public final class CommandParser {
             return c;
         }
         if (has(t, "contrast", "कंट्रास्ट")) { Map<String, Object> c = cmd("contrast"); c.put("factor", (double) amount(t, !down)); return c; }
-        if (has(t, "saturation", "रंग", "colour", "color", "कलर", "rang")) {
+        if (has(t, "black-white", "black and white", "black & white", "grayscale", "greyscale")) { Map<String, Object> c = cmd("saturation"); c.put("value", 0.0); return c; }
+        if (has(t, "saturation", "रंग", "colour", "color", "कलर", "rang", "vivid", "vibrant", "pale", "washed out")) {
             Map<String, Object> c = cmd(has(t, "गर्म", "warm", "सुनहर", "golden") || has(t, "ठंड", "cool", "नीला", "blue") ? "warmth" : "saturation");
             if (c.get("op").equals("warmth")) c.put("factor", (double) (has(t, "ठंड", "cool", "नीला", "blue") ? 0.7f : 1.3f));
             else c.put("factor", (double) amount(t, !down));
@@ -195,17 +230,21 @@ public final class CommandParser {
         if (names != null) for (String n : names) if (nameIn(t, n)) { who = n; break; }
         boolean voiceWord = has(t, "आवाज़", "आवाज", "voice", "awaaz", "awaz", "volume", "बोल", "sound", "level");
         if (who != null) {
-            if (has(t, "pitch", "पिच", "सुर", "मोटी", "मोटा", "भारी", "पतली", "पतला", "deeper", "deep", "higher pitch", "moti", "patli", "bhari")) {
+            if (has(t, "pitch", "पिच", "सुर", "मोटी", "मोटा", "भारी", "पतली", "पतला", "deeper", "deep", "higher pitch", "moti", "patli", "bhari",
+                    "squeaky", "squeakier", "younger", "older", "childlike", "thinner", "heavier", "manlier", "lighter voice")) {
                 Map<String, Object> c = cmd("voice_pitch");
                 c.put("who", who);
-                boolean lower = has(t, "मोटी", "मोटा", "भारी", "deeper", "deep", "moti", "bhari", "lower", "नीच") || (down && !has(t, "पतली", "पतला"));
+                boolean lower = has(t, "मोटी", "मोटा", "भारी", "deeper", "deep", "moti", "bhari", "lower", "नीच", "older", "heavier", "manlier")
+                        || (down && !has(t, "पतली", "पतला", "younger", "squeak", "thinner", "childlike"));
                 c.put("factor", (double) (lower ? 0.85f : 1.15f));
                 return c;
             }
-            if (has(t, "slow", "धीरे", "धीमा", "धीमी", "fast", "जल्दी", "speed", "रफ़्तार", "गति", "dheere", "jaldi")) {
+            if (has(t, "slow", "धीरे", "धीमा", "धीमी", "fast", "जल्दी", "speed", "रफ़्तार", "गति", "dheere", "jaldi", "quicker", "rushed", "hurried")) {
                 Map<String, Object> c = cmd("voice_rate");
                 c.put("who", who);
-                c.put("factor", (double) (has(t, "slow", "धीरे", "धीमा", "धीमी", "dheere") ? 0.85f : 1.15f));
+                boolean slower = has(t, "slow", "धीरे", "धीमा", "धीमी", "dheere", "rushed", "hurried", "too fast", "too quick");
+                if (has(t, "too slow")) slower = false;
+                c.put("factor", (double) (slower ? 0.85f : 1.15f));
                 return c;
             }
             Map<String, Object> c = cmd("voice_gain");
@@ -215,28 +254,31 @@ public final class CommandParser {
             return c;
         }
         // ---------- mix
-        if (has(t, "music", "संगीत", "म्यूज़िक", "म्यूजिक", "गाना", "धुन", "song", "bgm", "gaana")) {
+        if (has(t, "music", "संगीत", "म्यूज़िक", "म्यूजिक", "गाना", "धुन", "song", "bgm", "gaana", "soundtrack", "score", "melody", "tune")) {
             Map<String, Object> c = cmd("music");
             if (word(t, "mute", "म्यूट", "बंद", "हटा", "हटाओ", "off", "remove")) c.put("value", 0.0); else c.put("factor", (double) amount(t, !down));
             return c;
         }
         if (has(t, "narrator", "कथावाचक", "सूत्रधार")) { Map<String, Object> c = cmd("narrator"); c.put("factor", (double) amount(t, !down)); return c; }
-        if (has(t, "background sound", "background noise", "पृष्ठभूमि", "बैकग्राउंड", "ambience", "माहौल", "आसपास", "nature", "प्राकृतिक")) {
+        if (has(t, "background sound", "background noise", "पृष्ठभूमि", "बैकग्राउंड", "ambience", "ambient", "माहौल", "आसपास", "nature", "प्राकृतिक",
+                "birds", "noise", "surroundings")) {
             Map<String, Object> c = cmd("ambience");
             if (word(t, "mute", "म्यूट", "बंद", "हटा", "हटाओ", "off")) c.put("value", 0.0); else c.put("factor", (double) amount(t, !down));
             return c;
         }
-        if (has(t, "effect", "इफ़ेक्ट", "इफेक्ट", "ध्वनि", "धमाके", "sfx")) {
+        if (has(t, "effect", "इफ़ेक्ट", "इफेक्ट", "ध्वनि", "धमाके", "sfx", "foley")) {
             Map<String, Object> c = cmd("sfx");
             if (word(t, "mute", "म्यूट", "बंद", "हटा", "हटाओ", "off")) c.put("value", 0.0); else c.put("factor", (double) amount(t, !down));
             return c;
         }
-        if (voiceWord && has(t, "सब", "all", "dialogue", "संवाद", "सभी", "voices")) {
+        if ((voiceWord && has(t, "सब", "all", "dialogue", "संवाद", "सभी", "voices")) || has(t, "dialogue", "dialogues", "speech", "voices")) {
             Map<String, Object> c = cmd("voices"); c.put("factor", (double) amount(t, !down)); return c;
         }
-        if (has(t, "slow", "धीमा", "धीमी", "fast", "तेज़ चल", "speed", "रफ़्तार", "pace")) {
+        if (has(t, "slow", "धीमा", "धीमी", "fast", "तेज़ चल", "speed", "रफ़्तार", "pace", "pacing", "quicker", "drags", "dragging", "rushed")) {
             Map<String, Object> c = cmd("speed");
-            c.put("factor", (double) (has(t, "slow", "धीमा", "धीमी") ? 0.85f : 1.15f));
+            boolean slower = has(t, "slow", "धीमा", "धीमी", "rushed", "too fast", "too quick");
+            if (has(t, "too slow", "drags", "dragging", "speed up", "faster", "quicker")) slower = false;
+            c.put("factor", (double) (slower ? 0.85f : 1.15f));
             return c;
         }
         if (voiceWord) { Map<String, Object> c = cmd("voices"); c.put("factor", (double) amount(t, !down)); return c; }

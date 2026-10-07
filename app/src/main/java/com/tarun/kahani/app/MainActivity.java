@@ -751,7 +751,7 @@ public class MainActivity extends Activity {
         info.addView(Ui.text(this, file != null ? "🖼 Your picture" + (mouthSet ? " • 👄 mouth set" : " • 👄 automatic") : "🎨 Studio cartoon", 13, file != null ? Ui.GREEN : Ui.SUB, false));
         Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
         String vtxt = vs != null ? "🎙 Voice: your sample \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ Voice: AI (with feeling)"
-                : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 Voice: natural (neural)" : "📱 Voice: phone voice");
+                : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 Voice: " + presetLabel(project.setting("evoice." + c.displayName, ""), "natural (best match)") : "📱 Voice: phone voice");
         info.addView(Ui.text(this, vtxt, 13, vs != null ? Ui.GREEN : Ui.SUB, false));
         top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(top);
@@ -1264,26 +1264,101 @@ public class MainActivity extends Activity {
 
     // ================================================================== voices
 
+    /**
+     * One list of voices: the user's own recordings and the studio's built-in voices, 4 at a time, with the
+     * ones that suit this character (by age, gender and kind from the script) marked ★ and shown first.
+     */
     private void chooseVoice(final String name, final Story st, final Story.CharacterDef c) {
         target = "voice:" + name;
-        new Picker(this, library).show("Voice: " + (name.equals("narrator") ? "Narrator" : name), Library.VOICE, name,
-                new String[]{"record", "phone", "phoneVoice"}, new Picker.Listener() {
+        Picker p = new Picker(this, library);
+        boolean hindi = st == null || st.hindi;
+        com.tarun.kahani.core.EdgeVoice.Cast best = c == null ? com.tarun.kahani.core.EdgeVoice.narrator(hindi)
+                : com.tarun.kahani.core.EdgeVoice.castFor(c.look, c.age, hindi, st.characters.indexOf(c));
+        for (String[] pr : com.tarun.kahani.core.EdgeVoice.presets(hindi)) {
+            Library.Item it = new Library.Item();
+            it.id = "preset:" + pr[0];
+            it.path = it.id;
+            it.type = Library.VOICE;
+            it.name = pr[1] + " (studio)";
+            it.builtIn = true;
+            p.extra.add(it);
+            com.tarun.kahani.core.EdgeVoice.Cast pc = com.tarun.kahani.core.EdgeVoice.Cast.parse(pr[0]);
+            if (pc != null && pc.voice.equals(best.voice) && Math.abs(pc.pitchHz - best.pitchHz) <= 10) p.suggested.add(it.id);
+        }
+        Library.Item bestItem = new Library.Item();
+        bestItem.id = "preset:" + best.key();
+        bestItem.path = bestItem.id;
+        bestItem.type = Library.VOICE;
+        bestItem.name = "Best match for " + (c == null ? "the narrator" : c.shown()) + " (studio)";
+        bestItem.builtIn = true;
+        p.extra.add(0, bestItem);
+        p.suggested.add(bestItem.id);
+        if (c != null) for (Library.Item it : library.find(Library.VOICE, null, null)) if (Library.voiceSuits(it, c.look, c.age)) p.suggested.add(it.id);
+        final String line = sampleLine(st, c);
+        p.presetPlayer = new Picker.Player() {
+            public void play(final Library.Item it) { speakPreset(it.path.substring(7), line, st == null || st.hindi); }
+        };
+        p.show("Voice: " + (name.equals("narrator") ? "Narrator" : c != null ? c.shown() : name), Library.VOICE, name,
+                new String[]{"record", "phone"}, new Picker.Listener() {
                     public void picked(Library.Item it) {
-                        project.setSetting("vsample." + name, it.id);
-                        toast("✅ " + name + "'s lines will all be made in this voice");
-                        if (c != null) previewVoice(st, c, true);
+                        if (it.path.startsWith("preset:")) {
+                            project.setSetting("vsample." + name, "");
+                            project.setSetting("evoice." + name, it.path.substring(7));
+                            project.setSetting("evoiceIdx." + name, "");
+                            toast("✅ " + (c != null ? c.shown() : "Narrator") + " will speak with: " + it.label());
+                        } else {
+                            project.setSetting("vsample." + name, it.id);
+                            toast("✅ All of " + (c != null ? c.shown() : "the narrator") + "'s lines will be made in your voice \"" + it.label() + "\"");
+                            if (c != null) previewVoice(st, c, true);
+                        }
                         showStudio();
                     }
                     public void action(String a) {
                         if (a.equals("record")) record(Library.VOICE, name);
                         else if (a.equals("phone")) pick("audio/*", REQ_AUDIO, false);
-                        else {
-                            project.setSetting("vsample." + name, "");
-                            if (c != null) previewVoice(st, c, false);
-                            showStudio();
-                        }
                     }
                 });
+    }
+
+    static String presetLabel(String key, String def) {
+        if (key == null || key.length() == 0) return def;
+        for (String[] p : com.tarun.kahani.core.EdgeVoice.presets(true)) if (p[0].equals(key)) return p[1];
+        com.tarun.kahani.core.EdgeVoice.Cast c = com.tarun.kahani.core.EdgeVoice.Cast.parse(key);
+        return c == null ? def : c.voice.replace("Neural", "").replaceAll("^[a-z]{2}-[A-Z]{2}-", "") + " (custom)";
+    }
+
+    private String sampleLine(Story st, Story.CharacterDef c) {
+        String sample = st != null && st.hindi ? "नमस्ते! आज हम एक नई कहानी सुनाते हैं।" : "Hello! Let me tell you a new story today.";
+        if (st != null && c != null) for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.speaker == c) { sample = b.text; break; }
+        return sample.length() > 110 ? sample.substring(0, 110) : sample;
+    }
+
+    /** Speaks a line with one of the studio's built-in voices (online natural voices) and plays it. */
+    private void speakPreset(final String key, final String text, final boolean hindi) {
+        if (previewBusy) { toast("Still making the last voice… please wait"); return; }
+        previewBusy = true;
+        toast("🔊 Making the voice…");
+        background(null, new Work() {
+            public Object run() throws Exception {
+                com.tarun.kahani.core.EdgeVoice.Cast c = com.tarun.kahani.core.EdgeVoice.Cast.parse(key);
+                boolean lineHindi = com.tarun.kahani.core.Txt.mostlyHindi(text);
+                boolean presetHindi = c.voice.startsWith("hi-");
+                String say = presetHindi == lineHindi ? text
+                        : presetHindi ? "नमस्ते! आज हम एक नई कहानी सुनाते हैं।" : "Hello! Let me tell you a new story today.";
+                byte[] mp3 = new com.tarun.kahani.core.EdgeVoice().speak(com.tarun.kahani.core.Txt.forSpeech(say), c, null);
+                File f = new File(getCacheDir(), "preset_preview.mp3");
+                FileOutputStream o = new FileOutputStream(f);
+                o.write(mp3);
+                o.close();
+                return f;
+            }
+        }, new Done() {
+            public void done(Object r, Exception e) {
+                previewBusy = false;
+                if (e != null) { toast("Could not reach the studio voices (check internet): " + e.getMessage()); return; }
+                Picker.play(MainActivity.this, ((File) r).getAbsolutePath());
+            }
+        });
     }
 
     /** Plays one of the character's lines in the voice the film will use (with the sample applied if any). */
@@ -2003,7 +2078,7 @@ public class MainActivity extends Activity {
         LinearLayout panel = Ui.column(this);
         panel.setBackgroundColor(Ui.BG);
         panel.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
-        panel.addView(Ui.text(this, "✍ Type a change (e.g. increase brightness • lower the music • make Vrinda louder • add subtitles • smaller file size) — English, Hindi or Hinglish", 13, Ui.SUB, false));
+        panel.addView(Ui.text(this, "✍ Describe a change in plain English, e.g. \"the music is too loud\" • \"make Vrinda's voice a little higher\" • \"brighter and warmer\" • \"add subtitles\" • \"smaller file for WhatsApp\" • \"make it for Instagram\"", 13, Ui.SUB, false));
         LinearLayout cmdRow = Ui.row(this);
         final EditText cmd = new EditText(this);
         cmd.setHint("Your instruction…");
@@ -2053,6 +2128,12 @@ public class MainActivity extends Activity {
 
     private void applyCommand(final String text, final TextView status, final EditText box) {
         if (text.trim().length() == 0) return;
+        for (int i = 0; i < text.length(); i++) {
+            if (com.tarun.kahani.core.Txt.isDevanagari(text.charAt(i))) {
+                status.setText("Please type the change in English, e.g. \"make the background music softer\".");
+                return;
+            }
+        }
         loadStory();
         final List<String> names = new ArrayList<String>();
         for (Story.CharacterDef c : castStory.characters) names.add(c.displayName);

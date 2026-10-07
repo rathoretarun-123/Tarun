@@ -207,6 +207,72 @@ public final class Hinglish {
         return null;
     }
 
+    /** True if this one line is Hindi written in English letters (English lines stay English). */
+    public static boolean lineIsHinglish(String line) {
+        int latin = 0, dev = 0;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (Txt.isDevanagari(c)) dev++;
+            else if (isLatin(c)) latin++;
+        }
+        if (latin == 0 || dev > latin) return false;
+        int words = 0, hindi = 0;
+        for (String w : line.toLowerCase().split("[^a-z]+")) {
+            if (w.length() == 0) continue;
+            words++;
+            if (hindiWords.contains(w) && !english.contains(w) && !AMBIGUOUS.contains(w)) hindi++;
+        }
+        return hindi >= 2 || (hindi == 1 && words <= 4) || (words > 0 && hindi * 100 >= words * 20);
+    }
+
+    /**
+     * Converts the Hinglish lines of a script (English and Devanagari lines are left alone). Character names written
+     * with a capital letter stay exactly as written, so the same character is recognised in every line.
+     */
+    public static String convertScript(String raw, Map<String, String> back) { return convertScript(raw, back, null); }
+
+    /** As above; converted receives every line that was changed (so only those are shown back in English letters). */
+    public static String convertScript(String raw, Map<String, String> back, java.util.List<String> converted) {
+        Set<String> names = new HashSet<String>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^\\s*(?:[0-9]+[.)]\\s*)?([A-Z][A-Za-z.'-]*(?:\\s+[A-Z][A-Za-z.'-]*){0,3})\\s*[(:]").matcher(raw);
+        while (m.find()) for (String w : m.group(1).split("\\s+")) if (!structure.contains(w.toLowerCase())) names.add(w);
+        StringBuilder out = new StringBuilder();
+        for (String line : raw.split("\n", -1)) {
+            if (out.length() > 0) out.append('\n');
+            if (lineIsHinglish(line)) {
+                String c = convertLine(line, back, names);
+                out.append(c);
+                if (converted != null) converted.add(c);
+            } else out.append(line);
+        }
+        return out.toString();
+    }
+
+    static String convertLine(String text, Map<String, String> back, Set<String> keep) {
+        StringBuilder o = new StringBuilder();
+        int i = 0, n = text.length();
+        while (i < n) {
+            char c = text.charAt(i);
+            if (!isLatin(c)) { o.append(c); i++; continue; }
+            int j = i;
+            while (j < n && (isLatin(text.charAt(j)) || (text.charAt(j) == '\'' && j + 1 < n && isLatin(text.charAt(j + 1))))) j++;
+            String orig = text.substring(i, j);
+            String low = orig.toLowerCase();
+            // names and places written with a capital letter in the middle of a sentence stay as written (London, Raju)
+            boolean capital = Character.isUpperCase(orig.charAt(0)) && !sentenceStart(text, i) && !dict.containsKey(low);
+            if (keep.contains(orig) || capital) { o.append(orig); i = j; continue; }
+            String out;
+            if (structure.contains(low)) out = orig;
+            else if (dict.containsKey(low)) out = dict.get(low);
+            else if (english.contains(low)) out = orig;
+            else out = word(low.replace("'", ""));
+            if (back != null && !out.equals(orig) && !back.containsKey(out)) back.put(out, orig);
+            o.append(out);
+            i = j;
+        }
+        return o.toString();
+    }
+
     /** Converts a whole Hinglish text; back receives Devanagari word -> original spelling (for names and subtitles). */
     public static String toDevanagari(String text, Map<String, String> back) {
         StringBuilder o = new StringBuilder();
@@ -252,6 +318,12 @@ public final class Hinglish {
             i = j;
         }
         return o.toString();
+    }
+
+    static boolean sentenceStart(String t, int i) {
+        int k = i - 1;
+        while (k >= 0 && (t.charAt(k) == ' ' || t.charAt(k) == '"' || t.charAt(k) == '\u201C' || t.charAt(k) == '(' || t.charAt(k) == '\'')) k--;
+        return k < 0 || ".!?:।\n".indexOf(t.charAt(k)) >= 0;
     }
 
     static boolean isLatin(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }

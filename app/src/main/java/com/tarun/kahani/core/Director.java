@@ -80,6 +80,7 @@ public final class Director {
         l.who = who;
         l.text = text;
         l.shown = story.shown(shown);
+        l.hindi = text == null || text.trim().length() == 0 ? story.hindi : Txt.mostlyHindi(text);
         l.emotion = emo;
         l.whisper = whisper;
         l.echo = echo;

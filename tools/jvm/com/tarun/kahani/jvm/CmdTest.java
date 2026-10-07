@@ -8,9 +8,14 @@ public class CmdTest {
     public static void main(String[] a) {
         List<String> names = Arrays.asList("वृंदा", "वानुषा", "खान राक्षस", "आंटी चुड़ैल", "राजू बंदर", "रतनलाल");
         String[] tests = {
-            "music thoda kam karo aur Raju ki awaaz tez karo",
-            "subtitles lagao, chamak badhao",
-            "Vrinda ki awaaz patli karo",
+            "the background music is too loud",
+            "I can't hear Vrinda properly",
+            "make Khan sound deeper and a bit slower",
+            "the film drags, speed it up",
+            "make it black and white",
+            "the video is too big to upload on whatsapp",
+            "turn the birds down a little and add captions",
+            "make the colours more vivid",
             "make the music lower and increase brightness",
             "video is too dark",
             "make it darker",

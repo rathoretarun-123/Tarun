@@ -24,7 +24,17 @@ public final class Library {
     public static final String PIC = "pic", VOICE = "voice", SOUND = "sound";
 
     public static final class Item {
-        public String id, type, kind = "", name = "", tags = "", path = "", source = "";
+        public String id, type, kind = "", name = "", tags = "", path = "", source = "", meta = "";
+        public String meta(String key) {
+            for (String kv : meta.split(";")) if (kv.startsWith(key + "=")) return kv.substring(key.length() + 1);
+            return null;
+        }
+        public void setMeta(String key, String value) {
+            StringBuilder b = new StringBuilder();
+            for (String kv : meta.split(";")) if (kv.length() > 0 && !kv.startsWith(key + "=")) b.append(kv).append(';');
+            b.append(key).append('=').append(value);
+            meta = b.toString();
+        }
         public boolean builtIn;
         public String label() { return name.length() > 0 ? name : new File(path).getName(); }
     }
@@ -54,6 +64,7 @@ public final class Library {
                 it.id = Json.str(x, "id", ""); it.type = Json.str(x, "type", PIC); it.kind = Json.str(x, "kind", "");
                 it.name = Json.str(x, "name", ""); it.tags = Json.str(x, "tags", ""); it.path = Json.str(x, "path", "");
                 it.source = Json.str(x, "source", "");
+                it.meta = Json.str(x, "meta", "");
                 if (new File(it.path).exists()) items.add(it);
             }
         } catch (Exception ignored) {
@@ -66,7 +77,7 @@ public final class Library {
             if (it.builtIn) continue;
             Map<String, Object> m = new LinkedHashMap<String, Object>();
             m.put("id", it.id); m.put("type", it.type); m.put("kind", it.kind); m.put("name", it.name);
-            m.put("tags", it.tags); m.put("path", it.path); m.put("source", it.source);
+            m.put("tags", it.tags); m.put("path", it.path); m.put("source", it.source); m.put("meta", it.meta);
             arr.add(m);
         }
         try {
@@ -118,9 +129,45 @@ public final class Library {
             src.delete();
         }
         it.path = dst.getAbsolutePath();
+        if (type.equals(VOICE)) analyseVoice(it);
         items.add(0, it);
         save();
         return it;
+    }
+
+    /** What kind of voice a sample is (from its pitch), so the studio can suggest it for fitting characters. */
+    void analyseVoice(Item it) {
+        float[] pcm = AudioIO.decode(ctx, it.path, 40);
+        if (pcm == null) return;
+        float p = com.tarun.kahani.core.VoiceFx.medianPitch(pcm, com.tarun.kahani.core.Synth.SR);
+        it.setMeta("pitch", String.valueOf(Math.round(p)));
+        String kind = voiceKind(p);
+        if (kind.length() > 0 && !it.tags.contains(kind)) it.tags = (it.tags.length() > 0 ? it.tags + ", " : "") + kind;
+    }
+
+    static String voiceKind(float p) {
+        if (p <= 0) return "";
+        if (p < 120) return "deep male voice";
+        if (p < 175) return "male voice";
+        if (p < 245) return "female voice";
+        return "child voice";
+    }
+
+    /** True if a sample's pitch suits a character (child, woman, man, old, giant…). */
+    public static boolean voiceSuits(Item it, com.tarun.kahani.core.Look l, int age) {
+        String ps = it.meta("pitch");
+        if (ps == null || l == null) return false;
+        float p;
+        try { p = Float.parseFloat(ps); } catch (NumberFormatException e) { return false; }
+        if (p <= 0) return false;
+        switch (l.kind) {
+            case com.tarun.kahani.core.Look.GIRL: case com.tarun.kahani.core.Look.BOY: return p >= 220;
+            case com.tarun.kahani.core.Look.WOMAN: case com.tarun.kahani.core.Look.WITCH: return p >= 165 && p < 290;
+            case com.tarun.kahani.core.Look.MONSTER: return p < 130;
+            case com.tarun.kahani.core.Look.OLD_MAN: return p < 160;
+            case com.tarun.kahani.core.Look.MONKEY: return p >= 200;
+            default: return l.female ? p >= 165 && p < 290 : p >= 85 && p < 175;
+        }
     }
 
     public synchronized Item addBytes(String type, String kind, String name, String tags, byte[] data, String ext, String source) throws IOException {

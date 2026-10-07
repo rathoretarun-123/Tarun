@@ -98,12 +98,22 @@ public class AppTest {
         assertTrue(st.title.equals("Meena aur Jadui Aam"));
         assertTrue(st.dialogueCount() == 2);
         assertTrue(st.characters.get(0).shown().equals("Meena"));
-        assertTrue(st.characters.get(1).displayName.equals("राजू बंदर"));
+        assertTrue(st.characters.get(1).displayName.equals("Raju Bandar"));
         Director d = new Director(st, new Director.Options());
         Film f = d.prepare();
         System.out.println("HINGLISH LINE: speak=" + f.lines.get(0).text + " | shown=" + f.lines.get(0).shown);
         assertTrue(f.lines.get(0).text.contains("मेरा"));
         assertTrue(f.lines.get(0).shown.contains("Mera ribbon wapas do"));
+
+        // one story mixing Hindi, English and Hinglish dialogue: each line keeps its own language
+        String mix = "पात्र:\n1. वृंदा (11 वर्ष): राजकुमारी\n2. Mr. Brown (40 years): an English teacher\nदृश्य 1: महल\n(स्थान: महल का बगीचा)\n"
+                + "वृंदा (मुस्कुराकर): \"नमस्ते! आप कहाँ से आए हैं?\"\nMr. Brown (smiling): \"Good morning, Princess! I have come from London.\"\n"
+                + "वृंदा (हैरानी से): \"Wow! Aap sach mein London se aaye ho?\"\n";
+        Story ms = ScriptParser.parse(mix);
+        Film mf = new Director(ms, new Director.Options()).prepare();
+        assertTrue(mf.lines.get(0).hindi && !mf.lines.get(1).hindi && mf.lines.get(2).hindi);
+        assertTrue(mf.lines.get(0).shown.equals("नमस्ते! आप कहाँ से आए हैं?"));
+        assertTrue(mf.lines.get(2).text.contains("London") && mf.lines.get(2).text.contains("आप"));
     }
 
     static String dialogText() {

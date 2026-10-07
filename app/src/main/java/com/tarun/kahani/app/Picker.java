@@ -34,6 +34,14 @@ final class Picker {
 
     Picker(Activity a, Library lib) { this.a = a; this.lib = lib; }
 
+    /** Plays items that are not files (the studio's built-in voices are spoken on demand). */
+    interface Player { void play(Library.Item it); }
+    Player presetPlayer;
+    /** Built-in items shown after the user's own (e.g. studio voices). */
+    final java.util.List<Library.Item> extra = new java.util.ArrayList<Library.Item>();
+    /** Items that suit what is being chosen; shown first with a ★. */
+    final java.util.Set<String> suggested = new java.util.HashSet<String>();
+
     static Bitmap thumb(Activity a, Library.Item it, int max) {
         try {
             InputStream in = it.path.startsWith("asset:") ? a.getAssets().open(it.path.substring(6)) : new java.io.FileInputStream(it.path);
@@ -105,7 +113,15 @@ final class Picker {
      * actions = which extra buttons to offer.
      */
     void show(String title, final String type, final String query, final String[] actions, final Listener l) {
-        final List<Library.Item> items = lib.find(type, null, query);
+        final List<Library.Item> items = new java.util.ArrayList<Library.Item>(lib.find(type, null, query));
+        items.addAll(extra);
+        if (!suggested.isEmpty()) {
+            java.util.Collections.sort(items, new java.util.Comparator<Library.Item>() {
+                public int compare(Library.Item x, Library.Item y) {
+                    return (suggested.contains(y.id) ? 1 : 0) - (suggested.contains(x.id) ? 1 : 0);
+                }
+            });
+        }
         final AlertDialog[] d = new AlertDialog[1];
         final LinearLayout body = Ui.column(a);
         body.setPadding(Ui.dp(a, 12), Ui.dp(a, 6), Ui.dp(a, 12), Ui.dp(a, 6));
@@ -140,11 +156,11 @@ final class Picker {
                     } else {
                         LinearLayout r = Ui.row(a);
                         r.setGravity(Gravity.CENTER_VERTICAL);
-                        TextView t = Ui.text(a, (type.equals(Library.VOICE) ? "🎙 " : "🔊 ") + it.label()
-                                + (it.builtIn ? "" : "  (yours)"), 14, Ui.TEXT, false);
+                        TextView t = Ui.text(a, (suggested.contains(it.id) ? "★ " : "") + (type.equals(Library.VOICE) ? "🎙 " : "🔊 ") + it.label()
+                                + (it.builtIn ? "" : "  (yours)"), 14, suggested.contains(it.id) ? Ui.GREEN : Ui.TEXT, false);
                         r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                         r.addView(Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
-                            public void onClick(View v) { play(a, it.path); }
+                            public void onClick(View v) { if (it.path.startsWith("preset:") && presetPlayer != null) presetPlayer.play(it); else play(a, it.path); }
                         }));
                         r.addView(Ui.small(a, "Choose", Ui.GREEN, new View.OnClickListener() {
                             public void onClick(View v) { stop(); d[0].dismiss(); l.picked(it); }

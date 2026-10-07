@@ -106,7 +106,7 @@ public final class Voices {
         public int voice = -1;     // index into voices, -1 = engine default
         public float pitch = 1f, rate = 1f;
         public float shift = 1f;   // extra pitch shift by resampling (monster)
-        public float[] sample;     // the user's voice sample for this character (Synth.SR), or null
+        public com.tarun.kahani.core.VoiceFx.Profile sample; // the user's voice sample for this character, or null
         public String sampleId = "";
         public String gemini;      // Gemini voice name when AI voices are used
         public String signature() {

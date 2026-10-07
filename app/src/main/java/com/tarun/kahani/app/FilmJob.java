@@ -138,8 +138,8 @@ public final class FilmJob implements Runnable {
                 String sid = project.setting("vsample." + c.displayName, "");
                 Library.Item it = lib.byId(sid);
                 if (it != null) {
-                    k.sample = AudioIO.decode(ctx, it.path);
-                    if (k.sample != null) k.sampleId = it.id;
+                    float[] pcm = AudioIO.decode(ctx, it.path);
+                    if (pcm != null) { k.sample = VoiceFx.profile(pcm, Synth.SR); k.sampleId = it.id; }
                 }
                 if (aiVoices) {
                     String gv = project.setting("gvoice." + c.displayName, "");
@@ -151,7 +151,10 @@ public final class FilmJob implements Runnable {
             narratorCast.pitch = 1.0f; narratorCast.rate = 0.92f;
             if (aiVoices) narratorCast.gemini = "Charon";
             Library.Item ns = lib.byId(project.setting("vsample.narrator", ""));
-            if (ns != null) { narratorCast.sample = AudioIO.decode(ctx, ns.path); narratorCast.sampleId = ns.id; }
+            if (ns != null) {
+                float[] pcm = AudioIO.decode(ctx, ns.path);
+                if (pcm != null) { narratorCast.sample = VoiceFx.profile(pcm, Synth.SR); narratorCast.sampleId = ns.id; }
+            }
 
             File vdir = new File(project.dir, "voices");
             vdir.mkdirs();

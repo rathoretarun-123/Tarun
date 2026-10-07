@@ -1,80 +1,68 @@
-# कहानी फ़िल्म (Kahani Film)
+# कहानी फ़िल्म (Kahani Film) — v6
 
-अपनी हिंदी या अंग्रेज़ी कहानी से कार्टून फ़िल्म बनाने वाला Android ऐप।
-कहानी चिपकाइए, (चाहें तो) चित्र जोड़िए, और **🎬 फ़िल्म बनाएँ** दबाइए। आवाज़ें, संगीत, ध्वनि, दृश्य, कैमरा और होंठों का हिलना ऐप खुद तैयार करता है।
+यह Android ऐप आपकी हिंदी या अंग्रेज़ी कहानी से बच्चों (6–15 साल) की कार्टून फ़िल्म बनाता है।
+कहानी चिपकाइए। चाहें तो चित्र और आवाज़ दीजिए। फिर **🎬 फ़िल्म बनाएँ** दबाइए।
+आवाज़ें, संगीत, प्राकृतिक ध्वनियाँ, दृश्य, कैमरा और होंठों का हिलना स्टूडियो खुद तैयार करता है।
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 या नया)
 
-## फ़िल्म कैसी बनती है
+## आसान तरीका
 
-1. **शीर्षक पृष्ठ**: आपका चित्र (या ऐप का बनाया), शहनाई-ढोल की धुन, और कहानी का नाम बोला जाता है।
-2. **दृश्य 1, दृश्य 2…**: हर दृश्य से पहले उसका नाम और शीर्षक दिखता है।
-3. **दृश्य**: पात्र अंदर आते हैं, चलते-दौड़ते हैं, बात करते हैं। बोलते समय होंठ आवाज़ के साथ हिलते हैं और आँखें झपकती हैं। कैमरा बोलने वाले पर जाता है। जादू, धुआँ, घंटी, जाल, रोशनी जैसे असर दिखते हैं, और नीचे उपशीर्षक आते हैं।
-4. **अंतिम पृष्ठ**: आपका चित्र या ऐप का बनाया, उस पर "समाप्त" (अंग्रेज़ी कहानी में "The End"), और अंत की धुन।
+1. **साइन इन**: पहली बार ऐप खोलने पर अपने Gmail से साइन इन करें। फिर ऐप अनुमतियाँ माँगेगा: माइक, कैमरा, सूचनाएँ, चित्र/ऑडियो। इन्हें **Allow** करें। लॉग आउट होम स्क्रीन पर ऊपर है, और ⚙ सेटिंग में भी।
+2. **➕ नई फ़िल्म** › कहानी चिपकाएँ। पुरानी कहानी हटाने के लिए **🧹 साफ़ करें** दबाएँ।
+   * अगर कहानी साधारण गद्य में है (संवाद अलग नहीं लिखे), तो **🤖 AI से कहानी पढ़वाएँ** दबाएँ। AI पात्र, कपड़े, जगहें, भाव और आवाज़ें पढ़कर पटकथा बना देता है। आपकी मूल कहानी भी सुरक्षित रहती है।
+3. **🎭 स्टूडियो खोलें**: यहाँ हर पात्र, हर जगह, शीर्षक और अंतिम पृष्ठ की सूची है, और **क्या बाकी है** यह भी लिखा है।
+   * **📄 प्रोडक्शन फ़ाइल** में हर पात्र, जगह, शॉट, आवाज़ और ध्वनि का विवरण है। चित्र बनाने के लिए तैयार Prompt भी हैं। इसे डाउनलोड करें और Prompt को ChatGPT / Grok / Meta AI में चिपकाकर चित्र बनवाएँ।
+   * **📥 कई चित्र एक साथ जोड़ें**: चित्रों को पात्र या जगह के नाम से सेव करें (जैसे `वृंदा.jpg` या `Vrinda.jpg`)। ऐप नाम से पहचानकर हर चित्र सही जगह लगा देता है।
+   * हर पात्र के **🖼 चित्र** में चुनने के तरीके: लाइब्रेरी (एक बार में 4, फिर **अगले 4**), 📂 फ़ोन, 📷 कैमरा, 🌐 इंटरनेट पर मुफ़्त खोज, ✨ AI से बनवाना, या 🎬 स्टूडियो खुद चुने। असली फ़ोटो को **🎨 कार्टून (अवतार)** में भी बदला जा सकता है।
+   * **🎙 आवाज़**: 10–20 सेकंड बोलकर रिकॉर्ड करें, या फ़ोन से आवाज़ की फ़ाइल चुनें। **उस पात्र के सारे संवाद इसी आवाज़ में बनते हैं**। आवाज़ की पिच और रंगत आपके नमूने जैसी होती है, और भाव (गुस्सा, डर, खुशी…) के हिसाब से आवाज़ बदलती है। **🔊** दबाकर पहले सुन लें।
+   * **🎙 संवाद अपनी आवाज़ में रिकॉर्ड करें**: किसी भी संवाद को अपनी या बच्चों की असली आवाज़ में रिकॉर्ड करें। फ़िल्म में वही आवाज़ लगती है, और होंठ उसी के साथ हिलते हैं।
+   * हर जगह की **🔊 पृष्ठभूमि ध्वनि** (जंगल, झरना, महल, रात…) स्टूडियो खुद चुनता है। आप इसे बदल भी सकते हैं।
+   * पात्र के चित्र में **👄** दबाकर मुँह और आँखों पर टैप करें। इससे होंठ और पलकें ठीक जगह हिलेंगी।
+4. **कहाँ डालेंगे?** चुनें: YouTube (16:9), Instagram Reel / Shorts (9:16), या Facebook/Instagram पोस्ट (1:1)। फिर गुणवत्ता चुनें: 480p, 720p या 1080p।
+5. **🎬 फ़िल्म बनाएँ** दबाएँ। फ़िल्म बनते समय फ़ोन लॉक कर सकते हैं या दूसरा ऐप खोल सकते हैं। काम चलता रहता है, और सूचना (notification) में प्रगति और **बचा हुआ समय** दिखता है।
+6. **देखें और बदलें**: फ़िल्म ऐप में ही चलती है। नीचे आदेश लिखें, जैसे:
+   *चमक बढ़ाओ • संगीत धीमा करो • पृष्ठभूमि की आवाज़ बंद करो • वृंदा की आवाज़ तेज़ करो • खान की आवाज़ और मोटी करो • subtitles लगाओ • file size कम करो • instagram के लिए बनाओ*
+   फिर **🔁 फिर बनाएँ** दबाएँ। आवाज़ें दोबारा नहीं बनतीं, इसलिए यह जल्दी होता है। फ़िल्म पसंद आए तो **💾 डाउनलोड** (गैलरी › Movies/KahaniFilm) या **📤 साझा** करें।
 
-पात्रों और स्थानों का विवरण **कभी पढ़ा नहीं जाता**। वह सिर्फ़ पात्रों का रूप-रंग तय करने के काम आता है।
-ऐप के बनाए सभी पात्र पूरे और शालीन कपड़ों में बनते हैं।
+## फ़िल्म में क्या होता है
 
-## पहली बार
+* **शीर्षक पृष्ठ** पर चित्र और संगीत होता है। फिर कहानी बिना "दृश्य 1" जैसे कार्डों के, फ़िल्म की तरह चलती है। आख़िर में **समाप्त** (अंग्रेज़ी कहानी में **The End**) आता है।
+* पात्रों और जगहों का विवरण **कभी बोला नहीं जाता**। कथावाचक की आवाज़ तभी आती है जब कहानी में कथावाचक लिखा हो।
+* उपशीर्षक पहले से बंद रहते हैं। "subtitles लगाओ" लिखकर इन्हें चालू कर सकते हैं।
+* कैमरा बोलने वाले पात्र पर जाता है। भावुक पलों में चेहरे के पास (close-up) आता है, और पीछे का हिस्सा धुंधला (depth of field) होता है। हर मूड के हिसाब से रंगत बदलती है।
+* संगीत, पक्षी, झरना, हवा, गुफा, भीड़, तलवार, घंटी जैसी ध्वनियाँ असली रिकॉर्डिंग हैं, कंप्यूटर से बनी नहीं।
+* फ़िल्म 30 मिनट तक की हो सकती है। ध्वनि टुकड़ों में बनकर फ़ोन की स्टोरेज में रखी जाती है, इसलिए लंबी फ़िल्म में भी मेमोरी ख़त्म नहीं होती।
 
-1. APK फ़ोन में डालें और खोलें। फ़ोन पूछे तो "इस स्रोत से ऐप इंस्टॉल करने दें" चालू करें।
-2. **हिंदी आवाज़**: सेटिंग्स › भाषा › Text-to-speech › Google › भाषा › **हिंदी** डाउनलोड करें।
-   ऐप भी यह सुझाव देगा।
-3. ऐप में **📖 उदाहरण: रत्नगढ़ की दो राजकुमारियाँ** दबाएँ। आपके सारे चित्र पहले से जुड़े हैं। फिर **🎬 फ़िल्म बनाएँ** दबाएँ।
+## मुफ़्त AI (वैकल्पिक)
 
-## कहानी कैसे लिखें
-
-```
-पात्र और रूप-रंग:
-1. वानुषा (7 वर्ष): गोल-मटोल चेहरा … गुलाबी और हरे रंग का लहंगा-चोली …
-2. खान राक्षस: … काले सींग … लाल आँखें …
-स्थानों का विवरण:
-1. रत्नगढ़ का महल और बगीचा: …
-कहानी का नाम
-दृश्य 1: दृश्य का नाम
-(स्थान: महल का बगीचा। सूर्योदय। वानुषा तितली के पीछे दौड़ रही है।)
-वानुषा (हँसते हुए): "संवाद यहाँ"
-(निर्देश: कोई "पप-पप" करके फूल खिलते हैं …)
-```
-
-* `नाम (भाव): "संवाद"` में भाव (हँसते हुए, गुस्से में, रोते हुए, फुसफुसाते हुए…) से चेहरा, आवाज़ और कैमरा बदलते हैं।
-* निर्देश `( … )` में लिखे काम (दौड़ना, ताली, छलाँग, बेहोश होना, कंधे पर उठाना, गायब होना, शीशे से रोशनी, घंटा बजाना, जाल फेंकना…) पर्दे पर दिखाए जाते हैं। "कल-कल", "चह-चह", "टन", "धम-धम", "पप-पप" जैसी आवाज़ें भी बजती हैं।
-* "दृश्य बदलता है:" लिखने पर उसी दृश्य में स्थान बदल जाता है।
-* जानवर और पक्षी (लोमड़ी, कौआ, शेर, खरगोश, कछुआ, हाथी, मोर, तोता…) भी अपने आप बनते हैं।
-
-## चित्र जोड़ना (वैकल्पिक)
-
-* **शुरुआत और अंत का चित्र**: संपादक के 2 और 3 नंबर वाले हिस्से में।
-* **पात्र का चित्र** (🎭 निर्देशक से जाँच › 🖼 चित्र): सफ़ेद/सादी पृष्ठभूमि वाला पूरा चित्र दें। पृष्ठभूमि अपने आप हटती है।
-  फिर **👄 मुँह** में चित्र पर मुँह, बाईं आँख और दाईं आँख पर एक-एक बार टैप करें। इससे होंठ और पलकें ठीक जगह हिलेंगी।
-* **दृश्य की पृष्ठभूमि** (🖼 पृष्ठभूमि चित्र): हर दृश्य के लिए अलग चित्र।
-* **🔊 आवाज़**: हर पात्र के लिए फ़ोन में मौजूद आवाज़ें एक-एक करके सुनें और चुनें।
-
-## गति
-
-* 720p (सलाह) में फ़्रेम फ़ोन के कई कोर पर एक साथ बनते हैं, और वीडियो फ़ोन का हार्डवेयर एन्कोडर बनाता है। 8GB RAM वाले फ़ोन पर 6-7 मिनट की फ़िल्म कुछ ही मिनटों में बन जाती है।
-* फ़िल्म बनते समय ऐप खुला रखें (स्क्रीन अपने आप चालू रहती है)।
-* बनी फ़िल्म: **▶ देखें**, **💾 गैलरी में** (Movies/KahaniFilm), **📤 साझा करें**।
+ऐप **बिना किसी कुंजी के** भी काम करता है। AI से कहानी पढ़वाने और AI चित्र बनवाने के लिए मुफ़्त सेवाएँ हैं, जिनके लिए इंटरनेट चाहिए। इसके अलावा Openverse/Wikimedia पर मुफ़्त चित्र और ध्वनियाँ खोजी जा सकती हैं।
+बेहतर नतीजों के लिए **⚙ सेटिंग** में **Google Gemini की मुफ़्त कुंजी** डाल सकते हैं (aistudio.google.com/apikey)। इससे तीन चीज़ें बेहतर होती हैं: कहानी पढ़ना, अपलोड किए चित्र पहचानना, और भाव वाली AI आवाज़ें।
+कुंजी सिर्फ़ आपके फ़ोन में रहती है। इसे किसी को न भेजें, और GitHub पर न डालें।
 
 ## सीमाएँ (ईमानदारी से)
 
-* आवाज़ें फ़ोन के Text-to-Speech इंजन की हैं, असली कलाकारों की नहीं। अलग पात्रों के लिए पिच और गति बदली जाती है।
-* होंठों का हिलना आपके चित्र के मुँह पर बनी एनिमेशन है। यह आवाज़ की तीव्रता से चलती है। चित्र के पूरे चेहरे की 3D एनिमेशन नहीं है।
-* जिन पात्रों का चित्र नहीं है (जैसे उदाहरण में खान राक्षस और आंटी चुड़ैल), वे ऐप के 2D कार्टून से बनते हैं। उनके चित्र जोड़ने पर पूरी फ़िल्म एक जैसी दिखेगी।
+* **आवाज़**: आपके नमूने से आवाज़ की पिच और रंगत मिलाई जाती है। यह असली "voice cloning" नहीं है। शब्द फ़ोन की Text-to-Speech आवाज़ बोलती है, और उसे आपके नमूने जैसा बनाया जाता है। बिल्कुल असली आवाज़ चाहिए तो **🎙 संवाद रिकॉर्ड करें** इस्तेमाल करें।
+* **AI आवाज़ें (Gemini)** की मुफ़्त दैनिक सीमा बहुत कम है। सीमा पूरी होने पर बाकी संवाद फ़ोन की आवाज़ में बनते हैं। इसलिए यह सुविधा पहले से बंद रहती है।
+* **एनिमेशन**: फ़िल्म 2D कार्टून की है, 3D (Pixar जैसी) नहीं। होंठ आपके चित्र के मुँह पर आवाज़ के साथ हिलते हैं। पूरा चेहरा 3D में नहीं हिलता।
+* **गति**: एक 10 मिनट की 720p फ़िल्म 8GB वाले फ़ोन पर लगभग 15–30 मिनट में बनती है। 1080p में इससे ज़्यादा समय लगता है। यह समय मैंने फ़ोन पर नहीं मापा है, यह अनुमान है।
+* AI और इंटरनेट वाली सुविधाएँ (कहानी पढ़ना, चित्र बनाना, खोज, Gemini) फ़ोन पर ही चलती हैं। जिस मशीन पर ऐप बना, वहाँ से ये सेवाएँ खुलती नहीं थीं। इसलिए इनकी जाँच नकली (mock) सर्वर से हुई है, असली सेवाओं से नहीं।
 
 ---
 
 ## Developer notes (English)
 
-* `app/src/main/java/com/tarun/kahani/core`: platform-independent engine.
-  * `ScriptParser` → `Story`: reads the screenplay. Descriptions are used for looks only.
-  * `LookDesigner` turns descriptions into cartoon designs.
-  * `Director` stages every beat: entrances, positions, gestures, camera, effects, sound cues. The title page comes first, then the `दृश्य N` cards, then समाप्त/The End.
-  * `Renderer`, `Puppet`, `Sets` draw frames through the small `Gfx` interface.
-  * `Cutout` removes picture backgrounds. `Art` holds the user pictures and lip-sync landmarks.
-  * `Synth`, `Mixer` make the offline music, effects and soundtrack, plus lip-sync envelopes.
-* `app/src/main/java/com/tarun/kahani/app`: Android UI (`MainActivity`), TTS (`Voices`), parallel rendering + MediaCodec/MediaMuxer (`FilmJob`, `VideoWriter`), and `AndroidGfx`.
-* **Build:** `./build.sh` (Gradle-free; needs `aapt2`, `dalvik-exchange`, `zipalign`, `apksigner`, `android-sdk-platform-23` from Ubuntu, and JDK 17+). Output: `release/KahaniFilm.apk`, signed with `tools/debug.keystore`.
+* `app/src/main/java/com/tarun/kahani/core` holds the platform-independent engine:
+  * `ScriptParser` turns a script into a `Story`. `ScriptAI` (LLM via `Cloud`) rewrites prose stories into the screenplay layout, maps free-form edit requests to commands, and identifies uploaded pictures.
+  * `LookDesigner`, `Director`, `Renderer`, `Puppet`, `Sets`: design, staging, camera and drawing. Scene cards and subtitles are off by default.
+  * `Mixer.mixTo` streams the soundtrack in 8-second chunks with lazily built clips and a limiter. `SoundLib` provides recorded sounds. `VoiceFx` does pitch shifting (WSOLA) and voice-sample matching (pitch + spectral tone). `Grade` applies colour edits.
+  * `Edits` and `CommandParser` handle the post-preview command box (Hindi/English).
+  * `Bible` writes the production file. `Toon` is the photo-to-cartoon filter. `Cloud` wraps Gemini (text, vision, TTS), Pollinations (keyless text and image), and Openverse/Wikimedia (keyless search).
+* `app/src/main/java/com/tarun/kahani/app` holds the Android side:
+  * `MainActivity` screens: login, home, story, studio, face, progress, player, library, settings, lines.
+  * `Picker` is the chooser that shows 4 items at a time. `Library` stores the user's media. `AudioIO` decodes audio and records the mic. `Voices` drives TTS, samples and AI voices.
+  * `FilmJob` and `FilmService` run the foreground render with a wake lock and notification. `VideoWriter` encodes with MediaCodec and streams audio. `FilesProvider` serves files for the camera and sharing. `Prefs` stores settings.
+* **Build:** `./build.sh` is Gradle-free. It needs `aapt2`, `dalvik-exchange`, `zipalign`, `apksigner` and `android-sdk-platform-23` from Ubuntu, plus JDK 17+. Resources are linked against the Android 14 framework from Robolectric's `android-all` jar. Output: `release/KahaniFilm.apk`.
 * **Tests:**
-  * `tools/robotest`: Robolectric tests with real Android graphics. They open every screen, render frames through `android.graphics.Canvas`, and run the whole film job end-to-end. Run with `gradle test`.
-  * `tools/jvm/.../MakeFilm.java`: the desktop pipeline. It renders a complete MP4 with espeak-ng voices for visual checking.
+  * `tools/robotest` (Robolectric, real Android graphics) checks every screen, the pickers and the command box. It also runs a full film job in 9:16 with colour edits and a user-recorded line, and renders frames through `android.graphics.Canvas`. Run it with `gradle test`.
+  * `tools/jvm` holds desktop tools: `MakeFilm` (full MP4 with espeak voices; env `ASPECT`, `EDITS`, `SAMPLE=name=wav`, `AUDIO_ONLY`), `BibleDump`, and `CmdTest`.

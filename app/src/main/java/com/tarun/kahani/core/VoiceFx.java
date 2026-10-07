@@ -165,15 +165,34 @@ public final class VoiceFx {
         return o;
     }
 
+    /** What we learn from a voice sample once: its median pitch and tone colour. */
+    public static final class Profile {
+        public float pitch;
+        public float[] tone;
+    }
+
+    /** Analyses (at most the first 40 seconds of) a voice sample. */
+    public static Profile profile(float[] sample, int sr) {
+        float[] s = sample;
+        if (s.length > sr * 40) s = java.util.Arrays.copyOf(s, sr * 40);
+        Profile p = new Profile();
+        p.pitch = medianPitch(s, sr);
+        p.tone = toneProfile(s, sr);
+        return p;
+    }
+
     /** Makes generated speech closer to a voice sample: same median pitch and similar tone colour. */
-    public static float[] matchVoice(float[] speech, float[] sample, int sr) {
-        float p0 = medianPitch(speech, sr), p1 = medianPitch(sample, sr);
+    public static float[] matchVoice(float[] speech, float[] sample, int sr) { return matchVoice(speech, profile(sample, sr), sr); }
+
+    public static float[] matchVoice(float[] speech, Profile target, int sr) {
+        if (target == null) return speech;
+        float p0 = medianPitch(speech, sr);
         float[] y = speech;
-        if (p0 > 0 && p1 > 0) {
-            float f = Math.max(0.5f, Math.min(2.4f, p1 / p0));
+        if (p0 > 0 && target.pitch > 0) {
+            float f = Math.max(0.5f, Math.min(2.4f, target.pitch / p0));
             y = pitch(y, f);
         }
-        return matchTone(y, sr, toneProfile(sample, sr), 0.7f);
+        return matchTone(y, sr, target.tone, 0.7f);
     }
 
     // ---------------------------------------------------------------- FFT (radix 2, in place)

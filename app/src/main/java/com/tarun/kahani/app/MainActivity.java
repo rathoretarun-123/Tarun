@@ -1290,7 +1290,10 @@ public class MainActivity extends Activity {
                 int n = previewVoices.voices.size();
                 if (!keepVoice && vs == null && n > 0 && project.setting("voice." + c.displayName, "").length() > 0) k.voice = (k.voice + 1) % n;
                 if (n > 0) project.setSetting("voice." + c.displayName, String.valueOf(k.voice < 0 ? 0 : k.voice));
-                if (vs != null) { k.sample = AudioIO.decode(MainActivity.this, vs.path); k.sampleId = vs.id; }
+                if (vs != null) {
+                    float[] pcm = AudioIO.decode(MainActivity.this, vs.path);
+                    if (pcm != null) { k.sample = com.tarun.kahani.core.VoiceFx.profile(pcm, com.tarun.kahani.core.Synth.SR); k.sampleId = vs.id; }
+                }
                 Cloud cl = Prefs.online(MainActivity.this) && Prefs.aiVoices(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null;
                 if (cl != null && cl.hasGemini()) {
                     String gv = project.setting("gvoice." + c.displayName, "");
@@ -1657,8 +1660,8 @@ public class MainActivity extends Activity {
                     public Object run() throws Exception {
                         byte[] b = Project.readAll(getContentResolver().openInputStream(uri));
                         String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : ".m4a";
-                        boolean voice = target != null && target.startsWith("voice:");
-                        String n = voice ? target.substring(6) : name.replaceAll("\\.[A-Za-z0-9]+$", "");
+                        boolean voice = target != null && (target.startsWith("voice:") || target.equals("lib:voice"));
+                        String n = target != null && target.startsWith("voice:") ? target.substring(6) : name.replaceAll("\\.[A-Za-z0-9]+$", "");
                         Library.Item it = library.addBytes(voice ? Library.VOICE : Library.SOUND, voice ? "voice" : "amb", n, name, b, ext, "phone");
                         if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); throw new Exception("यह फ़ाइल चल नहीं सकी"); }
                         return it;
@@ -2093,7 +2096,7 @@ public class MainActivity extends Activity {
             add.addView(Ui.text(this, "आवाज़ के नमूने (10–20 सेकंड)। स्टूडियो में किसी पात्र को देने पर उसके सारे संवाद इसी आवाज़ में बनेंगे।", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
             r.addView(Ui.small(this, "🎙 रिकॉर्ड", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; record(Library.VOICE, ""); } }));
-            r.addView(Ui.small(this, "📂 फ़ाइल से", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "voice:नमूना"; pick("audio/*", REQ_AUDIO, false); } }));
+            r.addView(Ui.small(this, "📂 फ़ाइल से", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pick("audio/*", REQ_AUDIO, false); } }));
             add.addView(r);
         } else {
             add.addView(Ui.text(this, "प्राकृतिक ध्वनियाँ, संगीत और प्रभाव। नाम/शब्द से स्टूडियो सही जगह इस्तेमाल करता है।", 13, Ui.SUB, false));
@@ -2190,7 +2193,7 @@ public class MainActivity extends Activity {
         });
         ai.addView(online);
         CheckBox av = new CheckBox(this);
-        av.setText("AI आवाज़ें (भाव के साथ, कुंजी ज़रूरी; सीमा पूरी होने पर फ़ोन की आवाज़)");
+        av.setText("AI आवाज़ें (भाव के साथ; कुंजी ज़रूरी)। मुफ़्त सीमा बहुत कम है — छोटी फ़िल्मों के लिए। सीमा पूरी होने पर बाकी संवाद फ़ोन की आवाज़ में।");
         av.setChecked(Prefs.aiVoices(this));
         av.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "aiVoices", on ? "1" : "0"); }

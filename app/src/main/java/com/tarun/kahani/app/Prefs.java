@@ -20,7 +20,7 @@ public final class Prefs {
 
     public static String geminiKey(Context c) { return get(c, "geminiKey", ""); }
     public static boolean online(Context c) { return !"0".equals(get(c, "online", "1")); }
-    public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "1")); }
+    public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }
 
     /** A Cloud client configured from the settings. */
     public static Cloud cloud(Context c) {

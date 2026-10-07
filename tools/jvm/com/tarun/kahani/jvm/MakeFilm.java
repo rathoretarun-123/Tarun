@@ -38,9 +38,19 @@ public class MakeFilm {
         Film film = dir.prepare();
         float[][] voices = new float[film.lines.size()][];
         File tmp = Files.createTempDirectory("voices").toFile();
+        // SAMPLE="वानुषा=/path/sample.wav": that character's lines are moved to the sample's voice (as on the phone)
+        String sampleWho = null;
+        VoiceFx.Profile sampleProfile = null;
+        if (System.getenv("SAMPLE") != null) {
+            String[] sv = System.getenv("SAMPLE").split("=", 2);
+            sampleWho = sv[0];
+            sampleProfile = VoiceFx.profile(readWav(new File(sv[1])), Synth.SR);
+        }
         for (int i = 0; i < film.lines.size(); i++) {
             Film.Line l = film.lines.get(i);
             voices[i] = espeak(l, tmp, i);
+            if (voices[i] != null && sampleProfile != null && l.who != null && l.who.displayName.equals(sampleWho))
+                voices[i] = VoiceFx.matchVoice(voices[i], sampleProfile, Synth.SR);
             if (voices[i] != null) {
                 l.dur = voices[i].length / (float) Synth.SR;
                 l.env = Mixer.envelope(voices[i], Synth.SR);

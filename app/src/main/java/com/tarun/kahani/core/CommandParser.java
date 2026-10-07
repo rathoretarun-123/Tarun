@@ -31,6 +31,7 @@ public final class CommandParser {
     private static final String[] ON = {"लगा", "जोड़", "जोड", "चालू", "दिखा", "add", "show", "on", "enable", "laga", "jod"};
 
     public static Result parse(String text, List<String> characterNames) {
+        if (text != null) text = Hinglish.knownWords(text);   // "music kam karo" -> "music कम करो"
         Result r = new Result();
         if (text == null) return r;
         // split into separate requests
@@ -167,8 +168,15 @@ public final class CommandParser {
         // ---------- picture
         if (has(t, "brightness", "चमक", "उजाला", "रोशनी", "bright", "रौशनी", "andhera", "अंधेरा", "dark")) {
             Map<String, Object> c = cmd("brightness");
-            boolean darker = has(t, "अंधेरा", "andhera", "dark") ? !has(t, "कम", "less", "reduce") : !up;
-            if (!up && !down && !has(t, "अंधेरा", "dark")) darker = false;
+            boolean darkWord = has(t, "अंधेरा", "andhera", "dark");
+            boolean darker;
+            if (darkWord) {
+                // "too dark" / "अंधेरा बहुत है" is a complaint -> brighter; "make it darker" / "अंधेरा करो" -> darker
+                boolean complaint = has(t, "बहुत", "too", "ज़्यादा", "ज्यादा", "zyada", "है", "hai", "लग", "lag", "कम", "less", "reduce");
+                darker = has(t, "darker", "more dark", "अंधेरा करो", "अंधेरा बढ़", "dark करो", "make it dark") || (!complaint && up);
+            } else {
+                darker = down && !up;
+            }
             float a = amount(t, true) - 1;
             c.put("factor", (double) (1 + (darker ? -a * 0.6f : a * 0.6f)));
             return c;

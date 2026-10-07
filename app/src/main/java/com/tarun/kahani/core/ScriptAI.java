@@ -79,10 +79,14 @@ public final class ScriptAI {
     public static Result read(Cloud cloud, String text) {
         Result r = new Result();
         r.script = text;
-        boolean hindi = Txt.mostlyHindi(text);
+        boolean hinglish = Hinglish.isHinglish(text);
+        boolean hindi = Txt.mostlyHindi(text) || hinglish;
         String clipped = text.length() > 60000 ? text.substring(0, 60000) : text;
         try {
-            String answer = cloud.ask(system(hindi), (hindi ? "कहानी:\n\n" : "Story:\n\n") + clipped, false);
+            String sys = system(hindi) + (hinglish ? "\n\nThe story is written in Hinglish (Hindi in English letters). Write the screenplay in "
+                    + "Hindi using Devanagari script so the voices pronounce it correctly; keep English words the characters "
+                    + "actually say (like 'sorry', 'thank you') in English letters." : "");
+            String answer = cloud.ask(sys, (hindi ? "कहानी:\n\n" : "Story:\n\n") + clipped, false);
             answer = stripFences(answer);
             Story before = ScriptParser.parse(text);
             Story after = ScriptParser.parse(answer);
@@ -91,17 +95,16 @@ public final class ScriptAI {
             if (better) {
                 r.script = answer;
                 r.rewritten = true;
-                r.note = (hindi ? "AI ने कहानी पढ़कर पटकथा बनाई: " : "AI read the story: ") + after.characters.size()
-                        + (hindi ? " पात्र, " : " characters, ") + after.scenes.size() + (hindi ? " दृश्य, " : " scenes, ")
-                        + after.dialogueCount() + (hindi ? " संवाद।" : " lines.");
+                r.note = "AI read the story: " + after.characters.size() + " characters, " + after.scenes.size() + " scenes, "
+                        + after.dialogueCount() + " lines.";
             } else {
-                r.note = hindi ? "AI का जवाब ठीक नहीं था — आपकी मूल कहानी ही इस्तेमाल होगी।" : "The AI answer was not usable — your original text is used.";
+                r.note = "The AI answer was not usable — your original story will be used.";
             }
         } catch (IOException e) {
-            r.note = (hindi ? "AI से जुड़ नहीं सका (इंटरनेट/कुंजी देखें) — फ़ोन का अपना पढ़ने वाला इस्तेमाल हुआ। " : "Could not reach the AI — the built-in reader was used. ")
+            r.note = "Could not reach the AI (check internet / key) — the built-in reader will be used. "
                     + shortErr(e);
         } catch (RuntimeException e) {
-            r.note = hindi ? "AI का जवाब पढ़ा नहीं जा सका — मूल कहानी इस्तेमाल होगी।" : "Could not read the AI answer — original kept.";
+            r.note = "Could not read the AI answer — your original story will be used.";
         }
         return r;
     }

@@ -52,7 +52,7 @@ final class FaceTapView extends View {
         if (bmp == null || bmp.isRecycled()) return;
         layoutDst();
         c.drawBitmap(bmp, null, dst, p);
-        String[] lbl = {"मुँह", "बाईं आँख", "दाईं आँख"};
+        String[] lbl = {"Mouth", "Left eye", "Right eye"};
         int[] col = {0xFFFF1744, 0xFF2979FF, 0xFF2979FF};
         for (int i = 0; i < 3; i++) {
             if (pts[i * 2] <= 0) continue;

@@ -79,7 +79,7 @@ public final class Director {
         l.index = film.lines.size();
         l.who = who;
         l.text = text;
-        l.shown = shown;
+        l.shown = story.shown(shown);
         l.emotion = emo;
         l.whisper = whisper;
         l.echo = echo;
@@ -140,7 +140,7 @@ public final class Director {
         film.music.add(new Film.Music(Film.M_TITLE, 0, tdur));
         film.sfx.add(new Film.Sfx(Film.SFX_FANFARE, 0.3f, 4.5f, 0.9f));
         film.sfx.add(new Film.Sfx(Film.SFX_MAGIC, 1.0f, 2f, 0.5f));
-        film.notes.add("शीर्षक पृष्ठ: \"" + story.title + "\"" + (this.art.title != null ? " (आपका चित्र)" : " (अपने आप बना चित्र)") + " + संगीत");
+        film.notes.add("Title page: \"" + story.title + "\"" + (this.art.title != null ? " (your picture)" : " (made by the studio)") + " + music");
         t = tdur;
 
         // ---------------- scenes
@@ -206,7 +206,7 @@ public final class Director {
         film.music.add(new Film.Music(Film.M_END, t, end.t1));
         film.sfx.add(new Film.Sfx(Film.SFX_END_CHORD, t + 0.4f, 5f, 0.9f));
         film.sfx.add(new Film.Sfx(Film.SFX_MAGIC, t + 0.6f, 2f, 0.5f));
-        film.notes.add("अंतिम पृष्ठ: \"" + end.text1 + "\"" + (this.art.end != null ? " (आपका चित्र)" : " (अपने आप बना चित्र)") + " + संगीत");
+        film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
         return film;
     }
@@ -339,8 +339,8 @@ public final class Director {
         seg.t1 = tc + 0.8f;
         film.music.add(new Film.Music(mood, seg.t0, seg.t1));
         film.ambience.add(new Film.Amb(seg.t0, seg.t1, where + " " + Sets.name(seg.set) + " " + ambWords(seg)));
-        film.notes.set(noteIdx, sc.heading + (nParts > 1 ? " (भाग " + (pi + 1) + ")" : "") + ": " + Sets.name(seg.set)
-                + (seg.backdrop != null ? " [आपका चित्र]" : "") + ", पात्र: " + names(lineup));
+        film.notes.set(noteIdx, "Part " + sc.number + (nParts > 1 ? " (" + (char) ('a' + pi) + ")" : "") + ": " + Sets.label(seg.set)
+                + (seg.backdrop != null ? " [your picture]" : "") + ", characters: " + names(lineup));
         // remember persistent flags
         for (Film.Actor a : seg.actors) {
             Film.Key k = a.last();
@@ -355,7 +355,7 @@ public final class Director {
 
     private String names(List<Story.CharacterDef> l) {
         StringBuilder sb = new StringBuilder();
-        for (Story.CharacterDef c : l) { if (sb.length() > 0) sb.append(", "); sb.append(c.displayName); }
+        for (Story.CharacterDef c : l) { if (sb.length() > 0) sb.append(", "); sb.append(c.shown()); }
         return sb.toString();
     }
 
@@ -469,7 +469,7 @@ public final class Director {
         if (sp == null) {
             // should not happen (speakers are always staged) — keep audio anyway
             line.start = tc;
-            sub(tc, tc + line.dur, b.speaker == null ? "" : b.speaker.displayName, line.shown);
+            sub(tc, tc + line.dur, b.speaker == null ? "" : b.speaker.shown(), line.shown);
             return tc + line.dur + 0.35f;
         }
         // speaker must be visible
@@ -513,7 +513,7 @@ public final class Director {
         if (line.emotion == Pose.LAUGH && sp.look.hero && Txt.has(b.text, "हा हा", "हँस")) {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
         }
-        sub(start, end, b.speaker.displayName, line.shown);
+        sub(start, end, b.speaker.shown(), line.shown);
         camDialogue(sp, to, start, line.emotion);
         lastSpeaker = sp;
         lastSubject = b.speaker;
@@ -616,7 +616,7 @@ public final class Director {
             float shift = fx.t1 - t0 - 0.3f;
             shiftAfter(t0 + 0.3f, shift);
             tc += shift;
-            film.notes.add("  ↳ सिनेमा शॉट: " + Txt.withoutParens(text).substring(0, Math.min(40, Txt.withoutParens(text).length())) + "…");
+            film.notes.add("  ↳ cinematic shot: " + Txt.withoutParens(text).substring(0, Math.min(40, Txt.withoutParens(text).length())) + "…");
         }
         return tc;
     }

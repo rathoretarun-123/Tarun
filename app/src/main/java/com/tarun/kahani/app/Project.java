@@ -118,13 +118,13 @@ public final class Project {
         String n = setting("name", "");
         if (n.length() > 0) return n;
         String s = read("script.txt").trim();
-        if (s.length() == 0) return "नई फ़िल्म";
+        if (s.length() == 0) return "New film";
         try {
             String t = com.tarun.kahani.core.ScriptParser.parse(s).title;
             if (t.length() > 0) return t;
         } catch (RuntimeException ignored) {
         }
-        return "नई फ़िल्म";
+        return "New film";
     }
 
     // -------------------------------------------------------------- manifest (cast.txt)
@@ -153,7 +153,7 @@ public final class Project {
     /** Saves a picture chosen by the user, downscaled so it never wastes memory. */
     public String savePicture(Context c, android.net.Uri uri, String base) throws IOException {
         InputStream in = c.getContentResolver().openInputStream(uri);
-        if (in == null) throw new IOException("चित्र नहीं खुला");
+        if (in == null) throw new IOException("Could not open the picture");
         return savePicture(readAll(in), base);
     }
 
@@ -162,13 +162,13 @@ public final class Project {
         BitmapFactory.Options o = new BitmapFactory.Options();
         o.inJustDecodeBounds = true;
         BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        if (o.outWidth <= 0) throw new IOException("यह चित्र पढ़ा नहीं जा सका");
+        if (o.outWidth <= 0) throw new IOException("This picture could not be read");
         int sample = 1;
         while (Math.max(o.outWidth, o.outHeight) / sample > 2600) sample *= 2;
         o = new BitmapFactory.Options();
         o.inSampleSize = sample;
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        if (b == null) throw new IOException("यह चित्र पढ़ा नहीं जा सका");
+        if (b == null) throw new IOException("This picture could not be read");
         b = upright(b, data);
         boolean png = b.hasAlpha();
         String name = base + "_" + (System.nanoTime() % 100000000L) + (png ? ".png" : ".jpg");

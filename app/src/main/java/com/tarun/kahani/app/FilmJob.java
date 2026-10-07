@@ -31,7 +31,7 @@ public final class FilmJob implements Runnable {
 
     public final Project project;
     private final Context ctx;
-    public volatile String stage = "तैयारी…";
+    public volatile String stage = "Getting ready…";
     public volatile float progress;          // 0..1 overall
     public volatile boolean done, failed, cancelled;
     public volatile String error = "";
@@ -77,7 +77,7 @@ public final class FilmJob implements Runnable {
     /** "about 3 min 20 s left" while making the video. */
     public String eta() {
         if (etaSeconds < 0) return "";
-        return "लगभग " + fmt(etaSeconds) + " बाकी";
+        return "About " + fmt(etaSeconds) + " left";
     }
 
     public volatile long etaSeconds = -1;
@@ -117,15 +117,15 @@ public final class FilmJob implements Runnable {
         File tmp = new File(ctx.getCacheDir(), "film_tmp_" + startedAt);
         try {
             tmp.mkdirs();
-            step("कहानी पढ़ी जा रही है…", 0.01f);
+            step("Reading the story…", 0.01f);
             String script = scriptOf(project);
-            if (script.trim().length() < 10) throw new IllegalStateException("कहानी खाली है। पहले कहानी लिखें या चिपकाएँ।");
+            if (script.trim().length() < 10) throw new IllegalStateException("The story is empty. Write or paste a story first.");
             Story story = ScriptParser.parse(script);
             if (story.dialogueCount() == 0 && story.scenes.size() <= 1)
-                throw new IllegalStateException("कहानी में कोई संवाद नहीं मिला। संवाद ऐसे लिखें:  नाम: \"संवाद\"  — या \"AI से पढ़वाएँ\" दबाएँ।");
+                throw new IllegalStateException("No dialogue found in the story. Write lines like  Name: \"dialogue\"  — or tap \"Read with AI\".");
             Edits ed = Edits.fromJson(project.read("edits.json"));
 
-            step("चित्र तैयार हो रहे हैं (पृष्ठभूमि हटाना)…", 0.03f);
+            step("Preparing pictures (removing backgrounds)…", 0.03f);
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
             check();
 
@@ -138,15 +138,15 @@ public final class FilmJob implements Runnable {
             Film film = dir.prepare();
 
             // ---------------- voices
-            step("आवाज़ें तैयार हो रही हैं…", 0.06f);
+            step("Preparing voices…", 0.06f);
             voices = new Voices();
             boolean ttsOk = voices.init(ctx, story.hindi);
             Cloud cloud = Prefs.online(ctx) && Prefs.aiVoices(ctx) ? Prefs.cloud(ctx) : null;
             boolean aiVoices = cloud != null && cloud.hasGemini();
             boolean natural = Prefs.online(ctx) && Prefs.naturalVoices(ctx);
             if (natural) voices.edge = new EdgeVoice();
-            if (!ttsOk && !aiVoices && !natural) warning = "फ़ोन में बोलने वाला इंजन (Text-to-Speech) नहीं मिला — सेटिंग्स > Text-to-speech देखें।";
-            else if (ttsOk && !voices.languageOk && !aiVoices && !natural) warning = (story.hindi ? "हिंदी" : "English") + " आवाज़ फ़ोन में डाउनलोड नहीं है — सेटिंग्स > Text-to-speech में जाकर डाउनलोड करें।";
+            if (!ttsOk && !aiVoices && !natural) warning = "No Text-to-Speech engine found on this phone — check Settings > Text-to-speech.";
+            else if (ttsOk && !voices.languageOk && !aiVoices && !natural) warning = (story.hindi ? "Hindi" : "English") + " voice is not downloaded on this phone — download it in Settings > Text-to-speech.";
             Map<Story.CharacterDef, Voices.Cast> cast = voices.castAll(story, project);
             Library lib = new Library(ctx);
             int ci = 0;
@@ -190,7 +190,7 @@ public final class FilmJob implements Runnable {
                 check();
                 Film.Line l = film.lines.get(i);
                 String who = l.who == null ? "कथावाचक" : l.who.displayName;
-                step("आवाज़: " + who + " (" + (i + 1) + "/" + film.lines.size() + ")", 0.06f + 0.22f * i / Math.max(1, film.lines.size()));
+                step("Voice: " + (l.who == null ? "Narrator" : who) + " (" + (i + 1) + "/" + film.lines.size() + ")", 0.06f + 0.22f * i / Math.max(1, film.lines.size()));
                 updateEta();
                 Voices.Cast k = l.who == null ? narratorCast : cast.get(l.who);
                 float[] v = null;
@@ -207,7 +207,7 @@ public final class FilmJob implements Runnable {
                     if (v != null) {
                         if (voices.lastEngine.startsWith("AI")) aiLines++;
                         if (voices.lastEngine.startsWith("natural")) naturalLines++;
-                        // a fallback voice is not kept, so the next "फिर बनाएँ" tries the natural voice again
+                        // a fallback voice is not kept, so the next "Make again" tries the natural voice again
                         if (!voices.usedFallback) try { AudioIO.writeRaw(cached, v); } catch (IOException ignored) {}
                     }
                 }
@@ -228,16 +228,16 @@ public final class FilmJob implements Runnable {
                 }
             }
             if (aiVoices && voices.aiOff && warning.length() == 0)
-                warning = "AI आवाज़ की आज की सीमा पूरी हो गई या कुंजी गलत है — बाकी संवाद फ़ोन की आवाज़ में बने। " + (err[0] == null ? "" : err[0]);
+                warning = "The AI voice limit for today is used up or the key is wrong — remaining lines used the phone voice. " + (err[0] == null ? "" : err[0]);
             if (natural && voices.edgeOff && warning.length() == 0)
-                warning = "प्राकृतिक आवाज़ की सेवा से जुड़ नहीं सका (इंटरनेट देखें) — कुछ संवाद फ़ोन की आवाज़ में बने। इंटरनेट के साथ \"फिर बनाएँ\" दबाएँ। " + (err[0] == null ? "" : err[0]);
+                warning = "Could not reach the natural voice service (check internet) — some lines used the phone voice. Tap \"Make again\" with internet on. " + (err[0] == null ? "" : err[0]);
             if (failedLines > 0 && warning.length() == 0)
-                warning = failedLines + " संवाद बोले नहीं जा सके — फ़ोन की Text-to-Speech सेटिंग देखें।";
+                warning = failedLines + " lines could not be spoken — check the phone's Text-to-Speech settings.";
             voices.shutdown();
             voices = null;
 
             // ---------------- direction & sound
-            step("निर्देशक दृश्य सजा रहा है…", 0.29f);
+            step("Director is staging the scenes…", 0.29f);
             film = dir.direct(art);
             // background sounds the user picked for parts of the story
             for (Film.Amb a : film.ambience) {
@@ -246,11 +246,11 @@ public final class FilmJob implements Runnable {
                 Library.Item it = lib.byId(project.setting("amb." + story.scenes.get(sg.scene).number, ""));
                 if (it != null) a.words = "#" + it.path;
             }
-            if (film.duration > 30 * 60 + 30) warning = "फ़िल्म 30 मिनट से लंबी है (" + fmt((long) film.duration) + ") — बनने में ज़्यादा समय लगेगा।";
+            if (film.duration > 30 * 60 + 30) warning = "The film is longer than 30 minutes (" + fmt((long) film.duration) + ") — it will take longer to make.";
             film.subtitles = ed.subtitles;
             filmSeconds = film.duration;
             check();
-            step("संगीत और ध्वनि मिलाई जा रही है…", 0.30f);
+            step("Mixing music and sounds…", 0.30f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
             final byte[] mb = new byte[Synth.SR * 8 * 2];
@@ -288,28 +288,28 @@ public final class FilmJob implements Runnable {
                 } catch (Exception e) {
                     if (cancelled) throw new CancelledException();
                     last = e;
-                    warning = "वीडियो " + size[0] + "x" + size[1] + " में नहीं बन सका, छोटे आकार में कोशिश हो रही है…";
+                    warning = "Video " + size[0] + "x" + size[1] + " could not be made, trying a smaller size…";
                 }
             }
-            if (!ok) throw last != null ? last : new IllegalStateException("वीडियो नहीं बन सका");
+            if (!ok) throw last != null ? last : new IllegalStateException("The video could not be made");
             check();
             File fin = project.film();
             if (fin.exists()) fin.delete();
-            if (!out.renameTo(fin)) throw new IllegalStateException("फ़िल्म सहेजी नहीं जा सकी");
+            if (!out.renameTo(fin)) throw new IllegalStateException("The film could not be saved");
             project.setSetting("filmSeconds", String.valueOf((int) film.duration));
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
             project.setSetting("saved", "0");
             if (aiLines > 0) project.setSetting("aiLines", String.valueOf(aiLines));
-            step("फ़िल्म तैयार है!", 1f);
+            step("Your film is ready!", 1f);
             etaSeconds = -1;
             done = true;
         } catch (CancelledException e) {
-            stage = "रोक दिया गया";
+            stage = "Stopped";
         } catch (OutOfMemoryError e) {
-            error = "फ़ोन की मेमोरी कम पड़ गई। \"फ़ाइल का आकार छोटा करो\" या 720p चुनकर दोबारा कोशिश करें।";
+            error = "The phone ran out of memory. Choose 720p (or type \"smaller file size\") and try again.";
             failed = true;
         } catch (Throwable e) {
-            error = e.getMessage() != null && e.getMessage().length() > 0 ? e.getMessage() : ("त्रुटि: " + e.getClass().getSimpleName());
+            error = e.getMessage() != null && e.getMessage().length() > 0 ? e.getMessage() : ("Error: " + e.getClass().getSimpleName());
             failed = true;
         } finally {
             if (voices != null) voices.shutdown();
@@ -376,7 +376,7 @@ public final class FilmJob implements Runnable {
         }
         VideoWriter vw = new VideoWriter(w, h, fps);
         try {
-            step("वीडियो बन रहा है…", 0.36f);
+            step("Making the video…", 0.36f);
             vw.start(out, new VideoWriter.FileSource(audio), Synth.SR, bpp);
             long t0 = System.currentTimeMillis();
             for (int f = 0; f < frames; f++) {
@@ -384,7 +384,7 @@ public final class FilmJob implements Runnable {
                 int slot = f % slots.length;
                 synchronized (lock) {
                     while (slotFrame[slot] != f) {
-                        if (workerError[0] != null) throw new RuntimeException("चित्र बनाने में त्रुटि: " + workerError[0]);
+                        if (workerError[0] != null) throw new RuntimeException("Error while drawing: " + workerError[0]);
                         if (cancelled) throw new CancelledException();
                         lock.wait(200);
                     }
@@ -401,11 +401,11 @@ public final class FilmJob implements Runnable {
                     long el = System.currentTimeMillis() - t0;
                     long eta = f > 30 ? el * (frames - f) / f / 1000 : -1;
                     etaSeconds = eta;
-                    stage = "वीडियो बन रहा है… " + (f * 100 / frames) + "%";
+                    stage = "Making the video… " + (f * 100 / frames) + "%";
                     progress = 0.36f + 0.63f * f / frames;
                 }
             }
-            step("फ़िल्म सहेजी जा रही है…", 0.995f);
+            step("Saving the film…", 0.995f);
             vw.finish();
         } catch (Throwable e) {
             vw.release();
@@ -419,8 +419,8 @@ public final class FilmJob implements Runnable {
     }
 
     static String fmt(long s) {
-        if (s >= 3600) return (s / 3600) + " घंटा " + (s % 3600 / 60) + " मिनट";
-        if (s >= 60) return (s / 60) + " मिनट " + (s % 60) + " सेकंड";
-        return s + " सेकंड";
+        if (s >= 3600) return (s / 3600) + " h " + (s % 3600 / 60) + " min";
+        if (s >= 60) return (s / 60) + " min " + (s % 60) + " s";
+        return s + " s";
     }
 }

@@ -40,11 +40,11 @@ public final class FilmService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26 && nm != null && nm.getNotificationChannel(CH) == null) {
-            NotificationChannel ch = new NotificationChannel(CH, "फ़िल्म बनना", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("फ़िल्म बनने की प्रगति");
+            NotificationChannel ch = new NotificationChannel(CH, "Film making", NotificationManager.IMPORTANCE_LOW);
+            ch.setDescription("Progress of the film being made");
             nm.createNotificationChannel(ch);
         }
-        Notification n = build("फ़िल्म बन रही है…", "", 0, false);
+        Notification n = build("Making your film…", "", 0, false);
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
             else startForeground(ID, n);
@@ -72,8 +72,8 @@ public final class FilmService extends Service {
             if (j == null || j.done || j.failed || j.cancelled) {
                 if (!finished && j != null && nm != null) {
                     finished = true;
-                    String t = j.done ? "🎉 फ़िल्म तैयार है!" : j.failed ? "❌ फ़िल्म नहीं बन सकी" : "रोक दिया गया";
-                    nm.notify(ID + 1, build(t, j.done ? "देखने के लिए दबाएँ" : j.error, 0, true));
+                    String t = j.done ? "🎉 Your film is ready!" : j.failed ? "❌ The film could not be made" : "Stopped";
+                    nm.notify(ID + 1, build(t, j.done ? "Tap to watch" : j.error, 0, true));
                 }
                 stopForeground(true);
                 stopSelf();

@@ -91,7 +91,7 @@ final class Picker {
                 mp.start();
             }
         } catch (Exception e) {
-            android.widget.Toast.makeText(a, "चल नहीं सका", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(a, "Could not play", android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -117,7 +117,7 @@ final class Picker {
             public void run() {
                 grid.removeAllViews();
                 int from = page[0] * 4;
-                if (items.isEmpty()) grid.addView(Ui.text(a, "लाइब्रेरी में अभी कुछ नहीं — नीचे से जोड़ें।", 14, Ui.SUB, false));
+                if (items.isEmpty()) grid.addView(Ui.text(a, "Nothing in the library yet — add below.", 14, Ui.SUB, false));
                 LinearLayout row = null;
                 for (int i = from; i < Math.min(items.size(), from + 4); i++) {
                     final Library.Item it = items.get(i);
@@ -141,27 +141,27 @@ final class Picker {
                         LinearLayout r = Ui.row(a);
                         r.setGravity(Gravity.CENTER_VERTICAL);
                         TextView t = Ui.text(a, (type.equals(Library.VOICE) ? "🎙 " : "🔊 ") + it.label()
-                                + (it.builtIn ? "" : "  (आपकी)"), 14, Ui.TEXT, false);
+                                + (it.builtIn ? "" : "  (yours)"), 14, Ui.TEXT, false);
                         r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                         r.addView(Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
                             public void onClick(View v) { play(a, it.path); }
                         }));
-                        r.addView(Ui.small(a, "चुनें", Ui.GREEN, new View.OnClickListener() {
+                        r.addView(Ui.small(a, "Choose", Ui.GREEN, new View.OnClickListener() {
                             public void onClick(View v) { stop(); d[0].dismiss(); l.picked(it); }
                         }));
                         grid.addView(r);
                     }
                 }
                 int pages = Math.max(1, (items.size() + 3) / 4);
-                pageInfo.setText(items.isEmpty() ? "" : "पेज " + (page[0] + 1) + " / " + pages + "  (कुल " + items.size() + ")");
+                pageInfo.setText(items.isEmpty() ? "" : "Page " + (page[0] + 1) + " / " + pages + "  (total " + items.size() + ")");
             }
         };
         body.addView(grid);
         LinearLayout nav = Ui.row(a);
-        nav.addView(Ui.small(a, "◀ पिछले 4", Ui.SUB, new View.OnClickListener() {
+        nav.addView(Ui.small(a, "◀ Previous 4", Ui.SUB, new View.OnClickListener() {
             public void onClick(View v) { if (page[0] > 0) { page[0]--; fill[0].run(); } }
         }));
-        nav.addView(Ui.small(a, "अगले 4 ▶", Ui.PRIMARY, new View.OnClickListener() {
+        nav.addView(Ui.small(a, "Next 4 ▶", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { if ((page[0] + 1) * 4 < items.size()) { page[0]++; fill[0].run(); } }
         }));
         body.addView(nav);
@@ -169,13 +169,13 @@ final class Picker {
         for (final String act : actions) {
             String label;
             int color = Ui.PRIMARY;
-            if (act.equals("phone")) label = type.equals(Library.PIC) ? "📂 फ़ोन से चित्र" : "📂 फ़ोन से फ़ाइल";
-            else if (act.equals("camera")) label = "📷 कैमरा से फ़ोटो";
-            else if (act.equals("record")) label = "🎙 अभी रिकॉर्ड करें";
-            else if (act.equals("online")) { label = "🌐 इंटरनेट पर मुफ़्त खोजें"; color = Ui.BLUE; }
-            else if (act.equals("ai")) { label = "✨ AI से बनवाएँ (मुफ़्त)"; color = Ui.BLUE; }
-            else if (act.equals("phoneVoice")) { label = "📱 फ़ोन/AI की आवाज़ (नमूना हटाएँ)"; color = Ui.SUB; }
-            else { label = "🎬 स्टूडियो खुद चुने"; color = Ui.GREEN; }
+            if (act.equals("phone")) label = type.equals(Library.PIC) ? "📂 Picture from phone" : "📂 File from phone";
+            else if (act.equals("camera")) label = "📷 Photo from camera";
+            else if (act.equals("record")) label = "🎙 Record now";
+            else if (act.equals("online")) { label = "🌐 Search free on the internet"; color = Ui.BLUE; }
+            else if (act.equals("ai")) { label = "✨ Make with AI (free)"; color = Ui.BLUE; }
+            else if (act.equals("phoneVoice")) { label = "🗣 Studio voice (remove sample)"; color = Ui.SUB; }
+            else { label = "🎬 Let the studio choose"; color = Ui.GREEN; }
             Button b = Ui.button(a, label, color, new View.OnClickListener() {
                 public void onClick(View v) { stop(); d[0].dismiss(); l.action(act); }
             });
@@ -184,7 +184,7 @@ final class Picker {
         fill[0].run();
         ScrollView sv = new ScrollView(a);
         sv.addView(body);
-        d[0] = new AlertDialog.Builder(a).setTitle(title).setView(sv).setNegativeButton("बंद करें", null).create();
+        d[0] = new AlertDialog.Builder(a).setTitle(title).setView(sv).setNegativeButton("Close", null).create();
         d[0].setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
             public void onDismiss(android.content.DialogInterface di) { stop(); }
         });

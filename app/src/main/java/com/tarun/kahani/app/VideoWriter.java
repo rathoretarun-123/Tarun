@@ -123,7 +123,7 @@ public final class VideoWriter {
                 a.releaseOutputBuffer(ox, false);
                 if ((bi.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
             }
-            if (System.currentTimeMillis() - guard > 900000) throw new IOException("आवाज़ एन्कोड नहीं हो सकी");
+            if (System.currentTimeMillis() - guard > 900000) throw new IOException("Could not encode the sound");
         }
         a.stop();
         a.release();
@@ -135,7 +135,7 @@ public final class VideoWriter {
         int ix;
         while ((ix = video.dequeueInputBuffer(5000)) < 0) {
             drain(false);
-            if (System.currentTimeMillis() > deadline) throw new IOException("वीडियो एन्कोडर रुक गया");
+            if (System.currentTimeMillis() > deadline) throw new IOException("The video encoder stopped");
         }
         Image img = null;
         try { img = video.getInputImage(ix); } catch (Exception ignored) {}
@@ -187,7 +187,7 @@ public final class VideoWriter {
 
     /** Fallback for encoders that do not hand out an Image: plain NV12 in the byte buffer. */
     private void fillNV12(ByteBuffer buf, int[] argb) throws IOException {
-        if (buf == null) throw new IOException("वीडियो एन्कोडर ने चित्र स्वीकार नहीं किया");
+        if (buf == null) throw new IOException("The video encoder did not accept the frame");
         buf.clear();
         byte[] y = new byte[w * h], uv = new byte[w * h / 2];
         for (int i = 0; i < w * h; i++) {
@@ -203,7 +203,7 @@ public final class VideoWriter {
                 uv[yy * w + xx * 2 + 1] = (byte) (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
             }
         }
-        if (buf.capacity() < y.length + uv.length) throw new IOException("वीडियो एन्कोडर का बफ़र छोटा है");
+        if (buf.capacity() < y.length + uv.length) throw new IOException("The video encoder buffer is too small");
         buf.put(y);
         buf.put(uv);
     }
@@ -214,7 +214,7 @@ public final class VideoWriter {
             int ox = video.dequeueOutputBuffer(info, end ? 10000 : 0);
             if (ox == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 if (!end) return;
-                if (System.currentTimeMillis() > deadline) throw new IOException("वीडियो पूरा नहीं हो सका");
+                if (System.currentTimeMillis() > deadline) throw new IOException("The video could not be finished");
                 continue;
             }
             if (ox == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {

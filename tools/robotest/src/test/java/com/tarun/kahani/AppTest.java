@@ -81,6 +81,31 @@ public class AppTest {
         ff.set(o, v);
     }
 
+    static boolean hasDevanagari(String t) {
+        for (int i = 0; i < t.length(); i++) if (t.charAt(i) >= 0x0900 && t.charAt(i) <= 0x097F && "समाप्त".indexOf(t.charAt(i)) < 0) return true;
+        return false;
+    }
+
+    @Test
+    public void hinglishStoryIsReadAndShownInUsersSpelling() throws Exception {
+        String hs = "Characters:\n1. Meena (8 saal): chhoti ladki, gulabi frock\n2. Raju Bandar: shaitaan bandar\n\nMeena aur Jadui Aam\n"
+                + "Scene 1: Bagiche mein\n(Place: Gaon ka bagicha. Subah ka samay.)\n"
+                + "Meena (hanste hue): \"Raju! Mera ribbon wapas do, abhi ke abhi!\"\nRaju Bandar (shaitani se): \"Pehle mujhe pakad ke dikhao!\"\n";
+        Story st = ScriptParser.parse(hs);
+        System.out.println("HINGLISH: title=" + st.title + " chars=" + st.characters + " labels=" + st.characters.get(0).shown() + "," + st.characters.get(1).shown());
+        assertTrue(st.hinglish);
+        assertTrue(st.hindi);
+        assertTrue(st.title.equals("Meena aur Jadui Aam"));
+        assertTrue(st.dialogueCount() == 2);
+        assertTrue(st.characters.get(0).shown().equals("Meena"));
+        assertTrue(st.characters.get(1).displayName.equals("राजू बंदर"));
+        Director d = new Director(st, new Director.Options());
+        Film f = d.prepare();
+        System.out.println("HINGLISH LINE: speak=" + f.lines.get(0).text + " | shown=" + f.lines.get(0).shown);
+        assertTrue(f.lines.get(0).text.contains("मेरा"));
+        assertTrue(f.lines.get(0).shown.contains("Mera ribbon wapas do"));
+    }
+
     static String dialogText() {
         android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
         if (d == null || d.getWindow() == null) return "";
@@ -94,21 +119,23 @@ public class AppTest {
         View root = a.getWindow().getDecorView();
         List<String> login = texts(root, new ArrayList<String>());
         System.out.println("LOGIN: " + login);
-        assertTrue(login.toString().contains("Gmail से साइन इन"));
-        find(root, "अभी नहीं").performClick();
+        assertTrue(login.toString().contains("Sign in with Gmail"));
+        find(root, "Not now").performClick();
         idle();
         List<String> home = texts(root, new ArrayList<String>());
         System.out.println("HOME: " + home);
-        assertTrue(home.toString().contains("नई फ़िल्म"));
-        assertTrue(home.toString().contains("लाइब्रेरी"));
+        assertTrue(home.toString().contains("New film"));
+        assertTrue(home.toString().contains("Library"));
 
+        for (String t : home) assertTrue("Hindi left in the home screen: " + t, !hasDevanagari(t) || t.contains("Ratnagarh") || t.contains("रत्नगढ़"));
         // new empty film -> story screen (clear button, platforms) -> back
-        find(root, "नई फ़िल्म").performClick();
+        find(root, "New film").performClick();
         idle();
         List<String> ed = texts(root, new ArrayList<String>());
         System.out.println("STORY: " + ed);
-        assertTrue(ed.toString().contains("1. कहानी"));
-        assertTrue(ed.toString().contains("साफ़ करें"));
+        for (String t : ed) assertTrue("Hindi left in the story screen: " + t, !hasDevanagari(t));
+        assertTrue(ed.toString().contains("1. Story"));
+        assertTrue(ed.toString().contains("Clear"));
         assertTrue(ed.toString().contains("Instagram Reel"));
         a.onBackPressed();
         idle();
@@ -118,22 +145,22 @@ public class AppTest {
         set(a, "project", p);
         call(a, "showStory", new Class<?>[0]);
         idle();
-        find(root, "स्टूडियो खोलें").performClick();
+        find(root, "Open studio").performClick();
         idle();
         List<String> st = texts(root, new ArrayList<String>());
         System.out.println("STUDIO: " + st);
         assertTrue(st.toString().contains("वानुषा"));
-        assertTrue(st.toString().contains("प्रोडक्शन फ़ाइल"));
-        assertTrue(st.toString().contains("क्या बाकी है"));
-        assertTrue(st.toString().contains("निर्देशक की योजना"));
+        assertTrue(st.toString().contains("Production file"));
+        assertTrue(st.toString().contains("Still missing"));
+        assertTrue(st.toString().contains("Director's plan"));
 
         // picture chooser shows 4 at a time with "next 4"
         call(a, "choosePicture", new Class<?>[]{String.class, String.class}, "char:वृंदा", "वृंदा");
         idle();
         String pick = dialogText();
         System.out.println("PICKER: " + pick);
-        assertTrue(pick.contains("अगले 4"));
-        assertTrue(pick.contains("कैमरा"));
+        assertTrue(pick.contains("Next 4"));
+        assertTrue(pick.contains("camera"));
         org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
 
         // voice chooser
@@ -142,13 +169,13 @@ public class AppTest {
         idle();
         String vp = dialogText();
         System.out.println("VOICE PICKER: " + vp);
-        assertTrue(vp.contains("रिकॉर्ड"));
+        assertTrue(vp.contains("Record"));
         org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
 
         // record-each-line screen
         call(a, "showLines", new Class<?>[0]);
         idle();
-        assertTrue(texts(root, new ArrayList<String>()).toString().contains("रिकॉर्ड"));
+        assertTrue(texts(root, new ArrayList<String>()).toString().contains("Record"));
         call(a, "showFace", new Class<?>[]{String.class}, "वृंदा");
         Thread.sleep(3000);
         idle();
@@ -160,16 +187,16 @@ public class AppTest {
         idle();
         List<String> lib = texts(root, new ArrayList<String>());
         System.out.println("LIBRARY: " + lib.subList(0, Math.min(14, lib.size())));
-        assertTrue(lib.toString().contains("फ़ोन से"));
+        assertTrue(lib.toString().contains("From phone"));
         set(a, "libTab", "sound");
         call(a, "showLibrary", new Class<?>[0]);
         idle();
-        assertTrue(texts(root, new ArrayList<String>()).toString().contains("ध्वनियाँ"));
+        assertTrue(texts(root, new ArrayList<String>()).toString().contains("Sounds"));
         call(a, "showSettings", new Class<?>[0]);
         idle();
         List<String> se = texts(root, new ArrayList<String>());
         assertTrue(se.toString().contains("Gemini"));
-        assertTrue(se.toString().contains("लॉग आउट") || se.toString().contains("साइन इन"));
+        assertTrue(se.toString().contains("Log out") || se.toString().contains("Sign in"));
 
         // player + natural-language command box (film file faked)
         set(a, "project", p);

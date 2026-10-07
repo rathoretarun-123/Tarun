@@ -101,9 +101,9 @@ public final class Bible {
 
     /** Builds the whole production file. lib may be null. have = names that already have a picture/voice. */
     public static String write(Story st, SoundLib lib, Set<String> havePicture, Set<String> haveVoice) {
-        boolean hi = st.hindi;
+        boolean hi = false;   // the production file is written in English; story content stays in its own language
         StringBuilder b = new StringBuilder();
-        String title = st.title.length() > 0 ? st.title : (hi ? "मेरी कहानी" : "My story");
+        String title = st.title.length() > 0 ? st.title : "My story";
         b.append(hi ? "प्रोडक्शन फ़ाइल — " : "Production file — ").append(title).append("\n");
         b.append("============================================================\n\n");
         b.append(hi ? "कैसे इस्तेमाल करें:\n"
@@ -113,7 +113,7 @@ public final class Bible {
                 + "4. जो चीज़ आप नहीं देंगे, स्टूडियो अपनी लाइब्रेरी से खुद चुन लेगा।\n\n"
                 : "How to use:\n"
                 + "1. Each character and place below has a description and a \"Prompt\". Paste the prompt into ChatGPT / Grok / Meta AI to make the picture.\n"
-                + "2. Save the picture with the character/place name (e.g. Vrinda.jpg) and upload it in the app — the app recognises the name.\n"
+                + "2. Save the picture with the character/place name (e.g. Vrinda.jpg) and use \"Add many pictures at once\" in the studio — the app recognises the name.\n"
                 + "3. For voices give a 10–20 second recording per character; all their dialogue will be made in that voice.\n"
                 + "4. Anything you do not give, the studio picks from its own library.\n\n");
 
@@ -123,7 +123,7 @@ public final class Bible {
         for (Story.CharacterDef c : st.characters) {
             int lines = 0;
             for (Story.Scene sc : st.scenes) for (Story.Beat bt : sc.beats) if (bt.speaker == c) lines++;
-            b.append(i++).append(". ").append(c.fullName != null && c.fullName.length() > 0 ? c.fullName : c.displayName);
+            b.append(i++).append(". ").append(st.shown(c.fullName != null && c.fullName.length() > 0 ? c.fullName : c.displayName));
             if (c.age > 0) b.append(" (").append(c.age).append(hi ? " वर्ष)" : " yrs)");
             b.append("\n");
             if (c.description.length() > 0) b.append("   ").append(hi ? "विवरण: " : "Description: ").append(oneLine(c.description)).append("\n");
@@ -166,12 +166,12 @@ public final class Bible {
                 if (bt.type == Story.Beat.DIALOGUE) {
                     int emo = Director.emotionOf(bt.manner, bt.text, bt.speaker);
                     boolean changed = bt.speaker != last;
-                    String who = bt.narrator || bt.speaker == null ? (hi ? "कथावाचक (केवल आवाज़)" : "Narrator (voice only)") : bt.speaker.displayName;
+                    String who = bt.narrator || bt.speaker == null ? "Narrator (voice only)" : bt.speaker.shown();
                     b.append("   ").append(hi ? "शॉट " : "Shot ").append(shot++).append(" — ")
                             .append(bt.narrator ? (hi ? "दृश्य पर कथावाचक की आवाज़" : "Voice-over on the scene") : camera(k, changed, emo, false, hi))
                             .append("\n      ").append(who).append(" [").append(emotionWord(emo, hi)).append("]");
-                    if (bt.manner.length() > 0) b.append(" (").append(bt.manner).append(")");
-                    b.append(": \"").append(oneLine(bt.text)).append("\"\n");
+                    if (bt.manner.length() > 0) b.append(" (").append(st.shown(bt.manner)).append(")");
+                    b.append(": \"").append(st.shown(oneLine(bt.text))).append("\"\n");
                     last = bt.speaker;
                 } else {
                     String t = oneLine(bt.text);
@@ -191,7 +191,7 @@ public final class Bible {
                 .append(hi ? "कहानी का मुख्य चित्र + संगीत। Prompt: " : "main picture of the story + music. Prompt: ")
                 .append("Movie poster style title picture for a children's cartoon film named '").append(title)
                 .append("', main characters together, colourful, no text.\n");
-        b.append(hi ? "अंतिम पृष्ठ: \"समाप्त\" — शांत संगीत के साथ।\n" : "End page: \"The End\" — with gentle music.\n");
+        b.append("End page: \"").append(st.hindi ? "समाप्त" : "The End").append("\" — with gentle music.\n");
         return b.toString();
     }
 

@@ -22,7 +22,25 @@ public final class ScriptParser {
     static final String[] TITLE_WORDS = {"बड़ी", "छोटी", "बड़ा", "छोटा", "बाकी", "राजकुमारी", "राजकुमार", "गार्ड", "गार्ड्स",
             "the", "princess", "prince", "guard", "guards", "little", "big", "old", "young", "और", "का", "की", "के"};
 
+    /** Reads a script in Hindi, English or Hinglish (Hindi written in English letters). */
     public static Story parse(String raw) {
+        if (raw != null && Hinglish.isHinglish(raw)) {
+            java.util.Map<String, String> back = new java.util.HashMap<String, String>();
+            Story s = parseText(Hinglish.toDevanagari(raw, back));
+            s.hinglish = true;
+            s.back = back;
+            s.title = Hinglish.back(s.title, back);
+            s.subtitle = Hinglish.back(s.subtitle, back);
+            for (Story.CharacterDef c : s.characters) {
+                c.label = Hinglish.back(c.displayName, back);
+                if (!c.aliases.contains(c.label)) c.aliases.add(c.label);
+            }
+            return s;
+        }
+        return parseText(raw);
+    }
+
+    static Story parseText(String raw) {
         Story story = new Story();
         String text = Txt.digitsToAscii(raw.replace("\r\n", "\n").replace('\r', '\n'));
         String[] lines = text.split("\n");
@@ -33,7 +51,7 @@ public final class ScriptParser {
         }
         if (firstScene < 0) {
             // No scene headings: treat the whole thing as one scene.
-            story.warnings.add("कोई 'दृश्य 1' शीर्षक नहीं मिला — पूरी कहानी को एक दृश्य माना गया।");
+            story.warnings.add("No 'Scene 1' / 'दृश्य 1' heading found — the whole story is treated as one scene.");
             firstScene = 0;
             parsePreamble(story, new String[0]);
             Story.Scene sc = new Story.Scene();
@@ -328,7 +346,7 @@ public final class ScriptParser {
                     c = newChar(story, b.speakerRaw, "", -1);
                     c.fromScript = false;
                     c.aliases.add(b.speakerRaw);
-                    story.warnings.add("'" + b.speakerRaw + "' का विवरण पात्र-सूची में नहीं है — रूप अपने आप बनाया गया।");
+                    story.warnings.add("'" + b.speakerRaw + "' is not described in the character list — the studio designed a look.");
                 }
                 b.speaker = c;
                 Map<String, Integer> m = used.get(c);

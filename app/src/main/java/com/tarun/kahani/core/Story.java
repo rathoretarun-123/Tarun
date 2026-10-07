@@ -14,6 +14,13 @@ public final class Story {
     public final List<Scene> scenes = new ArrayList<Scene>();
     public final List<String> warnings = new ArrayList<String>();
     public boolean hasNarrator;
+    /** Written in Hinglish (Hindi in English letters): the text was turned into Devanagari for voices and staging. */
+    public boolean hinglish;
+    /** Devanagari word -> the user's own spelling (Hinglish stories), for names, title and subtitles. */
+    public java.util.Map<String, String> back;
+
+    /** How the user wrote it (Hinglish stories are shown in English letters again). */
+    public String shown(String devanagari) { return hinglish ? Hinglish.back(devanagari, back) : devanagari; }
 
     public static final class CharacterDef {
         public String id;            // stable key
@@ -24,6 +31,8 @@ public final class Story {
         public int age = -1;
         public boolean fromScript;   // false when invented for an unknown speaker
         public Look look;
+        public String label;          // name as the user wrote it (Hinglish), or null
+        public String shown() { return label != null ? label : displayName; }
         public String toString() { return displayName; }
     }
 

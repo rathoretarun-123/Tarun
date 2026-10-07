@@ -110,37 +110,37 @@ public final class Edits {
         float f = (float) Json.num(c, "factor", 1);
         float v = (float) Json.num(c, "value", Float.NaN);
         switch (op) {
-            case "brightness": brightness = clamp(Float.isNaN(v) ? brightness + (f - 1) : v, -0.8f, 0.8f); return "चमक: " + pct(brightness);
-            case "contrast": contrast = clamp(Float.isNaN(v) ? contrast * f : v, 0.5f, 1.8f); return "कंट्रास्ट: " + fmt(contrast);
-            case "saturation": saturation = clamp(Float.isNaN(v) ? saturation * f : v, 0f, 2f); return "रंग: " + fmt(saturation);
-            case "warmth": warmth = clamp(Float.isNaN(v) ? warmth + (f - 1) : v, -1f, 1f); return "रंगत: " + fmt(warmth);
-            case "music": music = clamp(Float.isNaN(v) ? music * f : v, 0f, 3f); return "संगीत: " + pct1(music);
-            case "sfx": sfx = clamp(Float.isNaN(v) ? sfx * f : v, 0f, 3f); return "ध्वनि-प्रभाव: " + pct1(sfx);
-            case "ambience": ambience = clamp(Float.isNaN(v) ? ambience * f : v, 0f, 3f); return "पृष्ठभूमि ध्वनि: " + pct1(ambience);
-            case "voices": voices = clamp(Float.isNaN(v) ? voices * f : v, 0.2f, 3f); return "सभी आवाज़ें: " + pct1(voices);
-            case "narrator": narrator = clamp(Float.isNaN(v) ? narrator * f : v, 0f, 3f); return "कथावाचक: " + pct1(narrator);
+            case "brightness": brightness = clamp(Float.isNaN(v) ? brightness + (f - 1) : v, -0.8f, 0.8f); return "Brightness: " + pct(brightness);
+            case "contrast": contrast = clamp(Float.isNaN(v) ? contrast * f : v, 0.5f, 1.8f); return "Contrast: " + fmt(contrast);
+            case "saturation": saturation = clamp(Float.isNaN(v) ? saturation * f : v, 0f, 2f); return "Colour: " + fmt(saturation);
+            case "warmth": warmth = clamp(Float.isNaN(v) ? warmth + (f - 1) : v, -1f, 1f); return "Warmth: " + fmt(warmth);
+            case "music": music = clamp(Float.isNaN(v) ? music * f : v, 0f, 3f); return "Music: " + pct1(music);
+            case "sfx": sfx = clamp(Float.isNaN(v) ? sfx * f : v, 0f, 3f); return "Sound effects: " + pct1(sfx);
+            case "ambience": ambience = clamp(Float.isNaN(v) ? ambience * f : v, 0f, 3f); return "Background sounds: " + pct1(ambience);
+            case "voices": voices = clamp(Float.isNaN(v) ? voices * f : v, 0.2f, 3f); return "All voices: " + pct1(voices);
+            case "narrator": narrator = clamp(Float.isNaN(v) ? narrator * f : v, 0f, 3f); return "Narrator: " + pct1(narrator);
             case "voice_gain": {
                 Float cur = voiceGain.get(who);
                 float nv = clamp(Float.isNaN(v) ? (cur == null ? 1 : cur) * f : v, 0f, 3f);
-                voiceGain.put(who, nv); return who + " की आवाज़: " + pct1(nv);
+                voiceGain.put(who, nv); return who + " voice volume: " + pct1(nv);
             }
             case "voice_pitch": {
                 Float cur = voicePitch.get(who);
                 float nv = clamp(Float.isNaN(v) ? (cur == null ? 1 : cur) * f : v, 0.5f, 2f);
-                voicePitch.put(who, nv); return who + " की पिच: " + fmt(nv);
+                voicePitch.put(who, nv); return who + " voice pitch: " + fmt(nv);
             }
             case "voice_rate": {
                 Float cur = voiceRate.get(who);
                 float nv = clamp(Float.isNaN(v) ? (cur == null ? 1 : cur) * f : v, 0.5f, 2f);
-                voiceRate.put(who, nv); return who + " की गति: " + fmt(nv);
+                voiceRate.put(who, nv); return who + " speaking speed: " + fmt(nv);
             }
-            case "speed": speed = clamp(Float.isNaN(v) ? speed * f : v, 0.6f, 1.5f); return "फ़िल्म की गति: " + fmt(speed);
-            case "subtitles": subtitles = Json.bool(c, "on", !subtitles); return subtitles ? "उपशीर्षक: चालू" : "उपशीर्षक: बंद";
+            case "speed": speed = clamp(Float.isNaN(v) ? speed * f : v, 0.6f, 1.5f); return "Film pace: " + fmt(speed);
+            case "subtitles": subtitles = Json.bool(c, "on", !subtitles); return subtitles ? "Subtitles: on" : "Subtitles: off";
             case "file_size": quality = (int) clamp(Float.isNaN(v) ? quality + (f > 1 ? 1 : -1) : v, 1, 3);
-                return "फ़ाइल का आकार: " + (quality == 1 ? "छोटा" : quality == 2 ? "सामान्य" : "बड़ा (सबसे साफ़)");
-            case "resolution": height = (int) (Float.isNaN(v) ? (f > 1 ? 1080 : 720) : v); return "रिज़ॉल्यूशन: " + height + "p";
-            case "aspect": aspect = Json.str(c, "value", aspect); return "आकार: " + aspect;
-            case "reset": { Edits d = new Edits(); copyFrom(d); return "सब बदलाव हटा दिए"; }
+                return "File size: " + (quality == 1 ? "small" : quality == 2 ? "normal" : "large (sharpest)");
+            case "resolution": height = (int) (Float.isNaN(v) ? (f > 1 ? 1080 : 720) : v); return "Resolution: " + height + "p";
+            case "aspect": aspect = Json.str(c, "value", aspect); return "Shape: " + aspect;
+            case "reset": { Edits d = new Edits(); copyFrom(d); return "All changes removed"; }
             default: return null;
         }
     }

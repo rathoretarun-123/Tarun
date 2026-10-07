@@ -130,9 +130,9 @@ public class MainActivity extends Activity {
         else if (project != null) showStory();
         else showHome();
         if (crash != null) {
-            new AlertDialog.Builder(this).setTitle("पिछली बार ऐप बंद हो गया था")
-                    .setMessage("माफ़ कीजिए। आपकी कहानी सुरक्षित है। अगर बार-बार हो तो 720p चुनकर देखें.\n\n" + crash)
-                    .setPositiveButton("ठीक है", null).show();
+            new AlertDialog.Builder(this).setTitle("The app closed unexpectedly last time")
+                    .setMessage("Sorry about that. Your story is safe. If it keeps happening, try 720p.\n\n" + crash)
+                    .setPositiveButton("OK", null).show();
         }
     }
 
@@ -258,14 +258,14 @@ public class MainActivity extends Activity {
     // ================================================================== sign-in & permissions
 
     private void showLogin() {
-        LinearLayout body = page(S_LOGIN, "🎬 कहानी फ़िल्म", false);
+        LinearLayout body = page(S_LOGIN, "🎬 Kahani Film", false);
         LinearLayout c = Ui.card(this);
-        c.addView(Ui.text(this, "स्वागत है!", 22, Ui.TEXT, true));
-        c.addView(Ui.text(this, "अपनी कहानी से बच्चों की कार्टून फ़िल्म बनाइए — आवाज़ें, संगीत, कैमरा और दृश्य स्टूडियो खुद तैयार करता है।\n\nशुरू करने के लिए अपने Gmail (Google खाते) से साइन इन करें।", 16, Ui.SUB, false));
-        c.addView(Ui.button(this, "G   Gmail से साइन इन करें", Ui.BLUE, new View.OnClickListener() {
+        c.addView(Ui.text(this, "Welcome!", 22, Ui.TEXT, true));
+        c.addView(Ui.text(this, "Turn your story into a cartoon film for children — the studio prepares voices, music, camera and scenes for you.\n\nSign in with your Gmail (Google account) to start.", 16, Ui.SUB, false));
+        c.addView(Ui.button(this, "G   Sign in with Gmail", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { login(); }
         }));
-        c.addView(Ui.small(this, "अभी नहीं", Ui.SUB, new View.OnClickListener() {
+        c.addView(Ui.small(this, "Not now", Ui.SUB, new View.OnClickListener() {
             public void onClick(View v) { Prefs.put(MainActivity.this, "skipLogin", "1"); askPermissions(); showHome(); }
         }));
         body.addView(c);
@@ -277,10 +277,10 @@ public class MainActivity extends Activity {
             startActivityForResult(i, REQ_LOGIN);
         } catch (Exception e) {
             final EditText et = new EditText(this);
-            et.setHint("आपका Gmail पता");
+            et.setHint("Your Gmail address");
             et.setInputType(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS | InputType.TYPE_CLASS_TEXT);
-            new AlertDialog.Builder(this).setTitle("Gmail पता लिखें").setView(et)
-                    .setPositiveButton("ठीक है", new DialogInterface.OnClickListener() {
+            new AlertDialog.Builder(this).setTitle("Enter your Gmail address").setView(et)
+                    .setPositiveButton("OK", new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface d, int w) {
                             String m = et.getText().toString().trim();
                             if (m.contains("@")) { Prefs.setAccount(MainActivity.this, m); askPermissions(); showHome(); }
@@ -290,16 +290,16 @@ public class MainActivity extends Activity {
     }
 
     private void logout() {
-        new AlertDialog.Builder(this).setTitle("लॉग आउट करें?")
-                .setMessage("आपकी फ़िल्में और लाइब्रेरी इस फ़ोन में सुरक्षित रहेंगी।")
-                .setPositiveButton("हाँ, लॉग आउट", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("Log out?")
+                .setMessage("Your films and library stay safe on this phone.")
+                .setPositiveButton("Yes, log out", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         Prefs.setAccount(MainActivity.this, "");
                         Prefs.put(MainActivity.this, "skipLogin", "0");
                         project = null;
                         showLogin();
                     }
-                }).setNegativeButton("नहीं", null).show();
+                }).setNegativeButton("No", null).show();
     }
 
     private String[] neededPermissions() {
@@ -334,10 +334,10 @@ public class MainActivity extends Activity {
             Runnable r = afterPermission;
             afterPermission = null;
             if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED && r != null) r.run();
-            else toast("अनुमति नहीं मिली — सेटिंग्स > ऐप्स > कहानी फ़िल्म > अनुमतियाँ में चालू करें");
+            else toast("Permission not given — turn it on in Settings > Apps > Kahani Film > Permissions");
         } else if (code == REQ_PERM_GALLERY) {
             if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED) saveToGallery(pendingShare);
-            else toast("गैलरी में सहेजने की अनुमति नहीं मिली");
+            else toast("No permission to save to the gallery");
         }
     }
 
@@ -345,32 +345,32 @@ public class MainActivity extends Activity {
 
     private void showHome() {
         project = null;
-        LinearLayout body = page(S_HOME, "🎬 कहानी फ़िल्म", false);
+        LinearLayout body = page(S_HOME, "🎬 Kahani Film", false);
         String acc = Prefs.account(this);
         LinearLayout top = Ui.row(this);
         top.setPadding(Ui.dp(this, 16), Ui.dp(this, 4), Ui.dp(this, 12), 0);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView who = Ui.text(this, acc.length() > 0 ? "👤 " + acc : "👤 साइन इन नहीं", 14, Ui.SUB, false);
+        TextView who = Ui.text(this, acc.length() > 0 ? "👤 " + acc : "👤 Not signed in", 14, Ui.SUB, false);
         top.addView(who, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        top.addView(Ui.small(this, acc.length() > 0 ? "लॉग आउट" : "साइन इन", Ui.SUB, new View.OnClickListener() {
+        top.addView(Ui.small(this, acc.length() > 0 ? "Log out" : "Sign in", Ui.SUB, new View.OnClickListener() {
             public void onClick(View v) { if (Prefs.account(MainActivity.this).length() > 0) logout(); else login(); }
         }));
         body.addView(top);
 
         LinearLayout hero = Ui.card(this);
-        hero.addView(Ui.text(this, "अपनी कहानी से कार्टून फ़िल्म बनाइए", 18, Ui.TEXT, true));
-        hero.addView(Ui.text(this, "1. कहानी चिपकाएँ   2. (चाहें तो) चित्र-आवाज़ दें   3. ‘फ़िल्म बनाएँ’", 15, Ui.SUB, false));
-        hero.addView(Ui.button(this, "➕  नई फ़िल्म", Ui.PRIMARY, new View.OnClickListener() {
+        hero.addView(Ui.text(this, "Make a cartoon film from your story", 18, Ui.TEXT, true));
+        hero.addView(Ui.text(this, "1. Paste your story   2. (Optional) add pictures and voices   3. Tap ‘Make film’", 15, Ui.SUB, false));
+        hero.addView(Ui.button(this, "➕  New film", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { project = Project.create(MainActivity.this); showStory(); }
         }));
-        hero.addView(Ui.button(this, "📖  उदाहरण: रत्नगढ़ की दो राजकुमारियाँ", Ui.BLUE, new View.OnClickListener() {
+        hero.addView(Ui.button(this, "📖  Example: The Two Princesses of Ratnagarh", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { openSample(); }
         }));
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "📚 लाइब्रेरी", Ui.GREEN, new View.OnClickListener() {
+        r.addView(Ui.small(this, "📚 Library", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { showLibrary(); }
         }));
-        r.addView(Ui.small(this, "⚙ सेटिंग", Ui.SUB, new View.OnClickListener() {
+        r.addView(Ui.small(this, "⚙ Settings", Ui.SUB, new View.OnClickListener() {
             public void onClick(View v) { showSettings(); }
         }));
         hero.addView(r);
@@ -379,28 +379,28 @@ public class MainActivity extends Activity {
         FilmJob job = FilmJob.current;
         if (job != null && !job.done && !job.failed && !job.cancelled) {
             LinearLayout c = Ui.card(this);
-            c.addView(Ui.text(this, "⏳ एक फ़िल्म बन रही है: " + job.project.name(), 16, Ui.TEXT, true));
+            c.addView(Ui.text(this, "⏳ A film is being made: " + job.project.name(), 16, Ui.TEXT, true));
             final Project jp = job.project;
-            c.addView(Ui.button(this, "प्रगति देखें", Ui.GREEN, new View.OnClickListener() {
+            c.addView(Ui.button(this, "See progress", Ui.GREEN, new View.OnClickListener() {
                 public void onClick(View v) { project = jp; showProgress(); }
             }));
             body.addView(c);
         }
 
         List<Project> ps = Project.all(this);
-        if (!ps.isEmpty()) heading(body, "मेरी फ़िल्में");
+        if (!ps.isEmpty()) heading(body, "My films");
         for (final Project p : ps) {
             LinearLayout c = Ui.card(this);
             final boolean made = p.film().exists();
             c.addView(Ui.text(this, p.name(), 17, Ui.TEXT, true));
             long secs = 0;
             try { secs = Long.parseLong(p.setting("filmSeconds", "0")); } catch (NumberFormatException ignored) {}
-            c.addView(Ui.text(this, made ? "✅ फ़िल्म तैयार (" + FilmJob.fmt(secs) + ")" : "✏️ अधूरी", 14, made ? Ui.GREEN : Ui.SUB, false));
+            c.addView(Ui.text(this, made ? "✅ Film ready (" + FilmJob.fmt(secs) + ")" : "✏️ In progress", 14, made ? Ui.GREEN : Ui.SUB, false));
             LinearLayout rr = Ui.row(this);
-            rr.addView(Ui.small(this, "खोलें", Ui.PRIMARY, new View.OnClickListener() {
+            rr.addView(Ui.small(this, "Open", Ui.PRIMARY, new View.OnClickListener() {
                 public void onClick(View v) { project = p; showStory(); }
             }));
-            if (made) rr.addView(Ui.small(this, "▶ देखें", Ui.GREEN, new View.OnClickListener() {
+            if (made) rr.addView(Ui.small(this, "▶ Watch", Ui.GREEN, new View.OnClickListener() {
                 public void onClick(View v) { project = p; showPlayer(); }
             }));
             rr.addView(Ui.small(this, "🗑", Ui.RED, new View.OnClickListener() {
@@ -415,11 +415,11 @@ public class MainActivity extends Activity {
         for (Project p : Project.all(this)) {
             if (p.has("char_vrinda.jpg") && p.read("script.txt").contains("रत्नगढ़")) { project = p; showStory(); return; }
         }
-        background("उदाहरण तैयार हो रहा है…", new Work() {
+        background("Preparing the example…", new Work() {
             public Object run() throws Exception { return Project.createSample(MainActivity.this); }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("उदाहरण नहीं खुला: " + e.getMessage()); return; }
+                if (e != null) { toast("Could not open the example: " + e.getMessage()); return; }
                 project = (Project) r;
                 showStory();
             }
@@ -427,10 +427,10 @@ public class MainActivity extends Activity {
     }
 
     private void confirmDelete(final Project p) {
-        new AlertDialog.Builder(this).setTitle("हटाएँ?").setMessage("\"" + p.name() + "\" और इसकी फ़िल्म हमेशा के लिए हट जाएगी।")
-                .setPositiveButton("हाँ, हटाएँ", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("Delete?").setMessage("\"" + p.name() + "\" and its film will be deleted for good.")
+                .setPositiveButton("Yes, delete", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) { deleteDir(p.dir); showHome(); }
-                }).setNegativeButton("नहीं", null).show();
+                }).setNegativeButton("No", null).show();
     }
 
     static void deleteDir(File d) {
@@ -459,11 +459,11 @@ public class MainActivity extends Activity {
         LinearLayout body = page(S_STORY, project.name(), true);
 
         LinearLayout c1 = Ui.card(this);
-        c1.addView(Ui.title(this, "1. कहानी"));
-        c1.addView(Ui.text(this, "किसी भी तरह लिखें — हिंदी या English, कहानी के रूप में या पटकथा (नाम (भाव): \"संवाद\") के रूप में। पात्रों और जगहों का विवरण केवल चित्र बनाने के काम आता है, पढ़ा नहीं जाता।", 13, Ui.SUB, false));
+        c1.addView(Ui.title(this, "1. Story"));
+        c1.addView(Ui.text(this, "Write it any way you like — Hindi, English or Hinglish, as a story or as a script (Name (feeling): \"dialogue\"). Descriptions of characters and places are only used for the pictures; they are never read aloud.", 13, Ui.SUB, false));
         scriptBox = new EditText(this);
         scriptBox.setText(project.read("script.txt"));
-        scriptBox.setHint("यहाँ अपनी कहानी चिपकाएँ…");
+        scriptBox.setHint("Paste your story here…");
         scriptBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         scriptBox.setGravity(Gravity.TOP);
         scriptBox.setMinLines(8);
@@ -473,61 +473,61 @@ public class MainActivity extends Activity {
         scriptBox.setPadding(Ui.dp(this, 10), Ui.dp(this, 10), Ui.dp(this, 10), Ui.dp(this, 10));
         c1.addView(scriptBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
         LinearLayout r1 = Ui.row(this);
-        r1.addView(Ui.small(this, "📋 चिपकाएँ", Ui.PRIMARY, new View.OnClickListener() {
+        r1.addView(Ui.small(this, "📋 Paste", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) {
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
                     CharSequence t = cm.getPrimaryClip().getItemAt(0).coerceToText(MainActivity.this);
                     scriptBox.setText(t);
                     saveScript();
-                } else toast("क्लिपबोर्ड खाली है");
+                } else toast("The clipboard is empty");
             }
         }));
-        r1.addView(Ui.small(this, "📂 फ़ाइल", Ui.PRIMARY, new View.OnClickListener() {
+        r1.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("text/*", REQ_SCRIPT, false); }
         }));
-        r1.addView(Ui.small(this, "🧹 साफ़ करें", Ui.RED, new View.OnClickListener() {
+        r1.addView(Ui.small(this, "🧹 Clear", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) {
                 if (scriptBox.getText().length() == 0) return;
-                new AlertDialog.Builder(MainActivity.this).setTitle("कहानी साफ़ करें?").setMessage("चिपकाई हुई पूरी कहानी हट जाएगी।")
-                        .setPositiveButton("हाँ, साफ़ करें", new DialogInterface.OnClickListener() {
+                new AlertDialog.Builder(MainActivity.this).setTitle("Clear the story?").setMessage("The whole pasted story will be removed.")
+                        .setPositiveButton("Yes, clear", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { scriptBox.setText(""); saveScript(); }
-                        }).setNegativeButton("नहीं", null).show();
+                        }).setNegativeButton("No", null).show();
             }
         }));
         c1.addView(r1);
         boolean hasAi = project.has("script_ai.txt");
         final boolean useAi = "1".equals(project.setting("useAi", "0")) && hasAi;
-        c1.addView(Ui.button(this, "🤖  AI से कहानी पढ़वाएँ (पटकथा बनाएँ)", Ui.BLUE, new View.OnClickListener() {
+        c1.addView(Ui.button(this, "🤖  Read with AI (make a script)", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { aiRead(); }
         }));
         if (hasAi) {
             CheckBox cb = new CheckBox(this);
-            cb.setText("AI की बनाई पटकथा इस्तेमाल करें");
+            cb.setText("Use the script made by AI");
             cb.setChecked(useAi);
             cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(CompoundButton b, boolean on) { project.setSetting("useAi", on ? "1" : "0"); }
             });
             c1.addView(cb);
-            c1.addView(Ui.small(this, "AI की पटकथा देखें", Ui.SUB, new View.OnClickListener() {
-                public void onClick(View v) { showText("AI की पटकथा", project.read("script_ai.txt")); }
+            c1.addView(Ui.small(this, "See the AI script", Ui.SUB, new View.OnClickListener() {
+                public void onClick(View v) { showText("AI script", project.read("script_ai.txt")); }
             }));
         }
         body.addView(c1);
 
         LinearLayout c2 = Ui.card(this);
-        c2.addView(Ui.title(this, "2. स्टूडियो: पात्र, आवाज़ें, जगहें"));
-        c2.addView(Ui.text(this, "निर्देशक कहानी पढ़कर बताएगा क्या-क्या चाहिए। आप चित्र/आवाज़ दें, या स्टूडियो को खुद चुनने दें। यहीं से प्रोडक्शन फ़ाइल भी डाउनलोड करें।", 13, Ui.SUB, false));
-        c2.addView(Ui.button(this, "🎭  स्टूडियो खोलें", Ui.PRIMARY, new View.OnClickListener() {
+        c2.addView(Ui.title(this, "2. Studio: characters, voices, places"));
+        c2.addView(Ui.text(this, "The director reads your story and lists everything needed. Add pictures and voices, or let the studio choose. Download the production file here too.", 13, Ui.SUB, false));
+        c2.addView(Ui.button(this, "🎭  Open studio", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { saveScript(); showStudio(); }
         }));
         body.addView(c2);
 
         LinearLayout c3 = Ui.card(this);
-        c3.addView(Ui.title(this, "3. कहाँ डालेंगे?"));
+        c3.addView(Ui.title(this, "3. Where will you post it?"));
         final Edits ed = edits();
-        final String[][] plats = {{"YouTube (चौड़ा 16:9)", "16:9"}, {"Instagram Reel / YouTube Shorts (खड़ा 9:16)", "9:16"},
-                {"Facebook / Instagram पोस्ट (चौकोर 1:1)", "1:1"}};
+        final String[][] plats = {{"YouTube (wide 16:9)", "16:9"}, {"Instagram Reel / YouTube Shorts (tall 9:16)", "9:16"},
+                {"Facebook / Instagram post (square 1:1)", "1:1"}};
         RadioGroup rg = new RadioGroup(this);
         for (int i = 0; i < plats.length; i++) {
             RadioButton rb = new RadioButton(this);
@@ -541,11 +541,11 @@ public class MainActivity extends Activity {
             public void onCheckedChanged(RadioGroup g, int id) { Edits e = edits(); e.aspect = plats[id - 2000][1]; saveEdits(e); }
         });
         c3.addView(rg);
-        c3.addView(Ui.text(this, "गुणवत्ता:", 14, Ui.SUB, false));
+        c3.addView(Ui.text(this, "Quality:", 14, Ui.SUB, false));
         RadioGroup qg = new RadioGroup(this);
         qg.setOrientation(RadioGroup.HORIZONTAL);
         final int[] qs = {480, 720, 1080};
-        final String[] ql = {"480p (तेज़)", "720p HD", "1080p Full HD"};
+        final String[] ql = {"480p (fast)", "720p HD", "1080p Full HD"};
         for (int i = 0; i < qs.length; i++) {
             RadioButton rb = new RadioButton(this);
             rb.setText(ql[i]);
@@ -561,12 +561,12 @@ public class MainActivity extends Activity {
         body.addView(c3);
 
         LinearLayout c4 = Ui.card(this);
-        c4.addView(Ui.button(this, "🎬  फ़िल्म बनाएँ", Ui.GREEN, new View.OnClickListener() {
+        c4.addView(Ui.button(this, "🎬  Make film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { makeFilm(); }
         }));
-        c4.addView(Ui.text(this, "फ़िल्म बनते समय आप फ़ोन लॉक कर सकते हैं या दूसरा ऐप खोल सकते हैं — काम चलता रहेगा।", 13, Ui.SUB, false));
+        c4.addView(Ui.text(this, "While the film is being made you can lock the phone or use other apps — it keeps working.", 13, Ui.SUB, false));
         if (project.film().exists()) {
-            c4.addView(Ui.button(this, "▶  बनी हुई फ़िल्म देखें / बदलाव करें", Ui.PRIMARY, new View.OnClickListener() {
+            c4.addView(Ui.button(this, "▶  Watch the film / make changes", Ui.PRIMARY, new View.OnClickListener() {
                 public void onClick(View v) { showPlayer(); }
             }));
         }
@@ -576,21 +576,21 @@ public class MainActivity extends Activity {
     private void aiRead() {
         saveScript();
         final String text = project.read("script.txt");
-        if (text.trim().length() < 20) { toast("पहले कहानी लिखें या चिपकाएँ"); return; }
-        if (!Prefs.online(this)) { toast("सेटिंग में ऑनलाइन सुविधाएँ चालू करें"); return; }
-        background("AI कहानी पढ़ रहा है… (1-2 मिनट)", new Work() {
+        if (text.trim().length() < 20) { toast("Write or paste a story first"); return; }
+        if (!Prefs.online(this)) { toast("Turn on online features in Settings"); return; }
+        background("AI is reading the story… (1-2 minutes)", new Work() {
             public Object run() { return ScriptAI.read(Prefs.cloud(MainActivity.this), text); }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("नहीं हो सका: " + e.getMessage()); return; }
+                if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
                 ScriptAI.Result res = (ScriptAI.Result) r;
                 if (res.rewritten) {
                     project.write("script_ai.txt", res.script);
                     project.setSetting("useAi", "1");
                 }
-                new AlertDialog.Builder(MainActivity.this).setTitle(res.rewritten ? "✅ पटकथा तैयार" : "AI")
-                        .setMessage(res.note + (res.rewritten ? "\n\nअब फ़िल्म इसी पटकथा से बनेगी। आपकी मूल कहानी भी सुरक्षित है।" : ""))
-                        .setPositiveButton("ठीक है", null).show();
+                new AlertDialog.Builder(MainActivity.this).setTitle(res.rewritten ? "✅ Script ready" : "AI")
+                        .setMessage(res.note + (res.rewritten ? "\n\nThe film will now be made from this script. Your original story is kept too." : ""))
+                        .setPositiveButton("OK", null).show();
                 showStory();
             }
         });
@@ -602,7 +602,7 @@ public class MainActivity extends Activity {
         tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         ScrollView sv = new ScrollView(this);
         sv.addView(tv);
-        new AlertDialog.Builder(this).setTitle(title).setView(sv).setPositiveButton("बंद करें", null).show();
+        new AlertDialog.Builder(this).setTitle(title).setView(sv).setPositiveButton("Close", null).show();
     }
 
     // ================================================================== studio
@@ -615,12 +615,12 @@ public class MainActivity extends Activity {
 
     private void showStudio() {
         if (project == null) { showHome(); return; }
-        LinearLayout body = page(S_STUDIO, "🎭 स्टूडियो", true);
+        LinearLayout body = page(S_STUDIO, "🎭 Studio", true);
         final Story st;
         try {
             st = loadStory();
         } catch (Throwable e) {
-            body.addView(Ui.text(this, "कहानी पढ़ी नहीं जा सकी: " + e.getMessage(), 16, Ui.RED, true));
+            body.addView(Ui.text(this, "Could not read the story: " + e.getMessage(), 16, Ui.RED, true));
             return;
         }
         // ---- summary and what is missing
@@ -632,56 +632,56 @@ public class MainActivity extends Activity {
         for (Story.Scene sc : st.scenes) if (sceneFile(sc) == null) noBg++;
         LinearLayout sum = Ui.card(this);
         sum.addView(Ui.title(this, "📜 " + st.title));
-        sum.addView(Ui.text(this, "भाषा: " + (st.hindi ? "हिंदी (अंत में \"समाप्त\")" : "English (ends with \"The End\")")
-                + "\nपात्र: " + st.characters.size() + "   •   भाग: " + st.scenes.size() + "   •   संवाद: " + st.dialogueCount()
-                + (st.hasNarrator ? "\nकथावाचक की आवाज़: हाँ (कहानी में कथावाचक है)" : ""), 15, Ui.TEXT, false));
-        String miss = "क्या बाकी है:\n• " + noPic + " पात्रों के चित्र  • " + noVoice + " पात्रों की आवाज़ के नमूने  • " + noBg + " भागों की पृष्ठभूमि"
-                + "\nजो आप नहीं देंगे, स्टूडियो अपनी लाइब्रेरी से खुद बनाएगा।";
+        sum.addView(Ui.text(this, "Language: " + (st.hinglish ? "Hinglish (spoken in Hindi, ends with \"समाप्त\")" : st.hindi ? "Hindi (ends with \"समाप्त\")" : "English (ends with \"The End\")")
+                + "\nCharacters: " + st.characters.size() + "   •   Parts: " + st.scenes.size() + "   •   Lines: " + st.dialogueCount()
+                + (st.hasNarrator ? "\nNarrator voice: yes (the story has a narrator)" : ""), 15, Ui.TEXT, false));
+        String miss = "Still missing:\n• " + noPic + " character pictures  • " + noVoice + " voice samples  • " + noBg + " backgrounds"
+                + "\nAnything you don't add, the studio makes from its own library.";
         sum.addView(Ui.text(this, miss, 14, noPic + noVoice + noBg == 0 ? Ui.GREEN : Ui.PRIMARY_DARK, false));
         for (String w : st.warnings) sum.addView(Ui.text(this, "⚠ " + w, 13, Ui.RED, false));
-        if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ कोई संवाद नहीं मिला। \"AI से कहानी पढ़वाएँ\" दबाएँ या ऐसे लिखें — नाम: \"संवाद\"", 14, Ui.RED, true));
-        sum.addView(Ui.button(this, "📄  प्रोडक्शन फ़ाइल (पात्र, शॉट, आवाज़ें, ध्वनियाँ)", Ui.BLUE, new View.OnClickListener() {
+        if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ No dialogue found. Tap \"Read with AI\" or write lines like — Name: \"dialogue\"", 14, Ui.RED, true));
+        sum.addView(Ui.button(this, "📄  Production file (characters, shots, voices, sounds)", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { productionFile(st); }
         }));
-        sum.addView(Ui.button(this, "📥  कई चित्र एक साथ जोड़ें (नाम से पहचान)", Ui.PRIMARY, new View.OnClickListener() {
+        sum.addView(Ui.button(this, "📥  Add many pictures at once (matched by name)", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("image/*", REQ_BULK, true); }
         }));
-        sum.addView(Ui.button(this, "🎙  संवाद अपनी आवाज़ में रिकॉर्ड करें", Ui.GREEN, new View.OnClickListener() {
+        sum.addView(Ui.button(this, "🎙  Record lines in your own voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { showLines(); }
         }));
         body.addView(sum);
 
         // ---- title and end pages
-        heading(body, "शुरुआत और अंत");
-        body.addView(pageCard("शीर्षक पृष्ठ", "title"));
-        body.addView(pageCard(st.hindi ? "अंतिम पृष्ठ (समाप्त)" : "End page (The End)", "end"));
+        heading(body, "Start and end");
+        body.addView(pageCard("Title page", "title"));
+        body.addView(pageCard(st.hindi ? "End page (समाप्त)" : "End page (The End)", "end"));
 
         // ---- characters
-        heading(body, "पात्र (चित्र और आवाज़)");
+        heading(body, "Characters (pictures and voices)");
         for (Story.CharacterDef c : st.characters) body.addView(characterCard(st, c));
         if (st.hasNarrator) body.addView(narratorCard());
 
         // ---- parts of the story
-        heading(body, "जगहें (पृष्ठभूमि और आवाज़ें)");
+        heading(body, "Places (backgrounds and sounds)");
         SoundLib sl = library.soundLib();
         for (Story.Scene sc : st.scenes) body.addView(sceneCard(sc, sl));
 
         // ---- director plan
         LinearLayout plan = Ui.card(this);
-        plan.addView(Ui.title(this, "🎬 निर्देशक की योजना"));
+        plan.addView(Ui.title(this, "🎬 Director's plan"));
         try {
             Director d = new Director(st, new Director.Options());
             d.prepare();
             Film f = d.direct(new Art());
             StringBuilder sb = new StringBuilder();
             for (String n : f.notes) sb.append("• ").append(n).append('\n');
-            sb.append("\nअनुमानित लंबाई: ").append(FilmJob.fmt((long) f.duration));
-            if (f.duration > 30 * 60) sb.append("\n⚠ 30 मिनट से लंबी — बनने में ज़्यादा समय लगेगा।");
+            sb.append("\nEstimated length: ").append(FilmJob.fmt((long) f.duration));
+            if (f.duration > 30 * 60) sb.append("\n⚠ Longer than 30 minutes — it will take longer to make.");
             plan.addView(Ui.text(this, sb.toString(), 14, Ui.TEXT, false));
         } catch (Throwable e) {
-            plan.addView(Ui.text(this, "योजना नहीं बन सकी: " + e, 14, Ui.RED, false));
+            plan.addView(Ui.text(this, "Could not make the plan: " + e, 14, Ui.RED, false));
         }
-        plan.addView(Ui.button(this, "🎬  फ़िल्म बनाएँ", Ui.GREEN, new View.OnClickListener() {
+        plan.addView(Ui.button(this, "🎬  Make film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { makeFilm(); }
         }));
         body.addView(plan);
@@ -713,20 +713,20 @@ public class MainActivity extends Activity {
             c.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 150)));
             final String f = file;
             CheckBox cb = new CheckBox(this);
-            cb.setText(kind.equals("title") ? "चित्र पर शीर्षक लिखें" : "चित्र पर \"समाप्त\" लिखें");
+            cb.setText(kind.equals("title") ? "Write the title on the picture" : "Write \"The End\" on the picture");
             cb.setChecked(!line.endsWith("|0"));
             cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 public void onCheckedChanged(CompoundButton b, boolean on) { project.setManifest(kind, kind, kind + "|" + f + "|" + (on ? "1" : "0")); }
             });
             c.addView(cb);
         } else {
-            c.addView(Ui.text(this, "🎨 स्टूडियो खुद सुंदर पृष्ठ बनाएगा (संगीत के साथ)", 13, Ui.SUB, false));
+            c.addView(Ui.text(this, "🎨 The studio will make a nice page itself (with music)", 13, Ui.SUB, false));
         }
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🖼 चित्र चुनें", Ui.PRIMARY, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🖼 Choose picture", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { choosePicture(kind, kind.equals("title") ? castStory.title : "end समाप्त"); }
         }));
-        if (file != null) r.addView(Ui.small(this, "✖ हटाएँ", Ui.RED, new View.OnClickListener() {
+        if (file != null) r.addView(Ui.small(this, "✖ Remove", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) { project.setManifest(kind, kind, null); showStudio(); }
         }));
         c.addView(r);
@@ -745,21 +745,21 @@ public class MainActivity extends Activity {
         top.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, 80), Ui.dp(this, 120)));
         LinearLayout info = Ui.column(this);
         info.setPadding(Ui.dp(this, 10), 0, 0, 0);
-        info.addView(Ui.text(this, c.displayName, 18, Ui.TEXT, true));
+        info.addView(Ui.text(this, c.shown(), 18, Ui.TEXT, true));
         info.addView(Ui.text(this, describe(c), 13, Ui.SUB, false));
         boolean mouthSet = line != null && line.split("\\|").length >= 11;
-        info.addView(Ui.text(this, file != null ? "🖼 आपका चित्र" + (mouthSet ? " • 👄 मुँह सेट" : " • 👄 अपने आप") : "🎨 स्टूडियो का कार्टून", 13, file != null ? Ui.GREEN : Ui.SUB, false));
+        info.addView(Ui.text(this, file != null ? "🖼 Your picture" + (mouthSet ? " • 👄 mouth set" : " • 👄 automatic") : "🎨 Studio cartoon", 13, file != null ? Ui.GREEN : Ui.SUB, false));
         Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
-        String vtxt = vs != null ? "🎙 आवाज़: आपका नमूना \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ आवाज़: AI (भाव के साथ)"
-                : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 आवाज़: प्राकृतिक (न्यूरल)" : "📱 आवाज़: फ़ोन की आवाज़");
+        String vtxt = vs != null ? "🎙 Voice: your sample \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ Voice: AI (with feeling)"
+                : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 Voice: natural (neural)" : "📱 Voice: phone voice");
         info.addView(Ui.text(this, vtxt, 13, vs != null ? Ui.GREEN : Ui.SUB, false));
         top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(top);
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🖼 चित्र", Ui.PRIMARY, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🖼 Picture", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { choosePicture("char:" + keyFor(c), c.displayName + " " + c.description); }
         }));
-        r.addView(Ui.small(this, "🎙 आवाज़", Ui.GREEN, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🎙 Voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseVoice(c.displayName, st, c); }
         }));
         r.addView(Ui.small(this, "🔊", Ui.BLUE, new View.OnClickListener() {
@@ -777,10 +777,10 @@ public class MainActivity extends Activity {
 
     private LinearLayout narratorCard() {
         LinearLayout card = Ui.card(this);
-        card.addView(Ui.text(this, "🎙 कथावाचक (केवल आवाज़)", 17, Ui.TEXT, true));
+        card.addView(Ui.text(this, "🎙 Narrator (voice only)", 17, Ui.TEXT, true));
         Library.Item vs = library.byId(project.setting("vsample.narrator", ""));
-        card.addView(Ui.text(this, vs != null ? "आपका नमूना: " + vs.label() : "स्टूडियो की आवाज़", 13, Ui.SUB, false));
-        card.addView(Ui.small(this, "🎙 आवाज़ चुनें", Ui.GREEN, new View.OnClickListener() {
+        card.addView(Ui.text(this, vs != null ? "Your sample: " + vs.label() : "Studio voice", 13, Ui.SUB, false));
+        card.addView(Ui.small(this, "🎙 Choose voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseVoice("narrator", castStory, null); }
         }));
         return card;
@@ -790,22 +790,22 @@ public class MainActivity extends Activity {
         LinearLayout card = Ui.card(this);
         final String key = String.valueOf(sc.number);
         final String file = sceneFile(sc);
-        card.addView(Ui.text(this, (castStory.hindi ? "भाग " : "Part ") + sc.number + (sc.title.length() > 0 ? ": " + sc.title : ""), 16, Ui.TEXT, true));
-        card.addView(Ui.text(this, "जगह: " + Sets.name(Sets.detect(sc.setting)) + "   •   संवाद: " + countDialogue(sc), 13, Ui.SUB, false));
+        card.addView(Ui.text(this, (castStory.hindi ? "Part " : "Part ") + sc.number + (sc.title.length() > 0 ? ": " + sc.title : ""), 16, Ui.TEXT, true));
+        card.addView(Ui.text(this, "Place: " + Sets.label(Sets.detect(sc.setting)) + "   •   Lines: " + countDialogue(sc), 13, Ui.SUB, false));
         if (file != null) {
             ImageView iv = new ImageView(this);
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             iv.setImageBitmap(thumb(project.file(file), 500));
             card.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 120)));
-        } else card.addView(Ui.text(this, "🎨 स्टूडियो की बनाई पृष्ठभूमि", 13, Ui.SUB, false));
+        } else card.addView(Ui.text(this, "🎨 Background made by the studio", 13, Ui.SUB, false));
         Library.Item amb = library.byId(project.setting("amb." + key, ""));
         SoundLib.Entry auto = sl.best(sc.setting + " " + sc.title, "amb", null);
-        card.addView(Ui.text(this, "🔊 पृष्ठभूमि ध्वनि: " + (amb != null ? amb.label() + " (आपकी पसंद)" : (auto != null ? auto.title + " (अपने आप)" : "अपने आप")), 13, amb != null ? Ui.GREEN : Ui.SUB, false));
+        card.addView(Ui.text(this, "🔊 Background sound: " + (amb != null ? amb.label() + " (your choice)" : (auto != null ? auto.title + " (automatic)" : "Automatic")), 13, amb != null ? Ui.GREEN : Ui.SUB, false));
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🖼 पृष्ठभूमि", Ui.PRIMARY, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🖼 Background", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { choosePicture("scene:" + key, sc.setting); }
         }));
-        r.addView(Ui.small(this, "🔊 ध्वनि", Ui.GREEN, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🔊 Sound", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseSound("amb:" + key, sc.setting + " " + sc.title); }
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
@@ -851,17 +851,17 @@ public class MainActivity extends Activity {
         Look l = c.look;
         String kind;
         switch (l.kind) {
-            case Look.GIRL: kind = "लड़की"; break;
-            case Look.BOY: kind = "लड़का"; break;
-            case Look.WOMAN: kind = "महिला"; break;
-            case Look.WITCH: kind = "चुड़ैल"; break;
-            case Look.MONSTER: kind = "राक्षस"; break;
-            case Look.MONKEY: kind = "बंदर"; break;
-            case Look.ANIMAL: kind = "जानवर"; break;
-            case Look.BIRD: kind = "पक्षी"; break;
-            default: kind = "पुरुष";
+            case Look.GIRL: kind = "girl"; break;
+            case Look.BOY: kind = "boy"; break;
+            case Look.WOMAN: kind = "woman"; break;
+            case Look.WITCH: kind = "witch"; break;
+            case Look.MONSTER: kind = "monster"; break;
+            case Look.MONKEY: kind = "monkey"; break;
+            case Look.ANIMAL: kind = "animal"; break;
+            case Look.BIRD: kind = "bird"; break;
+            default: kind = "man";
         }
-        return kind + (c.age > 0 ? ", " + c.age + " वर्ष" : "") + (l.hero ? "" : " • खलनायक") + (c.fromScript ? "" : " • (विवरण नहीं मिला)");
+        return kind + (c.age > 0 ? ", " + c.age + " yrs" : "") + (l.hero ? "" : " • villain") + (c.fromScript ? "" : " • (no description found)");
     }
 
     static Bitmap thumb(File f, int max) {
@@ -909,23 +909,23 @@ public class MainActivity extends Activity {
             if (library.byId(project.setting("vsample." + c.displayName, "")) != null) voices.add(com.tarun.kahani.core.Txt.norm(c.displayName));
         }
         final SoundLib sl = library.soundLib();
-        background("प्रोडक्शन फ़ाइल बन रही है…", new Work() {
+        background("Making the production file…", new Work() {
             public Object run() { return Bible.write(st, sl, pics, voices); }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("नहीं बन सकी: " + e.getMessage()); return; }
+                if (e != null) { toast("Could not make it: " + e.getMessage()); return; }
                 final String text = (String) r;
                 final String name = safeName(st.title) + "_production.txt";
-                new AlertDialog.Builder(MainActivity.this).setTitle("📄 प्रोडक्शन फ़ाइल तैयार")
-                        .setMessage("इसमें हर पात्र, जगह, शॉट, आवाज़ और ध्वनि का विवरण है, और चित्र बनाने के लिए तैयार Prompt भी।")
-                        .setPositiveButton("💾 डाउनलोड करें", new DialogInterface.OnClickListener() {
+                new AlertDialog.Builder(MainActivity.this).setTitle("📄 Production file ready")
+                        .setMessage("It describes every character, place, shot, voice and sound, with ready-made prompts for making pictures.")
+                        .setPositiveButton("💾 Download", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { saveTextFile(name, text); }
                         })
-                        .setNeutralButton("📤 साझा करें", new DialogInterface.OnClickListener() {
+                        .setNeutralButton("📤 Share", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { shareText(name, text); }
                         })
-                        .setNegativeButton("👁 यहीं पढ़ें", new DialogInterface.OnClickListener() {
-                            public void onClick(DialogInterface d, int w) { showText("प्रोडक्शन फ़ाइल", text); }
+                        .setNegativeButton("👁 Read here", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) { showText("Production file", text); }
                         }).show();
             }
         });
@@ -953,14 +953,14 @@ public class MainActivity extends Activity {
                 v.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
                 v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                 Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-                if (uri == null) throw new Exception("Downloads उपलब्ध नहीं");
+                if (uri == null) throw new Exception("Downloads folder not available");
                 OutputStream o = getContentResolver().openOutputStream(uri);
                 o.write(text.getBytes("UTF-8"));
                 o.close();
-                toast("✅ Downloads में सहेजा: " + name);
+                toast("✅ Saved to Downloads: " + name);
             } else shareText(name, text);
         } catch (Exception e) {
-            toast("सहेजा नहीं जा सका: " + e.getMessage());
+            toast("Could not save: " + e.getMessage());
         }
     }
 
@@ -975,9 +975,9 @@ public class MainActivity extends Activity {
             s.putExtra(Intent.EXTRA_STREAM, FilesProvider.uriFor(f));
             s.putExtra(Intent.EXTRA_SUBJECT, name);
             s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(s, "साझा करें"));
+            startActivity(Intent.createChooser(s, "Share"));
         } catch (Exception e) {
-            toast("साझा नहीं हो सका");
+            toast("Could not share");
         }
     }
 
@@ -985,15 +985,15 @@ public class MainActivity extends Activity {
 
     private String targetName(String t) {
         if (t.startsWith("char:")) return t.substring(5);
-        if (t.startsWith("scene:")) return (castStory != null && castStory.hindi ? "भाग " : "Part ") + t.substring(6);
-        if (t.equals("title")) return "शीर्षक";
-        if (t.equals("end")) return "समाप्त";
+        if (t.startsWith("scene:")) return (castStory != null && castStory.hindi ? "Part " : "Part ") + t.substring(6);
+        if (t.equals("title")) return "Title";
+        if (t.equals("end")) return "End";
         return "";
     }
 
     private void choosePicture(final String tgt, final String query) {
         target = tgt;
-        new Picker(this, library).show("चित्र: " + targetName(tgt), Library.PIC, query,
+        new Picker(this, library).show("Picture: " + targetName(tgt), Library.PIC, query,
                 new String[]{"phone", "camera", "online", "ai", "auto"}, new Picker.Listener() {
                     public void picked(Library.Item it) { usePicture(it); }
                     public void action(String a) {
@@ -1018,14 +1018,14 @@ public class MainActivity extends Activity {
     private void usePicture(final Library.Item it) {
         final String tgt = target;
         if (tgt == null || project == null || tgt.startsWith("lib")) { if (screen == S_LIBRARY) showLibrary(); return; }
-        background("चित्र लगाया जा रहा है…", new Work() {
+        background("Adding the picture…", new Work() {
             public Object run() throws Exception {
                 InputStream in = library.open(it);
                 return project.savePicture(Project.readAll(in), tgt.startsWith("char:") ? "char" : tgt.startsWith("scene:") ? "scene" : tgt);
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("चित्र नहीं लगा: " + e.getMessage()); return; }
+                if (e != null) { toast("Could not add the picture: " + e.getMessage()); return; }
                 String f = (String) r;
                 if (tgt.startsWith("char:")) {
                     String name = tgt.substring(5);
@@ -1040,7 +1040,7 @@ public class MainActivity extends Activity {
                 } else if (tgt.equals("title") || tgt.equals("end")) {
                     project.setManifest(tgt, tgt, tgt + "|" + f + "|1");
                 }
-                toast("✅ लगा दिया");
+                toast("✅ Added");
                 showStudio();
             }
         });
@@ -1053,7 +1053,7 @@ public class MainActivity extends Activity {
         DialogInterface.OnClickListener go = new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface d, final int which) {
                 final boolean toon = which == DialogInterface.BUTTON_POSITIVE;
-                background(toon ? "कार्टून बनाया जा रहा है…" : "सहेजा जा रहा है…", new Work() {
+                background(toon ? "Making the cartoon…" : "Saving…", new Work() {
                     public Object run() throws Exception {
                         byte[] bytes = toon ? toonify(data) : data;
                         String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
@@ -1063,15 +1063,15 @@ public class MainActivity extends Activity {
                     }
                 }, new Done() {
                     public void done(Object r, Exception e) {
-                        if (e != null) { toast("नहीं हो सका: " + e.getMessage()); return; }
+                        if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
                         usePicture((Library.Item) r);
                     }
                 });
             }
         };
-        new AlertDialog.Builder(this).setTitle("चित्र कैसा रखें?")
-                .setMessage(person ? "अगर यह असली फ़ोटो है तो स्टूडियो इसे कार्टून (अवतार) में बदल सकता है।" : "असली फ़ोटो को कार्टून जैसा बनाया जा सकता है।")
-                .setPositiveButton("🎨 कार्टून बनाएँ", go).setNegativeButton("जैसा है वैसा", go).show();
+        new AlertDialog.Builder(this).setTitle("How should the picture look?")
+                .setMessage(person ? "If this is a real photo, the studio can turn it into a cartoon (avatar)." : "A real photo can be turned into a cartoon.")
+                .setPositiveButton("🎨 Make cartoon", go).setNegativeButton("Keep as is", go).show();
     }
 
     static byte[] toonify(byte[] data) throws Exception {
@@ -1084,7 +1084,7 @@ public class MainActivity extends Activity {
         o.inSampleSize = s;
         o.inPreferredConfig = Bitmap.Config.ARGB_8888;
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        if (b == null) throw new Exception("चित्र पढ़ा नहीं जा सका");
+        if (b == null) throw new Exception("Could not read the picture");
         b = Project.upright(b, data);
         int w = b.getWidth(), h = b.getHeight();
         int[] px = new int[w * h];
@@ -1099,7 +1099,7 @@ public class MainActivity extends Activity {
     }
 
     private void camera() {
-        withPermission(Manifest.permission.CAMERA, "कैमरा की अनुमति दें", new Runnable() {
+        withPermission(Manifest.permission.CAMERA, "Please allow the camera", new Runnable() {
             public void run() {
                 try {
                     cameraFile = new File(FilesProvider.sharedDir(MainActivity.this), "cam_" + System.currentTimeMillis() + ".jpg");
@@ -1110,22 +1110,22 @@ public class MainActivity extends Activity {
                     i.setClipData(ClipData.newRawUri("photo", u));
                     startActivityForResult(i, REQ_CAMERA);
                 } catch (Exception e) {
-                    toast("कैमरा नहीं खुला");
+                    toast("Could not open the camera");
                 }
             }
         });
     }
 
     private void searchPictures(String query) {
-        if (!Prefs.online(this)) { toast("सेटिंग में ऑनलाइन सुविधाएँ चालू करें"); return; }
+        if (!Prefs.online(this)) { toast("Turn on online features in Settings"); return; }
         final EditText q = new EditText(this);
         String s = query == null ? "" : query;
         q.setText(s.length() > 60 ? s.substring(0, 60) : s);
-        new AlertDialog.Builder(this).setTitle("🌐 मुफ़्त चित्र खोजें (Openverse, Wikimedia)").setView(q)
-                .setPositiveButton("खोजें", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("🌐 Search free pictures (Openverse, Wikimedia)").setView(q)
+                .setPositiveButton("Search", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         final String text = q.getText().toString().trim();
-                        background("खोज रहे हैं…", new Work() {
+                        background("Searching…", new Work() {
                             public Object run() throws Exception {
                                 Cloud c = Prefs.cloud(MainActivity.this);
                                 List<Cloud.Found> fs = c.searchPictures(text, 12);
@@ -1137,18 +1137,18 @@ public class MainActivity extends Activity {
                                         if (b != null) out.add(new Object[]{f, b});
                                     } catch (Throwable ignored) {}
                                 }
-                                if (out.isEmpty()) throw new Exception(c.lastError.length() > 0 ? c.lastError : "कुछ नहीं मिला");
+                                if (out.isEmpty()) throw new Exception(c.lastError.length() > 0 ? c.lastError : "Nothing found");
                                 return out;
                             }
                         }, new Done() {
                             @SuppressWarnings("unchecked")
                             public void done(Object r, Exception e) {
-                                if (e != null) { toast("नहीं मिला: " + e.getMessage()); return; }
+                                if (e != null) { toast("Not found: " + e.getMessage()); return; }
                                 showFound((List<Object[]>) r, text);
                             }
                         });
                     }
-                }).setNegativeButton("रद्द", null).show();
+                }).setNegativeButton("Cancel", null).show();
     }
 
     private void showFound(final List<Object[]> found, final String query) {
@@ -1176,34 +1176,34 @@ public class MainActivity extends Activity {
             }
         };
         body.addView(grid);
-        body.addView(Ui.small(this, "अगले 4 ▶", Ui.PRIMARY, new View.OnClickListener() {
+        body.addView(Ui.small(this, "Next 4 ▶", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { page[0] = (page[0] + 1) * 4 < found.size() ? page[0] + 1 : 0; fill[0].run(); }
         }));
-        body.addView(Ui.text(this, "चित्र मुफ़्त लाइसेंस वाले हैं (स्रोत लाइब्रेरी में लिखा रहेगा)।", 12, Ui.SUB, false));
+        body.addView(Ui.text(this, "These pictures have free licences (the source is noted in your library).", 12, Ui.SUB, false));
         fill[0].run();
-        d[0] = new AlertDialog.Builder(this).setTitle("चित्र चुनें").setView(body).setNegativeButton("बंद", null).show();
+        d[0] = new AlertDialog.Builder(this).setTitle("Choose a picture").setView(body).setNegativeButton("Close", null).show();
     }
 
     private void downloadFound(final Cloud.Found f, final String query) {
-        background("चित्र डाउनलोड हो रहा है…", new Work() {
+        background("Downloading the picture…", new Work() {
             public Object run() throws Exception {
                 byte[] b = Prefs.cloud(MainActivity.this).download(f.url);
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inJustDecodeBounds = true;
                 BitmapFactory.decodeByteArray(b, 0, b.length, o);
-                if (o.outWidth <= 0) throw new Exception("यह चित्र खुला नहीं");
+                if (o.outWidth <= 0) throw new Exception("This picture could not be opened");
                 return b;
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("डाउनलोड नहीं हुआ: " + e.getMessage()); return; }
+                if (e != null) { toast("Download failed: " + e.getMessage()); return; }
                 incomingPicture((byte[]) r, f.title + " (" + f.source + " " + f.license + " " + f.creator + ")");
             }
         });
     }
 
     private void aiPicture() {
-        if (!Prefs.online(this)) { toast("सेटिंग में ऑनलाइन सुविधाएँ चालू करें"); return; }
+        if (!Prefs.online(this)) { toast("Turn on online features in Settings"); return; }
         final String tgt = target;
         String prompt;
         final boolean tall;
@@ -1225,39 +1225,39 @@ public class MainActivity extends Activity {
         final EditText et = new EditText(this);
         et.setText(prompt);
         et.setMaxLines(8);
-        new AlertDialog.Builder(this).setTitle("✨ AI से चित्र (मुफ़्त, बिना कुंजी)").setView(et)
-                .setPositiveButton("बनाएँ", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("✨ AI picture (free, no key)").setView(et)
+                .setPositiveButton("Make", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) { makeAiPicture(et.getText().toString(), tall); }
-                }).setNegativeButton("रद्द", null).show();
+                }).setNegativeButton("Cancel", null).show();
     }
 
     private void makeAiPicture(final String prompt, final boolean tall) {
         final int seed = (int) (System.currentTimeMillis() % 100000);
-        background("AI चित्र बना रहा है… (30-60 सेकंड)", new Work() {
+        background("AI is drawing… (30-60 seconds)", new Work() {
             public Object run() throws Exception {
                 return Prefs.cloud(MainActivity.this).makePicture(prompt, tall ? 768 : 1280, tall ? 1152 : 720, seed);
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("चित्र नहीं बना: " + e.getMessage()); return; }
+                if (e != null) { toast("Could not make the picture: " + e.getMessage()); return; }
                 final byte[] b = (byte[]) r;
                 ImageView iv = new ImageView(MainActivity.this);
                 iv.setAdjustViewBounds(true);
                 iv.setImageBitmap(decodeSmall(b, 900));
-                new AlertDialog.Builder(MainActivity.this).setTitle("पसंद आया?").setView(iv)
-                        .setPositiveButton("✔ इस्तेमाल करें", new DialogInterface.OnClickListener() {
+                new AlertDialog.Builder(MainActivity.this).setTitle("Do you like it?").setView(iv)
+                        .setPositiveButton("✔ Use it", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) {
                                 try {
                                     String tgt = target == null ? "lib:pic" : target;
                                     Library.Item it = library.addBytes(Library.PIC, tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt,
                                             targetName(tgt), prompt.length() > 200 ? prompt.substring(0, 200) : prompt, b, ".jpg", "AI");
                                     usePicture(it);
-                                } catch (Exception ex) { toast("सहेजा नहीं जा सका"); }
+                                } catch (Exception ex) { toast("Could not save"); }
                             }
                         })
-                        .setNeutralButton("↻ दोबारा", new DialogInterface.OnClickListener() {
+                        .setNeutralButton("↻ Again", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { makeAiPicture(prompt, tall); }
-                        }).setNegativeButton("रद्द", null).show();
+                        }).setNegativeButton("Cancel", null).show();
             }
         });
     }
@@ -1266,11 +1266,11 @@ public class MainActivity extends Activity {
 
     private void chooseVoice(final String name, final Story st, final Story.CharacterDef c) {
         target = "voice:" + name;
-        new Picker(this, library).show("आवाज़: " + (name.equals("narrator") ? "कथावाचक" : name), Library.VOICE, name,
+        new Picker(this, library).show("Voice: " + (name.equals("narrator") ? "Narrator" : name), Library.VOICE, name,
                 new String[]{"record", "phone", "phoneVoice"}, new Picker.Listener() {
                     public void picked(Library.Item it) {
                         project.setSetting("vsample." + name, it.id);
-                        toast("✅ " + name + " के सारे संवाद इसी आवाज़ में बनेंगे");
+                        toast("✅ " + name + "'s lines will all be made in this voice");
                         if (c != null) previewVoice(st, c, true);
                         showStudio();
                     }
@@ -1288,19 +1288,19 @@ public class MainActivity extends Activity {
 
     /** Plays one of the character's lines in the voice the film will use (with the sample applied if any). */
     private void previewVoice(final Story st, final Story.CharacterDef c, final boolean keepVoice) {
-        if (previewBusy) { toast("पिछली आवाज़ बन रही है… रुकिए"); return; }
+        if (previewBusy) { toast("Still making the last voice… please wait"); return; }
         previewBusy = true;
         final Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
         String sample = st.hindi ? "नमस्ते, मैं " + c.displayName + " हूँ।" : "Hello, I am " + c.displayName + ".";
         for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.speaker == c) { sample = b.text; break; }
         if (sample.length() > 110) sample = sample.substring(0, 110);
         final String text = sample;
-        background(previewVoices == null ? "आवाज़ तैयार हो रही है…" : null, new Work() {
+        background(previewVoices == null ? "Preparing the voice…" : null, new Work() {
             public Object run() throws Exception {
                 boolean natural = Prefs.online(MainActivity.this) && Prefs.naturalVoices(MainActivity.this);
                 if (previewVoices == null) {
                     Voices v = new Voices();
-                    if (!v.init(MainActivity.this, st.hindi) && !natural) throw new Exception("फ़ोन में Text-to-Speech नहीं मिला");
+                    if (!v.init(MainActivity.this, st.hindi) && !natural) throw new Exception("No Text-to-Speech found on this phone");
                     previewVoices = v;
                 }
                 previewVoices.edgeOff = false;
@@ -1343,7 +1343,7 @@ public class MainActivity extends Activity {
                 File tmp = new File(getCacheDir(), "preview");
                 tmp.mkdirs();
                 float[] pcm = previewVoices.speak(l, k, tmp, 0, cl, null);
-                if (pcm == null) throw new Exception("आवाज़ नहीं बन सकी — Text-to-Speech सेटिंग देखें");
+                if (pcm == null) throw new Exception("Could not make the voice — check Text-to-Speech settings");
                 File f = new File(tmp, "preview.wav");
                 AudioIO.writeWav(f, pcm, com.tarun.kahani.core.Synth.SR);
                 return new Object[]{f, choice, choices, previewVoices.lastEngine, previewVoices.languageOk};
@@ -1355,31 +1355,31 @@ public class MainActivity extends Activity {
                 Object[] o = (Object[]) r;
                 Picker.play(MainActivity.this, ((File) o[0]).getAbsolutePath());
                 String eng = (String) o[3];
-                String pos = " " + ((Integer) o[1] + 1) + "/" + Math.max(1, (Integer) o[2]) + " — पसंद न आए तो फिर 🔊 दबाएँ";
-                toast("🔊 " + (eng.contains("sample") ? "आपके नमूने वाली आवाज़" : eng.startsWith("AI") ? "AI आवाज़"
-                        : eng.startsWith("natural") ? "प्राकृतिक आवाज़" + pos : "फ़ोन की आवाज़" + pos));
-                if (eng.startsWith("phone") && previewVoices.edge != null) toast("प्राकृतिक आवाज़ की सेवा नहीं मिली (इंटरनेट देखें) — अभी फ़ोन की आवाज़ सुनाई गई");
+                String pos = " " + ((Integer) o[1] + 1) + "/" + Math.max(1, (Integer) o[2]) + " — tap 🔊 again for another";
+                toast("🔊 " + (eng.contains("sample") ? "Voice from your sample" : eng.startsWith("AI") ? "AI voice"
+                        : eng.startsWith("natural") ? "Natural voice" + pos : "Phone voice" + pos));
+                if (eng.startsWith("phone") && previewVoices.edge != null) toast("Natural voice service not reachable (check internet) — you heard the phone voice");
                 else if (!(Boolean) o[4] && eng.startsWith("phone")) offerTtsInstall();
             }
         });
     }
 
     private void offerTtsInstall() {
-        new AlertDialog.Builder(this).setTitle("फ़ोन की आवाज़")
-                .setMessage("अगर हिंदी आवाज़ नहीं आ रही, तो Google Text-to-speech में हिंदी आवाज़ डाउनलोड करें।")
-                .setPositiveButton("डाउनलोड करें", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("Phone voice")
+                .setMessage("If the Hindi voice is missing, download the Hindi voice in Google Text-to-speech.")
+                .setPositiveButton("Download", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         try { startActivity(new Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)); }
-                        catch (Exception e) { toast("सेटिंग्स > भाषा > Text-to-speech में जाएँ"); }
+                        catch (Exception e) { toast("Go to Settings > Language > Text-to-speech"); }
                     }
-                }).setNegativeButton("बाद में", null).show();
+                }).setNegativeButton("Later", null).show();
     }
 
     // ================================================================== sounds
 
     private void chooseSound(final String tgt, final String query) {
         target = tgt;
-        new Picker(this, library).show("पृष्ठभूमि ध्वनि", Library.SOUND, query, new String[]{"record", "phone", "online", "auto"},
+        new Picker(this, library).show("Background sound", Library.SOUND, query, new String[]{"record", "phone", "online", "auto"},
                 new Picker.Listener() {
                     public void picked(Library.Item it) { useSound(it); }
                     public void action(String a) {
@@ -1395,41 +1395,41 @@ public class MainActivity extends Activity {
         String tgt = target;
         if (tgt != null && tgt.startsWith("amb:") && project != null) {
             project.setSetting("amb." + tgt.substring(4), it.id);
-            toast("✅ पृष्ठभूमि ध्वनि लगा दी");
+            toast("✅ Background sound set");
             showStudio();
         } else if (tgt != null && tgt.startsWith("voice:") && project != null) {
             project.setSetting("vsample." + tgt.substring(6), it.id);
-            toast("✅ आवाज़ का नमूना लगा दिया — सारे संवाद इसी आवाज़ में बनेंगे");
+            toast("✅ Voice sample set — all lines will be made in this voice");
             showStudio();
         } else if (screen == S_LIBRARY) showLibrary();
     }
 
     private void searchSounds(String query) {
-        if (!Prefs.online(this)) { toast("सेटिंग में ऑनलाइन सुविधाएँ चालू करें"); return; }
+        if (!Prefs.online(this)) { toast("Turn on online features in Settings"); return; }
         final EditText q = new EditText(this);
-        q.setHint("जैसे: forest birds, rain, river, crowd");
+        q.setHint("e.g. forest birds, rain, river, crowd");
         String s = query == null ? "" : query;
         q.setText(s.length() > 40 ? s.substring(0, 40) : s);
-        new AlertDialog.Builder(this).setTitle("🌐 मुफ़्त ध्वनि खोजें (अंग्रेज़ी शब्द बेहतर)").setView(q)
-                .setPositiveButton("खोजें", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("🌐 Search free sounds (English words work best)").setView(q)
+                .setPositiveButton("Search", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         final String text = q.getText().toString().trim();
-                        background("खोज रहे हैं…", new Work() {
+                        background("Searching…", new Work() {
                             public Object run() throws Exception {
                                 Cloud c = Prefs.cloud(MainActivity.this);
                                 List<Cloud.Found> fs = c.searchSounds(text, 12);
-                                if (fs.isEmpty()) throw new Exception(c.lastError.length() > 0 ? c.lastError : "कुछ नहीं मिला");
+                                if (fs.isEmpty()) throw new Exception(c.lastError.length() > 0 ? c.lastError : "Nothing found");
                                 return fs;
                             }
                         }, new Done() {
                             @SuppressWarnings("unchecked")
                             public void done(Object r, Exception e) {
-                                if (e != null) { toast("नहीं मिला: " + e.getMessage()); return; }
+                                if (e != null) { toast("Not found: " + e.getMessage()); return; }
                                 showFoundSounds((List<Cloud.Found>) r, text);
                             }
                         });
                     }
-                }).setNegativeButton("रद्द", null).show();
+                }).setNegativeButton("Cancel", null).show();
     }
 
     private void showFoundSounds(final List<Cloud.Found> fs, final String query) {
@@ -1444,31 +1444,31 @@ public class MainActivity extends Activity {
             r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() {
                 public void onClick(View v) { Picker.play(MainActivity.this, f.url); }
             }));
-            r.addView(Ui.small(this, "चुनें", Ui.GREEN, new View.OnClickListener() {
+            r.addView(Ui.small(this, "Choose", Ui.GREEN, new View.OnClickListener() {
                 public void onClick(View v) { Picker.stop(); d[0].dismiss(); downloadSound(f, query); }
             }));
             body.addView(r);
         }
         ScrollView sv = new ScrollView(this);
         sv.addView(body);
-        d[0] = new AlertDialog.Builder(this).setTitle("ध्वनि चुनें").setView(sv).setNegativeButton("बंद", null).create();
+        d[0] = new AlertDialog.Builder(this).setTitle("Choose a sound").setView(sv).setNegativeButton("Close", null).create();
         d[0].setOnDismissListener(new DialogInterface.OnDismissListener() { public void onDismiss(DialogInterface di) { Picker.stop(); } });
         d[0].show();
     }
 
     private void downloadSound(final Cloud.Found f, final String query) {
-        background("ध्वनि डाउनलोड हो रही है…", new Work() {
+        background("Downloading the sound…", new Work() {
             public Object run() throws Exception {
                 byte[] b = Prefs.cloud(MainActivity.this).download(f.url);
                 String u = f.url.toLowerCase(Locale.US);
                 String ext = u.contains(".mp3") ? ".mp3" : u.contains(".ogg") ? ".ogg" : u.contains(".wav") ? ".wav" : u.contains(".flac") ? ".flac" : ".m4a";
                 Library.Item it = library.addBytes(Library.SOUND, "amb", f.title, query + "," + f.title, b, ext, f.source + " " + f.license + " " + f.creator);
-                if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); throw new Exception("यह ध्वनि फ़ोन में नहीं चल सकी"); }
+                if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); throw new Exception("This sound does not play on this phone"); }
                 return it;
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("नहीं हुआ: " + e.getMessage()); return; }
+                if (e != null) { toast("Failed: " + e.getMessage()); return; }
                 useSound((Library.Item) r);
             }
         });
@@ -1478,7 +1478,7 @@ public class MainActivity extends Activity {
 
     /** Records a voice sample or sound with the microphone and saves it to the library. */
     private void record(final String type, final String name) {
-        withPermission(Manifest.permission.RECORD_AUDIO, "माइक की अनुमति दें", new Runnable() {
+        withPermission(Manifest.permission.RECORD_AUDIO, "Please allow the microphone", new Runnable() {
             public void run() { recordDialog(type, name); }
         });
     }
@@ -1488,8 +1488,8 @@ public class MainActivity extends Activity {
         final LinearLayout body = Ui.column(this);
         body.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         final TextView tip = Ui.text(this, type.equals(Library.VOICE)
-                ? "शांत जगह में 10–20 सेकंड साफ़ बोलें (कोई भी वाक्य)। इसी आवाज़ में " + name + " के सारे संवाद बनेंगे।"
-                : "जो ध्वनि चाहिए उसे फ़ोन के पास रिकॉर्ड करें।", 14, Ui.SUB, false);
+                ? "In a quiet place, speak clearly for 10–20 seconds (any sentences). All of " + name + "'s lines will be made in this voice."
+                : "Record the sound you want close to the phone.", 14, Ui.SUB, false);
         body.addView(tip);
         final TextView time = Ui.text(this, "0:00", 28, Ui.TEXT, true);
         time.setGravity(Gravity.CENTER);
@@ -1498,13 +1498,13 @@ public class MainActivity extends Activity {
         meter.setMax(100);
         body.addView(meter);
         final EditText nm = new EditText(this);
-        nm.setHint(type.equals(Library.VOICE) ? "नाम (जैसे: मेरी आवाज़)" : "नाम/शब्द (जैसे: बारिश, rain)");
+        nm.setHint(type.equals(Library.VOICE) ? "Name (e.g. My voice)" : "Name / words (e.g. rain, बारिश)");
         nm.setText(name);
         body.addView(nm);
-        final Button btn = Ui.button(this, "⏺  रिकॉर्डिंग शुरू", Ui.RED, null);
+        final Button btn = Ui.button(this, "⏺  Start recording", Ui.RED, null);
         body.addView(btn);
-        final AlertDialog d = new AlertDialog.Builder(this).setTitle(type.equals(Library.VOICE) ? "🎙 आवाज़ रिकॉर्ड करें" : "🎙 ध्वनि रिकॉर्ड करें")
-                .setView(body).setNegativeButton("रद्द", null).create();
+        final AlertDialog d = new AlertDialog.Builder(this).setTitle(type.equals(Library.VOICE) ? "🎙 Record a voice" : "🎙 Record a sound")
+                .setView(body).setNegativeButton("Cancel", null).create();
         final Runnable tick = new Runnable() {
             public void run() {
                 if (recorder == null || !recorder.isRunning()) return;
@@ -1520,7 +1520,7 @@ public class MainActivity extends Activity {
                     recorder = new AudioIO.Recorder(out);
                     recordingFile = out;
                     recorder.start();
-                    btn.setText("⏹  रोकें और सहेजें");
+                    btn.setText("⏹  Stop and save");
                     ui.post(tick);
                 } else {
                     AudioIO.Recorder r = recorder;
@@ -1528,14 +1528,14 @@ public class MainActivity extends Activity {
                     recordingFile = null;
                     r.stop();
                     d.dismiss();
-                    if (r.error != null || out.length() < 32000) { toast("रिकॉर्डिंग नहीं हुई " + (r.error == null ? "(बहुत छोटी)" : r.error)); out.delete(); return; }
+                    if (r.error != null || out.length() < 32000) { toast("Nothing was recorded " + (r.error == null ? "(too short)" : r.error)); out.delete(); return; }
                     try {
                         String n = nm.getText().toString().trim();
                         Library.Item it = library.add(type, type.equals(Library.VOICE) ? "voice" : "amb", n, n, out, ".wav", "recorded");
-                        toast("✅ लाइब्रेरी में सहेजा");
+                        toast("✅ Saved to library");
                         useSound(it);
                     } catch (Exception e) {
-                        toast("सहेजा नहीं जा सका: " + e.getMessage());
+                        toast("Could not save: " + e.getMessage());
                     }
                 }
             }
@@ -1551,16 +1551,16 @@ public class MainActivity extends Activity {
     // ================================================================== recording each line yourself
 
     private void showLines() {
-        LinearLayout body = page(S_LINES, "🎙 संवाद रिकॉर्ड करें", true);
+        LinearLayout body = page(S_LINES, "🎙 Record lines", true);
         LinearLayout info = Ui.card(this);
-        info.addView(Ui.text(this, "जिस संवाद को आप अपनी (या बच्चों की) असली आवाज़ में चाहते हैं, उसे यहाँ रिकॉर्ड करें। बाकी संवाद नमूने/फ़ोन/AI की आवाज़ में बनेंगे। होंठ आपकी रिकॉर्डिंग के साथ हिलेंगे।", 14, Ui.SUB, false));
+        info.addView(Ui.text(this, "Record any line you want in your own (or your children's) real voice. Other lines use the sample / natural / phone voice. Lips move with your recording.", 14, Ui.SUB, false));
         body.addView(info);
         Story st = loadStory();
         Film f;
         try {
             f = new Director(st, new Director.Options()).prepare();
         } catch (Throwable e) {
-            body.addView(Ui.text(this, "कहानी पढ़ी नहीं जा सकी", 15, Ui.RED, true));
+            body.addView(Ui.text(this, "Could not read the story", 15, Ui.RED, true));
             return;
         }
         final File dir = new File(project.dir, "lines");
@@ -1569,13 +1569,13 @@ public class MainActivity extends Activity {
             final String who = l.who == null ? "कथावाचक" : l.who.displayName;
             final File file = new File(dir, FilmJob.hash(who + "|" + l.text) + ".wav");
             LinearLayout c = Ui.card(this);
-            c.addView(Ui.text(this, who + (l.manner.length() > 0 ? " (" + l.manner + ")" : ""), 15, Ui.TEXT, true));
+            c.addView(Ui.text(this, (l.who == null ? "Narrator" : l.who.shown()) + (l.manner.length() > 0 ? " (" + st.shown(l.manner) + ")" : ""), 15, Ui.TEXT, true));
             c.addView(Ui.text(this, l.shown, 14, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            final Button rec = Ui.small(this, file.equals(recordingFile) ? "⏹ रोकें" : file.exists() ? "🎙 फिर से" : "🎙 रिकॉर्ड", Ui.RED, null);
+            final Button rec = Ui.small(this, file.equals(recordingFile) ? "⏹ Stop" : file.exists() ? "🎙 Redo" : "🎙 Record", Ui.RED, null);
             rec.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                    withPermission(Manifest.permission.RECORD_AUDIO, "माइक की अनुमति दें", new Runnable() {
+                    withPermission(Manifest.permission.RECORD_AUDIO, "Please allow the microphone", new Runnable() {
                         public void run() {
                             if (recorder != null && file.equals(recordingFile)) {
                                 // finish this line's recording
@@ -1583,16 +1583,16 @@ public class MainActivity extends Activity {
                                 recorder = null;
                                 recordingFile = null;
                                 rr.stop();
-                                toast(file.length() > 16000 ? "✅ सहेजा" : "बहुत छोटी रिकॉर्डिंग");
+                                toast(file.length() > 16000 ? "✅ Saved" : "Recording too short");
                                 if (file.length() <= 16000) file.delete();
                                 showLines();
                                 return;
                             }
-                            if (recorder != null) { toast("पहले चल रही रिकॉर्डिंग ⏹ से रोकें"); return; }
+                            if (recorder != null) { toast("Stop the current recording with ⏹ first"); return; }
                             recordingFile = file;
                             recorder = new AudioIO.Recorder(file);
                             recorder.start();
-                            rec.setText("⏹ रोकें");
+                            rec.setText("⏹ Stop");
                         }
                     });
                 }
@@ -1619,9 +1619,9 @@ public class MainActivity extends Activity {
             i.setType(type);
             i.addCategory(Intent.CATEGORY_OPENABLE);
             if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            startActivityForResult(Intent.createChooser(i, "चुनें"), code);
+            startActivityForResult(Intent.createChooser(i, "Choose"), code);
         } catch (Exception e) {
-            toast("फ़ाइल चुनने वाला ऐप नहीं मिला");
+            toast("No file picker app found");
         }
     }
 
@@ -1645,7 +1645,7 @@ public class MainActivity extends Activity {
                 String name = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
                 if (name != null && name.length() > 0) {
                     Prefs.setAccount(this, name);
-                    toast("✅ साइन इन: " + name);
+                    toast("✅ Signed in: " + name);
                     askPermissions();
                     showHome();
                 }
@@ -1659,7 +1659,7 @@ public class MainActivity extends Activity {
                     cameraFile.delete();
                     incomingPicture(b, "camera");
                 } catch (Exception e) {
-                    toast("फ़ोटो नहीं मिली");
+                    toast("No photo received");
                 }
             } else if (result == RESULT_OK && data != null && data.getExtras() != null && data.getExtras().get("data") instanceof Bitmap) {
                 Bitmap bm = (Bitmap) data.getExtras().get("data");
@@ -1671,14 +1671,14 @@ public class MainActivity extends Activity {
         }
         if (code == REQ_SAVE_TEXT) {
             if (result == RESULT_OK && data != null && data.getData() != null && pendingText == null) {
-                toast("फिर से \"डाउनलोड करें\" दबाएँ");
+                toast("Please tap \"Download\" again");
             }
             if (result == RESULT_OK && data != null && data.getData() != null && pendingText != null) {
                 try {
                     OutputStream o = getContentResolver().openOutputStream(data.getData());
                     o.write(pendingText.getBytes("UTF-8"));
                     o.close();
-                    toast("✅ सहेजा गया");
+                    toast("✅ Saved");
                 } catch (Exception e) {
                     saveTextToDownloads(pendingTextName, pendingText);
                 }
@@ -1703,28 +1703,28 @@ public class MainActivity extends Activity {
                 project.setSetting("useAi", "0");
                 showStory();
             } else if (code == REQ_IMAGE) {
-                background("चित्र खुल रहा है…", new Work() {
+                background("Opening the picture…", new Work() {
                     public Object run() throws Exception {
                         InputStream in = getContentResolver().openInputStream(uri);
-                        if (in == null) throw new Exception("चित्र नहीं खुला");
+                        if (in == null) throw new Exception("Could not open the picture");
                         return new Object[]{Project.readAll(in), displayName(uri)};
                     }
                 }, new Done() {
                     public void done(Object r, Exception e) {
-                        if (e != null) { toast("चित्र नहीं खुला: " + e.getMessage()); return; }
+                        if (e != null) { toast("Could not open the picture: " + e.getMessage()); return; }
                         incomingPicture((byte[]) ((Object[]) r)[0], (String) ((Object[]) r)[1]);
                     }
                 });
             } else if (code == REQ_AUDIO) {
                 final String name = displayName(uri);
-                background("ध्वनि जोड़ी जा रही है…", new Work() {
+                background("Adding the sound…", new Work() {
                     public Object run() throws Exception {
                         byte[] b = Project.readAll(getContentResolver().openInputStream(uri));
                         String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : ".m4a";
                         boolean voice = target != null && (target.startsWith("voice:") || target.equals("lib:voice"));
                         String n = target != null && target.startsWith("voice:") ? target.substring(6) : name.replaceAll("\\.[A-Za-z0-9]+$", "");
                         Library.Item it = library.addBytes(voice ? Library.VOICE : Library.SOUND, voice ? "voice" : "amb", n, name, b, ext, "phone");
-                        if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); throw new Exception("यह फ़ाइल चल नहीं सकी"); }
+                        if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); throw new Exception("This file does not play"); }
                         return it;
                     }
                 }, new Done() {
@@ -1735,7 +1735,7 @@ public class MainActivity extends Activity {
                 });
             }
         } catch (Throwable e) {
-            toast("खुल नहीं सका: " + e.getMessage());
+            toast("Could not open: " + e.getMessage());
         }
     }
 
@@ -1751,7 +1751,7 @@ public class MainActivity extends Activity {
         names.add("शीर्षक");
         names.add("end");
         names.add("समाप्त");
-        background("चित्र पहचाने जा रहे हैं… (" + uris.size() + ")", new Work() {
+        background("Recognising pictures… (" + uris.size() + ")", new Work() {
             public Object run() throws Exception {
                 Cloud cloud = Prefs.online(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null;
                 StringBuilder rep = new StringBuilder();
@@ -1763,7 +1763,7 @@ public class MainActivity extends Activity {
                     byte[] small = cloud != null && cloud.hasGemini() ? shrink(data, 512) : null;
                     String who = ScriptAI.identify(cloud, fname, small, names);
                     library.addBytes(Library.PIC, "", who == null ? fname : who, fname, data, ".jpg", "phone");
-                    if (who == null) { rep.append("• ").append(fname).append(" → पहचाना नहीं (लाइब्रेरी में सहेजा)\n"); continue; }
+                    if (who == null) { rep.append("• ").append(fname).append(" → not recognised (saved to library)\n"); continue; }
                     String f = project.savePicture(data, "pic");
                     Story.CharacterDef c = null;
                     for (Story.CharacterDef cd : st.characters) if (cd.displayName.equals(who)) c = cd;
@@ -1783,12 +1783,12 @@ public class MainActivity extends Activity {
                     ok++;
                     rep.append("• ").append(fname).append(" → ").append(who).append(" ✔\n");
                 }
-                return ok + " चित्र अपनी जगह लगे।\n\n" + rep;
+                return ok + " pictures placed.\n\n" + rep;
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("नहीं हो सका: " + e.getMessage()); return; }
-                showText("चित्र जोड़े गए", r + "\n\nपात्रों के चित्र में 👄 दबाकर मुँह-आँख ठीक करें ताकि होंठ सही हिलें।");
+                if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
+                showText("Pictures added", r + "\n\nTap 👄 on each character picture to mark the mouth and eyes so the lips move correctly.");
                 showStudio();
             }
         });
@@ -1835,7 +1835,7 @@ public class MainActivity extends Activity {
 
     private void showFace(final String charName) {
         final LinearLayout outer = Ui.column(this);
-        final TextView hint = Ui.text(this, "चित्र तैयार हो रहा है…", 17, 0xFFFFFFFF, true);
+        final TextView hint = Ui.text(this, "Preparing the picture…", 17, 0xFFFFFFFF, true);
         hint.setBackgroundColor(Ui.PRIMARY);
         hint.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 12));
         outer.addView(hint);
@@ -1844,15 +1844,15 @@ public class MainActivity extends Activity {
         LinearLayout r = Ui.row(this);
         r.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
         r.setBackgroundColor(Ui.BG);
-        final Button again = Ui.small(this, "↺ फिर से", Ui.RED, null);
-        final Button save = Ui.small(this, "✔ सहेजें", Ui.GREEN, null);
-        final Button skip = Ui.small(this, "अपने आप", Ui.SUB, null);
+        final Button again = Ui.small(this, "↺ Redo", Ui.RED, null);
+        final Button save = Ui.small(this, "✔ Save", Ui.GREEN, null);
+        final Button skip = Ui.small(this, "Automatic", Ui.SUB, null);
         r.addView(again);
         r.addView(save);
         r.addView(skip);
         outer.addView(r);
         setScreen(S_FACE, outer);
-        final String[] steps = {"1/3: चित्र में मुँह के बीच टैप करें", "2/3: बाईं आँख (आपकी तरफ़ से) पर टैप करें", "3/3: दाईं आँख पर टैप करें", "✔ हो गया! \"सहेजें\" दबाएँ"};
+        final String[] steps = {"1/3: Tap the middle of the mouth", "2/3: Tap the left eye (as you look at it)", "3/3: Tap the right eye", "✔ Done! Tap \"Save\""};
         fv.listener = new FaceTapView.Listener() {
             public void changed(int step) { hint.setText(steps[Math.min(3, step)]); }
         };
@@ -1867,13 +1867,13 @@ public class MainActivity extends Activity {
                 try {
                     sp = Art.makeSprite(project.loader(), f[2], 1100);
                 } catch (Throwable e) {
-                    ui.post(new Runnable() { public void run() { toast("चित्र नहीं खुला"); showStudio(); } });
+                    ui.post(new Runnable() { public void run() { toast("Could not open the picture"); showStudio(); } });
                     return;
                 }
                 ui.post(new Runnable() {
                     public void run() {
                         if (screen != S_FACE) return;
-                        if (sp == null) { toast("चित्र नहीं खुला"); showStudio(); return; }
+                        if (sp == null) { toast("Could not open the picture"); showStudio(); return; }
                         float[] init = null;
                         if (f.length >= 11) {
                             try {
@@ -1883,21 +1883,21 @@ public class MainActivity extends Activity {
                             init = new float[]{sp.mouthX, sp.mouthY, sp.eyeLX, sp.eyeLY, sp.eyeRX, sp.eyeRY};
                         }
                         fv.set((Bitmap) sp.img, init);
-                        hint.setText(fv.step >= 3 ? "निशान ठीक हैं? नहीं तो \"फिर से\" दबाकर मुँह और आँखों पर टैप करें" : steps[0]);
+                        hint.setText(fv.step >= 3 ? "Are the marks right? If not, tap \"Redo\" and tap the mouth and eyes" : steps[0]);
                     }
                 });
             }
         }).start();
         save.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                if (fv.step < 3) { toast("पहले मुँह और दोनों आँखों पर टैप करें"); return; }
+                if (fv.step < 3) { toast("First tap the mouth and both eyes"); return; }
                 float[] p = fv.pts;
                 float eyeDist = Math.abs(p[4] - p[2]);
                 float mouthHW = eyeDist * 0.42f, eyeR = eyeDist * 0.24f;
                 String nl = String.format(Locale.US, "char|%s|%s|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%s",
                         f[1], f[2], p[0], p[1], mouthHW, p[2], p[3], p[4], p[5], eyeR, f.length >= 12 ? f[11] : "0");
                 project.setManifest("char", f[1], nl);
-                toast("सहेज लिया — अब होंठ आवाज़ के साथ हिलेंगे");
+                toast("Saved — the lips will now move with the voice");
                 showStudio();
             }
         });
@@ -1907,7 +1907,7 @@ public class MainActivity extends Activity {
 
     private void makeFilm() {
         saveScript();
-        if (FilmJob.scriptOf(project).trim().length() < 10) { toast("पहले कहानी लिखें या चिपकाएँ"); return; }
+        if (FilmJob.scriptOf(project).trim().length() < 10) { toast("Write or paste a story first"); return; }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED && !askedPerms) {
             askPermissions();
         }
@@ -1915,11 +1915,11 @@ public class MainActivity extends Activity {
         if (j == null) {
             FilmJob cur = FilmJob.current;
             final Project other = cur != null ? cur.project : null;
-            AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle("एक फ़िल्म पहले से बन रही है")
-                    .setMessage(cur != null && cur.cancelled ? "पिछली फ़िल्म रुक रही है — कुछ सेकंड बाद फिर दबाएँ।"
-                            : "\"" + (other == null ? "" : other.name()) + "\" बन रही है। उसके पूरा होने के बाद यह फ़िल्म बनाएँ, या उसे रोक दें।")
-                    .setPositiveButton("ठीक है", null);
-            if (other != null && !cur.cancelled) b.setNeutralButton("उसकी प्रगति देखें", new DialogInterface.OnClickListener() {
+            AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle("A film is already being made")
+                    .setMessage(cur != null && cur.cancelled ? "The previous film is still stopping — try again in a few seconds."
+                            : "\"" + (other == null ? "" : other.name()) + "\" is being made. Make this film after it finishes, or stop it.")
+                    .setPositiveButton("OK", null);
+            if (other != null && !cur.cancelled) b.setNeutralButton("See its progress", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface d, int w) { project = other; showProgress(); }
             });
             b.show();
@@ -1929,7 +1929,7 @@ public class MainActivity extends Activity {
     }
 
     private void showProgress() {
-        LinearLayout body = page(S_PROGRESS, "⏳ फ़िल्म बन रही है", true);
+        LinearLayout body = page(S_PROGRESS, "⏳ Making your film", true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         LinearLayout c = Ui.card(this);
         final TextView stage = Ui.text(this, "", 17, Ui.TEXT, true);
@@ -1939,7 +1939,7 @@ public class MainActivity extends Activity {
         final ImageView preview = new ImageView(this);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         preview.setBackgroundColor(0xFF000000);
-        final TextView note = Ui.text(this, "आप फ़ोन लॉक कर सकते हैं या दूसरा ऐप खोल सकते हैं — फ़िल्म बनती रहेगी (सूचना में प्रगति दिखेगी)।", 14, Ui.SUB, false);
+        final TextView note = Ui.text(this, "You can lock the phone or use other apps — the film keeps being made (progress shows in the notification).", 14, Ui.SUB, false);
         final TextView warn = Ui.text(this, "", 14, Ui.RED, false);
         c.addView(stage);
         c.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 22)));
@@ -1947,12 +1947,12 @@ public class MainActivity extends Activity {
         c.addView(preview, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 200)));
         c.addView(note);
         c.addView(warn);
-        final Button stop = Ui.button(this, "■  रोकें", Ui.RED, new View.OnClickListener() {
+        final Button stop = Ui.button(this, "■  Stop", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) {
-                new AlertDialog.Builder(MainActivity.this).setTitle("रोकें?").setMessage("बनती हुई फ़िल्म रुक जाएगी।")
-                        .setPositiveButton("हाँ, रोकें", new DialogInterface.OnClickListener() {
+                new AlertDialog.Builder(MainActivity.this).setTitle("Stop?").setMessage("The film being made will stop.")
+                        .setPositiveButton("Yes, stop", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { FilmJob j = FilmJob.current; if (j != null) j.cancel(); }
-                        }).setNegativeButton("नहीं", null).show();
+                        }).setNegativeButton("No", null).show();
             }
         });
         c.addView(stop);
@@ -1969,17 +1969,17 @@ public class MainActivity extends Activity {
                 if (j.warning.length() > 0) warn.setText("⚠ " + j.warning);
                 if (j.done) {
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    toast("🎉 फ़िल्म तैयार है!");
+                    toast("🎉 Your film is ready!");
                     project = j.project;
                     showPlayer();
                     return;
                 }
                 if (j.failed || j.cancelled) {
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    stage.setText(j.failed ? "❌ फ़िल्म नहीं बन सकी" : "रोक दिया गया");
+                    stage.setText(j.failed ? "❌ The film could not be made" : "Stopped");
                     eta.setText("");
                     if (j.failed) warn.setText(j.error);
-                    stop.setText("← वापस");
+                    stop.setText("← Back");
                     stop.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showStory(); } });
                     return;
                 }
@@ -2003,28 +2003,28 @@ public class MainActivity extends Activity {
         LinearLayout panel = Ui.column(this);
         panel.setBackgroundColor(Ui.BG);
         panel.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
-        panel.addView(Ui.text(this, "✍ बदलाव लिखें (जैसे: चमक बढ़ाओ • संगीत धीमा करो • वृंदा की आवाज़ तेज़ करो • subtitles लगाओ • file size कम करो)", 13, Ui.SUB, false));
+        panel.addView(Ui.text(this, "✍ Type a change (e.g. increase brightness • lower the music • make Vrinda louder • add subtitles • smaller file size) — English, Hindi or Hinglish", 13, Ui.SUB, false));
         LinearLayout cmdRow = Ui.row(this);
         final EditText cmd = new EditText(this);
-        cmd.setHint("आपका आदेश…");
+        cmd.setHint("Your instruction…");
         cmd.setTextSize(15);
         cmd.setSingleLine(false);
         cmd.setMaxLines(3);
         cmdRow.addView(cmd, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         final TextView status = Ui.text(this, pendingEditsNote(), 13, Ui.GREEN, false);
-        cmdRow.addView(Ui.small(this, "✔ लागू", Ui.PRIMARY, new View.OnClickListener() {
+        cmdRow.addView(Ui.small(this, "✔ Apply", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { applyCommand(cmd.getText().toString(), status, cmd); }
         }));
         panel.addView(cmdRow);
         panel.addView(status);
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🔁 फिर बनाएँ", Ui.GREEN, new View.OnClickListener() {
+        r.addView(Ui.small(this, "🔁 Make again", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { vv.stopPlayback(); makeFilm(); }
         }));
-        r.addView(Ui.small(this, "💾 डाउनलोड", Ui.PRIMARY, new View.OnClickListener() {
+        r.addView(Ui.small(this, "💾 Download", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { saveToGallery(false); }
         }));
-        r.addView(Ui.small(this, "📤 साझा", Ui.BLUE, new View.OnClickListener() {
+        r.addView(Ui.small(this, "📤 Share", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { saveToGallery(true); }
         }));
         panel.addView(r);
@@ -2036,7 +2036,7 @@ public class MainActivity extends Activity {
         vv.setVideoPath(project.film().getAbsolutePath());
         vv.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener() {
             public boolean onError(android.media.MediaPlayer mp, int what, int extra) {
-                toast("फ़िल्म चल नहीं सकी — डाउनलोड करके गैलरी में देखें");
+                toast("The film could not play here — download it and watch it in the gallery");
                 return true;
             }
         });
@@ -2047,7 +2047,7 @@ public class MainActivity extends Activity {
         long made = 0;
         try { made = Long.parseLong(project.setting("madeAt", "0")); } catch (NumberFormatException ignored) {}
         File e = project.file("edits.json");
-        if (e.exists() && e.lastModified() > made + 1000) return "बदलाव सहेजे गए — देखने के लिए \"🔁 फिर बनाएँ\" दबाएँ (आवाज़ें दोबारा नहीं बनेंगी, जल्दी होगा)।";
+        if (e.exists() && e.lastModified() > made + 1000) return "Changes saved — tap \"🔁 Make again\" to see them (voices are reused, so it is quicker).";
         return "";
     }
 
@@ -2065,13 +2065,13 @@ public class MainActivity extends Activity {
         }
         saveEdits(ed);
         if (res.unknown.isEmpty() || !Prefs.online(this)) {
-            if (!res.unknown.isEmpty()) done.append("? समझ नहीं आया: ").append(res.unknown).append('\n');
-            status.setText(done + (done.length() > 0 ? "देखने के लिए \"🔁 फिर बनाएँ\" दबाएँ।" : ""));
+            if (!res.unknown.isEmpty()) done.append("? Not understood: ").append(res.unknown).append('\n');
+            status.setText(done + (done.length() > 0 ? "Tap \"🔁 Make again\" to see the changes." : ""));
             box.setText("");
             return;
         }
         final String rest = android.text.TextUtils.join(", ", res.unknown);
-        background("AI आदेश समझ रहा है…", new Work() {
+        background("AI is understanding your instruction…", new Work() {
             public Object run() throws Exception { return ScriptAI.commands(Prefs.cloud(MainActivity.this), rest, names); }
         }, new Done() {
             @SuppressWarnings("unchecked")
@@ -2081,9 +2081,9 @@ public class MainActivity extends Activity {
                     String d = ed2.apply(c);
                     if (d != null) done.append("✔ ").append(d).append('\n');
                 }
-                else done.append("? समझ नहीं आया: ").append(rest).append('\n');
+                else done.append("? Not understood: ").append(rest).append('\n');
                 saveEdits(ed2);
-                status.setText(done + "देखने के लिए \"🔁 फिर बनाएँ\" दबाएँ।");
+                status.setText(done + "Tap \"🔁 Make again\" to see the changes.");
                 box.setText("");
             }
         });
@@ -2100,7 +2100,7 @@ public class MainActivity extends Activity {
         }
         final File src = project.film();
         final String name = safeName(project.name()) + ".mp4";
-        background(thenShare ? "साझा करने की तैयारी…" : "गैलरी में सहेजा जा रहा है…", new Work() {
+        background(thenShare ? "Preparing to share…" : "Saving to the gallery…", new Work() {
             public Object run() throws Exception {
                 String saved = project.setting("savedUri", "");
                 if (saved.length() > 0 && project.setting("saved", "0").equals("1")) return Uri.parse(saved);
@@ -2111,16 +2111,16 @@ public class MainActivity extends Activity {
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("सहेजा नहीं जा सका: " + e.getMessage()); return; }
-                if (!thenShare) { toast("✅ गैलरी में सहेजा गया (Movies/KahaniFilm)"); return; }
+                if (e != null) { toast("Could not save: " + e.getMessage()); return; }
+                if (!thenShare) { toast("✅ Saved to the gallery (Movies/KahaniFilm)"); return; }
                 try {
                     Intent s = new Intent(Intent.ACTION_SEND);
                     s.setType("video/mp4");
                     s.putExtra(Intent.EXTRA_STREAM, (Uri) r);
                     s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(Intent.createChooser(s, "फ़िल्म साझा करें (YouTube, Instagram, Facebook…)"));
+                    startActivity(Intent.createChooser(s, "Share the film (YouTube, Instagram, Facebook…)"));
                 } catch (Exception ex) {
-                    toast("साझा नहीं हो सका");
+                    toast("Could not share");
                 }
             }
         });
@@ -2141,7 +2141,7 @@ public class MainActivity extends Activity {
             v.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/KahaniFilm");
             v.put(MediaStore.Video.Media.IS_PENDING, 1);
             Uri uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new Exception("गैलरी उपलब्ध नहीं");
+            if (uri == null) throw new Exception("Gallery not available");
             OutputStream o = getContentResolver().openOutputStream(uri);
             Project.copy(new FileInputStream(src), o);
             v.clear();
@@ -2150,7 +2150,7 @@ public class MainActivity extends Activity {
             return uri;
         }
         File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "KahaniFilm");
-        if (!dir.exists() && !dir.mkdirs()) throw new Exception("फ़ोल्डर नहीं बन सका");
+        if (!dir.exists() && !dir.mkdirs()) throw new Exception("Could not create the folder");
         File dst = new File(dir, name);
         Project.copy(new FileInputStream(src), new FileOutputStream(dst));
         final Uri[] out = {null};
@@ -2160,7 +2160,7 @@ public class MainActivity extends Activity {
                     public void onScanCompleted(String path, Uri uri) { synchronized (lock) { out[0] = uri; lock.notifyAll(); } }
                 });
         synchronized (lock) { if (out[0] == null) lock.wait(5000); }
-        if (out[0] == null) throw new Exception("गैलरी ने फ़ाइल नहीं पहचानी");
+        if (out[0] == null) throw new Exception("The gallery did not recognise the file");
         return out[0];
     }
 
@@ -2168,10 +2168,10 @@ public class MainActivity extends Activity {
 
     private void showLibrary() {
         target = "lib:" + libTab;
-        LinearLayout body = page(S_LIBRARY, "📚 मेरी लाइब्रेरी", true);
+        LinearLayout body = page(S_LIBRARY, "📚 My library", true);
         LinearLayout tabs = Ui.row(this);
         tabs.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
-        final String[][] t = {{Library.PIC, "🖼 चित्र"}, {Library.VOICE, "🎙 आवाज़ें"}, {Library.SOUND, "🔊 ध्वनियाँ"}};
+        final String[][] t = {{Library.PIC, "🖼 Picture"}, {Library.VOICE, "🎙 Voices"}, {Library.SOUND, "🔊 Sounds"}};
         for (final String[] x : t) {
             tabs.addView(Ui.small(this, x[1], x[0].equals(libTab) ? Ui.PRIMARY : Ui.SUB, new View.OnClickListener() {
                 public void onClick(View v) { libTab = x[0]; showLibrary(); }
@@ -2180,24 +2180,24 @@ public class MainActivity extends Activity {
         body.addView(tabs);
         LinearLayout add = Ui.card(this);
         if (libTab.equals(Library.PIC)) {
-            add.addView(Ui.text(this, "आपके चित्र हर फ़िल्म में इस्तेमाल हो सकते हैं। असली फ़ोटो को कार्टून-अवतार में बदला जा सकता है।", 13, Ui.SUB, false));
+            add.addView(Ui.text(this, "Your pictures can be used in every film. Real photos can be turned into cartoon avatars.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            r.addView(Ui.small(this, "📂 फ़ोन से", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; pick("image/*", REQ_IMAGE, false); } }));
-            r.addView(Ui.small(this, "📷 कैमरा", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; camera(); } }));
-            r.addView(Ui.small(this, "🌐 खोजें", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; searchPictures(""); } }));
+            r.addView(Ui.small(this, "📂 From phone", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; pick("image/*", REQ_IMAGE, false); } }));
+            r.addView(Ui.small(this, "📷 Camera", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; camera(); } }));
+            r.addView(Ui.small(this, "🌐 Search", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; searchPictures(""); } }));
             add.addView(r);
         } else if (libTab.equals(Library.VOICE)) {
-            add.addView(Ui.text(this, "आवाज़ के नमूने (10–20 सेकंड)। स्टूडियो में किसी पात्र को देने पर उसके सारे संवाद इसी आवाज़ में बनेंगे।", 13, Ui.SUB, false));
+            add.addView(Ui.text(this, "Voice samples (10–20 seconds). Give one to a character in the studio and all their lines are made in that voice.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            r.addView(Ui.small(this, "🎙 रिकॉर्ड", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; record(Library.VOICE, ""); } }));
-            r.addView(Ui.small(this, "📂 फ़ाइल से", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pick("audio/*", REQ_AUDIO, false); } }));
+            r.addView(Ui.small(this, "🎙 Record", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; record(Library.VOICE, ""); } }));
+            r.addView(Ui.small(this, "📂 From file", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pick("audio/*", REQ_AUDIO, false); } }));
             add.addView(r);
         } else {
-            add.addView(Ui.text(this, "प्राकृतिक ध्वनियाँ, संगीत और प्रभाव। नाम/शब्द से स्टूडियो सही जगह इस्तेमाल करता है।", 13, Ui.SUB, false));
+            add.addView(Ui.text(this, "Natural sounds, music and effects. The studio uses them in the right places by their names and words.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            r.addView(Ui.small(this, "🎙 रिकॉर्ड", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; record(Library.SOUND, ""); } }));
-            r.addView(Ui.small(this, "📂 फ़ाइल", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; pick("audio/*", REQ_AUDIO, false); } }));
-            r.addView(Ui.small(this, "🌐 खोजें", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; searchSounds(""); } }));
+            r.addView(Ui.small(this, "🎙 Record", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; record(Library.SOUND, ""); } }));
+            r.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; pick("audio/*", REQ_AUDIO, false); } }));
+            r.addView(Ui.small(this, "🌐 Search", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; searchSounds(""); } }));
             add.addView(r);
         }
         body.addView(add);
@@ -2214,7 +2214,7 @@ public class MainActivity extends Activity {
                 iv.setBackgroundColor(0xFFEEEEEE);
                 Picker.thumbAsync(this, iv, it, 300);
                 cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 120)));
-                TextView tv = Ui.text(this, it.label() + (it.builtIn ? " (ऐप)" : ""), 12, Ui.TEXT, false);
+                TextView tv = Ui.text(this, it.label() + (it.builtIn ? " (app)" : ""), 12, Ui.TEXT, false);
                 tv.setMaxLines(1);
                 cell.addView(tv);
                 if (!it.builtIn) cell.setOnLongClickListener(new View.OnLongClickListener() {
@@ -2226,39 +2226,39 @@ public class MainActivity extends Activity {
                 LinearLayout r = Ui.row(this);
                 r.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 8), 0);
                 r.setGravity(Gravity.CENTER_VERTICAL);
-                r.addView(Ui.text(this, it.label() + (it.builtIn ? "  (ऐप)" : ""), 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                r.addView(Ui.text(this, it.label() + (it.builtIn ? "  (app)" : ""), 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { Picker.play(MainActivity.this, it.path); } }));
                 if (!it.builtIn) r.addView(Ui.small(this, "🗑", Ui.RED, new View.OnClickListener() { public void onClick(View v) { confirmRemove(it); } }));
                 body.addView(r);
             }
         }
         if (libTab.equals(Library.PIC) && !items.isEmpty())
-            body.addView(Ui.text(this, "  हटाने के लिए अपने चित्र को देर तक दबाएँ।", 12, Ui.SUB, false));
+            body.addView(Ui.text(this, "  Long-press your picture to delete it.", 12, Ui.SUB, false));
     }
 
     private void confirmRemove(final Library.Item it) {
-        new AlertDialog.Builder(this).setTitle("हटाएँ?").setMessage(it.label())
-                .setPositiveButton("हाँ", new DialogInterface.OnClickListener() {
+        new AlertDialog.Builder(this).setTitle("Delete?").setMessage(it.label())
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) { Picker.stop(); library.remove(it); showLibrary(); }
-                }).setNegativeButton("नहीं", null).show();
+                }).setNegativeButton("No", null).show();
     }
 
     // ================================================================== settings
 
     private void showSettings() {
-        LinearLayout body = page(S_SETTINGS, "⚙ सेटिंग", true);
+        LinearLayout body = page(S_SETTINGS, "⚙ Settings", true);
         LinearLayout acc = Ui.card(this);
         String a = Prefs.account(this);
-        acc.addView(Ui.title(this, "खाता"));
-        acc.addView(Ui.text(this, a.length() > 0 ? "👤 " + a : "साइन इन नहीं", 15, Ui.TEXT, false));
-        acc.addView(Ui.small(this, a.length() > 0 ? "लॉग आउट" : "Gmail से साइन इन", a.length() > 0 ? Ui.RED : Ui.BLUE, new View.OnClickListener() {
+        acc.addView(Ui.title(this, "Account"));
+        acc.addView(Ui.text(this, a.length() > 0 ? "👤 " + a : "Not signed in", 15, Ui.TEXT, false));
+        acc.addView(Ui.small(this, a.length() > 0 ? "Log out" : "Sign in with Gmail", a.length() > 0 ? Ui.RED : Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { if (Prefs.account(MainActivity.this).length() > 0) logout(); else login(); }
         }));
         body.addView(acc);
 
         LinearLayout ai = Ui.card(this);
-        ai.addView(Ui.title(this, "मुफ़्त AI (वैकल्पिक)"));
-        ai.addView(Ui.text(this, "बिना कुंजी के भी ऐप काम करता है (मुफ़्त AI चित्र और कहानी पढ़ना)। बेहतर कहानी-पढ़ाई, चित्र-पहचान और भाव वाली AI आवाज़ों के लिए Google Gemini की मुफ़्त कुंजी डालें:\n1. aistudio.google.com/apikey खोलें (उसी Gmail से)\n2. \"Create API key\" दबाएँ, कुंजी कॉपी करें\n3. यहाँ चिपकाएँ। कुंजी सिर्फ़ इस फ़ोन में रहती है।", 13, Ui.SUB, false));
+        ai.addView(Ui.title(this, "Free AI (optional)"));
+        ai.addView(Ui.text(this, "The app works without any key (free AI pictures and story reading). For better story reading, picture recognition and expressive AI voices, add a free Google Gemini key:\n1. Open aistudio.google.com/apikey (same Gmail)\n2. Tap \"Create API key\" and copy it\n3. Paste it here. The key stays only on this phone.", 13, Ui.SUB, false));
         final EditText key = new EditText(this);
         key.setHint("Gemini API key (AIza…)");
         key.setSingleLine(true);
@@ -2266,36 +2266,36 @@ public class MainActivity extends Activity {
         key.setText(Prefs.geminiKey(this));
         ai.addView(key);
         LinearLayout kr = Ui.row(this);
-        kr.addView(Ui.small(this, "💾 सहेजें", Ui.GREEN, new View.OnClickListener() {
-            public void onClick(View v) { Prefs.put(MainActivity.this, "geminiKey", key.getText().toString().trim()); toast("सहेजा"); }
+        kr.addView(Ui.small(this, "💾 Save", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { Prefs.put(MainActivity.this, "geminiKey", key.getText().toString().trim()); toast("Saved"); }
         }));
-        kr.addView(Ui.small(this, "🧪 जाँचें", Ui.BLUE, new View.OnClickListener() {
+        kr.addView(Ui.small(this, "🧪 Test", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) {
                 Prefs.put(MainActivity.this, "geminiKey", key.getText().toString().trim());
-                background("जाँच हो रही है…", new Work() {
+                background("Testing…", new Work() {
                     public Object run() throws Exception { return Prefs.cloud(MainActivity.this).gemini(null, "Reply with the single word OK", false, null, null); }
                 }, new Done() {
-                    public void done(Object r, Exception e) { toast(e == null ? "✅ कुंजी काम कर रही है" : "❌ " + e.getMessage()); }
+                    public void done(Object r, Exception e) { toast(e == null ? "✅ The key works" : "❌ " + e.getMessage()); }
                 });
             }
         }));
         ai.addView(kr);
         CheckBox online = new CheckBox(this);
-        online.setText("ऑनलाइन सुविधाएँ (AI, मुफ़्त चित्र/ध्वनि खोज)");
+        online.setText("Online features (AI, free picture/sound search)");
         online.setChecked(Prefs.online(this));
         online.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "online", on ? "1" : "0"); }
         });
         ai.addView(online);
         CheckBox nv = new CheckBox(this);
-        nv.setText("प्राकृतिक आवाज़ें (Microsoft की मुफ़्त न्यूरल आवाज़ें, इंटरनेट चाहिए, कुंजी नहीं) — सलाह: चालू रखें");
+        nv.setText("Natural voices (Microsoft's free neural voices, needs internet, no key) — recommended");
         nv.setChecked(Prefs.naturalVoices(this));
         nv.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "naturalVoices", on ? "1" : "0"); }
         });
         ai.addView(nv);
         CheckBox av = new CheckBox(this);
-        av.setText("AI आवाज़ें (भाव के साथ; कुंजी ज़रूरी)। मुफ़्त सीमा बहुत कम है — छोटी फ़िल्मों के लिए। सीमा पूरी होने पर बाकी संवाद फ़ोन की आवाज़ में।");
+        av.setText("AI voices (expressive; needs the key). The free limit is very small — for short films. After the limit, remaining lines use another voice.");
         av.setChecked(Prefs.aiVoices(this));
         av.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "aiVoices", on ? "1" : "0"); }
@@ -2304,14 +2304,14 @@ public class MainActivity extends Activity {
         body.addView(ai);
 
         LinearLayout ph = Ui.card(this);
-        ph.addView(Ui.title(this, "फ़ोन"));
-        ph.addView(Ui.small(this, "🔊 फ़ोन की आवाज़ें (Text-to-Speech)", Ui.PRIMARY, new View.OnClickListener() {
+        ph.addView(Ui.title(this, "Phone"));
+        ph.addView(Ui.small(this, "🔊 Phone voices (Text-to-Speech)", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { offerTtsInstall(); }
         }));
-        ph.addView(Ui.small(this, "🔐 अनुमतियाँ दें", Ui.PRIMARY, new View.OnClickListener() {
+        ph.addView(Ui.small(this, "🔐 Give permissions", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) {
                 String[] m = neededPermissions();
-                if (m.length == 0) toast("✅ सारी अनुमतियाँ मिल चुकी हैं");
+                if (m.length == 0) toast("✅ All permissions are given");
                 else requestPermissions(m, REQ_PERMS);
             }
         }));

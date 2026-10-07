@@ -190,7 +190,7 @@ public final class AudioIO {
             try {
                 int min = AudioRecord.getMinBufferSize(SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
                 rec = new AudioRecord(MediaRecorder.AudioSource.MIC, SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(min, SR));
-                if (rec.getState() != AudioRecord.STATE_INITIALIZED) throw new IOException("माइक नहीं खुला");
+                if (rec.getState() != AudioRecord.STATE_INITIALIZED) throw new IOException("Could not open the microphone");
                 raf = new RandomAccessFile(out, "rw");
                 raf.setLength(0);
                 raf.write(new byte[44]);

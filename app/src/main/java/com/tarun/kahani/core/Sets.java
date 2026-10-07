@@ -10,6 +10,22 @@ public final class Sets {
             CELEBRATION = 6, HALL = 7, VILLAGE = 8, GENERIC_OUT = 9;
     public static final int MORNING = 0, DAY = 1, EVENING = 2, NIGHT = 3;
 
+    /** English name of a set for the app's screens (name() stays Hindi: it is also used to match sounds). */
+    public static String label(int set) {
+        switch (set) {
+            case GARDEN: return "garden";
+            case COURTYARD: return "courtyard";
+            case GATE: return "main gate";
+            case CAVE_IN: return "inside a cave";
+            case CAVE_MOUTH: return "cave entrance";
+            case FOREST: return "forest";
+            case CELEBRATION: return "celebration";
+            case HALL: return "palace hall";
+            case VILLAGE: return "village";
+            default: return "open place";
+        }
+    }
+
     public static String name(int set) {
         switch (set) {
             case GARDEN: return "बगीचा";

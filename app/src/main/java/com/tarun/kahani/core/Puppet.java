@@ -1,0 +1,1503 @@
+package com.tarun.kahani.core;
+
+/**
+ * Draws a character as a 2D cartoon puppet. Origin = point between the feet, y grows downward.
+ * All characters are drawn fully clothed and child-friendly.
+ */
+public final class Puppet {
+    private Puppet() {}
+
+    static final int INK = 0xFF2B1D16;
+
+    static int shade(int c, float f) { return LookDesigner.darker(c, f); }
+
+    static int lighten(int c, float f) {
+        int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        r = (int) (r + (255 - r) * f); g = (int) (g + (255 - g) * f); b = (int) (b + (255 - b) * f);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    static int mix(int a, int b, float t) {
+        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+        int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+        return 0xFF000000 | ((int) (ar + (br - ar) * t) << 16) | ((int) (ag + (bg - ag) * t) << 8) | (int) (ab + (bb - ab) * t);
+    }
+
+    static int alpha(int c, float a) { return (((int) (Math.max(0, Math.min(1, a)) * 255)) << 24) | (c & 0xFFFFFF); }
+
+    /** Pixel height of a character for a given stage scale. */
+    public static float heightPx(Look l, float stageUnit) { return l.height * stageUnit; }
+
+    // ------------------------------------------------------------------ entry point
+
+    public static void draw(Gfx g, Look l, Pose p, float H) {
+        g.save();
+        g.translate(0, p.bob);
+        if (p.body == Pose.LIE) {
+            g.translate(0, -H * 0.09f);
+            g.rotate(p.facing > 0 ? -88 : 88);
+            g.translate(0, H * 0.5f);
+        } else if (p.body == Pose.HANG) {
+            g.rotate(180);
+        }
+        if (p.tilt != 0) g.rotate(p.tilt * p.facing);
+        if (p.squash != 1f) g.scale(1f / p.squash, p.squash);
+        if (l.kind == Look.MONKEY) drawMonkey(g, l, p, H);
+        else if (l.kind == Look.WITCH && p.disguised) drawHuman(g, disguise(l), p, H * 0.95f);
+        else drawHuman(g, l, p, H);
+        g.restore();
+    }
+
+    private static Look disguiseCache, disguiseSrc;
+
+    /** The witch's "sweet old seller" disguise: grey saree, yellow shawl over the head, kind face. */
+    static Look disguise(Look w) {
+        if (disguiseSrc == w && disguiseCache != null) return disguiseCache;
+        Look d = w.copy();
+        d.kind = Look.WOMAN; d.female = true; d.girth = 0.95f;
+        d.outfit = Look.O_SAREE; d.primary = 0xFF7D7A80; d.secondary = 0xFFE0B040;
+        d.headwear = Look.HW_PALLU; d.hair = Look.H_BUN; d.hairColor = 0xFFBDBDBD;
+        d.skin = 0xFFC99772; d.crookedNose = false; d.glowEyes = false; d.wrinkles = true; d.eyeColor = 0xFF4E342E;
+        d.wand = false; d.longNails = false; d.necklace = 0; d.bindi = 0; d.earrings = true;
+        disguiseSrc = w; disguiseCache = d;
+        return d;
+    }
+
+    // ------------------------------------------------------------------ geometry helpers
+
+    static final class Body {
+        float H, headR, L, T, neck, sw, hw, hipY, shY, headY, armLen, armW, legW;
+    }
+
+    static Body body(Look l, float H) {
+        Body b = new Body();
+        b.H = H;
+        if (l.isChild()) { b.headR = 0.165f * H; b.L = 0.29f * H; b.T = 0.29f * H; b.neck = 0.02f * H; }
+        else if (l.kind == Look.MONSTER) { b.headR = 0.125f * H; b.L = 0.33f * H; b.T = 0.38f * H; b.neck = 0f; }
+        else if (l.kind == Look.WITCH) { b.headR = 0.125f * H; b.L = 0.37f * H; b.T = 0.31f * H; b.neck = 0.02f * H; }
+        else { b.headR = 0.12f * H; b.L = 0.40f * H; b.T = 0.31f * H; b.neck = 0.03f * H; }
+        float girth = l.girth;
+        b.sw = b.T * (l.isChild() ? 0.42f : 0.46f) * girth;
+        if (l.female && !l.isChild()) b.sw *= 0.9f;
+        b.hw = b.sw * (l.female ? 0.95f : 0.82f);
+        b.hipY = -b.L;
+        b.shY = -(b.L + b.T);
+        b.headY = b.shY - b.neck - b.headR * 0.92f;
+        b.armLen = b.T * 1.02f;
+        b.armW = b.headR * (l.kind == Look.MONSTER ? 0.5f : 0.36f);
+        b.legW = b.headR * (l.kind == Look.MONSTER ? 0.5f : 0.42f);
+        return b;
+    }
+
+    static float[] hand(Body b, float side, float armDeg, float elbowDeg) {
+        float sx = side * b.sw * 0.92f, sy = b.shY + b.armW * 0.6f;
+        double a = Math.toRadians(armDeg);
+        float ex = sx + side * (float) Math.sin(a) * b.armLen * 0.5f;
+        float ey = sy + (float) Math.cos(a) * b.armLen * 0.5f;
+        double a2 = Math.toRadians(armDeg + elbowDeg);
+        float hx = ex + side * (float) Math.sin(a2) * b.armLen * 0.5f;
+        float hy = ey + (float) Math.cos(a2) * b.armLen * 0.5f;
+        return new float[]{sx, sy, ex, ey, hx, hy};
+    }
+
+    // ------------------------------------------------------------------ human
+
+    static void drawHuman(Gfx g, Look l, Pose p, float H) {
+        Body b = body(l, H);
+        boolean witch = l.kind == Look.WITCH;
+        boolean monster = l.kind == Look.MONSTER;
+        float lift = 0;
+        if (p.body == Pose.SIT) lift = b.L * 0.55f;
+        else if (p.body == Pose.KNEEL) lift = b.L * 0.48f;
+        else if (p.body == Pose.CROUCH) lift = b.L * 0.22f;
+        g.save();
+        g.translate(0, lift);
+
+        // Shadow on ground
+        if (p.body != Pose.LIE && p.body != Pose.HANG) {
+            g.color(0x33000000);
+            g.oval(0, -lift + 2, b.sw * 1.6f, b.headR * 0.28f);
+        }
+
+        // Hair behind head (long braid / pigtails hanging down back)
+        drawBackHair(g, l, p, b);
+
+        // Legs
+        drawLegs(g, l, p, b);
+
+        // Outfit body
+        drawOutfit(g, l, p, b);
+
+        // Props on body (belt, scabbard, satchel)
+        drawBodyProps(g, l, p, b);
+
+        // Head (the witch is hunched: head forward and lower, with a hump)
+        g.save();
+        if (witch && !p.disguised) {
+            g.color(shade(l.primary, 0.9f));
+            g.oval(-p.facing * b.sw * 0.45f, b.shY + b.T * 0.08f, b.sw * 0.75f, b.T * 0.28f);
+            g.translate(p.facing * b.headR * 0.35f, b.headR * 0.3f);
+        }
+        g.translate(p.facing * b.headR * 0.04f, b.headY);
+        if (p.headTilt != 0) g.rotate(p.headTilt * p.facing);
+        drawHead(g, l, p, b);
+        g.restore();
+
+        // Arms in front
+        drawArm(g, l, p, b, -1, p.armL, p.elbowL, p.holdL);
+        drawArm(g, l, p, b, 1, p.armR, p.elbowR, p.holdR);
+
+        // Spear or wand held at the side when not gesturing
+        g.restore();
+    }
+
+    static void drawLegs(Gfx g, Look l, Pose p, Body b) {
+        boolean longSkirt = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_SAREE || l.outfit == Look.O_CLOAK;
+        float stride = (float) Math.sin(p.walk) * p.walkAmt;
+        int legColor;
+        switch (l.outfit) {
+            case Look.O_SALWAR: legColor = l.secondary; break;
+            case Look.O_ACHKAN: legColor = 0xFFF1EBDD; break;
+            case Look.O_UNIFORM: legColor = l.secondary; break;
+            case Look.O_ARMOR: legColor = l.furColor; break;
+            case Look.O_KURTA: legColor = 0xFFF1EBDD; break;
+            default: legColor = shade(l.primary, 0.8f);
+        }
+        if (l.kind == Look.MONSTER) legColor = l.furColor;
+        if (l.kind == Look.MONSTER && p.body != Pose.SIT && p.body != Pose.KNEEL) { monsterLegs(g, l, p, b, stride); return; }
+        for (int side = -1; side <= 1; side += 2) {
+            float hx = side * b.hw * 0.45f;
+            float fx, fy;
+            if (p.body == Pose.SIT) {
+                fx = hx * 0.6f + p.facing * b.L * 0.75f; fy = -b.L * 0.45f + b.L * 0.5f;
+                g.color(legColor);
+                g.line(hx, b.hipY, fx - p.facing * b.L * 0.15f, b.hipY + b.legW * 0.2f, b.legW * 2f);
+                g.line(fx - p.facing * b.L * 0.15f, b.hipY + b.legW * 0.2f, fx, fy, b.legW * 1.8f);
+            } else if (p.body == Pose.KNEEL) {
+                fx = hx - p.facing * b.L * 0.45f; fy = -b.L * 0.52f + b.L * 0.5f;
+                g.color(legColor);
+                g.line(hx, b.hipY, hx + p.facing * b.L * 0.1f, b.hipY + b.L * 0.5f, b.legW * 2f);
+                g.line(hx + p.facing * b.L * 0.1f, b.hipY + b.L * 0.5f, fx, fy, b.legW * 1.8f);
+            } else {
+                float sw = side * stride * b.L * 0.38f;
+                fx = hx + sw; fy = 0;
+                if (!longSkirt || p.walkAmt > 0.01f || p.body == Pose.LIE) {
+                    g.color(legColor);
+                    g.line(hx, b.hipY, fx, fy - b.legW * 0.6f, b.legW * 2f);
+                }
+            }
+            // foot / shoe
+            if (l.kind == Look.MONSTER) {
+                g.color(shade(l.furColor, 0.7f));
+                g.oval(fx + p.facing * b.legW * 0.5f, fy - b.legW * 0.45f, b.legW * 1.5f, b.legW * 0.7f);
+                g.color(0xFF4A2E1A);
+                g.rect(fx - b.legW, fy - b.L * 0.45f, b.legW * 2f, b.legW * 0.35f);
+                g.rect(fx - b.legW, fy - b.L * 0.25f, b.legW * 2f, b.legW * 0.35f);
+            } else {
+                g.color(l.shoeColor);
+                g.begin();
+                float fw = b.legW * 1.5f;
+                g.moveTo(fx - fw * 0.7f, fy);
+                g.lineTo(fx + p.facing * fw * 1.25f, fy);
+                g.quadTo(fx + p.facing * fw * 1.5f, fy - fw * 0.45f, fx + p.facing * fw * 0.6f, fy - fw * 0.75f);
+                g.lineTo(fx - fw * 0.7f, fy - fw * 0.75f);
+                g.close();
+                g.fillPath();
+                if (l.outfit == Look.O_LEHENGA || l.outfit == Look.O_ACHKAN) { // juti curl
+                    g.color(l.secondary);
+                    g.oval(fx + p.facing * fw * 1.3f, fy - fw * 0.3f, fw * 0.18f, fw * 0.18f);
+                }
+            }
+        }
+    }
+
+    static void monsterLegs(Gfx g, Look l, Pose p, Body b, float stride) {
+        for (int side = -1; side <= 1; side += 2) {
+            float hx = side * b.hw * 0.62f;
+            float fx = hx + side * stride * b.L * 0.3f + side * b.legW * 0.2f;
+            float kx = (hx + fx) / 2 + side * b.legW * 0.25f, ky = b.hipY * 0.48f;
+            float tw = b.legW * 1.15f, sw2 = b.legW * 0.85f;
+            g.begin();
+            g.moveTo(hx - tw, b.hipY); g.lineTo(hx + tw, b.hipY);
+            g.quadTo(kx + tw * 1.1f, ky, fx + sw2, -b.legW * 0.4f);
+            g.lineTo(fx - sw2, -b.legW * 0.4f);
+            g.quadTo(kx - tw * 1.1f, ky, hx - tw, b.hipY);
+            g.close();
+            g.color(shade(l.furColor, 0.55f)); g.strokePath(3);
+            g.linear(hx - tw, 0, hx + tw, 0, shade(l.furColor, 0.85f), lighten(l.furColor, 0.08f)); g.fillPath();
+            furStrokes(g, l.furColor, hx - tw, b.hipY, tw * 2, -b.hipY, p.seed + side);
+            // leather straps
+            g.color(0xFF3E2716);
+            g.line(kx - tw, ky + b.L * 0.12f, kx + tw, ky + b.L * 0.08f, 5);
+            g.line(fx - sw2, -b.L * 0.2f, fx + sw2, -b.L * 0.23f, 5);
+            // clawed foot
+            g.color(shade(l.furColor, 0.7f));
+            g.oval(fx + p.facing * b.legW * 0.35f, -b.legW * 0.32f, b.legW * 1.15f, b.legW * 0.5f);
+            g.color(0xFFEDE3C8);
+            for (int k = 0; k < 3; k++) {
+                float cx = fx + p.facing * (b.legW * 0.9f) + (k - 1) * b.legW * 0.35f;
+                g.begin(); g.moveTo(cx - 4, -b.legW * 0.2f); g.lineTo(cx + p.facing * 9, 0); g.lineTo(cx + 4, -b.legW * 0.15f); g.close(); g.fillPath();
+            }
+        }
+    }
+
+    static void drawOutfit(Gfx g, Look l, Pose p, Body b) {
+        float sw = b.sw, hw = b.hw, shY = b.shY, hipY = b.hipY;
+        float waistY = shY + b.T * 0.62f;
+        float sway = (float) Math.sin(p.time * 2.2f) * 0.03f + (float) Math.sin(p.walk) * p.walkAmt * 0.06f;
+        switch (l.outfit) {
+            case Look.O_LEHENGA: {
+                // flared skirt to the floor
+                float skirtW = hw * (l.isChild() ? 2.5f : 2.2f);
+                float topY = waistY;
+                g.begin();
+                g.moveTo(-hw * 0.95f, topY);
+                g.lineTo(hw * 0.95f, topY);
+                g.quadTo(skirtW * 0.9f, -b.L * 0.4f, skirtW * (1 + sway), -2);
+                g.quadTo(0, b.L * 0.06f, -skirtW * (1 - sway), -2);
+                g.quadTo(-skirtW * 0.9f, -b.L * 0.4f, -hw * 0.95f, topY);
+                g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.linear(0, topY, 0, 0, lighten(l.primary, 0.12f), shade(l.primary, 0.85f));
+                g.fillPath();
+                // pleats
+                g.color(alpha(shade(l.primary, 0.6f), 0.45f));
+                for (int i = -3; i <= 3; i++) {
+                    float x = i * skirtW * 0.27f;
+                    g.line(x * 0.35f, topY + 6, x, -8, 2.2f);
+                }
+                // gota border band (secondary) with bells
+                g.color(l.secondary);
+                g.begin();
+                g.moveTo(-skirtW * (1 - sway), -2);
+                g.quadTo(0, b.L * 0.06f, skirtW * (1 + sway), -2);
+                g.lineTo(skirtW * (1 + sway) * 0.97f, -b.L * 0.17f);
+                g.quadTo(0, -b.L * 0.11f, -skirtW * (1 - sway) * 0.97f, -b.L * 0.17f);
+                g.close();
+                g.fillPath();
+                g.color(0xFFE8C04A);
+                g.line(-skirtW * 0.97f, -b.L * 0.17f, skirtW * 0.97f, -b.L * 0.17f, 2.5f);
+                if (l.anklets) {
+                    g.color(0xFFD9A93A);
+                    for (int i = -4; i <= 4; i++) g.oval(i * skirtW * 0.22f, -1, 3.2f, 3.2f);
+                }
+                // choli + dupatta: full coverage top
+                drawTop(g, l, p, b, waistY + b.T * 0.06f, l.secondary, true);
+                break;
+            }
+            case Look.O_FROCK: {
+                float skirtW = hw * 1.9f;
+                g.begin();
+                g.moveTo(-hw, waistY); g.lineTo(hw, waistY);
+                g.lineTo(skirtW, -b.L * 0.45f); g.lineTo(-skirtW, -b.L * 0.45f); g.close();
+                g.color(l.primary); g.fillPath();
+                drawTop(g, l, p, b, waistY, l.primary, false);
+                break;
+            }
+            case Look.O_SAREE: {
+                float skirtW = hw * 1.45f;
+                g.begin();
+                g.moveTo(-hw, waistY); g.lineTo(hw, waistY);
+                g.quadTo(skirtW, -b.L * 0.5f, skirtW * (1 + sway), -2);
+                g.lineTo(-skirtW * (1 - sway), -2);
+                g.quadTo(-skirtW, -b.L * 0.5f, -hw, waistY);
+                g.close();
+                g.color(shade(l.primary, 0.55f)); g.strokePath(3);
+                g.linear(0, waistY, 0, 0, l.primary, shade(l.primary, 0.8f)); g.fillPath();
+                // pleats
+                g.color(alpha(shade(l.primary, 0.55f), 0.5f));
+                for (int i = 0; i < 4; i++) g.line(-hw * 0.2f + i * 6, waistY + b.T * 0.3f, -skirtW * 0.3f + i * 9, -6, 2);
+                // gold border
+                g.color(l.secondary);
+                g.rect(-skirtW * (1 - sway), -b.L * 0.12f, skirtW * 2 * (1 + sway * 0.5f), b.L * 0.1f);
+                g.color(alpha(0xFFFFE9A0, 0.8f));
+                for (int i = -5; i <= 5; i++) g.oval(i * skirtW * 0.18f, -b.L * 0.07f, 2.5f, 2.5f);
+                drawTop(g, l, p, b, waistY, shade(l.primary, 0.9f), false);
+                // pallu: diagonal drape from left hip over right shoulder
+                g.begin();
+                g.moveTo(-hw * 1.05f, waistY + b.T * 0.35f);
+                g.lineTo(-hw * 0.3f, waistY + b.T * 0.42f);
+                g.lineTo(sw * 0.95f, shY + b.T * 0.05f);
+                g.lineTo(sw * 0.55f, shY - b.T * 0.02f);
+                g.close();
+                g.color(lighten(l.primary, 0.08f)); g.fillPath();
+                g.color(l.secondary);
+                g.line(-hw * 0.3f, waistY + b.T * 0.42f, sw * 0.95f, shY + b.T * 0.05f, 5);
+                break;
+            }
+            case Look.O_SALWAR: {
+                // kurta to knees
+                float kw = hw * 1.25f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.06f); g.lineTo(sw, shY + b.T * 0.06f);
+                g.lineTo(kw * (1 + sway), hipY + b.L * 0.55f);
+                g.lineTo(-kw * (1 - sway), hipY + b.L * 0.55f); g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY + b.L * 0.5f, lighten(l.primary, 0.1f), l.primary); g.fillPath();
+                g.color(l.secondary);
+                g.rect(-kw * (1 - sway), hipY + b.L * 0.47f, kw * 2, b.L * 0.08f);
+                g.line(0, shY + b.T * 0.1f, 0, shY + b.T * 0.42f, 3);
+                // white dupatta over both shoulders
+                g.color(alpha(l.secondary, 0.95f));
+                g.begin();
+                g.moveTo(-sw * 1.02f, shY + b.T * 0.05f);
+                g.quadTo(0, shY + b.T * 0.45f, sw * 1.02f, shY + b.T * 0.05f);
+                g.lineTo(sw * 0.8f, shY + b.T * 0.22f);
+                g.quadTo(0, shY + b.T * 0.6f, -sw * 0.8f, shY + b.T * 0.22f);
+                g.close();
+                g.fillPath();
+                break;
+            }
+            case Look.O_ACHKAN: {
+                float cw = hw * 1.3f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.04f); g.lineTo(sw, shY + b.T * 0.04f);
+                g.lineTo(cw * (1 + sway), hipY + b.L * 0.6f); g.lineTo(-cw * (1 - sway), hipY + b.L * 0.6f); g.close();
+                g.color(shade(l.primary, 0.55f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY + b.L * 0.6f, lighten(l.primary, 0.1f), shade(l.primary, 0.85f)); g.fillPath();
+                // zari trims
+                g.color(l.secondary);
+                g.line(0, shY + b.T * 0.06f, 0, hipY + b.L * 0.6f, 5);
+                g.rect(-cw, hipY + b.L * 0.52f, cw * 2, b.L * 0.08f);
+                g.color(0xFFFFE08A);
+                for (int i = 0; i < 6; i++) g.oval(b.headR * 0.12f, shY + b.T * (0.15f + i * 0.13f), 3, 3);
+                // cummerbund
+                g.color(l.secondary);
+                g.rect(-hw * 1.05f, waistY + b.T * 0.18f, hw * 2.1f, b.T * 0.1f);
+                break;
+            }
+            case Look.O_UNIFORM: {
+                float tw = hw * 1.15f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.04f); g.lineTo(sw, shY + b.T * 0.04f);
+                g.lineTo(tw, hipY + b.L * 0.3f); g.lineTo(-tw, hipY + b.L * 0.3f); g.close();
+                g.color(shade(l.primary, 0.55f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY, lighten(l.primary, 0.08f), l.primary); g.fillPath();
+                // white cross belts
+                g.color(l.secondary);
+                g.line(-sw * 0.8f, shY + b.T * 0.1f, hw * 0.8f, waistY + b.T * 0.15f, 5);
+                // waist sash and brass crest
+                g.color(l.secondary);
+                g.rect(-hw * 1.05f, waistY + b.T * 0.15f, hw * 2.1f, b.T * 0.11f);
+                g.color(0xFFD9A93A);
+                g.oval(0, waistY + b.T * 0.2f, b.headR * 0.2f, b.headR * 0.2f);
+                g.color(0xFFF7DE8A);
+                g.oval(-b.headR * 0.05f, waistY + b.T * 0.18f, b.headR * 0.07f, b.headR * 0.07f);
+                break;
+            }
+            case Look.O_CLOAK: {
+                float cw = sw * 1.5f;
+                g.begin();
+                g.moveTo(-sw * 0.9f, shY - b.headR * 0.1f);
+                g.lineTo(sw * 0.9f, shY - b.headR * 0.1f);
+                g.quadTo(cw * 1.1f, -b.L, cw * (1 + sway), -4);
+                // ragged hem
+                int n = 9;
+                for (int i = n; i >= 0; i--) {
+                    float x = -cw + (2 * cw) * i / n;
+                    float y = (i % 2 == 0) ? -2 : -b.L * 0.12f;
+                    g.lineTo(x * (1 + (i % 3) * 0.03f), y);
+                }
+                g.quadTo(-cw * 1.1f, -b.L, -sw * 0.9f, shY - b.headR * 0.1f);
+                g.close();
+                g.color(0xFF141216); g.strokePath(3);
+                g.linear(0, shY, 0, 0, l.primary, shade(l.primary, 0.75f)); g.fillPath();
+                // second layer (dark green rag)
+                g.begin();
+                g.moveTo(-sw * 0.95f, shY);
+                g.lineTo(sw * 0.95f, shY);
+                g.lineTo(sw * 1.1f, waistY + b.T * 0.3f);
+                for (int i = 6; i >= 0; i--) {
+                    float x = -sw * 1.1f + sw * 2.2f * i / 6f;
+                    g.lineTo(x, waistY + b.T * ((i % 2 == 0) ? 0.45f : 0.3f));
+                }
+                g.close();
+                g.color(l.secondary); g.fillPath();
+                g.color(alpha(0xFF000000, 0.35f));
+                for (int i = -2; i <= 2; i++) g.line(i * cw * 0.28f, waistY + b.T * 0.5f, i * cw * 0.42f, -b.L * 0.08f, 3);
+                g.color(alpha(l.accent == 0xFFE0A526 ? 0xFF6E6A5E : l.accent, 0.8f));
+                g.line(-sw * 0.3f, shY + b.T * 0.3f, -sw * 0.5f, waistY + b.T * 0.4f, 3);
+                g.line(sw * 0.4f, shY + b.T * 0.35f, sw * 0.2f, -b.L * 0.4f, 3);
+                // patches
+                g.color(0xFF4E4A3A);
+                g.rect(-cw * 0.55f, -b.L * 0.5f, cw * 0.22f, cw * 0.18f);
+                g.color(0xFF2F5A3A);
+                g.rect(cw * 0.3f, -b.L * 0.75f, cw * 0.18f, cw * 0.16f);
+                if (p.disguised) {
+                    // a soft orange shawl over the cloak as the "sweet seller" disguise
+                    g.color(0xFFC9772E);
+                    g.begin();
+                    g.moveTo(-sw * 1.2f, shY - b.headR * 0.2f);
+                    g.lineTo(sw * 1.2f, shY - b.headR * 0.2f);
+                    g.lineTo(sw * 1.35f, waistY + b.T * 0.6f);
+                    g.lineTo(-sw * 1.35f, waistY + b.T * 0.6f);
+                    g.close(); g.fillPath();
+                    g.color(0xFFF2C230);
+                    g.line(-sw * 1.35f, waistY + b.T * 0.6f, sw * 1.35f, waistY + b.T * 0.6f, 4);
+                }
+                break;
+            }
+            case Look.O_ARMOR: {
+                // furry torso
+                g.begin();
+                g.moveTo(-sw, shY); g.quadTo(0, shY - b.headR * 0.4f, sw, shY);
+                g.quadTo(sw * 1.2f, waistY, hw * 1.05f, hipY + b.L * 0.15f);
+                g.lineTo(-hw * 1.05f, hipY + b.L * 0.15f);
+                g.quadTo(-sw * 1.2f, waistY, -sw, shY);
+                g.close();
+                g.color(shade(l.furColor, 0.6f)); g.strokePath(4);
+                g.radial(-sw * 0.2f, shY + b.T * 0.3f, sw * 1.6f, lighten(l.furColor, 0.1f), shade(l.furColor, 0.8f)); g.fillPath();
+                furStrokes(g, l.furColor, -sw, shY, sw * 2, hipY + b.L * 0.1f - shY, p.seed);
+                // lighter belly fur
+                g.color(alpha(lighten(l.furColor, 0.22f), 0.8f));
+                g.oval(0, waistY + b.T * 0.15f, hw * 0.75f, b.T * 0.3f);
+                // leather chest plate + shoulder pads
+                g.color(shade(l.primary, 0.9f));
+                g.roundRect(-sw * 0.7f, shY + b.T * 0.15f, sw * 1.4f, b.T * 0.5f, 10);
+                g.color(shade(l.primary, 0.7f));
+                g.oval(-sw * 0.95f, shY + b.T * 0.06f, sw * 0.38f, b.T * 0.16f);
+                g.oval(sw * 0.95f, shY + b.T * 0.06f, sw * 0.38f, b.T * 0.16f);
+                // spikes
+                g.color(0xFFBDBDBD);
+                for (int s = -1; s <= 1; s += 2) {
+                    for (int i = 0; i < 3; i++) {
+                        float x = s * sw * (0.75f + i * 0.13f), y = shY - b.T * 0.02f;
+                        g.begin(); g.moveTo(x - 6, y); g.lineTo(x, y - b.T * 0.16f); g.lineTo(x + 6, y); g.close(); g.fillPath();
+                    }
+                }
+                // chains & bones
+                if (l.chains) {
+                    g.color(0xFF9E9E9E);
+                    for (int i = 0; i < 9; i++) {
+                        float t = i / 8f;
+                        g.strokeOval(-sw * 0.8f + t * sw * 1.6f, shY + b.T * (0.12f + t * 0.5f), 6, 4, 2.5f);
+                    }
+                }
+                g.color(0xFFEDE3C8);
+                g.roundRect(-sw * 0.25f, shY + b.T * 0.32f, sw * 0.5f, 7, 4);
+                g.oval(-sw * 0.25f, shY + b.T * 0.32f + 3.5f, 6, 6);
+                g.oval(sw * 0.25f, shY + b.T * 0.32f + 3.5f, 6, 6);
+                // belt with axe
+                g.color(0xFF3E2716);
+                g.rect(-hw * 1.1f, waistY + b.T * 0.2f, hw * 2.2f, b.T * 0.12f);
+                g.color(0xFF8D8D8D);
+                g.roundRect(-b.headR * 0.25f, waistY + b.T * 0.19f, b.headR * 0.5f, b.T * 0.14f, 4);
+                // loin cloth
+                g.color(shade(l.primary, 0.75f));
+                g.begin(); g.moveTo(-hw, hipY - b.L * 0.05f); g.lineTo(hw, hipY - b.L * 0.05f);
+                g.lineTo(hw * 0.8f, hipY + b.L * 0.4f); g.lineTo(0, hipY + b.L * 0.3f); g.lineTo(-hw * 0.8f, hipY + b.L * 0.4f); g.close();
+                g.fillPath();
+                break;
+            }
+            default: { // kurta (men)
+                float kw = hw * 1.18f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.04f); g.lineTo(sw, shY + b.T * 0.04f);
+                g.lineTo(kw, hipY + b.L * 0.45f); g.lineTo(-kw, hipY + b.L * 0.45f); g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.color(l.primary); g.fillPath();
+                g.color(l.secondary);
+                g.line(0, shY + b.T * 0.06f, 0, shY + b.T * 0.4f, 3);
+            }
+        }
+        // necklaces
+        float ny = shY + b.T * 0.1f;
+        switch (l.necklace) {
+            case 1:
+                g.color(0xFFE5B530);
+                arc(g, 0, ny - b.T * 0.06f, sw * 0.42f, b.T * 0.16f, 2.5f);
+                g.oval(0, ny + b.T * 0.1f, b.headR * 0.09f, b.headR * 0.1f);
+                break;
+            case 2:
+                g.color(0xFFF7F2E6);
+                for (int i = 0; i <= 10; i++) {
+                    double a = Math.PI * i / 10.0;
+                    g.oval((float) Math.cos(a) * sw * 0.4f, ny - b.T * 0.06f + (float) Math.sin(a) * b.T * 0.16f, 2.6f, 2.6f);
+                }
+                break;
+            case 3:
+                g.color(0xFFE9DFC4);
+                for (int i = 0; i <= 8; i++) {
+                    double a = Math.PI * i / 8.0;
+                    float x = (float) Math.cos(a) * sw * 0.48f, y = ny - b.T * 0.04f + (float) Math.sin(a) * b.T * 0.2f;
+                    g.roundRect(x - 3, y - 6, 6, 12, 3);
+                }
+                break;
+            case 4:
+                g.color(0xFFF7F2E6);
+                arc(g, 0, ny - b.T * 0.06f, sw * 0.45f, b.T * 0.2f, 3f);
+                arc(g, 0, ny - b.T * 0.06f, sw * 0.52f, b.T * 0.3f, 3f);
+                g.color(0xFF1E9E5A);
+                g.oval(0, ny + b.T * 0.24f, b.headR * 0.13f, b.headR * 0.15f);
+                g.color(0xFFE5B530);
+                g.strokeOval(0, ny + b.T * 0.24f, b.headR * 0.14f, b.headR * 0.16f, 2);
+                break;
+            default:
+        }
+    }
+
+    static void arc(Gfx g, float cx, float cy, float rx, float ry, float w) {
+        g.begin();
+        for (int i = 0; i <= 12; i++) {
+            double a = Math.PI * i / 12.0;
+            float x = cx + (float) Math.cos(a) * rx, y = cy + (float) Math.sin(a) * ry;
+            if (i == 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.strokePath(w);
+    }
+
+    static void drawTop(Gfx g, Look l, Pose p, Body b, float bottomY, int dupattaColor, boolean dupatta) {
+        float sw = b.sw, shY = b.shY;
+        // blouse covering whole torso down to the skirt (no bare midriff)
+        g.begin();
+        g.moveTo(-sw, shY + b.T * 0.05f);
+        g.quadTo(0, shY - b.T * 0.02f, sw, shY + b.T * 0.05f);
+        g.lineTo(b.hw * 0.98f, bottomY + 2);
+        g.lineTo(-b.hw * 0.98f, bottomY + 2);
+        g.close();
+        g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+        g.linear(0, shY, 0, bottomY, lighten(l.primary, 0.15f), l.primary); g.fillPath();
+        // embroidered neckline
+        g.color(l.secondary);
+        arc(g, 0, shY + b.T * 0.02f, sw * 0.38f, b.T * 0.16f, 3);
+        if (dupatta) {
+            // odhni across the chest from right shoulder to left hip
+            g.begin();
+            g.moveTo(sw * 0.95f, shY + b.T * 0.02f);
+            g.lineTo(sw * 0.55f, shY - b.T * 0.02f);
+            g.lineTo(-b.hw * 1.0f, bottomY - b.T * 0.06f);
+            g.lineTo(-b.hw * 0.75f, bottomY + b.T * 0.12f);
+            g.close();
+            g.color(alpha(dupattaColor, 0.92f)); g.fillPath();
+            g.color(0xFFE8C04A);
+            g.line(sw * 0.95f, shY + b.T * 0.02f, -b.hw * 0.75f, bottomY + b.T * 0.12f, 2.5f);
+        }
+    }
+
+    static void furStrokes(Gfx g, int fur, float x, float y, float w, float h, long seed) {
+        g.color(alpha(lighten(fur, 0.18f), 0.55f));
+        long s = seed * 31 + 7;
+        for (int i = 0; i < 26; i++) {
+            s = s * 1103515245L + 12345L;
+            float fx = x + ((s >>> 8) % 1000) / 1000f * w;
+            s = s * 1103515245L + 12345L;
+            float fy = y + ((s >>> 8) % 1000) / 1000f * h;
+            g.line(fx, fy, fx + 3, fy + 9, 2f);
+        }
+    }
+
+    static void drawBodyProps(Gfx g, Look l, Pose p, Body b) {
+        float waistY = b.shY + b.T * 0.62f;
+        if (l.sword || l.katar) {
+            if (l.outfit == Look.O_LEHENGA || l.outfit == Look.O_SALWAR) {
+                // wide leather belt
+                g.color(0xFF6B4226);
+                g.rect(-b.hw * 1.0f, waistY - b.T * 0.02f, b.hw * 2.0f, b.T * 0.09f);
+                g.color(0xFFE5B530);
+                g.roundRect(-b.headR * 0.13f, waistY - b.T * 0.03f, b.headR * 0.26f, b.T * 0.11f, 3);
+            }
+            if (l.sword && p.holdR != Pose.I_SWORD && p.holdR != Pose.I_WOOD_SWORD) {
+                // scabbard hanging diagonally at the hip
+                float sx = -p.facing * b.hw * 0.9f, sy = waistY + b.T * 0.05f;
+                g.color(0xFF4A2C17);
+                g.line(sx, sy, sx - p.facing * b.L * 0.25f, sy + b.L * 0.75f, b.headR * 0.13f);
+                g.color(0xFFE5B530);
+                g.line(sx + p.facing * 5, sy - 6, sx - p.facing * 5, sy + 4, 4);
+                g.oval(sx + p.facing * 2, sy - 10, 4, 4);
+            }
+            if (l.katar) {
+                float kx = p.facing * b.hw * 0.55f, ky = waistY + b.T * 0.02f;
+                g.color(0xFF9E9E9E);
+                g.line(kx, ky, kx + p.facing * 4, ky + b.T * 0.22f, 4);
+                g.color(0xFFE5B530);
+                g.rect(kx - 6, ky - 4, 12, 5);
+            }
+        }
+        if (l.satchel) {
+            g.color(0xFFC9A66B);
+            g.line(b.sw * 0.8f, b.shY + b.T * 0.05f, -b.hw * 0.9f, waistY + b.T * 0.3f, 4.5f);
+            float bx = -b.hw * 0.95f, by = waistY + b.T * 0.32f;
+            g.color(0xFFB5895A);
+            g.roundRect(bx - b.headR * 0.38f, by - b.headR * 0.2f, b.headR * 0.76f, b.headR * 0.62f, 8);
+            g.color(0xFF8A6A3A);
+            g.roundRect(bx - b.headR * 0.38f, by - b.headR * 0.2f, b.headR * 0.76f, b.headR * 0.22f, 8);
+            g.color(0xFF2F5DB5);
+            g.oval(bx, by + b.headR * 0.18f, 4, 4);
+        }
+        if (l.kind == Look.MONSTER && l.axe) {
+            float ax = -p.facing * b.hw * 1.05f, ay = waistY + b.T * 0.2f;
+            g.color(0xFF5D4037);
+            g.line(ax, ay - b.T * 0.2f, ax, ay + b.L * 0.6f, 7);
+            g.color(0xFF8D6E63);
+            g.begin(); g.moveTo(ax, ay); g.quadTo(ax - p.facing * b.headR * 0.9f, ay + b.headR * 0.4f, ax, ay + b.headR * 0.9f);
+            g.close(); g.fillPath();
+            g.color(0xFFA1887F);
+            g.line(ax - p.facing * b.headR * 0.55f, ay + b.headR * 0.15f, ax - p.facing * b.headR * 0.55f, ay + b.headR * 0.75f, 3);
+        }
+    }
+
+    // ------------------------------------------------------------------ arms
+
+    static void drawArm(Gfx g, Look l, Pose p, Body b, int side, float armDeg, float elbow, int hold) {
+        if (p.carrying) { armDeg = 165; elbow = 25; }
+        float[] h = hand(b, side, armDeg, elbow);
+        int sleeve;
+        boolean fullSleeve;
+        switch (l.outfit) {
+            case Look.O_LEHENGA: case Look.O_SAREE: sleeve = l.primary; fullSleeve = false; break;
+            case Look.O_SALWAR: sleeve = l.primary; fullSleeve = true; break;
+            case Look.O_ACHKAN: case Look.O_UNIFORM: case Look.O_KURTA: sleeve = l.primary; fullSleeve = true; break;
+            case Look.O_CLOAK: sleeve = l.primary; fullSleeve = true; break;
+            case Look.O_ARMOR: sleeve = l.furColor; fullSleeve = true; break;
+            default: sleeve = l.primary; fullSleeve = true;
+        }
+        if (p.disguised && l.kind == Look.WITCH) sleeve = 0xFFC9772E;
+        int skin = l.kind == Look.MONSTER ? l.furColor : faceSkin(l, p);
+        // upper arm
+        g.color(shade(sleeve, 0.7f));
+        g.line(h[0], h[1], h[2], h[3], b.armW * 2.15f);
+        g.color(sleeve);
+        g.line(h[0], h[1], h[2], h[3], b.armW * 1.85f);
+        // forearm
+        g.color(fullSleeve ? sleeve : skin);
+        g.line(h[2], h[3], h[4], h[5], b.armW * 1.6f);
+        if (!fullSleeve && l.secondary != 0) { // sleeve trim
+            g.color(l.secondary);
+            g.oval(h[2], h[3], b.armW * 0.95f, b.armW * 0.95f);
+        }
+        if (l.bangles && !fullSleeve) {
+            g.color(l.kind == Look.GIRL && l.necklace == 2 ? 0xFFE53935 : 0xFFE5B530);
+            float bx = h[2] + (h[4] - h[2]) * 0.78f, by = h[3] + (h[5] - h[3]) * 0.78f;
+            g.strokeOval(bx, by, b.armW * 0.85f, b.armW * 0.5f, 2.5f);
+            if (l.kind == Look.GIRL) { g.color(0xFF43A047); g.strokeOval(bx, by + 4, b.armW * 0.85f, b.armW * 0.5f, 2.5f); }
+        }
+        if (l.kind == Look.MONSTER) {
+            g.color(0xFF3E2716);
+            g.line(h[2], h[3], h[2] + (h[4] - h[2]) * 0.3f, h[3] + (h[5] - h[3]) * 0.3f, b.armW * 1.9f);
+        }
+        // hand
+        float hr = b.armW * (p.fist ? 0.95f : 1.05f);
+        g.color(skin);
+        g.oval(h[4], h[5], hr, hr);
+        if (l.longNails) {
+            g.color(0xFF3B3B2E);
+            for (int i = -1; i <= 1; i++) g.line(h[4] + i * 3, h[5] + hr * 0.6f, h[4] + i * 4, h[5] + hr * 1.5f, 2);
+        }
+        if (l.kind == Look.MONSTER) {
+            g.color(0xFFEDE3C8);
+            for (int i = -1; i <= 1; i++) g.line(h[4] + i * 5, h[5] + hr * 0.8f, h[4] + i * 6, h[5] + hr * 1.4f, 3);
+        }
+        drawHeld(g, l, p, b, side, h, hold);
+    }
+
+    static int faceSkin(Look l, Pose p) {
+        if (l.kind == Look.WITCH && p.disguised) return 0xFFD9A77A;
+        return l.skin;
+    }
+
+    static void drawHeld(Gfx g, Look l, Pose p, Body b, int side, float[] h, int hold) {
+        float hx = h[4], hy = h[5];
+        // default props when not holding anything special
+        if (hold == Pose.I_NONE) {
+            if (side == 1 && l.spear) {
+                g.color(0xFF8D6E63);
+                g.line(hx, hy - b.H * 0.75f, hx, hy + b.H * 0.25f, 5);
+                g.color(0xFFCFD8DC);
+                g.begin(); g.moveTo(hx - 8, hy - b.H * 0.75f); g.lineTo(hx, hy - b.H * 0.9f); g.lineTo(hx + 8, hy - b.H * 0.75f); g.close();
+                g.fillPath();
+                g.color(0xFFC62828);
+                g.rect(hx - 6, hy - b.H * 0.75f, 12, 6);
+            }
+            if (side == -1 && l.shield) {
+                g.color(0xFF8D6E63);
+                g.oval(hx, hy - 4, b.headR * 0.62f, b.headR * 0.62f);
+                g.color(0xFFE5B530);
+                g.strokeOval(hx, hy - 4, b.headR * 0.62f, b.headR * 0.62f, 3);
+                g.oval(hx, hy - 4, 5, 5);
+            }
+            if (side == 1 && l.wand && !p.disguised) drawWand(g, hx, hy, b, p.glowWand, p.time);
+            if (side == -1 && l.kind == Look.MONSTER && l.mace) {
+                g.color(0xFF5D4037);
+                g.line(hx, hy, hx, hy + b.L * 0.55f, 7);
+                g.color(0xFF616161);
+                g.oval(hx, hy + b.L * 0.6f, b.headR * 0.35f, b.headR * 0.35f);
+            }
+            return;
+        }
+        switch (hold) {
+            case Pose.I_RIBBON:
+                g.color(p.holdColor);
+                g.begin(); g.moveTo(hx, hy);
+                g.quadTo(hx + side * 14, hy + 18 + (float) Math.sin(p.time * 4) * 4, hx + side * 4, hy + 34);
+                g.strokePath(5);
+                break;
+            case Pose.I_BANANA:
+                g.color(0xFFFDD835);
+                g.begin(); g.moveTo(hx - 6, hy - 18); g.quadTo(hx + 14, hy - 4, hx - 2, hy + 14);
+                g.quadTo(hx + 4, hy - 2, hx - 6, hy - 18); g.close(); g.fillPath();
+                break;
+            case Pose.I_MIRROR:
+                g.color(0xFF8D6E63); g.line(hx, hy, hx, hy + 12, 5);
+                g.color(0xFFB0BEC5); g.oval(hx, hy - 8, 13, 13);
+                g.color(0xFFFFFFFF); g.oval(hx - 3, hy - 11, 5, 5);
+                break;
+            case Pose.I_WOOD_SWORD: case Pose.I_SWORD: {
+                float ang = p.armR > 60 ? -1 : 1;
+                int blade = hold == Pose.I_SWORD ? 0xFFE0E0E0 : 0xFFB98A55;
+                g.color(0xFF5D4037);
+                g.line(hx, hy, hx + side * 6, hy + 10 * ang, 6);
+                g.color(blade);
+                float dx = side * (p.armR > 60 ? b.H * 0.12f : b.H * 0.05f), dy = -(p.armR > 60 ? b.H * 0.25f : b.H * 0.3f);
+                g.line(hx, hy, hx + dx, hy + dy, 6);
+                g.color(0xFFE5B530);
+                g.line(hx - 8, hy + 2, hx + 8, hy - 2, 4);
+                break;
+            }
+            case Pose.I_BASKET:
+                g.color(0xFFA1887F);
+                g.roundRect(hx - 24, hy - 6, 48, 22, 8);
+                g.color(0xFF6D4C41);
+                g.strokeOval(hx, hy - 6, 22, 14, 3);
+                int[] cols = {0xFFFFB300, 0xFFE91E63, 0xFF7CB342, 0xFFFF7043};
+                for (int i = 0; i < 4; i++) {
+                    g.color(cols[i]);
+                    g.oval(hx - 15 + i * 10, hy - 8, 7, 7);
+                }
+                g.color(alpha(0xFFFFFFFF, 0.6f + 0.4f * (float) Math.sin(p.time * 7)));
+                g.oval(hx - 9, hy - 11, 2, 2);
+                g.oval(hx + 11, hy - 10, 2, 2);
+                break;
+            case Pose.I_FLOWER:
+                g.color(0xFF6D4C41); g.line(hx, hy, hx, hy + 14, 3);
+                g.color(0xFF8D6E63); g.oval(hx, hy - 4, 7, 7);
+                break;
+            case Pose.I_BOTTLE:
+                g.color(0xFF6D4C41); g.roundRect(hx - 7, hy - 16, 14, 24, 5);
+                g.color(0xFF90CAF9); g.rect(hx - 4, hy - 20, 8, 5);
+                break;
+            case Pose.I_TURBAN:
+                drawTurbanShape(g, hx, hy - 6, b.headR * 1.0f, p.turbanColor, p.turbanBand, false);
+                break;
+            default:
+        }
+    }
+
+    static void drawWand(Gfx g, float hx, float hy, Body b, boolean glow, float t) {
+        g.color(0xFF6D4C41);
+        g.begin(); g.moveTo(hx, hy + 20);
+        g.quadTo(hx - 6, hy - b.H * 0.15f, hx + 4, hy - b.H * 0.3f);
+        g.strokePath(5);
+        float gx = hx + 4, gy = hy - b.H * 0.32f;
+        if (glow) {
+            g.radial(gx, gy, 38, 0xAA76FF03, 0x0076FF03);
+            g.oval(gx, gy, 38, 38);
+        }
+        g.color(0xFF64DD17);
+        g.oval(gx, gy, 8, 8);
+        g.color(alpha(0xFFFFFFFF, 0.7f));
+        g.oval(gx - 2, gy - 3, 2.5f, 2.5f);
+    }
+
+    // ------------------------------------------------------------------ head
+
+    static void drawBackHair(Gfx g, Look l, Pose p, Body b) {
+        if (l.kind == Look.MONSTER || l.hair == Look.H_NONE) return;
+        float hy = b.headY, r = b.headR;
+        float swing = (float) Math.sin(p.time * 2.4f + p.seed) * 4 + (float) Math.sin(p.walk) * p.walkAmt * 8;
+        g.color(l.hairColor);
+        if (l.hair == Look.H_BRAID && l.headwear != Look.HW_PALLU) {
+            // thick single braid falling behind one shoulder
+            float bx = -p.facing * r * 0.75f;
+            for (int i = 0; i < 7; i++) {
+                float y = hy + r * 0.5f + i * r * 0.32f;
+                g.oval(bx + (i % 2 == 0 ? -3 : 3) + swing * i / 7f, y, r * 0.24f, r * 0.2f);
+            }
+            g.color(0xFFE5B530);
+            g.oval(bx + swing, hy + r * 0.5f + 7 * r * 0.32f, r * 0.12f, r * 0.08f);
+        } else if (l.hair == Look.H_LONG) {
+            g.begin();
+            g.moveTo(-r * 0.95f, hy);
+            g.quadTo(-r * 1.25f, hy + r * 1.6f, -r * 0.9f + swing, hy + r * 2.4f);
+            g.lineTo(r * 0.9f + swing, hy + r * 2.4f);
+            g.quadTo(r * 1.25f, hy + r * 1.6f, r * 0.95f, hy);
+            g.close(); g.fillPath();
+        }
+    }
+
+    static void drawHead(Gfx g, Look l, Pose p, Body b) {
+        float r = b.headR;
+        float f = p.facing;
+        if (l.kind == Look.MONSTER) { drawMonsterHead(g, l, p, r); return; }
+        boolean witch = l.kind == Look.WITCH;
+        int skin = faceSkin(l, p);
+
+        if (p.disguised && l.kind == Look.WITCH) {
+            // the sweet-seller's shawl: a hood behind the head, face stays visible
+            g.color(0xFFC9772E);
+            g.begin();
+            g.moveTo(-r * 1.25f, r * 1.25f);
+            g.cubicTo(-r * 1.45f, -r * 1.55f, r * 1.45f, -r * 1.55f, r * 1.25f, r * 1.25f);
+            g.close(); g.fillPath();
+            g.color(0xFFF2C230);
+            g.begin();
+            g.moveTo(-r * 1.25f, r * 1.25f);
+            g.cubicTo(-r * 1.45f, -r * 1.55f, r * 1.45f, -r * 1.55f, r * 1.25f, r * 1.25f);
+            g.strokePath(3);
+        }
+        // pigtails (behind ears)
+        if (l.hair == Look.H_PIGTAILS) {
+            for (int s = -1; s <= 1; s += 2) {
+                float sx = s * r * 0.95f;
+                float swing = (float) Math.sin(p.time * 3 + s) * 3;
+                g.color(l.hairColor);
+                for (int i = 0; i < 4; i++) g.oval(sx + s * 2 + swing * i / 4f, r * (0.35f + i * 0.33f), r * 0.2f, r * 0.19f);
+                if (l.ribbon1 != 0) {
+                    int rc = s < 0 ? l.ribbon1 : l.ribbon2;
+                    g.color(rc);
+                    float ry = r * 0.25f;
+                    g.begin(); g.moveTo(sx, ry); g.lineTo(sx - r * 0.25f, ry - r * 0.15f); g.lineTo(sx - r * 0.25f, ry + r * 0.15f); g.close(); g.fillPath();
+                    g.begin(); g.moveTo(sx, ry); g.lineTo(sx + r * 0.25f, ry - r * 0.15f); g.lineTo(sx + r * 0.25f, ry + r * 0.15f); g.close(); g.fillPath();
+                    g.oval(sx, ry, r * 0.07f, r * 0.07f);
+                }
+            }
+        }
+        // ears
+        g.color(shade(skin, 0.9f));
+        g.oval(-r * 0.93f, r * 0.08f, r * 0.15f, r * 0.2f);
+        g.oval(r * 0.93f, r * 0.08f, r * 0.15f, r * 0.2f);
+        if (l.earrings) {
+            g.color(0xFFE5B530);
+            if (l.kind == Look.WOMAN) {
+                for (int s = -1; s <= 1; s += 2) {
+                    g.oval(s * r * 0.95f, r * 0.32f, r * 0.08f, r * 0.05f);
+                    g.begin(); g.moveTo(s * r * 0.95f - r * 0.1f, r * 0.46f); g.lineTo(s * r * 0.95f + r * 0.1f, r * 0.46f);
+                    g.lineTo(s * r * 0.95f, r * 0.33f); g.close(); g.fillPath();
+                }
+            } else {
+                g.oval(-r * 0.95f, r * 0.27f, r * 0.05f, r * 0.05f);
+                g.oval(r * 0.95f, r * 0.27f, r * 0.05f, r * 0.05f);
+            }
+        }
+        // face
+        float jaw = l.isChild() ? 1.0f : (witch ? 1.12f : 1.04f);
+        g.begin();
+        g.moveTo(-r * 0.92f, -r * 0.1f);
+        g.cubicTo(-r * 0.92f, -r * 1.12f, r * 0.92f, -r * 1.12f, r * 0.92f, -r * 0.1f);
+        g.cubicTo(r * 0.92f, r * 0.62f * jaw, r * 0.45f, r * 0.98f * jaw, 0, r * 1.0f * jaw);
+        g.cubicTo(-r * 0.45f, r * 0.98f * jaw, -r * 0.92f, r * 0.62f * jaw, -r * 0.92f, -r * 0.1f);
+        g.close();
+        g.color(shade(skin, 0.7f)); g.strokePath(2.5f);
+        g.radial(-r * 0.2f, -r * 0.3f, r * 1.4f, lighten(skin, 0.1f), shade(skin, 0.9f)); g.fillPath();
+
+        if (p.redFace) { g.color(0x55FF1A1A); g.fillPath(); }
+        if (witch && !p.disguised) {
+            g.color(0x2224331A); g.fillPath();
+        }
+
+        // front hair (fringe & parting)
+        drawFrontHair(g, l, p, r);
+
+        float ex = f * r * 0.12f; // features shifted toward facing side
+        // cheeks blush
+        if (!witch) {
+            g.color(alpha(0xFFFF6F61, l.isChild() ? 0.28f : 0.16f));
+            g.oval(-r * 0.5f + ex, r * 0.35f, r * 0.17f, r * 0.1f);
+            g.oval(r * 0.5f + ex, r * 0.35f, r * 0.17f, r * 0.1f);
+        }
+        if (l.wrinkles && !p.disguised) {
+            g.color(alpha(shade(skin, 0.55f), 0.8f));
+            g.line(-r * 0.6f + ex, r * 0.05f, -r * 0.45f + ex, r * 0.12f, 1.6f);
+            g.line(r * 0.45f + ex, r * 0.12f, r * 0.6f + ex, r * 0.05f, 1.6f);
+            g.line(-r * 0.25f + ex, -r * 0.5f, r * 0.25f + ex, -r * 0.5f, 1.4f);
+            g.line(-r * 0.4f + ex, r * 0.5f, -r * 0.3f + ex, r * 0.62f, 1.4f);
+            g.color(0xFF6B6B3A);
+            g.oval(r * 0.45f + ex, r * 0.4f, r * 0.05f, r * 0.05f);
+        }
+
+        drawEyes(g, l, p, r, ex);
+        drawNose(g, l, p, r, ex);
+        drawMouth(g, l, p, r, ex);
+
+        if (l.mustache > 0) {
+            g.color(l.hairColor);
+            float my = r * 0.48f;
+            if (l.mustache == 2) {
+                for (int s = -1; s <= 1; s += 2) {
+                    g.begin();
+                    g.moveTo(ex, my - r * 0.04f);
+                    g.quadTo(ex + s * r * 0.35f, my - r * 0.12f, ex + s * r * 0.55f, my + r * 0.02f);
+                    g.quadTo(ex + s * r * 0.72f, my - r * 0.05f, ex + s * r * 0.7f, my - r * 0.22f);
+                    g.quadTo(ex + s * r * 0.62f, my + r * 0.14f, ex, my + r * 0.07f);
+                    g.close(); g.fillPath();
+                }
+            } else {
+                g.roundRect(ex - r * 0.32f, my - r * 0.05f, r * 0.64f, r * 0.12f, r * 0.06f);
+            }
+        }
+        if (l.beard) {
+            g.color(l.hairColor);
+            g.begin();
+            g.moveTo(-r * 0.85f, r * 0.1f);
+            g.quadTo(-r * 0.75f, r * 1.05f, 0, r * 1.15f);
+            g.quadTo(r * 0.75f, r * 1.05f, r * 0.85f, r * 0.1f);
+            g.quadTo(r * 0.6f, r * 0.7f, ex + r * 0.25f, r * 0.72f);
+            g.lineTo(ex - r * 0.25f, r * 0.72f);
+            g.quadTo(-r * 0.6f, r * 0.7f, -r * 0.85f, r * 0.1f);
+            g.close(); g.fillPath();
+            // keep the mouth visible
+            drawMouth(g, l, p, r, ex);
+        }
+        // bindi / tilak / sindoor
+        if (l.sindoor && !(l.headwear == Look.HW_PALLU && false)) {
+            g.color(0xFFD32F2F);
+            g.line(0, -r * 0.95f, 0, -r * 0.7f, 3);
+        }
+        if (l.bindi != 0 && !p.disguised) {
+            g.color(l.bindi);
+            g.oval(ex * 0.6f, -r * 0.32f, r * (l.kind == Look.WOMAN ? 0.075f : 0.06f), r * (l.kind == Look.WOMAN ? 0.075f : 0.06f));
+        }
+        if (l.tilak != 0) {
+            g.color(l.tilak);
+            g.line(ex * 0.6f, -r * 0.55f, ex * 0.6f, -r * 0.28f, r * 0.07f);
+            if (l.kind == Look.MAN && l.headwear == Look.HW_TURBAN && l.necklace == 4) {
+                g.color(0xFFF08A24);
+                g.line(ex * 0.6f - r * 0.06f, -r * 0.55f, ex * 0.6f - r * 0.06f, -r * 0.3f, 2);
+                g.line(ex * 0.6f + r * 0.06f, -r * 0.55f, ex * 0.6f + r * 0.06f, -r * 0.3f, 2);
+            }
+        }
+        if (p.tears) {
+            g.color(0xCC64B5F6);
+            float ty = r * 0.15f + ((p.time * 60) % 30);
+            g.oval(-r * 0.38f + ex, ty, r * 0.06f, r * 0.09f);
+            g.oval(r * 0.38f + ex, ty + 8, r * 0.06f, r * 0.09f);
+        }
+        if (p.sweat) {
+            g.color(0xCC81D4FA);
+            g.oval(r * 0.7f, -r * 0.45f + ((p.time * 20) % 10), r * 0.07f, r * 0.11f);
+        }
+
+        // headwear on top
+        drawHeadwear(g, l, p, r);
+    }
+
+    static void drawFrontHair(Gfx g, Look l, Pose p, float r) {
+        if (l.hair == Look.H_NONE) return;
+        boolean turban = l.headwear == Look.HW_TURBAN;
+        if (turban && !p.noHeadwear) return;
+        g.color(l.hairColor);
+        if (l.kind == Look.WITCH && p.disguised) return;
+        if (l.kind == Look.WITCH && !p.disguised) {
+            // stringy grey hair
+            g.begin();
+            g.moveTo(-r * 0.98f, r * 0.4f);
+            g.cubicTo(-r * 1.05f, -r * 1.2f, r * 1.05f, -r * 1.2f, r * 0.98f, r * 0.4f);
+            g.lineTo(r * 0.8f, -r * 0.3f);
+            g.quadTo(0, -r * 0.75f, -r * 0.8f, -r * 0.3f);
+            g.close(); g.fillPath();
+            return;
+        }
+        if (l.hair == Look.H_SHORT || p.noHeadwear) {
+            if (p.noHeadwear && l.headwear == Look.HW_TURBAN) {
+                // bald-ish head with a little hair (turban stolen)
+                g.color(shade(l.skin, 0.95f));
+                g.oval(0, -r * 0.6f, r * 0.85f, r * 0.45f);
+                g.color(l.hairColor);
+                g.oval(-r * 0.82f, -r * 0.15f, r * 0.15f, r * 0.3f);
+                g.oval(r * 0.82f, -r * 0.15f, r * 0.15f, r * 0.3f);
+                g.color(alpha(0xFFFFFFFF, 0.4f));
+                g.oval(-r * 0.2f, -r * 0.8f, r * 0.25f, r * 0.1f);
+                return;
+            }
+            g.begin();
+            g.moveTo(-r * 0.95f, -r * 0.05f);
+            g.cubicTo(-r * 1.0f, -r * 1.25f, r * 1.0f, -r * 1.25f, r * 0.95f, -r * 0.05f);
+            g.quadTo(r * 0.6f, -r * 0.65f, 0, -r * 0.62f);
+            g.quadTo(-r * 0.6f, -r * 0.65f, -r * 0.95f, -r * 0.05f);
+            g.close(); g.fillPath();
+            return;
+        }
+        // long hair parted in the middle (girls & women)
+        g.begin();
+        g.moveTo(-r * 0.98f, r * 0.15f);
+        g.cubicTo(-r * 1.08f, -r * 1.28f, r * 1.08f, -r * 1.28f, r * 0.98f, r * 0.15f);
+        g.quadTo(r * 0.8f, -r * 0.5f, 0, -r * 0.68f);
+        g.quadTo(-r * 0.8f, -r * 0.5f, -r * 0.98f, r * 0.15f);
+        g.close(); g.fillPath();
+        if (l.curly) {
+            for (int i = -3; i <= 3; i++) g.oval(i * r * 0.27f, -r * 0.82f + Math.abs(i) * r * 0.08f, r * 0.16f, r * 0.16f);
+        }
+        g.color(alpha(0xFFFFFFFF, 0.18f));
+        g.oval(-r * 0.35f, -r * 0.85f, r * 0.25f, r * 0.08f);
+        if (l.hair == Look.H_BUN && l.headwear != Look.HW_PALLU) {
+            g.color(l.hairColor);
+            g.oval(0, -r * 1.05f, r * 0.38f, r * 0.3f);
+            g.color(0xFFF7F2E6);
+            for (int i = 0; i < 5; i++) g.oval(-r * 0.3f + i * r * 0.15f, -r * 0.88f, 2.5f, 2.5f);
+        }
+    }
+
+    static void drawEyes(Gfx g, Look l, Pose p, float r, float ex) {
+        boolean child = l.isChild();
+        float ew = r * (child ? 0.2f : 0.16f), eh = r * (child ? 0.24f : 0.17f);
+        float ey = -r * 0.08f;
+        float sep = r * 0.36f;
+        float closed = p.eyesClosed ? 1f : p.blink;
+        int em = p.emotion;
+        if (em == Pose.LAUGH) closed = Math.max(closed, 0.65f);
+        if (em == Pose.SURPRISED || em == Pose.SCARED) { ew *= 1.15f; eh *= 1.25f; }
+        boolean witch = l.kind == Look.WITCH && !p.disguised;
+        for (int s = -1; s <= 1; s += 2) {
+            float cx = s * sep + ex;
+            if (closed > 0.85f) {
+                g.color(INK);
+                g.begin();
+                if (em == Pose.LAUGH || em == Pose.HAPPY) { g.moveTo(cx - ew, ey + 2); g.quadTo(cx, ey - eh, cx + ew, ey + 2); }
+                else { g.moveTo(cx - ew, ey); g.quadTo(cx, ey + eh * 0.5f, cx + ew, ey); }
+                g.strokePath(3);
+            } else {
+                float h = eh * (1 - closed);
+                if (witch) {
+                    g.color(0xFF1B1B12);
+                    g.oval(cx, ey, ew * 1.1f, h * 1.05f);
+                    g.color(l.eyeColor);
+                    g.oval(cx + p.facing * ew * 0.15f, ey, ew * 0.7f, h * 0.7f);
+                    g.color(0xFF1B1B12);
+                    g.oval(cx + p.facing * ew * 0.15f, ey, ew * 0.18f, h * 0.6f);
+                } else {
+                    g.color(0xFFFFFFFF);
+                    g.oval(cx, ey, ew, h);
+                    g.color(l.eyeColor);
+                    float ix = cx + p.facing * ew * 0.25f;
+                    g.oval(ix, ey + h * 0.05f, ew * 0.62f, Math.min(h, ew * 0.7f));
+                    g.color(0xFF120A06);
+                    g.oval(ix, ey + h * 0.05f, ew * 0.32f, Math.min(h * 0.8f, ew * 0.38f));
+                    g.color(0xFFFFFFFF);
+                    g.oval(ix - ew * 0.18f, ey - h * 0.25f, ew * 0.16f, ew * 0.16f);
+                    g.color(INK);
+                    g.begin(); g.moveTo(cx - ew * 1.1f, ey - h * 0.35f); g.quadTo(cx, ey - h * 1.25f, cx + ew * 1.1f, ey - h * 0.35f);
+                    g.strokePath(l.female ? 2.8f : 2.2f);
+                    if (l.female && !witch) { // lashes
+                        g.line(cx + s * ew * 0.9f, ey - h * 0.55f, cx + s * ew * 1.25f, ey - h * 0.85f, 2);
+                    }
+                }
+            }
+            // brows
+            float by = ey - eh - r * 0.12f;
+            float inner = 0, outer = 0;
+            switch (em) {
+                case Pose.ANGRY: case Pose.DETERMINED: case Pose.EVIL: inner = r * 0.1f; outer = -r * 0.05f; break;
+                case Pose.SAD: case Pose.SCARED: case Pose.PAIN: inner = -r * 0.09f; outer = r * 0.04f; break;
+                case Pose.SURPRISED: case Pose.CURIOUS: inner = -r * 0.08f; outer = -r * 0.08f; break;
+                case Pose.HAPPY: case Pose.LAUGH: inner = -r * 0.03f; outer = -r * 0.03f; break;
+                default:
+            }
+            float bw = l.kind == Look.WOMAN ? 2.6f : (l.isChild() ? 3.2f : 4.2f);
+            if (l.kind == Look.MAN || l.kind == Look.OLD_MAN) bw = 5f;
+            if (child && l.female && "".equals("")) bw = l.hair == Look.H_BRAID ? 4.2f : 3.0f; // Vrinda's thick brows
+            g.color(witch ? 0xFF55585A : l.hairColor);
+            g.line(cx - s * ew * 1.1f, by + inner, cx + s * ew * 1.1f, by + outer, bw);
+        }
+    }
+
+    static void drawNose(Gfx g, Look l, Pose p, float r, float ex) {
+        int skin = faceSkin(l, p);
+        if (l.crookedNose && !p.disguised) {
+            g.color(shade(skin, 0.85f));
+            float f = p.facing;
+            g.begin();
+            g.moveTo(ex - f * r * 0.05f, -r * 0.05f);
+            g.quadTo(ex + f * r * 0.35f, r * 0.15f, ex + f * r * 0.45f, r * 0.42f);
+            g.quadTo(ex + f * r * 0.2f, r * 0.38f, ex + f * r * 0.02f, r * 0.33f);
+            g.close();
+            g.fillPath();
+            g.color(shade(skin, 0.6f)); g.strokePath(2);
+            g.color(0xFF6B6B3A);
+            g.oval(ex + f * r * 0.25f, r * 0.18f, r * 0.04f, r * 0.04f);
+            return;
+        }
+        g.color(shade(skin, 0.72f));
+        g.begin();
+        g.moveTo(ex + p.facing * r * 0.04f, r * 0.08f);
+        g.quadTo(ex + p.facing * r * 0.13f, r * 0.24f, ex - p.facing * r * 0.02f, r * 0.27f);
+        g.strokePath(2.4f);
+    }
+
+    static void drawMouth(Gfx g, Look l, Pose p, float r, float ex) {
+        float my = r * 0.6f;
+        float mw = r * (l.isChild() ? 0.2f : 0.22f);
+        float open = Math.max(0, Math.min(1, p.mouth));
+        int em = p.emotion;
+        boolean witch = l.kind == Look.WITCH && !p.disguised;
+        float smile = 0;
+        switch (em) {
+            case Pose.HAPPY: case Pose.PROUD: smile = 1; break;
+            case Pose.LAUGH: smile = 1.4f; open = Math.max(open, 0.55f); break;
+            case Pose.EVIL: smile = 0.9f; break;
+            case Pose.SAD: case Pose.SCARED: case Pose.PAIN: smile = -0.8f; break;
+            case Pose.ANGRY: smile = -0.5f; break;
+            case Pose.SURPRISED: open = Math.max(open, 0.4f); break;
+            case Pose.CURIOUS: smile = 0.3f; break;
+            default:
+        }
+        if (open < 0.08f) {
+            g.color(INK);
+            g.begin();
+            g.moveTo(ex - mw, my - smile * r * 0.04f);
+            g.quadTo(ex, my + smile * r * 0.14f, ex + mw, my - smile * r * 0.04f);
+            g.strokePath(2.6f);
+            if (l.dimples && smile > 0.5f) {
+                g.color(shade(l.skin, 0.75f));
+                g.oval(ex - mw * 1.6f, my - r * 0.02f, 2.2f, 2.2f);
+                g.oval(ex + mw * 1.6f, my - r * 0.02f, 2.2f, 2.2f);
+            }
+            return;
+        }
+        float h = r * (0.06f + open * 0.26f);
+        float w = mw * (1.0f + (smile > 0 ? 0.25f : 0) - open * 0.15f);
+        g.begin();
+        g.moveTo(ex - w, my - smile * r * 0.03f);
+        g.quadTo(ex, my - r * 0.04f, ex + w, my - smile * r * 0.03f);
+        g.quadTo(ex, my + h * 2f, ex - w, my - smile * r * 0.03f);
+        g.close();
+        g.color(0xFF5A1A1A); g.fillPath();
+        // teeth
+        g.color(witch ? 0xFF3A3A2A : 0xFFFFFFFF);
+        if (witch) {
+            g.rect(ex - w * 0.4f, my - r * 0.02f, w * 0.18f, h * 0.45f);
+            g.rect(ex + w * 0.2f, my - r * 0.02f, w * 0.18f, h * 0.35f);
+        } else {
+            g.rect(ex - w * 0.62f, my - r * 0.025f, w * 1.24f, Math.min(h * 0.32f, r * 0.06f));
+        }
+        // tongue
+        if (open > 0.35f) {
+            g.color(0xFFE57373);
+            g.oval(ex, my + h * 1.35f, w * 0.45f, h * 0.35f);
+        }
+        if (l.dimples && smile > 0.5f) {
+            g.color(shade(l.skin, 0.75f));
+            g.oval(ex - w * 1.35f, my, 2.2f, 2.2f);
+            g.oval(ex + w * 1.35f, my, 2.2f, 2.2f);
+        }
+    }
+
+    static void drawHeadwear(Gfx g, Look l, Pose p, float r) {
+        int hw = l.headwear;
+        if (p.wearsTurban) { drawTurbanShape(g, 0, -r * 0.75f, r * 1.2f, p.turbanColor, p.turbanBand, false); return; }
+        if (p.noHeadwear && hw == Look.HW_TURBAN) return;
+        if (p.disguised && l.kind == Look.WITCH) {
+            // front edge of the shawl over the hair line
+            g.color(0xFFC9772E);
+            g.begin();
+            g.moveTo(-r * 1.0f, -r * 0.2f);
+            g.cubicTo(-r * 1.0f, -r * 1.2f, r * 1.0f, -r * 1.2f, r * 1.0f, -r * 0.2f);
+            g.cubicTo(r * 0.8f, -r * 0.75f, -r * 0.8f, -r * 0.75f, -r * 1.0f, -r * 0.2f);
+            g.close(); g.fillPath();
+            g.color(0xFFF2C230);
+            g.begin();
+            g.moveTo(-r * 1.0f, -r * 0.2f);
+            g.cubicTo(-r * 0.8f, -r * 0.75f, r * 0.8f, -r * 0.75f, r * 1.0f, -r * 0.2f);
+            g.strokePath(3);
+            return;
+        }
+        switch (hw) {
+            case Look.HW_TURBAN:
+                drawTurbanShape(g, 0, -r * 0.62f, r, l.headColor, l.headBand, l.kalgi);
+                break;
+            case Look.HW_PALLU: {
+                g.color(l.primary);
+                g.begin();
+                g.moveTo(-r * 1.05f, r * 0.7f);
+                g.cubicTo(-r * 1.2f, -r * 1.45f, r * 1.2f, -r * 1.45f, r * 1.05f, r * 0.7f);
+                g.lineTo(r * 0.88f, r * 0.6f);
+                g.cubicTo(r * 0.9f, -r * 1.0f, -r * 0.9f, -r * 1.0f, -r * 0.88f, r * 0.6f);
+                g.close();
+                g.fillPath();
+                g.color(l.secondary);
+                g.begin();
+                g.moveTo(-r * 0.88f, r * 0.6f);
+                g.cubicTo(-r * 0.9f, -r * 1.0f, r * 0.9f, -r * 1.0f, r * 0.88f, r * 0.6f);
+                g.strokePath(4);
+                // maang tikka
+                g.color(0xFFE5B530);
+                g.line(0, -r * 0.82f, 0, -r * 0.55f, 2);
+                g.oval(0, -r * 0.5f, r * 0.07f, r * 0.07f);
+                break;
+            }
+            case Look.HW_WITCH_HAT: {
+                g.color(0xFF1A171C);
+                g.oval(0, -r * 0.62f, r * 1.55f, r * 0.28f);
+                g.begin();
+                g.moveTo(-r * 0.85f, -r * 0.65f);
+                g.quadTo(-r * 0.4f, -r * 1.6f, r * 0.15f, -r * 2.2f);
+                g.quadTo(r * 0.9f, -r * 2.2f, r * 1.1f, -r * 1.7f);
+                g.quadTo(r * 0.6f, -r * 1.75f, r * 0.45f, -r * 1.5f);
+                g.quadTo(r * 0.6f, -r * 1.0f, r * 0.85f, -r * 0.65f);
+                g.close(); g.fillPath();
+                g.color(0xFF2F5A3A);
+                g.rect(-r * 0.8f, -r * 0.85f, r * 1.6f, r * 0.16f);
+                g.color(0xFF6E6A5E);
+                g.line(-r * 0.3f, -r * 1.2f, -r * 0.1f, -r * 1.05f, 2);
+                break;
+            }
+            case Look.HW_HORNS: {
+                for (int s = -1; s <= 1; s += 2) {
+                    g.begin();
+                    g.moveTo(s * r * 0.55f, -r * 0.65f);
+                    g.cubicTo(s * r * 1.5f, -r * 0.9f, s * r * 1.75f, -r * 0.25f, s * r * 1.35f, r * 0.15f);
+                    g.cubicTo(s * r * 1.45f, -r * 0.4f, s * r * 1.1f, -r * 0.55f, s * r * 0.65f, -r * 0.35f);
+                    g.close();
+                    g.color(0xFF141012); g.fillPath();
+                    g.color(0xFF3A3236); g.strokePath(2);
+                }
+                break;
+            }
+            case Look.HW_CROWN: {
+                g.color(0xFFE5B530);
+                g.begin();
+                g.moveTo(-r * 0.7f, -r * 0.65f); g.lineTo(-r * 0.75f, -r * 1.25f); g.lineTo(-r * 0.35f, -r * 0.95f);
+                g.lineTo(0, -r * 1.4f); g.lineTo(r * 0.35f, -r * 0.95f); g.lineTo(r * 0.75f, -r * 1.25f); g.lineTo(r * 0.7f, -r * 0.65f);
+                g.close(); g.fillPath();
+                g.color(0xFFC62828); g.oval(0, -r * 0.85f, r * 0.08f, r * 0.08f);
+                break;
+            }
+            default:
+        }
+    }
+
+    static void drawTurbanShape(Gfx g, float cx, float cy, float r, int color, int band, boolean kalgi) {
+        g.color(shade(color, 0.7f));
+        g.oval(cx, cy + r * 0.05f, r * 1.08f, r * 0.62f);
+        g.color(color);
+        g.oval(cx, cy, r * 1.02f, r * 0.58f);
+        // wraps
+        g.color(shade(color, 0.78f));
+        for (int i = 0; i < 3; i++) {
+            g.begin();
+            g.moveTo(cx - r * 0.98f, cy + r * (0.12f - i * 0.18f));
+            g.quadTo(cx, cy - r * (0.05f + i * 0.2f), cx + r * 0.98f, cy + r * (0.25f - i * 0.18f));
+            g.strokePath(3);
+        }
+        if (band != 0) {
+            g.color(band);
+            g.begin();
+            g.moveTo(cx - r * 1.0f, cy + r * 0.22f);
+            g.quadTo(cx, cy + r * 0.05f, cx + r * 1.0f, cy + r * 0.32f);
+            g.strokePath(r * 0.14f);
+        }
+        if (kalgi) {
+            g.color(0xFFE5B530);
+            g.oval(cx + r * 0.1f, cy - r * 0.15f, r * 0.14f, r * 0.14f);
+            g.color(0xFF1E9E5A);
+            g.oval(cx + r * 0.1f, cy - r * 0.15f, r * 0.08f, r * 0.08f);
+            g.color(0xFFF7F2E6);
+            g.begin();
+            g.moveTo(cx + r * 0.1f, cy - r * 0.2f);
+            g.quadTo(cx + r * 0.05f, cy - r * 0.95f, cx + r * 0.45f, cy - r * 1.05f);
+            g.quadTo(cx + r * 0.2f, cy - r * 0.6f, cx + r * 0.18f, cy - r * 0.2f);
+            g.close(); g.fillPath();
+        }
+    }
+
+    // ------------------------------------------------------------------ monster head
+
+    static void drawMonsterHead(Gfx g, Look l, Pose p, float r) {
+        float f = p.facing;
+        // torn ears
+        g.color(shade(l.furColor, 0.8f));
+        for (int s = -1; s <= 1; s += 2) {
+            g.begin();
+            g.moveTo(s * r * 0.8f, -r * 0.3f);
+            g.lineTo(s * r * 1.3f, -r * 0.55f);
+            g.lineTo(s * r * 1.18f, -r * 0.3f);
+            g.lineTo(s * r * 1.32f, -r * 0.2f);
+            g.lineTo(s * r * 0.85f, r * 0.05f);
+            g.close(); g.fillPath();
+        }
+        // head
+        g.begin();
+        g.moveTo(-r * 1.0f, -r * 0.2f);
+        g.cubicTo(-r * 1.05f, -r * 1.15f, r * 1.05f, -r * 1.15f, r * 1.0f, -r * 0.2f);
+        g.cubicTo(r * 1.15f, r * 0.7f, r * 0.7f, r * 1.1f, 0, r * 1.12f);
+        g.cubicTo(-r * 0.7f, r * 1.1f, -r * 1.15f, r * 0.7f, -r * 1.0f, -r * 0.2f);
+        g.close();
+        g.color(shade(l.furColor, 0.55f)); g.strokePath(4);
+        g.radial(-r * 0.2f, -r * 0.2f, r * 1.4f, lighten(l.furColor, 0.12f), shade(l.furColor, 0.85f)); g.fillPath();
+        furStrokes(g, l.furColor, -r, -r, r * 2, r * 2, p.seed + 3);
+        // muzzle
+        g.color(0xFF6D5546);
+        g.oval(f * r * 0.12f, r * 0.45f, r * 0.62f, r * 0.45f);
+        float ex = f * r * 0.12f;
+        // eyes: glowing embers
+        int em = p.emotion;
+        for (int s = -1; s <= 1; s += 2) {
+            float cx = s * r * 0.4f + ex, cy = -r * 0.12f;
+            g.radial(cx, cy, r * 0.42f, alpha(l.eyeColor, 0.55f), alpha(l.eyeColor, 0f));
+            g.oval(cx, cy, r * 0.42f, r * 0.42f);
+            float eh = r * 0.13f * (1 - (p.eyesClosed ? 1 : p.blink));
+            g.color(0xFF1A0E08);
+            g.oval(cx, cy, r * 0.19f, Math.max(eh, 1.5f) + 2);
+            g.color(l.eyeColor);
+            g.oval(cx, cy, r * 0.15f, Math.max(eh, 1.5f));
+            g.color(0xFFFFF59D);
+            g.oval(cx + f * r * 0.03f, cy, r * 0.05f, Math.max(eh * 0.6f, 1f));
+            // heavy brow
+            g.color(0xFF1C130E);
+            float inner = (em == Pose.PAIN || em == Pose.SCARED) ? -r * 0.12f : r * 0.08f;
+            g.line(cx - s * r * 0.25f, cy - r * 0.22f + inner, cx + s * r * 0.25f, cy - r * 0.3f, 7);
+        }
+        // scar across the eye
+        if (l.scar) {
+            g.color(0xFFB0645A);
+            g.line(-r * 0.75f + ex, -r * 0.5f, -r * 0.05f + ex, r * 0.25f, 4);
+            for (int i = 0; i < 4; i++) {
+                float t = 0.15f + i * 0.22f;
+                float x = -r * 0.75f + ex + t * r * 0.7f, y = -r * 0.5f + t * r * 0.75f;
+                g.line(x - 6, y + 5, x + 6, y - 5, 2);
+            }
+        }
+        // nose
+        g.color(0xFF1C130E);
+        g.oval(ex, r * 0.25f, r * 0.2f, r * 0.12f);
+        // jaw & mouth
+        float open = Math.max(p.mouth, em == Pose.ANGRY || em == Pose.LAUGH || em == Pose.PAIN ? 0.45f : 0f);
+        float my = r * 0.62f;
+        float w = r * 0.5f;
+        float h = r * (0.08f + open * 0.35f);
+        g.begin();
+        g.moveTo(ex - w, my);
+        g.quadTo(ex, my - r * 0.08f, ex + w, my);
+        g.quadTo(ex, my + h * 2, ex - w, my);
+        g.close();
+        g.color(0xFF3A0E0E); g.fillPath();
+        // fangs (always visible)
+        g.color(0xFFF5F0E0);
+        for (int s = -1; s <= 1; s += 2) {
+            float fx = ex + s * w * 0.55f;
+            g.begin(); g.moveTo(fx - r * 0.08f, my - r * 0.04f); g.lineTo(fx, my + r * 0.3f); g.lineTo(fx + r * 0.08f, my - r * 0.04f); g.close();
+            g.fillPath();
+        }
+        if (l.headwear == Look.HW_HORNS) drawHeadwear(g, l, p, r);
+    }
+
+    // ------------------------------------------------------------------ monkey
+
+    static void drawMonkey(Gfx g, Look l, Pose p, float H) {
+        float r = H * 0.2f;          // head radius
+        float bodyH = H * 0.45f;
+        float f = p.facing;
+        float hop = 0;
+        g.save();
+        // shadow
+        if (p.body != Pose.HANG && p.body != Pose.LIE) { g.color(0x33000000); g.oval(0, 2, r * 1.3f, r * 0.22f); }
+        // tail
+        float ts = (float) Math.sin(p.time * 3) * 8;
+        g.color(shade(l.furColor, 0.85f));
+        g.begin();
+        g.moveTo(-f * r * 0.4f, -bodyH * 0.35f);
+        g.cubicTo(-f * r * 1.8f, -bodyH * 0.2f, -f * r * 2.0f, -bodyH * 1.2f + ts, -f * r * 1.2f, -bodyH * 1.35f + ts);
+        g.strokePath(r * 0.22f);
+        // legs
+        float stride = (float) Math.sin(p.walk) * p.walkAmt;
+        g.color(l.furColor);
+        g.line(-r * 0.3f, -bodyH * 0.3f, -r * 0.35f + stride * 10, -4, r * 0.3f);
+        g.line(r * 0.3f, -bodyH * 0.3f, r * 0.35f - stride * 10, -4, r * 0.3f);
+        g.color(l.skin);
+        g.oval(-r * 0.35f + stride * 10 + f * 4, -3, r * 0.22f, r * 0.12f);
+        g.oval(r * 0.35f - stride * 10 + f * 4, -3, r * 0.22f, r * 0.12f);
+        // body
+        g.color(l.furColor);
+        g.oval(0, -bodyH * 0.62f, r * 0.72f, bodyH * 0.46f);
+        g.color(lighten(l.skin, 0.1f));
+        g.oval(0, -bodyH * 0.55f, r * 0.42f, bodyH * 0.3f);
+        // vest (bandi)
+        g.color(l.primary);
+        g.begin();
+        g.moveTo(-r * 0.72f, -bodyH * 0.95f);
+        g.lineTo(-r * 0.15f, -bodyH * 0.95f);
+        g.lineTo(-r * 0.2f, -bodyH * 0.3f);
+        g.lineTo(-r * 0.7f, -bodyH * 0.35f);
+        g.close(); g.fillPath();
+        g.begin();
+        g.moveTo(r * 0.72f, -bodyH * 0.95f);
+        g.lineTo(r * 0.15f, -bodyH * 0.95f);
+        g.lineTo(r * 0.2f, -bodyH * 0.3f);
+        g.lineTo(r * 0.7f, -bodyH * 0.35f);
+        g.close(); g.fillPath();
+        g.color(0xFFE5B530);
+        g.line(-r * 0.15f, -bodyH * 0.95f, -r * 0.2f, -bodyH * 0.3f, 2);
+        g.line(r * 0.15f, -bodyH * 0.95f, r * 0.2f, -bodyH * 0.3f, 2);
+        // arms
+        Body b = new Body();
+        b.H = H; b.headR = r; b.sw = r * 0.62f; b.shY = -bodyH * 0.92f; b.armLen = bodyH * 0.85f; b.armW = r * 0.14f; b.L = bodyH * 0.3f; b.T = bodyH;
+        for (int s = -1; s <= 1; s += 2) {
+            float ang = s < 0 ? p.armL : p.armR, el = s < 0 ? p.elbowL : p.elbowR;
+            float[] h = hand(b, s, ang, el);
+            g.color(l.furColor);
+            g.line(h[0], h[1], h[2], h[3], r * 0.26f);
+            g.line(h[2], h[3], h[4], h[5], r * 0.24f);
+            g.color(l.skin);
+            g.oval(h[4], h[5], r * 0.15f, r * 0.15f);
+            int hold = s < 0 ? p.holdL : p.holdR;
+            if (hold != Pose.I_NONE) drawHeld(g, l, p, b, s, h, hold);
+        }
+        // head
+        float hy = -bodyH - r * 0.75f;
+        g.save();
+        g.translate(0, hy);
+        if (p.headTilt != 0) g.rotate(p.headTilt * f);
+        g.color(l.furColor);
+        g.oval(-r * 0.95f, -r * 0.05f, r * 0.3f, r * 0.32f);
+        g.oval(r * 0.95f, -r * 0.05f, r * 0.3f, r * 0.32f);
+        g.color(l.skin);
+        g.oval(-r * 0.95f, -r * 0.05f, r * 0.17f, r * 0.2f);
+        g.oval(r * 0.95f, -r * 0.05f, r * 0.17f, r * 0.2f);
+        g.color(shade(l.furColor, 0.7f));
+        g.oval(0, 0, r * 0.92f, r * 0.88f);
+        g.color(l.furColor);
+        g.oval(0, 0, r * 0.88f, r * 0.84f);
+        // face mask (heart shape)
+        float ex = f * r * 0.12f;
+        g.color(l.skin);
+        g.oval(-r * 0.3f + ex, -r * 0.1f, r * 0.36f, r * 0.38f);
+        g.oval(r * 0.3f + ex, -r * 0.1f, r * 0.36f, r * 0.38f);
+        g.oval(ex, r * 0.35f, r * 0.48f, r * 0.38f);
+        // eyes (big, expressive, human-like)
+        for (int s = -1; s <= 1; s += 2) {
+            float cx = s * r * 0.3f + ex, cy = -r * 0.1f;
+            float eh = r * 0.17f * (1 - (p.eyesClosed ? 1 : p.blink));
+            g.color(0xFFFFFFFF);
+            g.oval(cx, cy, r * 0.16f, Math.max(eh, 1));
+            g.color(0xFF4E2A12);
+            g.oval(cx + f * r * 0.04f, cy, r * 0.11f, Math.max(Math.min(eh, r * 0.12f), 1));
+            g.color(0xFF000000);
+            g.oval(cx + f * r * 0.04f, cy, r * 0.05f, Math.max(Math.min(eh, r * 0.06f), 1));
+            g.color(0xFFFFFFFF);
+            g.oval(cx + f * r * 0.01f, cy - r * 0.05f, r * 0.03f, r * 0.03f);
+        }
+        // nose
+        g.color(shade(l.skin, 0.6f));
+        g.oval(ex - r * 0.06f, r * 0.25f, r * 0.03f, r * 0.025f);
+        g.oval(ex + r * 0.06f, r * 0.25f, r * 0.03f, r * 0.025f);
+        // mouth
+        float open = Math.max(p.mouth, p.emotion == Pose.LAUGH || p.emotion == Pose.HAPPY ? 0.3f : 0);
+        if (open > 0.08f) {
+            g.color(0xFF5A1A1A);
+            g.oval(ex, r * 0.48f, r * 0.2f, r * 0.08f + r * 0.14f * open);
+            g.color(0xFFFFFFFF);
+            g.rect(ex - r * 0.13f, r * 0.42f, r * 0.26f, r * 0.04f);
+        } else {
+            g.color(INK);
+            g.begin(); g.moveTo(ex - r * 0.2f, r * 0.45f); g.quadTo(ex, r * 0.55f, ex + r * 0.2f, r * 0.45f); g.strokePath(2);
+        }
+        if (p.wearsTurban) drawTurbanShape(g, 0, -r * 0.7f, r * 0.95f, p.turbanColor, p.turbanBand, false);
+        g.restore();
+        // bandana at neck
+        g.color(l.secondary);
+        g.begin();
+        g.moveTo(-r * 0.55f, -bodyH - r * 0.05f);
+        g.lineTo(r * 0.55f, -bodyH - r * 0.05f);
+        g.lineTo(f * r * 0.1f, -bodyH + r * 0.4f);
+        g.close(); g.fillPath();
+        g.restore();
+    }
+}

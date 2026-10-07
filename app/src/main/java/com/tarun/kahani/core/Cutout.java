@@ -1,0 +1,182 @@
+package com.tarun.kahani.core;
+
+/**
+ * Removes the plain (usually white) background around a character picture and finds the face,
+ * so uploaded character art can be animated: mouth for lip-sync, eyes for blinking.
+ * Works on ARGB int arrays so it runs identically on Android and desktop.
+ */
+public final class Cutout {
+    private Cutout() {}
+
+    /** Result: cropped pixels plus face landmarks in normalised (0..1) coordinates of the crop. */
+    public static final class Result {
+        public int[] px;
+        public int w, h;
+        public float mouthX = 0.5f, mouthY = 0.2f, mouthW = 0.08f;
+        public float eyeLX = 0.44f, eyeRX = 0.56f, eyeY = 0.15f, eyeR = 0.03f;
+        public float headTop = 0f, faceTop = 0.05f, chinY = 0.25f;
+        public int skin = 0xFFD9A074, lip = 0xFF9C4A3E;
+        public boolean faceFound;
+    }
+
+    private static int dist(int a, int b) {
+        int dr = ((a >> 16) & 255) - ((b >> 16) & 255);
+        int dg = ((a >> 8) & 255) - ((b >> 8) & 255);
+        int db = (a & 255) - (b & 255);
+        return Math.abs(dr) + Math.abs(dg) + Math.abs(db);
+    }
+
+    /** True if the picture already has transparency (e.g. a PNG cut-out). */
+    public static boolean hasAlpha(int[] px) {
+        int n = 0;
+        for (int i = 0; i < px.length; i += 97) if ((px[i] >>> 24) < 250) n++;
+        return n > px.length / 97 / 50;
+    }
+
+    public static Result process(int[] src, int w, int h) {
+        int[] px = src.clone();
+        if (!hasAlpha(px)) removeBackground(px, w, h);
+        // crop to opaque bounds
+        int minX = w, minY = h, maxX = -1, maxY = -1;
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                if ((px[row + x] >>> 24) > 40) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+        Result r = new Result();
+        if (maxX < 0) { r.px = px; r.w = w; r.h = h; return r; }
+        int cw = maxX - minX + 1, ch = maxY - minY + 1;
+        int[] out = new int[cw * ch];
+        for (int y = 0; y < ch; y++) System.arraycopy(px, (y + minY) * w + minX, out, y * cw, cw);
+        r.px = out; r.w = cw; r.h = ch;
+        findFace(r);
+        return r;
+    }
+
+    /** Flood-fills the background colour from the borders and makes it transparent with soft edges. */
+    public static void removeBackground(int[] px, int w, int h) {
+        // background colour = median-ish of border samples
+        long sr = 0, sg = 0, sb = 0; int n = 0;
+        for (int x = 0; x < w; x += Math.max(1, w / 64)) {
+            int[] ys = {0, 1, h - 2, h - 1};
+            for (int y : ys) { int c = px[y * w + x]; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
+        }
+        for (int y = 0; y < h; y += Math.max(1, h / 64)) {
+            int[] xs = {0, 1, w - 2, w - 1};
+            for (int x : xs) { int c = px[y * w + x]; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
+        }
+        int bg = 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+        final int TOL = 60, SOFT = 120;
+        byte[] state = new byte[w * h]; // 0 unknown, 1 background, 2 queued
+        int[] queue = new int[w * h];
+        int qh = 0, qt = 0;
+        for (int x = 0; x < w; x++) { queue[qt++] = x; queue[qt++] = (h - 1) * w + x; }
+        for (int y = 1; y < h - 1; y++) { queue[qt++] = y * w; queue[qt++] = y * w + w - 1; }
+        for (int i = 0; i < qt; i++) state[queue[i]] = 2;
+        int shadowRow = (int) (h * 0.9f);
+        while (qh < qt) {
+            int i = queue[qh++];
+            if (dist(px[i], bg) > TOL && !(i / w >= shadowRow && isShadow(px[i]))) { state[i] = 0; continue; }
+            state[i] = 1;
+            int x = i % w, y = i / w;
+            if (x > 0 && state[i - 1] == 0) { state[i - 1] = 2; queue[qt++] = i - 1; }
+            if (x < w - 1 && state[i + 1] == 0) { state[i + 1] = 2; queue[qt++] = i + 1; }
+            if (y > 0 && state[i - w] == 0) { state[i - w] = 2; queue[qt++] = i - w; }
+            if (y < h - 1 && state[i + w] == 0) { state[i + w] = 2; queue[qt++] = i + w; }
+            if (qt >= queue.length - 4) qt = queue.length - 4; // safety (cannot overflow in practice)
+        }
+        // soft shadows near the floor and anti-aliased edges
+        for (int i = 0; i < px.length; i++) {
+            if (state[i] == 1) { px[i] = 0; continue; }
+            int x = i % w, y = i / w;
+            boolean edge = (x > 0 && state[i - 1] == 1) || (x < w - 1 && state[i + 1] == 1)
+                    || (y > 0 && state[i - w] == 1) || (y < h - 1 && state[i + w] == 1);
+            if (edge) {
+                int d = dist(px[i], bg);
+                if (d < SOFT) {
+                    int a = (int) (255f * (d - TOL * 0.5f) / (SOFT - TOL * 0.5f));
+                    a = Math.max(0, Math.min(255, a));
+                    px[i] = (a << 24) | (px[i] & 0xFFFFFF);
+                }
+            }
+        }
+    }
+
+    /** Soft grey floor shadow under a character on a white background. */
+    static boolean isShadow(int c) {
+        int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        int mx = Math.max(r, Math.max(g, b)), mn = Math.min(r, Math.min(g, b));
+        return mx - mn < 22 && mx > 120;
+    }
+
+    static boolean isSkin(int c) {
+        int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        if ((c >>> 24) < 200) return false;
+        return r > 95 && g > 50 && b > 25 && r > g && g >= b - 5 && (r - b) > 30 && (r - g) < 95 && (r - g) > 8 && Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b)) > 25;
+    }
+
+    /** Heuristic face finder for front-facing cartoon characters (the user can correct it in the app). */
+    static void findFace(Result r) {
+        int w = r.w, h = r.h;
+        int top = 0;
+        outer:
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if ((r.px[y * w + x] >>> 24) > 128) { top = y; break outer; }
+        r.headTop = top / (float) h;
+        int scanH = (int) (h * 0.42f);
+        // per-row skin counts in the upper part, restricted to central 70%
+        int x0 = (int) (w * 0.15f), x1 = (int) (w * 0.85f);
+        int[] rowCount = new int[scanH];
+        long sx = 0, cnt = 0;
+        for (int y = top; y < Math.min(h, top + scanH); y++) {
+            int c = 0;
+            for (int x = x0; x < x1; x++) if (isSkin(r.px[y * w + x])) { c++; sx += x; }
+            rowCount[y - top] = c;
+            cnt += c;
+        }
+        if (cnt < 50) return;
+        // face = the first strong band of skin rows; neck is where width shrinks
+        int maxRow = 0, maxY = 0;
+        for (int i = 0; i < scanH; i++) if (rowCount[i] > maxRow) { maxRow = rowCount[i]; maxY = i; }
+        int fTop = maxY, fBot = maxY;
+        while (fTop > 0 && rowCount[fTop - 1] > maxRow * 0.3f) fTop--;
+        while (fBot < scanH - 1 && rowCount[fBot + 1] > maxRow * 0.45f) fBot++;
+        // horizontal centre of the face band
+        long fx = 0, fc = 0; int minX = w, maxX = 0;
+        long sr = 0, sg = 0, sb = 0;
+        for (int y = top + fTop; y <= top + fBot; y++) {
+            for (int x = x0; x < x1; x++) {
+                int c = r.px[y * w + x];
+                if (isSkin(c)) {
+                    fx += x; fc++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255;
+                }
+            }
+        }
+        if (fc < 20) return;
+        float cx = fx / (float) fc;
+        float faceW = Math.min(maxX - minX, w * 0.6f);
+        float faceTopPx = top + fTop, chinPx = top + fBot;
+        float faceH = chinPx - faceTopPx;
+        if (faceH < h * 0.04f) return;
+        r.faceFound = true;
+        r.skin = 0xFF000000 | ((int) (sr / fc) << 16) | ((int) (sg / fc) << 8) | (int) (sb / fc);
+        r.lip = Puppet.shade(Puppet.mix(r.skin, 0xFFB03A3A, 0.45f), 0.8f);
+        r.faceTop = faceTopPx / h;
+        r.chinY = chinPx / h;
+        r.mouthX = cx / w;
+        r.mouthY = (faceTopPx + faceH * 0.80f) / h;
+        r.mouthW = faceW * 0.26f / w;
+        r.eyeY = (faceTopPx + faceH * 0.48f) / h;
+        r.eyeLX = (cx - faceW * 0.2f) / w;
+        r.eyeRX = (cx + faceW * 0.2f) / w;
+        r.eyeR = faceW * 0.1f / w;
+    }
+}

@@ -1,0 +1,221 @@
+package com.tarun.kahani.core;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Pictures supplied by the user: character art (animated as cut-out sprites with lip-sync),
+ * scene backgrounds, full-screen cinematic shots, and the title / ending pictures.
+ */
+public final class Art {
+
+    /** Platform image loading: returns ARGB pixels (for cut-out) and creates drawable handles. */
+    public interface Loader {
+        /** Decodes a picture, scaled so its longest side is at most maxSide. Returns {w, h, pixels...} or null. */
+        int[] decode(String name, int maxSide);
+        /** Creates a drawable image from ARGB pixels. */
+        Object create(int[] argb, int w, int h);
+        /** Decodes directly into a drawable (no pixel access needed). */
+        Object load(String name, int maxSide);
+        int width(Object img);
+        int height(Object img);
+    }
+
+    public static final class Sprite {
+        public Object img;
+        public int w, h;
+        public float mouthX, mouthY, mouthHW;
+        public float eyeLX, eyeLY, eyeRX, eyeRY, eyeR;
+        public float turbanY;       // bottom of turban (0 = none / unknown)
+        public int skin = 0xFFD9A074, lip = 0xFF9C4A3E, lid = 0xFFC88A66;
+        public boolean faceKnown;
+        public transient Cutout.Result pixelsForSampling;
+    }
+
+    public static final class Backdrop {
+        public Object img;
+        public int w, h;
+        public float x0 = 0, y0 = 0, x1 = 1, y1 = 1;  // crop window (fractions)
+        public float ground = 0.9f;                    // where feet stand (fraction of frame height)
+    }
+
+    public static final class Shot {
+        public String scene;          // scene number ("8") or "" for any
+        public String[] keys;
+        public Backdrop pic;
+    }
+
+    public final Map<String, Sprite> sprites = new HashMap<String, Sprite>();   // by character id
+    public final Map<String, Backdrop> scenes = new HashMap<String, Backdrop>(); // "1", "10a", "10b"
+    public final List<Shot> shots = new ArrayList<Shot>();
+    public Backdrop title, end;
+    public boolean titleText = true, endText = true;
+
+    public Backdrop sceneBackdrop(int number, int part) {
+        Backdrop b = scenes.get(number + (part == 0 ? "a" : part == 1 ? "b" : "c"));
+        if (b == null && part == 0) b = scenes.get(String.valueOf(number));
+        if (b == null && part > 0 && !scenes.containsKey(number + "a")) b = null;
+        return b;
+    }
+
+    public Shot shotFor(int scene, String text) {
+        for (Shot s : shots) {
+            if (s.scene.length() > 0 && !s.scene.equals(String.valueOf(scene))) continue;
+            for (String k : s.keys) if (k.length() > 0 && Txt.has(text, k)) return s;
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------ building sprites
+
+    /** Cuts out a character picture and prepares it for animation. Landmarks may be overridden afterwards. */
+    public static Sprite makeSprite(Loader L, String file, int maxSide) {
+        int[] d = L.decode(file, maxSide);
+        if (d == null) return null;
+        int w = d[0], h = d[1];
+        int[] px = new int[w * h];
+        System.arraycopy(d, 2, px, 0, w * h);
+        Cutout.Result r = Cutout.process(px, w, h);
+        Sprite s = new Sprite();
+        s.w = r.w; s.h = r.h;
+        s.img = L.create(r.px, r.w, r.h);
+        s.mouthX = r.mouthX; s.mouthY = r.mouthY; s.mouthHW = r.mouthW;
+        s.eyeLX = r.eyeLX; s.eyeRX = r.eyeRX; s.eyeLY = r.eyeY; s.eyeRY = r.eyeY; s.eyeR = r.eyeR;
+        s.faceKnown = r.faceFound;
+        s.skin = r.skin; s.lip = r.lip;
+        s.lid = r.skin;
+        s.pixelsForSampling = r;
+        return s;
+    }
+
+    /** Re-samples skin and lip colours after landmarks are changed. */
+    public static void resample(Sprite s) {
+        Cutout.Result r = s.pixelsForSampling;
+        if (r == null) return;
+        s.skin = skinIn(r, s.eyeLX - s.eyeR, Math.min(s.eyeLY, s.eyeRY) - s.eyeR * 3f, s.eyeRX + s.eyeR, s.mouthY, s.skin);
+        s.lid = s.skin;
+        s.lip = Puppet.shade(Puppet.mix(s.skin, 0xFFB03A3A, 0.5f), 0.8f);
+    }
+
+    /** Average of skin-coloured pixels inside a box (ignores hair, mustache, eyes). */
+    static int skinIn(Cutout.Result r, float x0, float y0, float x1, float y1, int fallback) {
+        int ax = Math.max(0, (int) (x0 * r.w)), bx = Math.min(r.w - 1, (int) (x1 * r.w));
+        int ay = Math.max(0, (int) (y0 * r.h)), by = Math.min(r.h - 1, (int) (y1 * r.h));
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        int step = Math.max(1, (bx - ax) / 60);
+        for (int y = ay; y <= by; y += step) {
+            for (int x = ax; x <= bx; x += step) {
+                int c = r.px[y * r.w + x];
+                if (!Cutout.isSkin(c)) continue;
+                sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+            }
+        }
+        if (n < 10) return fallback;
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    static int sample(Cutout.Result r, float fx, float fy, int fallback) {
+        int cx = (int) (fx * r.w), cy = (int) (fy * r.h);
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        int rad = Math.max(2, r.w / 150);
+        for (int y = cy - rad; y <= cy + rad; y++) {
+            for (int x = cx - rad; x <= cx + rad; x++) {
+                if (x < 0 || y < 0 || x >= r.w || y >= r.h) continue;
+                int c = r.px[y * r.w + x];
+                if ((c >>> 24) < 200) continue;
+                sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+            }
+        }
+        if (n == 0) return fallback;
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    public static Backdrop makeBackdrop(Loader L, String file, int maxSide) {
+        Object img = L.load(file, maxSide);
+        if (img == null) return null;
+        Backdrop b = new Backdrop();
+        b.img = img;
+        b.w = L.width(img);
+        b.h = L.height(img);
+        fitCrop(b);
+        return b;
+    }
+
+    // ------------------------------------------------------------------ manifest
+
+    /**
+     * Reads a cast manifest (see assets/sample/cast.txt) and loads all pictures.
+     * Character names are matched against the parsed story.
+     */
+    public static Art fromManifest(String text, Story story, Loader L) {
+        Art art = new Art();
+        for (String raw : text.split("\n")) {
+            String line = raw.trim();
+            if (line.length() == 0 || line.startsWith("#")) continue;
+            String[] f = line.split("\\|");
+            try {
+                if (f[0].equals("char") && f.length >= 3) {
+                    Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                    if (c == null) continue;
+                    Sprite s = makeSprite(L, f[2], 1100);
+                    if (s == null) continue;
+                    if (f.length >= 11) {
+                        float[] v = new float[8];
+                        for (int i = 0; i < 8; i++) v[i] = Float.parseFloat(f[3 + i].trim());
+                        if (v[0] > 0) {
+                            s.mouthX = v[0]; s.mouthY = v[1]; s.mouthHW = v[2];
+                            s.eyeLX = v[3]; s.eyeLY = v[4]; s.eyeRX = v[5]; s.eyeRY = v[6]; s.eyeR = v[7];
+                            s.faceKnown = true;
+                        }
+                        if (f.length >= 12) s.turbanY = Float.parseFloat(f[11].trim());
+                        resample(s);
+                    }
+                    s.pixelsForSampling = null;
+                    art.sprites.put(c.id, s);
+                } else if (f[0].equals("scene") && f.length >= 3) {
+                    Backdrop b = makeBackdrop(L, f[2], 1600);
+                    if (b == null) continue;
+                    if (f.length >= 8) {
+                        b.x0 = Float.parseFloat(f[3]); b.y0 = Float.parseFloat(f[4]);
+                        b.x1 = Float.parseFloat(f[5]); b.y1 = Float.parseFloat(f[6]);
+                        b.ground = Float.parseFloat(f[7]);
+                    }
+                    art.scenes.put(f[1], b);
+                } else if (f[0].equals("shot") && f.length >= 4) {
+                    Backdrop b = makeBackdrop(L, f[3], 1600);
+                    if (b == null) continue;
+                    Shot s = new Shot();
+                    s.scene = f[1];
+                    s.keys = f[2].split(",");
+                    s.pic = b;
+                    art.shots.add(s);
+                } else if (f[0].equals("title") || f[0].equals("end")) {
+                    Backdrop b = makeBackdrop(L, f[1], 1600);
+                    if (b == null) continue;
+                    boolean txt = f.length < 3 || !f[2].equals("0");
+                    if (f[0].equals("title")) { art.title = b; art.titleText = txt; }
+                    else { art.end = b; art.endText = txt; }
+                }
+            } catch (RuntimeException e) {
+                // a bad line must never stop the film; skip it
+            }
+        }
+        return art;
+    }
+
+    /** Sets a centred 16:9 crop window for a picture of any shape. */
+    public static void fitCrop(Backdrop b) {
+        float ar = b.w / (float) Math.max(1, b.h);
+        float target = 16f / 9f;
+        if (ar > target) {
+            float wFrac = target / ar;
+            b.x0 = (1 - wFrac) / 2; b.x1 = b.x0 + wFrac; b.y0 = 0; b.y1 = 1;
+        } else {
+            float hFrac = ar / target;
+            b.y0 = (1 - hFrac) / 2; b.y1 = b.y0 + hFrac; b.x0 = 0; b.x1 = 1;
+        }
+        b.ground = 0.9f;
+    }
+}

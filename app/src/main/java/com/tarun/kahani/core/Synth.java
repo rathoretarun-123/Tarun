@@ -1,0 +1,342 @@
+package com.tarun.kahani.core;
+
+/** Procedural music and sound effects (no downloads, works offline). Mono float samples. */
+public final class Synth {
+    public static final int SR = 32000;
+
+    private long seed = 12345;
+
+    private float rnd() {
+        seed = seed * 6364136223846793005L + 1442695040888963407L;
+        return ((seed >>> 40) & 0xFFFFFF) / (float) 0x1000000 * 2f - 1f;
+    }
+
+    private static float midi(float n) { return (float) (440.0 * Math.pow(2, (n - 69) / 12.0)); }
+
+    static float clamp(float v) { return v > 1 ? 1 : v < -1 ? -1 : v; }
+
+    // ================================================================== effects
+
+    public float[] sfx(int type, float dur) {
+        seed = 777 + type * 31;
+        int n = Math.max(1, (int) (dur * SR));
+        float[] o = new float[n];
+        switch (type) {
+            case Film.SFX_STREAM: noiseBed(o, 0.06f, 0.35f, 2.5f, 0.5f); break;
+            case Film.SFX_WIND: noiseBed(o, 0.015f, 0.4f, 0.25f, 0.6f); break;
+            case Film.SFX_HISS: { noiseBed(o, 0.5f, 0.25f, 6f, 0.7f); fadeEnds(o, 0.3f); break; }
+            case Film.SFX_RUSTLE: { for (int i = 0; i < 6; i++) burst(o, i * 0.18f + rnd() * 0.05f, 0.18f, 0.35f, 0.45f); break; }
+            case Film.SFX_BIRDS: { float t = 0.1f; while (t < dur - 0.3f) { chirp(o, t, 2200 + rnd() * 1500, 0.08f + Math.abs(rnd()) * 0.08f, 0.25f); t += 0.15f + Math.abs(rnd()) * 0.6f; } break; }
+            case Film.SFX_CLACK: { float t = 0.05f; int k = 0; while (t < dur - 0.1f) { knock(o, t, 900 + (k % 2) * 250, 0.5f); t += (k % 3 == 2) ? 0.42f : 0.24f; k++; } break; }
+            case Film.SFX_POP: { tone(o, 0, 0.12f, 700, 1400, 0.5f, 0); break; }
+            case Film.SFX_CHIME: { int[] notes = {84, 88, 91, 96}; for (int i = 0; i < 4; i++) bellTone(o, i * 0.09f, midi(notes[i]), 1.2f, 0.18f); break; }
+            case Film.SFX_MAGIC: { for (int i = 0; i < 12; i++) bellTone(o, i * 0.07f, midi(79 + i * 2 + (i % 3)), 0.7f, 0.12f); noiseBedRange(o, 0, dur, 0.6f, 0.05f); break; }
+            case Film.SFX_MONKEY: { float t = 0.02f; while (t < dur - 0.12f) { tone(o, t, 0.07f + Math.abs(rnd()) * 0.05f, 1200 + rnd() * 300, 2400 + rnd() * 600, 0.35f, 1); t += 0.11f + Math.abs(rnd()) * 0.1f; } break; }
+            case Film.SFX_THUD: { float t = 0; while (t < dur - 0.2f) { thump(o, t, 55, 0.9f); t += 0.55f; } break; }
+            case Film.SFX_STEPS: { float t = 0; while (t < dur) { thump(o, t, 120, 0.25f); burst(o, t, 0.05f, 0.4f, 0.12f); t += 0.32f; } break; }
+            case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
+            case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }
+            case Film.SFX_DRUMS: dhol(o, 0, dur, 0.6f); break;
+            case Film.SFX_NIGHT: {
+                for (float t = 0; t < dur; t += 0.5f + Math.abs(rnd()) * 0.4f)
+                    for (int k = 0; k < 3; k++) tone(o, t + k * 0.05f, 0.03f, 4400, 4400, 0.06f, 0);
+                for (float t = 1.2f; t < dur - 1; t += 3.5f) { tone(o, t, 0.35f, 420, 380, 0.12f, 0); tone(o, t + 0.45f, 0.5f, 400, 360, 0.12f, 0); }
+                break;
+            }
+            case Film.SFX_ROAR: {
+                for (int i = 0; i < n; i++) {
+                    float t = i / (float) SR, env = (float) Math.sin(Math.PI * Math.min(1, t / dur)) ;
+                    float f = 70 + 25 * (float) Math.sin(t * 9);
+                    float saw = (float) (((t * f) % 1.0) * 2 - 1);
+                    o[i] += (saw * 0.5f + rnd() * 0.35f) * env * 0.8f;
+                }
+                lowpass(o, 0.08f);
+                break;
+            }
+            case Film.SFX_CLAP: { float t = 0.02f; while (t < dur - 0.1f) { burst(o, t, 0.04f, 0.9f, 0.6f); t += 0.3f; } break; }
+            case Film.SFX_ANKLET: { float t = 0; while (t < dur) { for (int k = 0; k < 3; k++) bellTone(o, t + k * 0.02f, 3500 + k * 600 + rnd() * 200, 0.25f, 0.06f); t += 0.22f; } break; }
+            case Film.SFX_DRIP: { for (float t = 0.3f; t < dur; t += 1.4f + Math.abs(rnd()) * 1.5f) tone(o, t, 0.08f, 1600, 900, 0.18f, 0); break; }
+            case Film.SFX_SPLASH: { burst(o, 0, 0.5f, 0.5f, 0.6f); break; }
+            case Film.SFX_NET: { sweepNoise(o, 0, 0.5f, 0.05f, 0.3f, 0.4f); thump(o, 0.45f, 90, 0.5f); break; }
+            case Film.SFX_FANFARE: fanfare(o); break;
+            case Film.SFX_END_CHORD: endChord(o); break;
+            case Film.SFX_CROWD: { noiseBed(o, 0.03f, 0.25f, 3f, 0.6f); break; }
+            case Film.SFX_GLASS: { bellTone(o, 0, 2637, 1.2f, 0.3f); bellTone(o, 0.05f, 3951, 1.0f, 0.2f); break; }
+            case Film.SFX_SWORD: { sweepNoise(o, 0, 0.3f, 0.3f, 0.9f, 0.3f); bellTone(o, 0.05f, 2200, 0.6f, 0.2f); break; }
+            default:
+        }
+        return o;
+    }
+
+    private void noiseBed(float[] o, float lp, float amp, float lfoHz, float depth) {
+        float y = 0;
+        for (int i = 0; i < o.length; i++) {
+            float t = i / (float) SR;
+            y += lp * (rnd() - y);
+            float m = 1 - depth + depth * (0.5f + 0.5f * (float) Math.sin(t * lfoHz * 6.283f + Math.sin(t * 0.7f)));
+            o[i] += y * amp * m * 4;
+        }
+        fadeEnds(o, 0.4f);
+    }
+
+    private void noiseBedRange(float[] o, float t0, float t1, float lp, float amp) {
+        int a = (int) (t0 * SR), b = Math.min(o.length, (int) (t1 * SR));
+        float y = 0;
+        for (int i = a; i < b; i++) {
+            y += lp * (rnd() - y);
+            float e = (float) Math.sin(Math.PI * (i - a) / (float) Math.max(1, b - a));
+            o[i] += y * amp * e;
+        }
+    }
+
+    private void fadeEnds(float[] o, float sec) {
+        int f = Math.min(o.length / 2, (int) (sec * SR));
+        for (int i = 0; i < f; i++) { float g = i / (float) f; o[i] *= g; o[o.length - 1 - i] *= g; }
+    }
+
+    private void burst(float[] o, float t, float d, float bright, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        float y = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            if (a + i < 0) continue;
+            y += bright * (rnd() - y);
+            float e = (float) Math.exp(-i / (n * 0.25f));
+            o[a + i] += y * amp * e;
+        }
+    }
+
+    private void chirp(float[] o, float t, float f, float d, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        double ph = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float u = i / (float) n;
+            float fr = f * (1 + 0.6f * (float) Math.sin(u * Math.PI * 3));
+            ph += 2 * Math.PI * fr / SR;
+            o[a + i] += (float) Math.sin(ph) * amp * (float) Math.sin(Math.PI * u);
+        }
+    }
+
+    private void knock(float[] o, float t, float f, float amp) {
+        int a = (int) (t * SR), n = (int) (0.09f * SR);
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float e = (float) Math.exp(-i / (SR * 0.012f));
+            o[a + i] += ((float) Math.sin(2 * Math.PI * f * i / SR) * 0.7f + rnd() * 0.3f) * amp * e;
+        }
+    }
+
+    /** f0 -> f1 glide; shape 0 sine, 1 square-ish. */
+    private void tone(float[] o, float t, float d, float f0, float f1, float amp, int shape) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        double ph = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            if (a + i < 0) continue;
+            float u = i / (float) n;
+            ph += 2 * Math.PI * (f0 + (f1 - f0) * u) / SR;
+            float s = (float) Math.sin(ph);
+            if (shape == 1) s = Math.signum(s) * 0.6f + s * 0.4f;
+            float e = Math.min(1, u * 20) * (1 - u);
+            o[a + i] += s * amp * e;
+        }
+    }
+
+    private void thump(float[] o, float t, float f, float amp) {
+        int a = (int) (t * SR), n = (int) (0.35f * SR);
+        double ph = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float fr = f * (1 + 1.5f * (float) Math.exp(-i / (SR * 0.02f)));
+            ph += 2 * Math.PI * fr / SR;
+            o[a + i] += (float) Math.sin(ph) * amp * (float) Math.exp(-i / (SR * 0.08f));
+        }
+    }
+
+    private void bellTone(float[] o, float t, float f, float d, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        float[] ratio = {1f, 2.01f, 2.76f, 4.07f, 5.4f};
+        float[] g = {1f, 0.5f, 0.35f, 0.2f, 0.1f};
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            if (a + i < 0) continue;
+            float s = 0;
+            float tt = i / (float) SR;
+            for (int k = 0; k < ratio.length; k++) s += (float) Math.sin(2 * Math.PI * f * ratio[k] * tt) * g[k] * (float) Math.exp(-tt * (2.2f + k * 1.4f) / d);
+            o[a + i] += s * amp * Math.min(1, i / 60f) * 0.6f;
+        }
+    }
+
+    private void sweepNoise(float[] o, float t, float d, float lp0, float lp1, float amp) {
+        int a = (int) (t * SR), n = Math.min(o.length - a, (int) (d * SR));
+        float y = 0;
+        for (int i = 0; i < n; i++) {
+            float u = i / (float) n;
+            y += (lp0 + (lp1 - lp0) * (float) Math.sin(u * Math.PI)) * (rnd() - y);
+            o[a + i] += y * amp * (float) Math.sin(Math.PI * u) * 2;
+        }
+    }
+
+    private static void lowpass(float[] o, float k) {
+        float y = 0;
+        for (int i = 0; i < o.length; i++) { y += k * (o[i] - y); o[i] = y * 2.5f; }
+    }
+
+    private void dhol(float[] o, float t0, float d, float amp) {
+        float beat = 0.25f;
+        int[] pat = {2, 0, 1, 1, 2, 0, 1, 0, 2, 1, 1, 0, 2, 0, 1, 1};
+        int k = 0;
+        for (float t = t0; t < t0 + d - 0.3f; t += beat, k++) {
+            int p = pat[k % pat.length];
+            if (p == 2) thump(o, t, 70, amp);
+            else if (p == 1) { knock(o, t, 420, amp * 0.45f); burst(o, t, 0.05f, 0.5f, amp * 0.15f); }
+        }
+    }
+
+    private void fanfare(float[] o) {
+        // shehnai-like bright reed melody over a drum roll
+        int[] mel = {67, 72, 74, 76, 74, 72, 79, 76, 77, 79};
+        float[] len = {0.25f, 0.25f, 0.25f, 0.5f, 0.25f, 0.25f, 0.75f, 0.25f, 0.25f, 1.2f};
+        float t = 0.1f;
+        for (int i = 0; i < mel.length; i++) { reed(o, t, len[i] * 0.95f, midi(mel[i]), 0.22f); t += len[i]; }
+        dhol(o, 0, 4.2f, 0.4f);
+        bellTone(o, t - 1.2f, midi(79), 2f, 0.2f);
+    }
+
+    private void reed(float[] o, float t, float d, float f, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        double ph = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float tt = i / (float) SR;
+            float vib = 1 + 0.008f * (float) Math.sin(tt * 2 * Math.PI * 5.5f) * Math.min(1, tt * 4);
+            ph += 2 * Math.PI * f * vib / SR;
+            float s = (float) (Math.sin(ph) + 0.5 * Math.sin(2 * ph) + 0.33 * Math.sin(3 * ph) + 0.2 * Math.sin(4 * ph) + 0.12 * Math.sin(5 * ph));
+            float e = Math.min(1, tt * 25) * Math.min(1, (d - tt) * 12);
+            o[a + i] += s * amp * 0.45f * e;
+        }
+    }
+
+    private void endChord(float[] o) {
+        int[] arp = {60, 64, 67, 72, 76, 79, 84};
+        for (int i = 0; i < arp.length; i++) pluck(o, 0.1f + i * 0.14f, midi(arp[i]), 2.5f, 0.3f);
+        int[] ch = {48, 55, 60, 64, 67};
+        for (int c : ch) pad(o, 0.9f, 4f, midi(c), 0.07f);
+        bellTone(o, 1.0f, midi(84), 3f, 0.15f);
+    }
+
+    // ================================================================== music
+
+    /**
+     * Background music for a mood. Built from a small Indian-flavoured palette:
+     * tanpura drone, santoor-like plucks, bansuri-like flute and tabla/dhol patterns.
+     */
+    public float[] music(int mood, float dur) {
+        seed = 4242 + mood * 97;
+        int n = Math.max(1, (int) (dur * SR));
+        float[] o = new float[n];
+        int root;
+        int[] scale;
+        float bpm;
+        switch (mood) {
+            case Film.M_TITLE: root = 62; scale = new int[]{0, 2, 4, 7, 9, 12}; bpm = 96; break;
+            case Film.M_HAPPY: root = 64; scale = new int[]{0, 2, 4, 7, 9, 12}; bpm = 100; break;
+            case Film.M_PLAYFUL: root = 67; scale = new int[]{0, 2, 4, 7, 9, 12}; bpm = 126; break;
+            case Film.M_TENSE: root = 57; scale = new int[]{0, 1, 4, 5, 7, 8, 11, 12}; bpm = 84; break;
+            case Film.M_VILLAIN: root = 50; scale = new int[]{0, 1, 3, 6, 7, 8, 12}; bpm = 70; break;
+            case Film.M_SAD: root = 57; scale = new int[]{0, 2, 3, 7, 8, 12}; bpm = 66; break;
+            case Film.M_ACTION: root = 55; scale = new int[]{0, 1, 4, 5, 7, 8, 10, 12}; bpm = 138; break;
+            case Film.M_CELEBRATE: root = 65; scale = new int[]{0, 2, 4, 5, 7, 9, 11, 12}; bpm = 128; break;
+            case Film.M_NIGHT: root = 55; scale = new int[]{0, 2, 3, 7, 8, 12}; bpm = 72; break;
+            case Film.M_END: root = 60; scale = new int[]{0, 2, 4, 7, 9, 12}; bpm = 90; break;
+            default: root = 62; scale = new int[]{0, 2, 4, 7, 9, 12}; bpm = 96;
+        }
+        float beat = 60f / bpm;
+        // drone
+        float droneAmp = (mood == Film.M_VILLAIN || mood == Film.M_TENSE || mood == Film.M_NIGHT) ? 0.11f : 0.07f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) SR;
+            float f1 = midi(root - 24), f2 = midi(root - 17);
+            float s = (float) (Math.sin(2 * Math.PI * f1 * t) * 0.6 + Math.sin(2 * Math.PI * f1 * 2 * t) * 0.25 * (0.5 + 0.5 * Math.sin(t * 0.9))
+                    + Math.sin(2 * Math.PI * f2 * t) * 0.35 + Math.sin(2 * Math.PI * f1 * 3 * t) * 0.12 * (0.5 + 0.5 * Math.sin(t * 1.3 + 1)));
+            o[i] += s * droneAmp;
+        }
+        // melody phrases
+        boolean flute = mood == Film.M_TITLE || mood == Film.M_SAD || mood == Film.M_NIGHT || mood == Film.M_END || mood == Film.M_HAPPY;
+        float t = 0.2f;
+        int deg = 2;
+        int phrase = 0;
+        while (t < dur - 0.5f) {
+            int notes = 6 + (phrase % 3) * 2;
+            for (int k = 0; k < notes && t < dur - 0.5f; k++) {
+                int step = (int) Math.round(rnd() * 2);
+                deg = Math.max(0, Math.min(scale.length - 1, deg + (step == 0 ? 1 : step)));
+                if (k == notes - 1) deg = 0;
+                float f = midi(root + scale[deg]);
+                float len = beat * ((k % 3 == 2) ? 2 : 1) * (mood == Film.M_ACTION || mood == Film.M_PLAYFUL ? 0.5f : 1f);
+                if (mood == Film.M_VILLAIN || mood == Film.M_TENSE) {
+                    if (k % 2 == 0) pluck(o, t, f * 0.5f, len * 1.8f, 0.16f);
+                } else if (flute && phrase % 2 == 0) flute(o, t, len * 0.95f, f, 0.13f);
+                else pluck(o, t, f, len * 2.2f, 0.17f);
+                t += len;
+            }
+            t += beat * 2;
+            phrase++;
+        }
+        // rhythm
+        switch (mood) {
+            case Film.M_CELEBRATE: dhol(o, 0, dur, 0.38f); break;
+            case Film.M_ACTION: for (float x = 0; x < dur - 0.2f; x += beat / 2) { thump(o, x, 60, (((int) (x / beat * 2)) % 4 == 0) ? 0.45f : 0.2f); } break;
+            case Film.M_PLAYFUL: case Film.M_HAPPY: case Film.M_TITLE: case Film.M_END: tabla(o, dur, beat, 0.22f); break;
+            case Film.M_TENSE: case Film.M_VILLAIN: for (float x = 0; x < dur - 0.5f; x += beat * 2) thump(o, x, 45, 0.3f); break;
+            default:
+        }
+        fadeEnds(o, 0.8f);
+        return o;
+    }
+
+    private void tabla(float[] o, float dur, float beat, float amp) {
+        int[] pat = {2, 0, 1, 1, 2, 1, 0, 1}; // dha . ti ti dha ti . ti (teentaal-ish feel)
+        int k = 0;
+        for (float t = 0; t < dur - 0.3f; t += beat / 2, k++) {
+            int p = pat[k % pat.length];
+            if (p == 2) { tone(o, t, 0.25f, 180, 140, amp, 0); knock(o, t, 600, amp * 0.3f); }
+            else if (p == 1) knock(o, t, 1100 + (k % 3) * 120, amp * 0.35f);
+        }
+    }
+
+    private void pluck(float[] o, float t, float f, float d, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        int period = Math.max(2, (int) (SR / f));
+        float[] buf = new float[period];
+        for (int i = 0; i < period; i++) buf[i] = rnd();
+        int idx = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            if (a + i < 0) continue;
+            float v = buf[idx];
+            int nx = (idx + 1) % period;
+            buf[idx] = 0.5f * (v + buf[nx]) * 0.996f;
+            idx = nx;
+            o[a + i] += v * amp;
+        }
+    }
+
+    private void flute(float[] o, float t, float d, float f, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        double ph = 0;
+        float y = 0;
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float tt = i / (float) SR;
+            float vib = 1 + 0.006f * (float) Math.sin(tt * 2 * Math.PI * 5) * Math.min(1, tt * 3);
+            ph += 2 * Math.PI * f * vib / SR;
+            y += 0.1f * (rnd() - y);
+            float s = (float) (Math.sin(ph) + 0.12 * Math.sin(2 * ph)) + y * 0.15f;
+            float e = Math.min(1, tt * 10) * Math.min(1, (d - tt) * 6);
+            o[a + i] += s * amp * e;
+        }
+    }
+
+    private void pad(float[] o, float t, float d, float f, float amp) {
+        int a = (int) (t * SR), n = (int) (d * SR);
+        for (int i = 0; i < n && a + i < o.length; i++) {
+            float tt = i / (float) SR;
+            float e = Math.min(1, tt / 0.8f) * Math.min(1, (d - tt) / 1.2f);
+            float s = (float) (Math.sin(2 * Math.PI * f * tt) + 0.5 * Math.sin(2 * Math.PI * f * 1.003 * tt) + 0.3 * Math.sin(2 * Math.PI * f * 2 * tt));
+            o[a + i] += s * amp * e;
+        }
+    }
+}

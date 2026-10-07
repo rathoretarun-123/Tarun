@@ -4,3 +4,4 @@ tools/robotest/.gradle/
 .gradle/
 *.class
 javac.*.args
+release/*.idsig

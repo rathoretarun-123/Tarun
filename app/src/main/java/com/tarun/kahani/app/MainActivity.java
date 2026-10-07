@@ -632,11 +632,18 @@ public class MainActivity extends Activity {
         }
         for (Story.Scene sc : st.scenes) if (sceneFile(sc) == null) noBg++;
         // first visit: offer pictures already in the library (from earlier stories) that fit this story
+        boolean offered = false;
         if (!"1".equals(project.setting("libChecked", "0")) && noPic == st.characters.size() && st.characters.size() > 0) {
             project.setSetting("libChecked", "1");
+            for (Library.Item it : library.find(Library.PIC, null, null)) if (!it.builtIn) { offered = true; break; }
+            if (offered) libraryMatches(true);
+        }
+        if (!offered && !"1".equals(project.setting("voiceChecked", "0")) && noVoice == st.characters.size() && st.characters.size() > 0) {
+            // (after the pictures, or on the next visit) offer saved voices that fit the voices the script describes
+            project.setSetting("voiceChecked", "1");
             boolean any = false;
-            for (Library.Item it : library.find(Library.PIC, null, null)) if (!it.builtIn) { any = true; break; }
-            if (any) libraryMatches(true);
+            for (Library.Item it : library.find(Library.VOICE, null, null)) if (!it.builtIn) { any = true; break; }
+            if (any) voiceMatches(true);
         }
         LinearLayout sum = Ui.card(this);
         sum.addView(Ui.title(this, "📜 " + st.title));
@@ -656,6 +663,9 @@ public class MainActivity extends Activity {
         }));
         sum.addView(Ui.button(this, "📥  Add many pictures — the director places them", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("image/*", REQ_BULK, true); }
+        }));
+        sum.addView(Ui.button(this, "🎙  Find voices in my library for this story", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { voiceMatches(false); }
         }));
         sum.addView(Ui.button(this, "🎙  Record lines in your own voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { showLines(); }
@@ -1302,8 +1312,10 @@ public class MainActivity extends Activity {
         target = "voice:" + name;
         Picker p = new Picker(this, library);
         boolean hindi = st == null || st.hindi;
+        // the voice the script describes for this character ("भारी, धीमी आवाज़", "a sweet voice"…)
+        com.tarun.kahani.core.VoiceMatch.Want want = c == null ? null : com.tarun.kahani.core.VoiceMatch.want(c);
         com.tarun.kahani.core.EdgeVoice.Cast best = c == null ? com.tarun.kahani.core.EdgeVoice.narrator(hindi)
-                : com.tarun.kahani.core.EdgeVoice.castFor(c.look, c.age, hindi, st.characters.indexOf(c));
+                : com.tarun.kahani.core.VoiceMatch.adjust(com.tarun.kahani.core.EdgeVoice.castFor(c.look, c.age, hindi, st.characters.indexOf(c)), want);
         for (String[] pr : com.tarun.kahani.core.EdgeVoice.presets(hindi)) {
             Library.Item it = new Library.Item();
             it.id = "preset:" + pr[0];
@@ -1313,7 +1325,7 @@ public class MainActivity extends Activity {
             it.builtIn = true;
             p.extra.add(it);
             com.tarun.kahani.core.EdgeVoice.Cast pc = com.tarun.kahani.core.EdgeVoice.Cast.parse(pr[0]);
-            if (pc != null && pc.voice.equals(best.voice) && Math.abs(pc.pitchHz - best.pitchHz) <= 10) p.suggested.add(it.id);
+            if (pc != null && pc.voice.equals(best.voice) && Math.abs(pc.pitchHz - best.pitchHz) <= 12) p.suggested.add(it.id);
         }
         Library.Item bestItem = new Library.Item();
         bestItem.id = "preset:" + best.key();
@@ -1323,7 +1335,26 @@ public class MainActivity extends Activity {
         bestItem.builtIn = true;
         p.extra.add(0, bestItem);
         p.suggested.add(bestItem.id);
-        if (c != null) for (Library.Item it : library.find(Library.VOICE, null, null)) if (Library.voiceSuits(it, c.look, c.age)) p.suggested.add(it.id);
+        p.fit.put(bestItem.id, 0.8f);
+        if (want != null) {
+            // only what a studio voice can really change (it can't become raspy)
+            List<String> made = new ArrayList<String>();
+            for (String w : want.words) if (!w.startsWith("raspy") && !w.startsWith("loud")) made.add(w);
+            if (!made.isEmpty()) p.note.put(bestItem.id, "Made " + join(made) + ", as the story describes");
+        }
+        // your own voices: measured once, then compared with the description
+        for (Library.Item it : library.find(Library.VOICE, null, null)) {
+            if (it.builtIn) continue;
+            float[] vf = Library.voiceFeatures(it);
+            if (vf == null) { p.note.put(it.id, it.meta("vf") == null ? "Still being measured…" : "No clear voice found in this recording"); continue; }
+            String heard = com.tarun.kahani.core.VoiceMatch.describe(vf);
+            if (want == null) { p.note.put(it.id, heard); continue; }
+            float sc = com.tarun.kahani.core.VoiceMatch.score(vf, want);
+            p.fit.put(it.id, sc);
+            String fits = com.tarun.kahani.core.VoiceMatch.fits(vf, want);
+            if (sc >= 0.72f) p.suggested.add(it.id);
+            p.note.put(it.id, heard + (sc >= 0.72f && fits.length() > 0 ? "  •  fits: " + fits : ""));
+        }
         final String line = sampleLine(st, c);
         p.presetPlayer = new Picker.Player() {
             public void play(final Library.Item it) { speakPreset(it.path.substring(7), line, st == null || st.hindi); }
@@ -1348,6 +1379,12 @@ public class MainActivity extends Activity {
                         else if (a.equals("phone")) pick("audio/*", REQ_AUDIO, false);
                     }
                 });
+    }
+
+    static String join(List<String> words) {
+        StringBuilder b = new StringBuilder();
+        for (String w : words) { if (b.length() > 0) b.append(", "); b.append(w); }
+        return b.toString();
     }
 
     static String presetLabel(String key, String def) {
@@ -1422,6 +1459,8 @@ public class MainActivity extends Activity {
                 if (natural) {
                     // natural voices: each tap on 🔊 tries the next variation and remembers it
                     List<com.tarun.kahani.core.EdgeVoice.Cast> opts = com.tarun.kahani.core.EdgeVoice.options(c.look, c.age, st.hindi, st.characters.indexOf(c));
+                    com.tarun.kahani.core.VoiceMatch.Want want = com.tarun.kahani.core.VoiceMatch.want(c);
+                    for (int i = 0; i < opts.size(); i++) opts.set(i, com.tarun.kahani.core.VoiceMatch.adjust(opts.get(i), want));
                     String key = "evoiceIdx." + c.displayName;
                     String cur = project.setting(key, "");
                     try { choice = cur.length() == 0 ? 0 : Integer.parseInt(cur); } catch (NumberFormatException ignored) {}
@@ -1634,14 +1673,19 @@ public class MainActivity extends Activity {
                     r.stop();
                     d.dismiss();
                     if (r.error != null || out.length() < 32000) { toast("Nothing was recorded " + (r.error == null ? "(too short)" : r.error)); out.delete(); return; }
-                    try {
-                        String n = nm.getText().toString().trim();
-                        Library.Item it = library.add(type, type.equals(Library.VOICE) ? "voice" : "amb", n, n, out, ".wav", "recorded");
-                        toast("✅ Saved to library");
-                        useSound(it);
-                    } catch (Exception e) {
-                        toast("Could not save: " + e.getMessage());
-                    }
+                    final String n = nm.getText().toString().trim();
+                    // saving measures the voice (pitch, speed, tone), which takes a few seconds: not on the screen's thread
+                    background("Saving and measuring the voice…", new Work() {
+                        public Object run() throws Exception {
+                            return library.add(type, type.equals(Library.VOICE) ? "voice" : "amb", n, n, out, ".wav", "recorded");
+                        }
+                    }, new Done() {
+                        public void done(Object r, Exception e) {
+                            if (e != null) { toast("Could not save: " + e.getMessage()); return; }
+                            toast("✅ Saved to library");
+                            useSound((Library.Item) r);
+                        }
+                    });
                 }
             }
         });
@@ -1898,12 +1942,13 @@ public class MainActivity extends Activity {
         for (int i = 0; i < ps.size(); i++) {
             Placement p = ps.get(i);
             com.tarun.kahani.core.PicSense.Info in = library.info(p.item);
+            com.tarun.kahani.core.PicSense.Traits tr = com.tarun.kahani.core.PicSense.Traits.fromMeta(p.item.meta);
             String byName = ScriptAI.matchName(p.fileName, labels);
             for (int t = 0; t < targets.size(); t++) {
                 String tg = targets.get(t)[0];
                 float f = 0;
                 if (in != null) {
-                    if (tg.startsWith("char:")) for (Story.CharacterDef c : st.characters) { if (tg.equals("char:" + keyFor(c))) f = com.tarun.kahani.core.PicSense.matchCharacter(in, c); }
+                    if (tg.startsWith("char:")) for (Story.CharacterDef c : st.characters) { if (tg.equals("char:" + keyFor(c))) f = com.tarun.kahani.core.PicSense.matchCharacter(in, tr, c); }
                     else if (tg.startsWith("place:")) f = com.tarun.kahani.core.PicSense.matchPlace(in, targets.get(t)[2]);
                 }
                 float s = f * 0.75f;
@@ -2102,6 +2147,90 @@ public class MainActivity extends Activity {
                 reviewPlacements(ps, "Pictures from your library that fit this story");
             }
         });
+    }
+
+    /**
+     * Voices saved in the library (recorded or added for any story) that fit this story's characters: each
+     * voice is matched by its measured pitch, speed and tone to the character's age, gender and the voice the
+     * script describes. Each voice goes to one character at most; the user checks and applies.
+     */
+    private void voiceMatches(boolean quietIfNone) {
+        final Story st = loadStory();
+        if (st == null) return;
+        Set<String> taken = new HashSet<String>();
+        List<Story.CharacterDef> chars = new ArrayList<Story.CharacterDef>();
+        for (Story.CharacterDef c : st.characters) {
+            Library.Item cur = library.byId(project.setting("vsample." + c.displayName, ""));
+            if (cur != null) taken.add(cur.id); else chars.add(c);
+        }
+        final List<Library.Item> mine = new ArrayList<Library.Item>();
+        List<float[]> feats = new ArrayList<float[]>();
+        int unmeasured = 0;
+        for (Library.Item it : library.find(Library.VOICE, null, null)) {
+            if (it.builtIn || taken.contains(it.id)) continue;
+            float[] vf = Library.voiceFeatures(it);
+            if (vf == null) { if (it.meta("vf") == null) unmeasured++; continue; }
+            mine.add(it);
+            feats.add(vf);
+        }
+        if (mine.isEmpty() || chars.isEmpty()) {
+            if (!quietIfNone) toast(chars.isEmpty() ? "Every character already has a voice sample"
+                    : unmeasured > 0 ? "Your voices are still being measured — try again in a moment" : "No voices in your library yet — record or add one first");
+            return;
+        }
+        List<com.tarun.kahani.core.VoiceMatch.Want> wants = new ArrayList<com.tarun.kahani.core.VoiceMatch.Want>();
+        for (Story.CharacterDef c : chars) wants.add(com.tarun.kahani.core.VoiceMatch.want(c));
+        int[] a = com.tarun.kahani.core.VoiceMatch.assign(feats, wants, 0.72f);
+        final List<Story.CharacterDef> rowsC = new ArrayList<Story.CharacterDef>();
+        final List<Library.Item> rowsV = new ArrayList<Library.Item>();
+        final List<CheckBox> boxes = new ArrayList<CheckBox>();
+        LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 12), Ui.dp(this, 4), Ui.dp(this, 12), Ui.dp(this, 4));
+        body.addView(Ui.text(this, "The director compared your saved voices with the voices the story describes "
+                + "(age, gender, deep / sweet / raspy, slow / fast). Untick any you don't want, tap ▶ to listen.", 13, Ui.SUB, false));
+        for (int i = 0; i < chars.size(); i++) {
+            if (a[i] < 0) continue;
+            Story.CharacterDef c = chars.get(i);
+            final Library.Item it = mine.get(a[i]);
+            float sc = com.tarun.kahani.core.VoiceMatch.score(feats.get(a[i]), wants.get(i));
+            String fits = com.tarun.kahani.core.VoiceMatch.fits(feats.get(a[i]), wants.get(i));
+            LinearLayout r = Ui.row(this);
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            CheckBox cb = new CheckBox(this);
+            cb.setChecked(true);
+            cb.setText(c.shown() + "  →  🎙 " + it.label() + "\n" + (fits.length() > 0 ? "fits: " + fits + "  •  " : "") + (sc >= 0.85f ? "good match" : "possible match"));
+            cb.setTextSize(14);
+            r.addView(cb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) { Picker.play(MainActivity.this, it.path); }
+            }));
+            body.addView(r);
+            rowsC.add(c);
+            rowsV.add(it);
+            boxes.add(cb);
+        }
+        if (rowsC.isEmpty()) {
+            if (!quietIfNone) toast("None of your saved voices fits the characters of this story — the studio voices will be used");
+            return;
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body);
+        new AlertDialog.Builder(this).setTitle("Voices from your library that fit this story").setView(sv)
+                .setPositiveButton("✔ Apply", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface di, int w) {
+                        Picker.stop();
+                        int n = 0;
+                        for (int i = 0; i < rowsC.size(); i++) {
+                            if (!boxes.get(i).isChecked()) continue;
+                            project.setSetting("vsample." + rowsC.get(i).displayName, rowsV.get(i).id);
+                            n++;
+                        }
+                        toast("✅ " + n + (n == 1 ? " voice" : " voices") + " from your library will be used");
+                        showStudio();
+                    }
+                }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface di, int w) { Picker.stop(); }
+                }).show();
     }
 
     /** Decodes a picture no bigger than about max pixels on its long side (never the full-size photo). */

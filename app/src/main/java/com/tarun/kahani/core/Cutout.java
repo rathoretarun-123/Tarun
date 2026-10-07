@@ -140,24 +140,52 @@ public final class Cutout {
             cnt += c;
         }
         if (cnt < 50) return;
-        // face = the first strong band of skin rows; neck is where width shrinks
-        int maxRow = 0, maxY = 0;
-        for (int i = 0; i < scanH; i++) if (rowCount[i] > maxRow) { maxRow = rowCount[i]; maxY = i; }
-        int fTop = maxY, fBot = maxY;
-        while (fTop > 0 && rowCount[fTop - 1] > maxRow * 0.3f) fTop--;
-        while (fBot < scanH - 1 && rowCount[fBot + 1] > maxRow * 0.45f) fBot++;
-        // horizontal centre of the face band
+        // face = the biggest face-shaped patch of skin in the upper body (hands are small, chest/arms are lower)
+        int sh = Math.min(h - top, (int) (h * 0.5f));
+        int[] lab = new int[w * sh];
+        int[] queue = new int[w * sh];
+        int best = -1, bestA = 0, bx0 = 0, bx1 = 0, by0 = 0, by1 = 0, cur = 0;
+        for (int y = 0; y < sh; y++) for (int x = x0; x < x1; x++) {
+            int i = y * w + x;
+            if (lab[i] != 0 || !isSkin(r.px[(y + top) * w + x])) continue;
+            cur++;
+            int qh = 0, qt = 0, area = 0, mnx = x, mxx = x, mny = y, mxy = y;
+            queue[qt++] = i;
+            lab[i] = cur;
+            while (qh < qt) {
+                int j = queue[qh++];
+                area++;
+                int jx = j % w, jy = j / w;
+                if (jx < mnx) mnx = jx; if (jx > mxx) mxx = jx; if (jy < mny) mny = jy; if (jy > mxy) mxy = jy;
+                int[] nb = {jx > x0 ? j - 1 : -1, jx < x1 - 1 ? j + 1 : -1, jy > 0 ? j - w : -1, jy < sh - 1 ? j + w : -1};
+                for (int k : nb) {
+                    if (k < 0 || lab[k] != 0 || !isSkin(r.px[(k / w + top) * w + k % w])) continue;
+                    lab[k] = cur;
+                    queue[qt++] = k;
+                }
+            }
+            int bw = mxx - mnx + 1, bh = mxy - mny + 1;
+            // face-shaped: not a thin strip, not much wider than tall; higher up is more likely the face
+            float shape = bh > bw * 0.55f && bw > w * 0.08f ? 1f : 0.25f;
+            float high = 1.2f - mny / (float) sh * 0.6f;
+            int score = (int) (area * shape * high);
+            if (score > bestA) { bestA = score; best = cur; bx0 = mnx; bx1 = mxx; by0 = mny; by1 = mxy; }
+        }
+        if (best < 0 || bestA < 30) return;
+        // the patch may include the neck: a face is about as tall as 1.25 x its width
+        int faceWpx = bx1 - bx0 + 1;
+        int fTop = by0, fBot = Math.min(by1, by0 + (int) (faceWpx * 0.95f));
+        for (int i = 0; i < scanH && i < rowCount.length; i++) rowCount[i] = 0;
         long fx = 0, fc = 0; int minX = w, maxX = 0;
         long sr = 0, sg = 0, sb = 0;
         for (int y = top + fTop; y <= top + fBot; y++) {
             for (int x = x0; x < x1; x++) {
+                if (lab[(y - top) * w + x] != best) continue;
                 int c = r.px[y * w + x];
-                if (isSkin(c)) {
-                    fx += x; fc++;
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255;
-                }
+                fx += x; fc++;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255;
             }
         }
         if (fc < 20) return;
@@ -172,9 +200,9 @@ public final class Cutout {
         r.faceTop = faceTopPx / h;
         r.chinY = chinPx / h;
         r.mouthX = cx / w;
-        r.mouthY = (faceTopPx + faceH * 0.80f) / h;
+        r.mouthY = (faceTopPx + faceH * 0.78f) / h;
         r.mouthW = faceW * 0.26f / w;
-        r.eyeY = (faceTopPx + faceH * 0.48f) / h;
+        r.eyeY = (faceTopPx + faceH * 0.47f) / h;
         r.eyeLX = (cx - faceW * 0.2f) / w;
         r.eyeRX = (cx + faceW * 0.2f) / w;
         r.eyeR = faceW * 0.1f / w;

@@ -163,7 +163,8 @@ public final class FilmJob implements Runnable {
                 if (natural) {
                     EdgeVoice.Cast chosen = EdgeVoice.Cast.parse(project.setting("evoice." + c.displayName, ""));
                     k.edge = k.sample != null ? EdgeVoice.forSample(k.sample.pitch, story.hindi)
-                            : chosen != null ? chosen : EdgeVoice.castFor(c.look, c.age, story.hindi, ci);
+                            : chosen != null ? chosen
+                            : com.tarun.kahani.core.VoiceMatch.adjust(EdgeVoice.castFor(c.look, c.age, story.hindi, ci), com.tarun.kahani.core.VoiceMatch.want(c));
                 }
                 if (aiVoices) {
                     String gv = project.setting("gvoice." + c.displayName, "");

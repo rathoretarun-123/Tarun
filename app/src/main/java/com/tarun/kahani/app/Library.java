@@ -62,6 +62,7 @@ public final class Library {
         load();
         recoverOrphans();
         addBuiltIns();
+        measureOldVoices();
     }
 
     /** Files in the library folders that the list does not know (e.g. after a crash) are taken back in. */
@@ -217,7 +218,25 @@ public final class Library {
             b.getPixels(px, 0, w, 0, 0, w, h);
             b.recycle();
             com.tarun.kahani.core.PicSense.Info in = com.tarun.kahani.core.PicSense.analyse(px, w, h);
-            it.meta = (it.meta.length() > 0 ? it.meta + ";" : "") + in.toMeta();
+            StringBuilder keep = new StringBuilder();
+            for (String kv : it.meta.split(";")) {
+                if (kv.length() == 0 || kv.startsWith("photo=") || kv.startsWith("figure=") || kv.startsWith("skin=") || kv.startsWith("hue=")
+                        || kv.startsWith("place=") || kv.startsWith("tr=")) continue;
+                keep.append(kv).append(';');
+            }
+            it.meta = keep + in.toMeta();
+            if (in.figure) {
+                // dress style, moustache, bindi, turban, spear, fur… read from a slightly bigger copy of the figure
+                android.graphics.Bitmap big = MainActivity.decodeSmall(data, 420);
+                if (big != null) {
+                    int bw = big.getWidth(), bh = big.getHeight();
+                    int[] bp = new int[bw * bh];
+                    big.getPixels(bp, 0, bw, 0, 0, bw, bh);
+                    big.recycle();
+                    com.tarun.kahani.core.Cutout.Result cr = com.tarun.kahani.core.Cutout.process(bp, bw, bh);
+                    it.meta += ";" + com.tarun.kahani.core.PicSense.traits(cr).toMeta();
+                }
+            }
             if (cameraPhoto(data)) it.setMeta("camera", "1");
         } catch (Throwable ignored) {
         }
@@ -236,43 +255,47 @@ public final class Library {
 
     public com.tarun.kahani.core.PicSense.Info info(Item it) {
         com.tarun.kahani.core.PicSense.Info in = com.tarun.kahani.core.PicSense.Info.fromMeta(it.meta);
-        if (in == null && !it.builtIn && it.type.equals(PIC)) { analysePicture(it); save(); in = com.tarun.kahani.core.PicSense.Info.fromMeta(it.meta); }
+        // pictures analysed by an older version get the newer reading (dress style, moustache, bindi…) once
+        boolean old = in == null || (in.figure && !it.meta.contains("tr=")) || !it.meta.contains("place=") || it.meta.split("place=")[1].split(";")[0].split(",").length < 10;
+        if (old && !it.builtIn && it.type.equals(PIC)) { analysePicture(it); save(); in = com.tarun.kahani.core.PicSense.Info.fromMeta(it.meta); }
         return in;
     }
 
-    /** What kind of voice a sample is (from its pitch), so the studio can suggest it for fitting characters. */
+    /**
+     * Measures a voice sample once (pitch, how lively, how fast, how bright, how raspy) so the director can
+     * match it to characters whose voice the script describes ("a deep, slow voice", "मीठी आवाज़"…).
+     */
     void analyseVoice(Item it) {
         float[] pcm = AudioIO.decode(ctx, it.path, 40);
-        if (pcm == null) return;
-        float p = com.tarun.kahani.core.VoiceFx.medianPitch(pcm, com.tarun.kahani.core.Synth.SR);
-        it.setMeta("pitch", String.valueOf(Math.round(p)));
-        String kind = voiceKind(p);
-        if (kind.length() > 0 && !it.tags.contains(kind)) it.tags = (it.tags.length() > 0 ? it.tags + ", " : "") + kind;
+        float[] vf = pcm == null ? null : com.tarun.kahani.core.VoiceFx.features(pcm, com.tarun.kahani.core.Synth.SR);
+        if (vf == null || vf[0] <= 0) { it.setMeta("vf", "-"); return; }   // no voice heard in it: not tried again
+        it.setMeta("pitch", String.valueOf(Math.round(vf[0])));
+        it.setMeta("vf", com.tarun.kahani.core.VoiceMatch.format(vf));
+        // the words shown with the voice: "female, smooth, lively voice" (older single words are replaced)
+        String d = com.tarun.kahani.core.VoiceMatch.describe(vf) + " voice";
+        String tags = it.tags.replaceAll("(^|, )(deep male|male|female|child) voice", "").replaceAll("^, ", "");
+        if (it.meta("vdesc") != null) tags = tags.replace(it.meta("vdesc"), "").replaceAll("(, )+", ", ").replaceAll("^, |, $", "");
+        it.tags = tags.length() > 0 ? tags + ", " + d : d;
+        it.setMeta("vdesc", d);
     }
 
-    static String voiceKind(float p) {
-        if (p <= 0) return "";
-        if (p < 120) return "deep male voice";
-        if (p < 175) return "male voice";
-        if (p < 245) return "female voice";
-        return "child voice";
+    /** The stored measurements of a voice, or null (built-in voices and voices not measured yet). */
+    public static float[] voiceFeatures(Item it) {
+        return it == null ? null : com.tarun.kahani.core.VoiceMatch.parse(it.meta("vf"));
     }
 
-    /** True if a sample's pitch suits a character (child, woman, man, old, giant…). */
-    public static boolean voiceSuits(Item it, com.tarun.kahani.core.Look l, int age) {
-        String ps = it.meta("pitch");
-        if (ps == null || l == null) return false;
-        float p;
-        try { p = Float.parseFloat(ps); } catch (NumberFormatException e) { return false; }
-        if (p <= 0) return false;
-        switch (l.kind) {
-            case com.tarun.kahani.core.Look.GIRL: case com.tarun.kahani.core.Look.BOY: return p >= 220;
-            case com.tarun.kahani.core.Look.WOMAN: case com.tarun.kahani.core.Look.WITCH: return p >= 165 && p < 290;
-            case com.tarun.kahani.core.Look.MONSTER: return p < 130;
-            case com.tarun.kahani.core.Look.OLD_MAN: return p < 160;
-            case com.tarun.kahani.core.Look.MONKEY: return p >= 200;
-            default: return l.female ? p >= 165 && p < 290 : p >= 85 && p < 175;
-        }
+    /** Voices saved by an older version (pitch only) are measured once in the background. */
+    private void measureOldVoices() {
+        new Thread(new Runnable() {
+            public void run() {
+                boolean changed = false;
+                for (Item it : items) {
+                    if (it.builtIn || !VOICE.equals(it.type) || it.meta("vf") != null) continue;
+                    try { analyseVoice(it); changed = true; } catch (Throwable ignored) {}
+                }
+                if (changed) save();
+            }
+        }, "measure-voices").start();
     }
 
     /** Puts a backed-up item back with its original id (used by restore). */

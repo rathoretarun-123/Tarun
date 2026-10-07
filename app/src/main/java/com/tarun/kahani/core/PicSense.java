@@ -23,6 +23,7 @@ public final class PicSense {
         public float skin;               // share of skin-coloured pixels in the figure/centre
         public final float[] hue = new float[15];   // 12 hue bins + white, grey, black (clothing/figure colours)
         public float green, dark, sky, white, warm, bright;   // place features
+        public float water, beige, flowers, lights;
         public boolean isPhoto() { return photo > 0.5f; }
         public String toMeta() {
             StringBuilder b = new StringBuilder();
@@ -30,7 +31,8 @@ public final class PicSense {
             b.append(";hue=");
             for (int i = 0; i < hue.length; i++) { if (i > 0) b.append(','); b.append(r2(hue[i])); }
             b.append(";place=").append(r2(green)).append(',').append(r2(dark)).append(',').append(r2(sky)).append(',')
-                    .append(r2(white)).append(',').append(r2(warm)).append(',').append(r2(bright));
+                    .append(r2(white)).append(',').append(r2(warm)).append(',').append(r2(bright)).append(',')
+                    .append(r2(water)).append(',').append(r2(beige)).append(',').append(r2(flowers)).append(',').append(r2(lights));
             return b.toString();
         }
         public static Info fromMeta(String meta) {
@@ -49,6 +51,7 @@ public final class PicSense {
                         String[] f = v.split(",");
                         in.green = Float.parseFloat(f[0]); in.dark = Float.parseFloat(f[1]); in.sky = Float.parseFloat(f[2]);
                         in.white = Float.parseFloat(f[3]); in.warm = Float.parseFloat(f[4]); in.bright = Float.parseFloat(f[5]);
+                        if (f.length >= 10) { in.water = Float.parseFloat(f[6]); in.beige = Float.parseFloat(f[7]); in.flowers = Float.parseFloat(f[8]); in.lights = Float.parseFloat(f[9]); }
                     }
                 } catch (RuntimeException ignored) {}
             }
@@ -119,14 +122,22 @@ public final class PicSense {
                 float[] hsv = hsv(c);
                 cnt++;
                 if (hsv[2] < 0.25f) in.dark++;
-                if (hsv[1] > 0.25f && hsv[0] > 70 && hsv[0] < 170 && hsv[2] > 0.2f) in.green++;
-                if (y < h / 3 && hsv[0] > 185 && hsv[0] < 250 && hsv[1] > 0.15f && hsv[2] > 0.45f) in.sky++;
+                if (hsv[1] > 0.2f && hsv[0] > 55 && hsv[0] < 170 && hsv[2] > 0.18f) in.green++;
+                if (y < h / 3 && ((hsv[0] > 185 && hsv[0] < 250 && hsv[1] > 0.15f && hsv[2] > 0.45f)
+                        || (hsv[0] > 15 && hsv[0] < 60 && hsv[1] < 0.6f && hsv[2] > 0.78f))) in.sky++;   // blue sky or a golden sunrise sky
                 if (hsv[1] < 0.15f && hsv[2] > 0.78f) in.white++;
                 if ((hsv[0] < 50 || hsv[0] > 340) && hsv[1] > 0.4f && hsv[2] > 0.45f) in.warm++;
                 in.bright += hsv[2];
+                if (y > h / 4 && ((hsv[0] > 170 && hsv[0] < 225 && hsv[1] > 0.12f && hsv[2] > 0.45f) || (hsv[1] < 0.12f && hsv[2] > 0.88f && y > h / 3))) in.water++;
+                if (hsv[0] >= 22 && hsv[0] <= 52 && hsv[1] >= 0.08f && hsv[1] <= 0.4f && hsv[2] > 0.62f) in.beige++;
+                if ((hsv[0] >= 290 || hsv[0] <= 8) && hsv[1] > 0.45f && hsv[2] > 0.5f) in.flowers++;
+                if (hsv[2] > 0.85f && hsv[1] > 0.35f && hsv[0] >= 25 && hsv[0] <= 60) in.lights++;
             }
         }
-        if (cnt > 0) { in.dark /= cnt; in.green /= cnt; in.sky /= cnt / 3f; in.white /= cnt; in.warm /= cnt; in.bright /= cnt; }
+        if (cnt > 0) {
+            in.dark /= cnt; in.green /= cnt; in.sky /= cnt / 3f; in.white /= cnt; in.warm /= cnt; in.bright /= cnt;
+            in.water /= cnt; in.beige /= cnt; in.flowers /= cnt; in.lights /= cnt;
+        }
         in.sky = Math.min(1, in.sky);
         return in;
     }
@@ -174,7 +185,9 @@ public final class PicSense {
             int d = Math.abs(((c >> 16) & 255) - mr) + Math.abs(((c >> 8) & 255) - mg) + Math.abs((c & 255) - mb);
             if (d < 50) close++;
         }
-        return close > samples.size() * 0.85f;
+        // character art sits on a light, plain background; a dark uniform border is a night or cave scene
+        float bright = (mr * 0.3f + mg * 0.59f + mb * 0.11f) / 255f;
+        return close > samples.size() * 0.85f && bright > 0.55f;
     }
 
     static boolean isSkin(int c) {
@@ -310,6 +323,197 @@ public final class PicSense {
         for (int i = 0; i < n; i++) if (fg[i] == 0 && outside[i] == 0) fg[i] = 1;
     }
 
+    // ------------------------------------------------------------------ what the figure looks like
+
+    /** Visible features of a figure, each -1 (no), 0 (can't tell) or 1 (yes); headRatio = head height / body height. */
+    public static final class Traits {
+        public int face, mustache, beard, bindi, turban, crown, hat, longHair, skirt, trousers, spear, greyHair, animal;
+        public float headRatio;
+        public String toMeta() {
+            return "tr=" + face + "," + mustache + "," + beard + "," + bindi + "," + turban + "," + crown + "," + hat + "," + longHair + ","
+                    + skirt + "," + trousers + "," + spear + "," + greyHair + "," + animal + "," + r2(headRatio);
+        }
+        public static Traits fromMeta(String meta) {
+            if (meta == null) return null;
+            int i = meta.indexOf("tr=");
+            if (i < 0) return null;
+            String v = meta.substring(i + 3);
+            int e = v.indexOf(';');
+            if (e >= 0) v = v.substring(0, e);
+            String[] f = v.split(",");
+            if (f.length < 14) return null;
+            Traits t = new Traits();
+            try {
+                t.face = Integer.parseInt(f[0]); t.mustache = Integer.parseInt(f[1]); t.beard = Integer.parseInt(f[2]);
+                t.bindi = Integer.parseInt(f[3]); t.turban = Integer.parseInt(f[4]); t.crown = Integer.parseInt(f[5]);
+                t.hat = Integer.parseInt(f[6]); t.longHair = Integer.parseInt(f[7]); t.skirt = Integer.parseInt(f[8]);
+                t.trousers = Integer.parseInt(f[9]); t.spear = Integer.parseInt(f[10]); t.greyHair = Integer.parseInt(f[11]);
+                t.animal = Integer.parseInt(f[12]); t.headRatio = Float.parseFloat(f[13]);
+            } catch (NumberFormatException ex) { return null; }
+            return t;
+        }
+    }
+
+    static float lumF(int c) { return lum(c) / 255f; }
+
+    /** Average colour of the opaque pixels in a box (fractions of the crop). */
+    static int avg(Cutout.Result r, float x0, float y0, float x1, float y1) {
+        int ax = Math.max(0, (int) (x0 * r.w)), bx = Math.min(r.w - 1, (int) (x1 * r.w));
+        int ay = Math.max(0, (int) (y0 * r.h)), by = Math.min(r.h - 1, (int) (y1 * r.h));
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        for (int y = ay; y <= by; y++) for (int x = ax; x <= bx; x++) {
+            int c = r.px[y * r.w + x];
+            if ((c >>> 24) < 160) continue;
+            sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+        }
+        if (n == 0) return 0;
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    /** Width of the figure (opaque span) on a row, as a fraction of the crop width. */
+    static float rowWidth(Cutout.Result r, float fy) {
+        int y = Math.max(0, Math.min(r.h - 1, (int) (fy * r.h)));
+        int a = -1, b = -1;
+        for (int x = 0; x < r.w; x++) if ((r.px[y * r.w + x] >>> 24) > 128) { if (a < 0) a = x; b = x; }
+        return a < 0 ? 0 : (b - a + 1) / (float) r.w;
+    }
+
+    /** Number of separate opaque runs on a row (two legs = 2). */
+    static int runs(Cutout.Result r, float fy, float minFrac) {
+        int y = Math.max(0, Math.min(r.h - 1, (int) (fy * r.h)));
+        int n = 0, len = 0;
+        for (int x = 0; x <= r.w; x++) {
+            boolean on = x < r.w && (r.px[y * r.w + x] >>> 24) > 128;
+            if (on) len++;
+            else { if (len > r.w * minFrac) n++; len = 0; }
+        }
+        return n;
+    }
+
+    /** Reads dress style, moustache, beard, bindi, headwear, hair, weapons and body proportions from a figure. */
+    public static Traits traits(Cutout.Result r) {
+        Traits t = new Traits();
+        if (r == null || r.w < 20 || r.h < 40) return t;
+        t.face = r.faceFound ? 1 : -1;
+        float skinShare = skinShare(r.px);
+        if (!r.faceFound) {
+            t.animal = skinShare < 0.04f ? 1 : 0;
+            return t;
+        }
+        // fur: an animal's "skin colour" covers most of the body, a person's only face, hands and feet
+        int op = 0, fur = 0;
+        for (int c : r.px) {
+            if ((c >>> 24) < 128) continue;
+            op++;
+            float[] hv = hsv(c);
+            if (hv[0] >= 5 && hv[0] <= 40 && hv[1] > 0.3f && hv[2] > 0.15f && hv[2] < 0.8f) fur++;
+        }
+        float furShare = op == 0 ? 0 : fur / (float) op;
+        if (DEBUG) System.out.println("  fur=" + furShare);
+        t.animal = furShare > 0.5f ? 1 : -1;
+        float faceTop = r.faceTop, chin = r.chinY, fh = chin - faceTop;
+        float cx = r.mouthX, fw = Math.max(0.05f, (r.eyeRX - r.eyeLX) * 2.6f);
+        t.headRatio = (chin - r.headTop) / 1f;
+        float skinL = lumF(r.skin);
+        // moustache: the band between nose and mouth is much darker than the skin
+        int mu = avg(r, cx - fw * 0.22f, faceTop + fh * 0.64f, cx + fw * 0.22f, faceTop + fh * 0.74f);
+        if (mu != 0) {
+            float l = lumF(mu);
+            float[] h = hsv(mu);
+            boolean lipRed = (h[0] < 20 || h[0] > 330) && h[1] > 0.45f;
+            t.mustache = l < skinL * 0.62f && !lipRed ? 1 : l > skinL * 0.82f ? -1 : 0;
+        }
+        // beard: the chin below the mouth is dark
+        int be = avg(r, cx - fw * 0.25f, faceTop + fh * 0.88f, cx + fw * 0.25f, Math.min(1, chin + fh * 0.05f));
+        if (be != 0) t.beard = lumF(be) < skinL * 0.45f ? 1 : lumF(be) > skinL * 0.8f ? -1 : 0;
+        // bindi / tilak: a small spot between the eyebrows that is clearly not skin-coloured
+        float ex = (r.eyeLX + r.eyeRX) / 2, ey = r.eyeY - (r.eyeRX - r.eyeLX) * 0.55f;
+        float sp = Math.max(0.008f, (r.eyeRX - r.eyeLX) * 0.12f);
+        int bi = avg(r, ex - sp, ey - sp, ex + sp, ey + sp);
+        int around = avg(r, ex - sp * 4, ey - sp * 3, ex - sp * 2, ey + sp * 3);
+        if (bi != 0 && around != 0) {
+            float[] hb = hsv(bi), ha = hsv(around);
+            float dh = Math.abs(hb[0] - ha[0]);
+            if (dh > 180) dh = 360 - dh;
+            boolean distinct = (hb[1] > 0.55f && dh > 12) || lumF(bi) < lumF(around) * 0.55f || (hb[0] > 40 && hb[0] < 70 && hb[1] > 0.5f && dh > 15);
+            t.bindi = distinct ? 1 : -1;
+        }
+        // headwear: what covers the top of the head
+        if (faceTop - r.headTop > 0.02f) {
+            int hw = avg(r, cx - fw * 0.3f, r.headTop + (faceTop - r.headTop) * 0.25f, cx + fw * 0.3f, r.headTop + (faceTop - r.headTop) * 0.75f);
+            float[] h = hsv(hw);
+            boolean hairLike = h[2] < 0.35f || (h[1] < 0.5f && h[0] >= 10 && h[0] <= 45 && h[2] < 0.55f);
+            boolean gold = h[0] >= 38 && h[0] <= 60 && h[1] > 0.45f && h[2] > 0.55f;
+            float tall = (faceTop - r.headTop) / Math.max(0.01f, fh);
+            t.crown = gold ? 1 : -1;
+            t.turban = !hairLike && !gold && h[1] > 0.3f && tall > 0.45f ? 1 : hairLike ? -1 : 0;
+            t.hat = !hairLike && tall > 1.1f && h[2] < 0.4f ? 1 : -1;
+            t.greyHair = hairLike ? -1 : (h[1] < 0.15f && h[2] > 0.6f ? 1 : -1);
+        }
+        // long hair / braid: dark hair continues beside or below the face
+        int side = avg(r, cx - fw * 0.75f, chin, cx - fw * 0.5f, chin + fh * 0.6f);
+        int side2 = avg(r, cx + fw * 0.5f, chin, cx + fw * 0.75f, chin + fh * 0.6f);
+        float dl = Math.min(side == 0 ? 1 : lumF(side), side2 == 0 ? 1 : lumF(side2));
+        t.longHair = dl < 0.3f ? 1 : 0;
+        // dress: a skirt flares out at the bottom, trousers show two legs
+        float waist = rowWidth(r, 0.55f), hem = rowWidth(r, 0.86f);
+        int legsLow = runs(r, 0.93f, 0.04f), legsMid = runs(r, 0.82f, 0.04f);
+        if (hem > waist * 1.22f) { t.skirt = 1; t.trousers = -1; }                       // lehenga / saree / frock flares out
+        else if (legsLow >= 2 && legsMid >= 2 && hem <= waist * 1.15f) { t.trousers = 1; t.skirt = -1; }
+        // spear / staff: something long and thin rises well above the head
+        // the very top of the figure is narrow for a while (a spear tip / staff above the head)
+        int narrow = 0;
+        for (float fy = 0.01f; fy < 0.12f; fy += 0.01f) if (rowWidth(r, fy) < 0.1f && rowWidth(r, fy) > 0) narrow++;
+        t.spear = narrow >= 5 ? 1 : -1;
+        return t;
+    }
+
+    /** Colours plus visible traits (dress style, moustache, bindi, headwear, spear, fur…) against a character. */
+    public static float matchCharacter(Info in, Traits t, Story.CharacterDef c) {
+        float col = matchCharacter(in, c);
+        if (t == null || !in.figure) return col;
+        float[] tm = traitMatch(t, c);
+        float wt = Math.min(0.75f, tm[1] / 12f);
+        return col * (1 - wt) + tm[0] * wt;
+    }
+
+    /** Agreement between what a picture shows and what the description says (0..1), plus how much was compared. */
+    public static float[] traitMatch(Traits t, Story.CharacterDef c) {
+        if (t == null || c == null || c.look == null) return new float[]{0.5f, 0};
+        Look l = c.look;
+        String d = c.description;
+        float s = 0, w = 0;
+        boolean animalDesc = l.kind == Look.MONKEY || l.kind == Look.ANIMAL || l.kind == Look.BIRD || l.kind == Look.MONSTER;
+        // {picture trait, description says yes, weight}
+        int descMust = l.mustache > 0 || Txt.has(d, "मूँछ", "मूंछ", "moustache", "mustache") ? 1 : -1;
+        int descBeard = l.beard || Txt.has(d, "दाढ़ी", "दाढी", "beard") ? 1 : -1;
+        int descBindi = l.bindi != 0 || l.tilak != 0 || Txt.has(d, "बिंदी", "तिलक", "bindi", "tilak") ? 1 : -1;
+        int descTurban = l.headwear == Look.HW_TURBAN || Txt.has(d, "पगड़ी", "साफ़ा", "साफा", "turban", "pagdi") ? 1 : -1;
+        int descCrown = l.headwear == Look.HW_CROWN || Txt.has(d, "मुकुट", "ताज", "crown") ? 1 : -1;
+        int descSkirt = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_SAREE || l.outfit == Look.O_FROCK
+                || Txt.has(d, "लहंगा", "लहँगा", "घाघरा", "साड़ी", "फ्रॉक", "lehenga", "saree", "sari", "frock", "skirt", "gown") ? 1 : 0;
+        int descTrousers = l.outfit == Look.O_UNIFORM || l.outfit == Look.O_ACHKAN || l.outfit == Look.O_ARMOR || l.outfit == Look.O_JACKET
+                || Txt.has(d, "पायजामा", "पजामा", "धोती", "सलवार", "वर्दी", "trousers", "pants", "pyjama", "uniform") ? 1 : 0;
+        int descHat = l.headwear == Look.HW_WITCH_HAT || Txt.has(d, "टोपी", "हैट", "hat", "cap") ? 1 : -1;
+        int descSpear = l.spear || Txt.has(d, "भाला", "भाले", "spear", "लाठी", "staff") ? 1 : -1;
+        int descLongHair = l.hair == Look.H_BRAID || l.hair == Look.H_LONG || l.hair == Look.H_PIGTAILS
+                || Txt.has(d, "चोटी", "चोटियों", "लंबे बाल", "braid", "long hair", "pigtail") ? 1 : 0;
+        int descGrey = l.kind == Look.OLD_MAN || c.age >= 60 || Txt.has(d, "सफ़ेद बाल", "सफेद बाल", "grey hair", "white hair", "बुज़ुर्ग", "बूढ़") ? 1 : 0;
+        float[][] pairs = {
+                {t.mustache, descMust, 2.2f}, {t.beard, descBeard, 1.4f}, {t.bindi, descBindi, 1.2f},
+                {t.turban, descTurban, 2.0f}, {t.crown, descCrown, 1.6f}, {t.hat, descHat, 1.6f},
+                {t.skirt, descSkirt == 1 ? 1 : descTrousers == 1 ? -1 : 0, 1.8f}, {t.trousers, descTrousers == 1 ? 1 : descSkirt == 1 ? -1 : 0, 1.4f},
+                {t.spear, descSpear, 1.2f}, {t.longHair, descLongHair, 0.8f}, {t.greyHair, descGrey, 1.0f},
+                {t.animal, animalDesc ? 1 : -1, 2.5f}};
+        for (float[] p : pairs) {
+            if (p[0] == 0 || p[1] == 0) continue;
+            w += p[2];
+            if ((p[0] > 0) == (p[1] > 0)) s += p[2];
+        }
+        // (head size is not used for age: in cartoon / 3D animation styles even adults have big heads)
+        return new float[]{w == 0 ? 0.5f : s / w, w};
+    }
+
     // ------------------------------------------------------------------ matching to the script
 
     static int hueBin(int c) {
@@ -379,9 +583,54 @@ public final class PicSense {
         return dress;
     }
 
-    /** How well a picture fits a place description (forest = green, cave/night = dark, palace = white…). 0..1 */
+    /** {feature index, weight, description words…}: what a described detail looks like in a picture. */
+    static final Object[][] PLACE_CUES = {
+            {6, 1.6f, "झरन", "नदी", "तालाब", "झील", "पानी", "जल", "समुद्र", "सरोवर", "waterfall", "river", "lake", "pond", "sea", "water", "fountain", "फव्वार"},
+            {7, 1.3f, "महल", "द्वार", "गेट", "मंदिर", "दरबार", "प्रांगण", "किला", "हवेली", "संगमरमर", "palace", "gate", "temple", "fort", "castle", "marble", "courtyard", "building"},
+            {0, 1.3f, "बगीच", "बाग", "जंगल", "पेड़", "घास", "हरे-भरे", "हरा", "वन", "garden", "forest", "jungle", "tree", "grass", "green", "park"},
+            {8, 1.0f, "फूल", "फूलों", "गुलाब", "कमल", "flower", "roses", "lotus", "blossom"},
+            {2, 1.0f, "आसमान", "आकाश", "धूप", "सुबह", "सूर्योदय", "दिन", "sky", "sunny", "morning", "sunrise", "daylight"},
+            {1, 1.6f, "रात", "अँधेर", "अंधेर", "अंधकार", "गुफा", "night", "dark", "cave", "shadow"},
+            {9, 1.2f, "रोशनी", "दीये", "दीप", "उत्सव", "जश्न", "लालटेन", "मशाल", "lights", "lamps", "festival", "diya", "torch", "lantern", "celebration"},
+            {4, 0.8f, "सूर्यास्त", "शाम", "सुनहर", "sunset", "evening", "golden"},
+            {3, 0.8f, "सफ़ेद", "सफेद", "बर्फ", "white", "snow"}};
+
+    static float feature(Info in, int k) {
+        switch (k) {
+            case 0: return in.green; case 1: return in.dark; case 2: return in.sky; case 3: return in.white; case 4: return in.warm;
+            case 5: return in.bright; case 6: return in.water; case 7: return in.beige + in.white * 0.5f; case 8: return in.flowers;
+            default: return in.lights;
+        }
+    }
+
+    /** Typical share of a feature in a picture where that detail is clearly visible. */
+    static final float[] FULL = {0.35f, 0.45f, 0.35f, 0.3f, 0.25f, 0.6f, 0.08f, 0.25f, 0.04f, 0.03f};
+
+    /**
+     * How well a picture fits a place description. Every detail mentioned (water, palace, garden, flowers, sky,
+     * night/cave, lights, sunset…) is looked for in the picture; details that are not there lower the score. 0..1
+     */
     public static float matchPlace(Info in, String text) {
         if (in.figure) return 0.02f;
+        float s = 0, w = 0;
+        for (Object[] cue : PLACE_CUES) {
+            boolean said = false;
+            for (int i = 2; i < cue.length; i++) if (Txt.has(text, (String) cue[i])) { said = true; break; }
+            if (!said) continue;
+            int k = (Integer) cue[0];
+            float wt = (Float) cue[1];
+            w += wt;
+            s += wt * Math.min(1, feature(in, k) / FULL[k]);
+        }
+        // a dark picture for a sunny place (or a bright one for night) is a strong "no"
+        boolean night = Txt.has(text, "रात", "night", "अँधेर", "अंधेर", "गुफा", "cave");
+        if (!night && in.dark > 0.45f) { s -= 0.6f; w += 0.6f; }
+        if (night && in.bright > 0.6f) { s -= 0.6f; w += 0.6f; }
+        float detail = w == 0 ? 0.3f : Math.max(0, s / w);
+        return 0.65f * detail + 0.35f * matchPlaceKind(in, text);
+    }
+
+    static float matchPlaceKind(Info in, String text) {
         int set = Sets.detect(text);
         boolean night = Txt.has(text, "रात", "night", "अँधेर", "अंधेर", "dark", "शाम", "evening");
         float[] want = new float[6]; // green, dark, sky, white, warm, bright
@@ -439,6 +688,29 @@ public final class PicSense {
             out[bi] = bt;
             usedI[bi] = true;
             usedT[bt] = true;
+        }
+        // improve the whole arrangement: swap or move pictures while the total fit gets better
+        boolean better = true;
+        for (int round = 0; better && round < 50; round++) {
+            better = false;
+            for (int i = 0; i < items; i++) {
+                for (int j = i + 1; j < items; j++) {
+                    int ti = out[i], tj = out[j];
+                    if (ti < 0 && tj < 0) continue;
+                    float now = (ti >= 0 ? score[i][ti] : 0) + (tj >= 0 ? score[j][tj] : 0);
+                    float swap = (tj >= 0 ? score[i][tj] : 0) + (ti >= 0 ? score[j][ti] : 0);
+                    boolean okI = tj < 0 || score[i][tj] > min, okJ = ti < 0 || score[j][ti] > min;
+                    if (swap > now + 1e-4f && okI && okJ) { out[i] = tj; out[j] = ti; better = true; }
+                }
+                // or take a free target that fits better
+                for (int t = 0; t < targets; t++) {
+                    boolean taken = false;
+                    for (int k = 0; k < items; k++) if (out[k] == t) { taken = true; break; }
+                    if (taken) continue;
+                    float cur = out[i] >= 0 ? score[i][out[i]] : min;
+                    if (score[i][t] > cur + 1e-4f) { out[i] = t; better = true; }
+                }
+            }
         }
         return out;
     }

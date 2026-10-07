@@ -273,6 +273,52 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /** Saved voices (no names given) are matched to characters by the voice the script describes. */
+    @Test
+    public void directorFindsVoicesThatFitTheDescription() throws Exception {
+        RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        Project p = Project.create(RuntimeEnvironment.getApplication());
+        String script = "पात्र (Characters):\n"
+                + "1. राजा विक्रम (70 वर्ष):\n * चेहरा: सफ़ेद दाढ़ी, बड़ी मूँछें, सिर पर पगड़ी।\n * आवाज़: भारी, गहरी और धीमी आवाज़।\n"
+                + "2. मीना (8 वर्ष):\n * चेहरा: गोल चेहरा, दो चोटियाँ।\n * आवाज़: चंचल, जल्दी-जल्दी बोलती है।\n"
+                + "3. रानी सुमन:\n * चेहरा: सौम्य, बड़ी लाल बिंदी, साड़ी।\n * आवाज़: मीठी, कोमल और सुरीली आवाज़।\n\n"
+                + "दृश्य 1: महल\n(स्थान: राजमहल का दरबार)\n"
+                + "राजा विक्रम: \"आज हम एक नई यात्रा पर चलेंगे।\"\nमीना: \"मैं भी चलूँगी!\"\nरानी सुमन: \"ध्यान से जाना, बेटी।\"\n";
+        Files.write(new File(p.dir, "script.txt").toPath(), script.getBytes("UTF-8"));
+        set(a, "project", p);
+        Field libF = MainActivity.class.getDeclaredField("library");
+        libF.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) libF.get(a);
+        java.util.Map<String, String> idOf = new java.util.HashMap<String, String>();
+        int n = 0;
+        for (String f : new String[]{"man", "deep_slow", "woman", "child"}) {
+            byte[] data = Files.readAllBytes(new File("voices/" + f + ".wav").toPath());
+            com.tarun.kahani.app.Library.Item it = lib.addBytes("voice", "", "recording " + (++n), "", data, ".wav", "test");
+            assertTrue("voice not measured: " + it.meta, it.meta.contains("vf="));
+            System.out.println("VOICE " + f + ": " + it.tags + "  [" + it.meta + "]");
+            idOf.put(it.id, f);
+        }
+        call(a, "voiceMatches", new Class<?>[]{boolean.class}, false);
+        idle();
+        android.app.AlertDialog d = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull("no voice suggestions shown", d);
+        d.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick();
+        idle();
+        Story st = ScriptParser.parse(script);
+        java.util.Map<String, String> got = new java.util.HashMap<String, String>();
+        for (Story.CharacterDef c : st.characters) {
+            String id = p.setting("vsample." + c.displayName, "");
+            got.put(c.fullName == null ? c.displayName : c.fullName, idOf.get(id));
+            System.out.println("CAST VOICE: " + c.displayName + " -> " + idOf.get(id));
+        }
+        assertTrue(got.toString(), "deep_slow".equals(got.get("राजा विक्रम")));
+        assertTrue(got.toString(), "child".equals(got.get("मीना")));
+        assertTrue(got.toString(), "woman".equals(got.get("रानी सुमन")));
+        ac.pause().stop().destroy();
+    }
+
     /** Whole background job with a short script: no TTS available, fake hardware encoders. Must finish, not hang. */
     @Test
     public void filmJobFinishesEndToEnd() throws Exception {

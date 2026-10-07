@@ -19,8 +19,15 @@ All screens and instructions in the app are in English; the story, dialogue and 
    * **📄 Production file**: describes every character, place, shot, voice and sound, with ready-made prompts. Download it, paste the prompts into ChatGPT / Grok / Meta AI, and make the pictures there.
    * **📥 Add many pictures — the director places them**: no special file names needed. The director compares each picture with the script's descriptions and shows where each one goes; tap **Change** if one is wrong, then **Apply**.
      * With internet, an AI vision model identifies the pictures. It works without a key and works better with a Gemini key.
-     * Offline, the studio matches by colours and the kind of place, and you confirm each picture.
+     * Offline, the studio reads the picture itself and compares it with every detail of the description:
+       * **people**: dress colours, dress style (lehenga / skirt vs. trousers), moustache, beard, bindi, turban, crown or hat, grey or long hair, a spear in hand, fur (animals, monsters)
+       * **places**: every detail that can be seen — forest, river or waterfall, sky, night, cave, palace, sand, snow, flowers, lamps — and the picture with the most matching details wins
+     * Each picture goes to one character only, so two pictures never fight over the same role. Check the suggestions before you apply them.
    * **✨ Find pictures in my library for this story**: your saved pictures from earlier stories are matched to the new story's characters and places. A new story offers this by itself the first time you open the studio.
+   * **🎙 Find voices in my library for this story**: your saved voice samples (from any story) are matched to the characters by the voice the script describes. Write it in the character's description, e.g. `आवाज़: भारी, धीमी आवाज़`, `Voice: sweet and soft`, `awaaz: patli aur chanchal`.
+     * Each sample is measured once: pitch (deep male, male, female, child), speed (slow / fast), tone (smooth / raspy) and how lively it is.
+     * It is then compared with the character's age, gender and kind, plus the words the script uses: deep, high, sweet / soft, raspy, slow, fast, loud.
+     * Each voice goes to one character at most. You see why it fits ("fits: deep male, slow"), can listen with ▶, untick any, then **Apply**. A new story offers this by itself too.
    * **Real photos become animated avatars**: photos from the camera (or with camera data) are turned into the film's animated style automatically, and people are separated from busy backgrounds. For other pictures, one tap chooses "Make animated avatar" or "It's artwork — keep it".
    * **Missing pictures are created for you**: with internet, every character, place, title and end page you didn't give is created in **3D animated style** by a free AI service before the film is made. These pictures are saved to your library too. Offline, the studio draws them as cartoons.
    * **🖼 Picture** for each character offers several sources:
@@ -32,7 +39,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
      * 🎬 let the studio choose
 
      A real photo can also be turned into a **🎨 cartoon avatar**.
-   * **🎙 Voice**: one list with your recorded voices and the studio's built-in voices, 4 at a time. ★ marks the voices that suit the character's age and gender. Tap ▶ to hear one, or record 10–20 seconds or pick an audio file. **All of that character's lines are made in this voice**, close to your sample's pitch and tone, and changed with feeling (anger, fear, joy…). Tap **🔊** to listen first; tap it again to try another variation.
+   * **🎙 Voice**: one list with your recorded voices and the studio's built-in voices, 4 at a time. ★ marks the voices that suit the character's age, gender and described voice, best first, and each of your voices shows what it sounds like and why it fits. **Best match** is the studio voice made deeper, higher, slower or faster as the description asks. Tap ▶ to hear one, or record 10–20 seconds or pick an audio file. **All of that character's lines are made in this voice**, close to your sample's pitch and tone, and changed with feeling (anger, fear, joy…). Tap **🔊** to listen first; tap it again to try another variation.
    * **🎙 Record lines in your own voice**: record any line in your (or your children's) real voice. The film uses it, and the lips move with it.
    * Each place gets a **🔊 Sound** (forest, waterfall, palace, night…) chosen automatically. You can change it.
    * Tap **👄** on a character picture and tap the mouth and eyes, so the lips and eyelids move in the right place.
@@ -47,6 +54,13 @@ All screens and instructions in the app are in English; the story, dialogue and 
    *the music is too loud • I can't hear Vrinda • make Khan sound deeper and a bit slower • brighter and warmer • make it black and white • turn the birds down and add captions • the film drags, speed it up • smaller file for WhatsApp • make it for Instagram*
 
    Then tap **🔁 Make again**. Voices are reused, so this is quicker. When you like it, tap **💾 Download** (Gallery → Movies/KahaniFilm) or **📤 Share**.
+
+## Your library is permanent
+
+* Every picture, voice and sound you add (or record, or that the studio makes with AI) is saved on the phone straight away and stays when the app is closed or the phone restarts.
+* Each file is saved with its own description next to it, so even after a crash nothing is lost: files the list does not know are taken back in on the next start.
+* A backup copy goes to **Downloads/KahaniFilm/Library**. It stays even if the app is uninstalled. After reinstalling, open 📚 Library → **♻ Restore from backup** and choose that folder.
+* Everything in the library can be used in any later story: the director matches it to the new story's descriptions.
 
 ## What the film contains
 
@@ -88,7 +102,8 @@ For better story reading, picture recognition and expressive AI voices, add a **
 * **3D:** the film looks 3D when its pictures are 3D-style: your uploads, or the studio's AI pictures, which are always requested in 3D animated style. The camera, depth, light and parallax add a 2.5D cinematic feel.
   * The characters are still flat pictures that move, turn and lip-sync. They are not rigged 3D models, so they don't walk around in true 3D like a Pixar film. That isn't possible with the phone engine.
   * Characters drawn by the studio offline are flat cartoons.
-* **Recognising pictures offline** is a best guess from colours. Characters in identical uniforms can't be told apart, so check the suggestions. With internet, the AI vision model does this properly.
+* **Recognising pictures offline** is a best guess. On the sample story's 10 character pictures, the right character was the first guess for 7 and in the top three for 8. The three guards wear identical uniforms and can't be told apart. Places were right for 3 of 8 offline. Check the suggestions; with internet, the AI vision model does this much better.
+* **Voice matching** measures pitch reliably. Speed and tone are rougher readings: they were checked with computer voices at known speeds, not with many real recordings. If the story doesn't describe a voice, only age and gender are used.
 * **Speed:** a 10-minute 720p film should take roughly 15–30 minutes on a phone with 8 GB of RAM, and longer at 1080p. This is an estimate; it has not been measured on a phone.
 * **Hinglish spelling:** Hinglish is changed into Hindi letters by rules plus a word list, so unusual words or names can be pronounced a little wrong. **Read with AI** (online) writes a proper Hindi script and fixes this.
 * **Online features were not tested live.** The AI, internet search, natural voices and Gemini can't be reached from the machine the app was built on. They were tested against mock servers built from the services' protocols, not the live services.
@@ -103,7 +118,8 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * `LookDesigner`, `Director`, `Renderer`, `Puppet` and `Sets` handle design, staging, camera and drawing.
   * `EdgeVoice` is a minimal WebSocket client for the Edge read-aloud neural voices. It handles the Sec-MS-GEC token and per-character/emotion SSML prosody, and returns MP3. It was verified against a protocol mock built from the `edge-tts` reference.
   * `Mixer.mixTo` streams the soundtrack in chunks with a limiter. `SoundLib` provides the recorded sounds. `VoiceFx` does pitch/tempo changes and voice-sample matching. `Grade` applies colour edits.
-  * `PicSense` analyses pictures offline: photo vs artwork signals, figure vs place, clothing colours from the dress part of descriptions, place look, and person/background separation. `Toon.avatar` turns photos into avatars.
+  * `PicSense` analyses pictures offline: photo vs artwork signals, figure vs place, clothing colours from the dress part of descriptions, traits (dress style, moustache, beard, bindi, headwear, hair, spear, fur) read from the figure that `Cutout` finds, place details, and person/background separation. `Toon.avatar` turns photos into avatars.
+  * `VoiceMatch` turns a character's description into the voice it should have and scores measured samples (`VoiceFx.features`: pitch, liveliness, syllable rate, brightness, roughness) against it.
   * `Director.scoreMusic` builds the in-scene score with swells, dips and stingers. `Renderer` draws the cinematic look: ground-anchored parallax, camera roll and drift, light, a blurred foreground, grain and letterbox.
   * `Edits` and `CommandParser` turn the plain-English change requests typed after the preview into edits (an LLM handles anything the rules miss).
   * `Bible` writes the production file. `Toon` turns photos into cartoons.
@@ -115,5 +131,5 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * Tools: `aapt2`, `dalvik-exchange`, `zipalign`, `apksigner` and `android-sdk-platform-23` from Ubuntu, plus JDK 17+.
   * Resources are linked against the Android 14 framework from Robolectric's `android-all` jar.
 * **Tests:**
-  * `tools/robotest` (Robolectric, real Android graphics): screens with an English-only check, pickers, the command box, Hinglish reading, a full film job in 9:16, and frames drawn through `android.graphics.Canvas`. Run with `gradle test`.
+  * `tools/robotest` (Robolectric, real Android graphics): screens with an English-only check, pickers, the command box, Hinglish reading, pictures and voices from the library placed by description, a full film job in 9:16, and frames drawn through `android.graphics.Canvas`. Run with `gradle test`.
   * `tools/jvm`: `MakeFilm` (desktop MP4 with espeak; env `ASPECT`, `EDITS`, `SAMPLE=name=wav`, `AUDIO_ONLY`), `BibleDump`, `CmdTest`.

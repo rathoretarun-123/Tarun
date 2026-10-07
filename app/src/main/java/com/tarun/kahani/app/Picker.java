@@ -41,6 +41,9 @@ final class Picker {
     final java.util.List<Library.Item> extra = new java.util.ArrayList<Library.Item>();
     /** Items that suit what is being chosen; shown first with a ★. */
     final java.util.Set<String> suggested = new java.util.HashSet<String>();
+    /** How well each item fits (higher first among the ★ items) and a short reason shown under it. */
+    final java.util.Map<String, Float> fit = new java.util.HashMap<String, Float>();
+    final java.util.Map<String, String> note = new java.util.HashMap<String, String>();
 
     static Bitmap thumb(Activity a, Library.Item it, int max) {
         try {
@@ -118,7 +121,10 @@ final class Picker {
         if (!suggested.isEmpty()) {
             java.util.Collections.sort(items, new java.util.Comparator<Library.Item>() {
                 public int compare(Library.Item x, Library.Item y) {
-                    return (suggested.contains(y.id) ? 1 : 0) - (suggested.contains(x.id) ? 1 : 0);
+                    int c = (suggested.contains(y.id) ? 1 : 0) - (suggested.contains(x.id) ? 1 : 0);
+                    if (c != 0) return c;
+                    Float fx = fit.get(x.id), fy = fit.get(y.id);
+                    return Float.compare(fy == null ? 0 : fy, fx == null ? 0 : fx);
                 }
             });
         }
@@ -158,7 +164,15 @@ final class Picker {
                         r.setGravity(Gravity.CENTER_VERTICAL);
                         TextView t = Ui.text(a, (suggested.contains(it.id) ? "★ " : "") + (type.equals(Library.VOICE) ? "🎙 " : "🔊 ") + it.label()
                                 + (it.builtIn ? "" : "  (yours)"), 14, suggested.contains(it.id) ? Ui.GREEN : Ui.TEXT, false);
-                        r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                        String why = note.get(it.id);
+                        if (why != null && why.length() > 0) {
+                            LinearLayout tc = Ui.column(a);
+                            tc.addView(t);
+                            tc.addView(Ui.text(a, why, 12, Ui.SUB, false));
+                            r.addView(tc, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                        } else {
+                            r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                        }
                         r.addView(Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
                             public void onClick(View v) { if (it.path.startsWith("preset:") && presetPlayer != null) presetPlayer.play(it); else play(a, it.path); }
                         }));

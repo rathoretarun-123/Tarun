@@ -165,6 +165,93 @@ public final class VoiceFx {
         return o;
     }
 
+    /**
+     * Measures a voice: {median pitch Hz, pitch liveliness (std in semitones), syllables per second,
+     * brightness (spectral centre Hz), roughness 0..1 (how unclear / breathy / raspy the tone is)}.
+     */
+    public static float[] features(float[] x, int sr) {
+        if (x.length > sr * 40) x = java.util.Arrays.copyOf(x, sr * 40);
+        int win = sr / 25, hop = sr / 100, minLag = sr / 450, maxLag = sr / 60;
+        java.util.List<Float> pitches = new java.util.ArrayList<Float>();
+        double harmSum = 0;
+        int voiced = 0, frames = 0;
+        for (int start = 0; start + win + maxLag < x.length; start += hop) {
+            double energy = 0;
+            for (int i = 0; i < win; i++) energy += x[start + i] * x[start + i];
+            frames++;
+            if (energy / win < 1e-4) continue;
+            double best = 0;
+            int bestLag = 0;
+            for (int lag = minLag; lag <= maxLag; lag++) {
+                double s = 0, e2 = 0;
+                for (int i = 0; i < win; i += 2) { s += x[start + i] * x[start + i + lag]; e2 += x[start + i + lag] * x[start + i + lag]; }
+                double c = s / Math.sqrt(energy / 2 * e2 + 1e-12);
+                if (c > best) { best = c; bestLag = lag; }
+            }
+            voiced++;
+            harmSum += best;
+            if (best > 0.55 && bestLag > 0) pitches.add(sr / (float) bestLag);
+        }
+        float[] out = new float[5];
+        if (pitches.isEmpty()) return out;
+        java.util.Collections.sort(pitches);
+        float med = pitches.get(pitches.size() / 2);
+        out[0] = med;
+        double v = 0;
+        for (float p : pitches) { double st = 12 * Math.log(p / med) / Math.log(2); v += st * st; }
+        out[1] = (float) Math.sqrt(v / pitches.size());
+        // syllables per second of speech: loudness peaks (in dB) that stand at least 3 dB above the dip
+        // separating them from the previous syllable; pauses are not counted
+        int ew = sr / 100;
+        int n = x.length / ew;
+        float[] pw = new float[n];
+        for (int i = 0; i < n; i++) {
+            double s = 0;
+            for (int j = i * ew; j < (i + 1) * ew; j++) s += x[j] * x[j];
+            pw[i] = (float) (s / ew);
+        }
+        float[] db = new float[n];
+        float mx = -200;
+        for (int i = 0; i < n; i++) {
+            float a = 0;
+            int c = 0;
+            for (int k = Math.max(0, i - 1); k <= Math.min(n - 1, i + 1); k++) { a += pw[k]; c++; }
+            db[i] = (float) (10 * Math.log10(a / c + 1e-10));
+            mx = Math.max(mx, db[i]);
+        }
+        float floor = mx - 30;
+        int speech = 0, syl = 0, last = -1;
+        float lastV = 0;
+        for (int i = 0; i < n; i++) if (db[i] > floor) speech++;
+        for (int i = 1; i < n - 1; i++) {
+            if (db[i] <= floor + 5 || db[i] < db[i - 1] || db[i] <= db[i + 1]) continue;
+            if (last < 0) { syl++; last = i; lastV = db[i]; continue; }
+            float dip = Float.MAX_VALUE;
+            for (int k = last; k <= i; k++) dip = Math.min(dip, db[k]);
+            if (Math.min(lastV, db[i]) - dip >= 3 && i - last >= 7) { syl++; last = i; lastV = db[i]; }
+            else if (db[i] > lastV) { last = i; lastV = db[i]; }
+        }
+        out[2] = speech == 0 ? 0 : syl / (speech / 100f);
+        // brightness: average spectral centre of loud frames
+        int fn = 1024;
+        float[] re = new float[fn], im = new float[fn];
+        double cs = 0;
+        int cf = 0;
+        for (int start = 0; start + fn < x.length; start += fn) {
+            double e = 0;
+            for (int i = 0; i < fn; i++) e += x[start + i] * x[start + i];
+            if (e / fn < 1e-4) continue;
+            for (int i = 0; i < fn; i++) { re[i] = x[start + i] * (float) (0.5 - 0.5 * Math.cos(2 * Math.PI * i / fn)); im[i] = 0; }
+            fft(re, im);
+            double num = 0, den = 0;
+            for (int k = 1; k < fn / 2; k++) { double m = Math.sqrt(re[k] * re[k] + im[k] * im[k]); num += m * k * sr / (double) fn; den += m; }
+            if (den > 0) { cs += num / den; cf++; }
+        }
+        out[3] = cf == 0 ? 0 : (float) (cs / cf);
+        out[4] = voiced == 0 ? 0 : (float) Math.max(0, Math.min(1, 1 - harmSum / voiced));
+        return out;
+    }
+
     /** What we learn from a voice sample once: its median pitch and tone colour. */
     public static final class Profile {
         public float pitch;

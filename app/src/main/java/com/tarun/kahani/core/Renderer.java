@@ -329,33 +329,25 @@ public final class Renderer {
 
     /** Out-of-focus leaves and flowers right in front of the lens: they slide faster than the scene (depth). */
     private void foreground(Gfx g, final Film.Seg s, float t) {
-        if (!outdoor(s.set) || camZ > 1.75f) return;
+        // only on wide films and wide shots: narrow (vertical/square) frames need every pixel for the characters
+        if (!outdoor(s.set) || camZ > 1.6f || vw / vh < 1.6f) return;
         final boolean night = s.tod == Sets.NIGHT || s.tod == Sets.EVENING;
         final float W2 = vw, H2 = vh;
-        float a = Math.max(0, Math.min(1, (1.75f - camZ) / 0.45f));
+        float a = Math.max(0, Math.min(1, (1.6f - camZ) / 0.4f));
         g.save();
-        g.setAlpha(a * 0.9f);
-        float px = -(camX - 640) * 0.45f, py = -(camY - 360) * 0.25f;
-        g.translate(px, py);
-        g.layerLow("fg:" + s.set + ":" + night + ":" + (int) W2, W2, H2, 0.1f, new Gfx.Painter() {
+        g.setAlpha(a * 0.8f);
+        g.translate(-(camX - 640) * 0.45f, 0);
+        g.layerLow("fg2:" + s.set + ":" + night + ":" + (int) W2, W2, H2, 0.12f, new Gfx.Painter() {
             public void paint(Gfx gg) {
                 int leaf = night ? 0xFF0E2416 : 0xFF2E6B2A, leaf2 = night ? 0xFF16301C : 0xFF4E8F34;
-                // bottom-left bush
-                for (int i = 0; i < 9; i++) {
-                    float x = -60 + i * 38, y = H2 - 30 + (i % 3) * 22;
-                    gg.color(i % 2 == 0 ? leaf : leaf2);
-                    gg.oval(x, y, 70 + (i % 4) * 14, 46 + (i % 3) * 10);
-                }
-                // bottom-right flowers and leaves
-                for (int i = 0; i < 7; i++) {
-                    float x = W2 - 40 - i * 42, y = H2 - 20 + (i % 3) * 18;
-                    gg.color(i % 2 == 0 ? leaf2 : leaf);
-                    gg.oval(x, y, 64, 44);
-                }
+                // a bush in the bottom-left corner and leaves in the bottom-right corner, never across the middle
+                float[][] l = {{-40, H2 + 10, 120, 80}, {40, H2 + 30, 90, 60}, {-20, H2 - 40, 70, 50}, {110, H2 + 40, 60, 40}};
+                float[][] r = {{W2 + 30, H2 + 10, 110, 80}, {W2 - 50, H2 + 35, 80, 55}, {W2 + 10, H2 - 45, 60, 45}};
+                for (int i = 0; i < l.length; i++) { gg.color(i % 2 == 0 ? leaf : leaf2); gg.oval(l[i][0], l[i][1], l[i][2], l[i][3]); }
+                for (int i = 0; i < r.length; i++) { gg.color(i % 2 == 0 ? leaf2 : leaf); gg.oval(r[i][0], r[i][1], r[i][2], r[i][3]); }
                 if (!night) {
-                    gg.color(0xFFE85A8C); gg.oval(W2 - 150, H2 - 60, 26, 22);
-                    gg.color(0xFFF2C230); gg.oval(W2 - 90, H2 - 40, 22, 18);
-                    gg.color(0xFFE8E8F0); gg.oval(150, H2 - 50, 22, 18);
+                    gg.color(0xFFE85A8C); gg.oval(W2 - 60, H2 - 35, 20, 17);
+                    gg.color(0xFFF2C230); gg.oval(70, H2 - 25, 17, 14);
                 }
             }
         });

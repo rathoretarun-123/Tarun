@@ -222,6 +222,8 @@ public final class Bible {
         return out;
     }
 
+    public static String firstClauseOf(String s) { return firstClause(firstClause(s, "।.!?"), ",;—-("); }
+
     static String firstClause(String s, String stops) {
         int cut = s.length();
         for (int i = 0; i < stops.length(); i++) {

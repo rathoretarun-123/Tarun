@@ -170,6 +170,46 @@ public final class ScriptAI {
         }
     }
 
+    /** What the AI saw in a picture. */
+    public static final class Seen {
+        public String match;          // candidate name, or null
+        public String type = "";      // character | place | title | end | other
+        public boolean realPhoto;
+        public String caption = "";
+    }
+
+    /**
+     * Shows the picture to the vision model together with the story's characters and places (name + description)
+     * and asks which one it shows, whether it is a real photo, and a short caption for the library.
+     */
+    public static Seen look(Cloud cloud, byte[] jpeg, List<String[]> candidates) throws IOException {
+        StringBuilder b = new StringBuilder();
+        b.append("This picture was uploaded for a children's animated film. Here are the film's characters and places:\n");
+        for (String[] c : candidates) {
+            String d = c[1] == null ? "" : Bible.oneLine(c[1]);
+            if (d.length() > 260) d = d.substring(0, 260);
+            b.append("- ").append(c[0]).append(": ").append(d).append("\n");
+        }
+        b.append("\nWhich ONE of these does the picture show? Use the descriptions (age, clothes, colours, animal, place features). ")
+                .append("Reply only with JSON: {\"match\":\"<exact name from the list or NONE>\",\"type\":\"character|place|title|end|other\",")
+                .append("\"real_photo\":<true if it is a real camera photograph of a real person/place, false for drawings, cartoons, 3D renders or AI art>,")
+                .append("\"caption\":\"<short English description: who/what, clothes, colours, setting>\"}");
+        Object o = Cloud.jsonIn(cloud.vision(b.toString(), jpeg));
+        Seen s = new Seen();
+        if (o == null) return s;
+        String m = Json.str(o, "match", "NONE");
+        for (String[] c : candidates) if (c[0].equals(m)) s.match = c[0];
+        if (s.match == null && !m.equalsIgnoreCase("NONE")) {
+            List<String> names = new ArrayList<String>();
+            for (String[] c : candidates) names.add(c[0]);
+            s.match = matchName(m, names);
+        }
+        s.type = Json.str(o, "type", "");
+        s.realPhoto = Json.bool(o, "real_photo", false);
+        s.caption = Json.str(o, "caption", "");
+        return s;
+    }
+
     /** Finds a candidate whose name appears in s (Devanagari or Latin spelling). */
     public static String matchName(String s, List<String> candidates) {
         if (s == null) return null;

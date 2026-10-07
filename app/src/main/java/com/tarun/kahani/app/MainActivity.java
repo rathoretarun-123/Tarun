@@ -630,6 +630,13 @@ public class MainActivity extends Activity {
             if (library.byId(project.setting("vsample." + c.displayName, "")) == null) noVoice++;
         }
         for (Story.Scene sc : st.scenes) if (sceneFile(sc) == null) noBg++;
+        // first visit: offer pictures already in the library (from earlier stories) that fit this story
+        if (!"1".equals(project.setting("libChecked", "0")) && noPic == st.characters.size() && st.characters.size() > 0) {
+            project.setSetting("libChecked", "1");
+            boolean any = false;
+            for (Library.Item it : library.find(Library.PIC, null, null)) if (!it.builtIn) { any = true; break; }
+            if (any) libraryMatches(true);
+        }
         LinearLayout sum = Ui.card(this);
         sum.addView(Ui.title(this, "📜 " + st.title));
         sum.addView(Ui.text(this, "Language: " + (st.hinglish ? "Hinglish (spoken in Hindi, ends with \"समाप्त\")" : st.hindi ? "Hindi (ends with \"समाप्त\")" : "English (ends with \"The End\")")
@@ -643,7 +650,10 @@ public class MainActivity extends Activity {
         sum.addView(Ui.button(this, "📄  Production file (characters, shots, voices, sounds)", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { productionFile(st); }
         }));
-        sum.addView(Ui.button(this, "📥  Add many pictures at once (matched by name)", Ui.PRIMARY, new View.OnClickListener() {
+        sum.addView(Ui.button(this, "✨  Find pictures in my library for this story", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { libraryMatches(false); }
+        }));
+        sum.addView(Ui.button(this, "📥  Add many pictures — the director places them", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("image/*", REQ_BULK, true); }
         }));
         sum.addView(Ui.button(this, "🎙  Record lines in your own voice", Ui.GREEN, new View.OnClickListener() {
@@ -1047,34 +1057,53 @@ public class MainActivity extends Activity {
     }
 
     /** A picture arrived from the phone or camera: offer the cartoon (avatar) look, save to library, use it. */
+    /**
+     * A picture arrived (phone, camera, download). Real camera photos become animated avatars automatically;
+     * for other pictures the user decides with one tap. Everything is saved in the library for later stories.
+     */
     private void incomingPicture(final byte[] data, final String fileName) {
         final String tgt = target == null ? "lib:pic" : target;
         final boolean person = tgt.startsWith("char:") || tgt.equals("lib:pic");
-        DialogInterface.OnClickListener go = new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface d, final int which) {
-                final boolean toon = which == DialogInterface.BUTTON_POSITIVE;
-                background(toon ? "Making the cartoon…" : "Saving…", new Work() {
-                    public Object run() throws Exception {
-                        byte[] bytes = toon ? toonify(data) : data;
-                        String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
-                        String name = targetName(tgt);
-                        if (name.length() == 0 && fileName != null) name = fileName.replaceAll("\\.[A-Za-z0-9]+$", "");
-                        return library.addBytes(Library.PIC, kind, name, fileName == null ? "" : fileName, bytes, ".jpg", toon ? "photo → cartoon" : "phone");
-                    }
-                }, new Done() {
-                    public void done(Object r, Exception e) {
-                        if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
-                        usePicture((Library.Item) r);
-                    }
-                });
-            }
-        };
-        new AlertDialog.Builder(this).setTitle("How should the picture look?")
-                .setMessage(person ? "If this is a real photo, the studio can turn it into a cartoon (avatar)." : "A real photo can be turned into a cartoon.")
-                .setPositiveButton("🎨 Make cartoon", go).setNegativeButton("Keep as is", go).show();
+        boolean camera = "camera".equals(fileName) || Library.cameraPhoto(data);
+        if (camera) {
+            toast("📷 Real photo — turning it into an animated avatar…");
+            savePicture(data, fileName, tgt, true, person);
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Is this a real photo?")
+                .setMessage(person ? "Real photos of people are turned into an animated avatar so they fit the cartoon world (the background is removed)."
+                        : "Real photos of places can be turned into the animated style of the film.")
+                .setPositiveButton("🎨 Make animated avatar", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { savePicture(data, fileName, tgt, true, person); }
+                })
+                .setNegativeButton("It's artwork — keep it", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { savePicture(data, fileName, tgt, false, person); }
+                }).show();
     }
 
-    static byte[] toonify(byte[] data) throws Exception {
+    private void savePicture(final byte[] data, final String fileName, final String tgt, final boolean toon, final boolean person) {
+        background(toon ? "Making the animated avatar…" : "Saving…", new Work() {
+            public Object run() throws Exception {
+                byte[] bytes = toon ? toonify(data, person) : data;
+                String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
+                String name = targetName(tgt);
+                if (name.length() == 0 && fileName != null) name = fileName.replaceAll("\\.[A-Za-z0-9]+$", "");
+                String ext = toon && person ? ".png" : ".jpg";
+                Library.Item it = library.addBytes(Library.PIC, kind, name, fileName == null ? "" : fileName, bytes, ext, toon ? "photo → avatar" : "phone");
+                if (toon) { it.setMeta("avatar", "1"); library.save(); }
+                return it;
+            }
+        }, new Done() {
+            public void done(Object r, Exception e) {
+                if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
+                usePicture((Library.Item) r);
+            }
+        });
+    }
+
+    static byte[] toonify(byte[] data) throws Exception { return toonify(data, false); }
+
+    static byte[] toonify(byte[] data, boolean person) throws Exception {
         BitmapFactory.Options o = new BitmapFactory.Options();
         o.inJustDecodeBounds = true;
         BitmapFactory.decodeByteArray(data, 0, data.length, o);
@@ -1090,10 +1119,10 @@ public class MainActivity extends Activity {
         int[] px = new int[w * h];
         b.getPixels(px, 0, w, 0, 0, w, h);
         b.recycle();
-        int[] t = Toon.apply(px, w, h);
+        int[] t = Toon.avatar(px, w, h, person);
         Bitmap out = Bitmap.createBitmap(t, w, h, Bitmap.Config.ARGB_8888);
         java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-        out.compress(Bitmap.CompressFormat.JPEG, 92, bo);
+        out.compress(person ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG, 92, bo);
         out.recycle();
         return bo.toByteArray();
     }
@@ -1814,40 +1843,163 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Many pictures at once: each is recognised by its file name (or by AI) and put where it belongs. */
-    private void bulkPictures(final List<Uri> uris) {
-        loadStory();
-        final Story st = castStory;
-        final List<String> names = new ArrayList<String>();
-        for (Story.CharacterDef c : st.characters) names.add(c.displayName);
-        final List<String[]> places = Bible.places(st);
-        for (String[] p : places) names.add(p[0]);
-        names.add("title");
-        names.add("शीर्षक");
-        names.add("end");
-        names.add("समाप्त");
-        background("Recognising pictures… (" + uris.size() + ")", new Work() {
+    // ================================================================== the director places pictures
+
+    /** One picture and where the director thinks it belongs. */
+    static final class Placement {
+        Library.Item item;
+        String fileName = "";
+        String target;              // char:KEY | place:NAME | title | end | null
+        String label = "";
+        float score;
+        final List<String[]> options = new ArrayList<String[]>();   // {target, label}
+        Bitmap thumb;
+    }
+
+    /** Everything a picture can be in this story: {target, label, description}. */
+    private List<String[]> pictureTargets(Story st) {
+        List<String[]> t = new ArrayList<String[]>();
+        for (Story.CharacterDef c : st.characters) t.add(new String[]{"char:" + keyFor(c), c.shown(), c.description});
+        for (String[] p : Bible.places(st)) t.add(new String[]{"place:" + p[0], st.shown(p[0]), p[1]});
+        t.add(new String[]{"title", "Title page", "title picture / movie poster of " + st.title + ", main characters together"});
+        t.add(new String[]{"end", "End page", "ending picture, calm landscape, sunset, the end"});
+        return t;
+    }
+
+    /**
+     * Scores every picture against every character/place: file name or library words (exact), AI vision
+     * (online), and the offline colour/scene analysis; then gives each picture its best free target.
+     */
+    private void identify(List<Placement> ps, Story st, boolean useAi, boolean libraryWords) {
+        List<String[]> targets = pictureTargets(st);
+        List<String[]> cands = new ArrayList<String[]>();
+        for (String[] t : targets) cands.add(new String[]{t[1], t[2]});
+        List<String> labels = new ArrayList<String>();
+        for (String[] t : targets) labels.add(t[1]);
+        Cloud cloud = useAi && Prefs.online(this) ? Prefs.cloud(this) : null;
+        boolean aiDown = false;
+        float[][] score = new float[ps.size()][targets.size()];
+        for (int i = 0; i < ps.size(); i++) {
+            Placement p = ps.get(i);
+            com.tarun.kahani.core.PicSense.Info in = library.info(p.item);
+            String byName = ScriptAI.matchName(p.fileName, labels);
+            for (int t = 0; t < targets.size(); t++) {
+                String tg = targets.get(t)[0];
+                float f = 0;
+                if (in != null) {
+                    if (tg.startsWith("char:")) for (Story.CharacterDef c : st.characters) { if (tg.equals("char:" + keyFor(c))) f = com.tarun.kahani.core.PicSense.matchCharacter(in, c); }
+                    else if (tg.startsWith("place:")) f = com.tarun.kahani.core.PicSense.matchPlace(in, targets.get(t)[2]);
+                }
+                float s = f * 0.75f;
+                if (libraryWords) s = Math.max(s, com.tarun.kahani.core.PicSense.textMatch(p.item.name + " " + p.item.tags, targets.get(t)[1], targets.get(t)[2]));
+                if (byName != null && byName.equals(targets.get(t)[1])) s = 1f;
+                score[i][t] = s;
+            }
+            if (cloud != null && !aiDown && byName == null) {
+                try {
+                    byte[] small = shrink(Project.readAll(library.open(p.item)), 640);
+                    ScriptAI.Seen seen = ScriptAI.look(cloud, small, cands);
+                    if (seen.caption.length() > 0) { p.item.tags = (p.item.tags + ", " + seen.caption).replaceAll("^, ", ""); }
+                    if (seen.realPhoto) p.item.setMeta("realphoto", "1");
+                    if (seen.match != null) for (int t = 0; t < targets.size(); t++) if (targets.get(t)[1].equals(seen.match)) score[i][t] = Math.max(score[i][t], 0.95f);
+                } catch (Exception e) {
+                    aiDown = true;   // no internet: the offline analysis decides
+                }
+            }
+        }
+        library.save();
+        int[] best = com.tarun.kahani.core.PicSense.assign(score, 0.12f);
+        for (int i = 0; i < ps.size(); i++) {
+            Placement p = ps.get(i);
+            if (best[i] >= 0) { p.target = targets.get(best[i])[0]; p.label = targets.get(best[i])[1]; p.score = score[i][best[i]]; }
+            // the 4 most likely choices for "Change"
+            final float[] sc = score[i];
+            List<Integer> order = new ArrayList<Integer>();
+            for (int t = 0; t < targets.size(); t++) order.add(t);
+            java.util.Collections.sort(order, new java.util.Comparator<Integer>() {
+                public int compare(Integer a, Integer b) { return Float.compare(sc[b], sc[a]); }
+            });
+            for (int k = 0; k < order.size(); k++) p.options.add(new String[]{targets.get(order.get(k))[0], targets.get(order.get(k))[1]});
+            p.thumb = Picker.thumb(this, p.item, 160);
+        }
+    }
+
+    static String confidence(float s) { return s >= 0.9f ? "sure" : s >= 0.5f ? "likely" : "guess — please check"; }
+
+    /** Shows where each picture will go; the user can change any of them, then everything is applied at once. */
+    private void reviewPlacements(final List<Placement> ps, String title) {
+        final AlertDialog[] d = new AlertDialog[1];
+        final LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 12), Ui.dp(this, 4), Ui.dp(this, 12), Ui.dp(this, 4));
+        body.addView(Ui.text(this, "The director read the story and placed your pictures. Tap \"Change\" if one is wrong.", 13, Ui.SUB, false));
+        final Runnable[] fill = new Runnable[1];
+        final LinearLayout list = Ui.column(this);
+        body.addView(list);
+        fill[0] = new Runnable() {
+            public void run() {
+                list.removeAllViews();
+                for (final Placement p : ps) {
+                    LinearLayout r = Ui.row(MainActivity.this);
+                    r.setGravity(Gravity.CENTER_VERTICAL);
+                    r.setPadding(0, Ui.dp(MainActivity.this, 4), 0, Ui.dp(MainActivity.this, 4));
+                    ImageView iv = new ImageView(MainActivity.this);
+                    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    iv.setImageBitmap(p.thumb);
+                    r.addView(iv, new LinearLayout.LayoutParams(Ui.dp(MainActivity.this, 56), Ui.dp(MainActivity.this, 56)));
+                    String txt = p.target == null ? "→ not used (kept in your library)" : "→ " + p.label + "  (" + confidence(p.score) + ")";
+                    TextView tv = Ui.text(MainActivity.this, txt, 14, p.target == null ? Ui.SUB : p.score >= 0.5f ? Ui.GREEN : Ui.PRIMARY_DARK, false);
+                    tv.setPadding(Ui.dp(MainActivity.this, 8), 0, 0, 0);
+                    r.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                    r.addView(Ui.small(MainActivity.this, "Change", Ui.BLUE, new View.OnClickListener() {
+                        public void onClick(View v) {
+                            final String[] labels = new String[p.options.size() + 1];
+                            for (int i = 0; i < p.options.size(); i++) labels[i] = p.options.get(i)[1];
+                            labels[labels.length - 1] = "Don't use it here";
+                            new AlertDialog.Builder(MainActivity.this).setTitle("This picture is…").setItems(labels, new DialogInterface.OnClickListener() {
+                                public void onClick(DialogInterface dd, int which) {
+                                    if (which == labels.length - 1) { p.target = null; }
+                                    else {
+                                        // one picture per character: free the other picture that had it
+                                        for (Placement o : ps) if (o != p && p.options.get(which)[0].equals(o.target)) o.target = null;
+                                        p.target = p.options.get(which)[0]; p.label = p.options.get(which)[1]; p.score = 1f;
+                                    }
+                                    fill[0].run();
+                                }
+                            }).show();
+                        }
+                    }));
+                    list.addView(r);
+                }
+            }
+        };
+        fill[0].run();
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body);
+        d[0] = new AlertDialog.Builder(this).setTitle(title).setView(sv)
+                .setPositiveButton("✔ Apply", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface di, int w) { applyPlacements(ps); }
+                }).setNegativeButton("Cancel", null).show();
+    }
+
+    private void applyPlacements(final List<Placement> ps) {
+        final Story st = castStory != null ? castStory : loadStory();
+        background("Placing the pictures…", new Work() {
             public Object run() throws Exception {
-                Cloud cloud = Prefs.online(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null;
-                StringBuilder rep = new StringBuilder();
-                int ok = 0;
-                for (Uri u : uris) {
-                    String fname = displayName(u);
-                    byte[] data;
-                    try { data = Project.readAll(getContentResolver().openInputStream(u)); } catch (Exception e) { continue; }
-                    byte[] small = cloud != null && cloud.hasGemini() ? shrink(data, 512) : null;
-                    String who = ScriptAI.identify(cloud, fname, small, names);
-                    library.addBytes(Library.PIC, "", who == null ? fname : who, fname, data, ".jpg", "phone");
-                    if (who == null) { rep.append("• ").append(fname).append(" → not recognised (saved to library)\n"); continue; }
-                    String f = project.savePicture(data, "pic");
-                    Story.CharacterDef c = null;
-                    for (Story.CharacterDef cd : st.characters) if (cd.displayName.equals(who)) c = cd;
-                    if (c != null) project.setManifest("char", keyFor(c), "char|" + keyFor(c) + "|" + f);
-                    else if (who.equals("title") || who.equals("शीर्षक")) project.setManifest("title", "title", "title|" + f + "|1");
-                    else if (who.equals("end") || who.equals("समाप्त")) project.setManifest("end", "end", "end|" + f + "|1");
-                    else {
+                int n = 0;
+                for (Placement p : ps) {
+                    if (p.target == null) continue;
+                    String f = project.savePicture(Project.readAll(library.open(p.item)), p.target.startsWith("char:") ? "char" : "pic");
+                    if (p.target.startsWith("char:")) {
+                        String key = p.target.substring(5);
+                        project.setManifest("char", key, "char|" + key + "|" + f);
+                    } else if (p.target.equals("title") || p.target.equals("end")) {
+                        project.setManifest(p.target, p.target, p.target + "|" + f + "|1");
+                    } else if (p.target.startsWith("place:")) {
+                        String place = p.target.substring(6);
                         for (Story.Scene sc : st.scenes) {
-                            if (Bible.similar(who, sc.setting) || com.tarun.kahani.core.Txt.norm(sc.setting).contains(com.tarun.kahani.core.Txt.norm(who))) {
+                            String first = sc.setting.length() > 0 ? sc.setting : sc.title;
+                            if (Bible.similar(place, first) || com.tarun.kahani.core.Txt.norm(first).contains(com.tarun.kahani.core.Txt.norm(place))
+                                    || Bible.similar(Bible.firstClauseOf(first), place)) {
                                 String k = String.valueOf(sc.number);
                                 project.setManifest("scene", k + "a", null);
                                 project.setManifest("scene", k + "b", null);
@@ -1855,16 +2007,83 @@ public class MainActivity extends Activity {
                             }
                         }
                     }
-                    ok++;
-                    rep.append("• ").append(fname).append(" → ").append(who).append(" ✔\n");
+                    n++;
                 }
-                return ok + " pictures placed.\n\n" + rep;
+                return n;
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
-                showText("Pictures added", r + "\n\nTap 👄 on each character picture to mark the mouth and eyes so the lips move correctly.");
+                if (e != null) { toast("Could not place them: " + e.getMessage()); return; }
+                toast("✅ " + r + " pictures placed. Tap 👄 on characters to fine-tune the lips.");
                 showStudio();
+            }
+        });
+    }
+
+    /** Many pictures at once: the director recognises each from the story's descriptions and places it. */
+    private void bulkPictures(final List<Uri> uris) {
+        final Story st = loadStory();
+        background("The director is looking at " + uris.size() + " pictures…", new Work() {
+            public Object run() throws Exception {
+                List<Placement> ps = new ArrayList<Placement>();
+                for (Uri u : uris) {
+                    byte[] data;
+                    try { data = Project.readAll(getContentResolver().openInputStream(u)); } catch (Exception e) { continue; }
+                    Placement p = new Placement();
+                    p.fileName = displayName(u);
+                    p.item = library.addBytes(Library.PIC, "", p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), p.fileName, data, ".jpg", "phone");
+                    ps.add(p);
+                }
+                identify(ps, st, true, false);
+                // real photos of people and places become animated avatars before they are used
+                for (Placement p : ps) {
+                    boolean real = "1".equals(p.item.meta("camera")) || "1".equals(p.item.meta("realphoto"));
+                    if (!real || p.target == null) continue;
+                    boolean person = p.target.startsWith("char:");
+                    byte[] av = toonify(Project.readAll(library.open(p.item)), person);
+                    Library.Item a = library.addBytes(Library.PIC, person ? "person" : "place", p.label, p.item.tags, av, person ? ".png" : ".jpg", "photo → avatar");
+                    a.setMeta("avatar", "1");
+                    p.item = a;
+                    p.thumb = Picker.thumb(MainActivity.this, a, 160);
+                }
+                library.save();
+                return ps;
+            }
+        }, new Done() {
+            @SuppressWarnings("unchecked")
+            public void done(Object r, Exception e) {
+                if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
+                reviewPlacements((List<Placement>) r, "Where your pictures go");
+            }
+        });
+    }
+
+    /** Pictures saved in the library (from any story) that fit this story's characters and places. */
+    private void libraryMatches(final boolean quietIfNone) {
+        final Story st = loadStory();
+        background(quietIfNone ? null : "Looking through your library…", new Work() {
+            public Object run() throws Exception {
+                List<Placement> ps = new ArrayList<Placement>();
+                for (Library.Item it : library.find(Library.PIC, null, null)) {
+                    if (it.builtIn) continue;
+                    Placement p = new Placement();
+                    p.item = it;
+                    p.fileName = it.name + " " + it.tags;
+                    ps.add(p);
+                }
+                if (ps.isEmpty()) return ps;
+                identify(ps, st, false, true);
+                List<Placement> keep = new ArrayList<Placement>();
+                for (Placement p : ps) if (p.target != null && p.score >= 0.35f) keep.add(p);
+                return keep;
+            }
+        }, new Done() {
+            @SuppressWarnings("unchecked")
+            public void done(Object r, Exception e) {
+                if (e != null) { if (!quietIfNone) toast("Could not do it: " + e.getMessage()); return; }
+                List<Placement> ps = (List<Placement>) r;
+                if (ps.isEmpty()) { if (!quietIfNone) toast("No pictures in your library fit this story yet"); return; }
+                reviewPlacements(ps, "Pictures from your library that fit this story");
             }
         });
     }

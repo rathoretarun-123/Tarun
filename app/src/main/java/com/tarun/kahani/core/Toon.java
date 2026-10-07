@@ -7,6 +7,16 @@ package com.tarun.kahani.core;
 public final class Toon {
     private Toon() {}
 
+    /**
+     * Real photo -> animated avatar. For a person photographed against a busy background the person is first
+     * separated from the background (so they can act in any scene), then drawn in the cartoon style.
+     */
+    public static int[] avatar(int[] px, int w, int h, boolean person) {
+        int[] src = px;
+        if (person && !Cutout.hasAlpha(px) && !PicSense.plainBorder(px, w, h)) src = PicSense.segmentCentre(px, w, h);
+        return apply(src, w, h);
+    }
+
     public static int[] apply(int[] src, int w, int h) {
         int[] a = smooth(src, w, h, 2);
         a = smooth(a, w, h, 2);

@@ -130,9 +130,44 @@ public final class Library {
         }
         it.path = dst.getAbsolutePath();
         if (type.equals(VOICE)) analyseVoice(it);
+        if (type.equals(PIC)) analysePicture(it);
         items.add(0, it);
         save();
         return it;
+    }
+
+    /** Colours, figure/place, real-photo signs: lets the director match the picture to stories later. */
+    public void analysePicture(Item it) {
+        try {
+            byte[] data = Project.readAll(open(it));
+            android.graphics.Bitmap b = MainActivity.decodeSmall(data, 256);
+            if (b == null) return;
+            int w = b.getWidth(), h = b.getHeight();
+            int[] px = new int[w * h];
+            b.getPixels(px, 0, w, 0, 0, w, h);
+            b.recycle();
+            com.tarun.kahani.core.PicSense.Info in = com.tarun.kahani.core.PicSense.analyse(px, w, h);
+            it.meta = (it.meta.length() > 0 ? it.meta + ";" : "") + in.toMeta();
+            if (cameraPhoto(data)) it.setMeta("camera", "1");
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** A real camera photo carries the camera's make/model or exposure in its EXIF data. */
+    public static boolean cameraPhoto(byte[] data) {
+        try {
+            android.media.ExifInterface ex = new android.media.ExifInterface(new java.io.ByteArrayInputStream(data));
+            return ex.getAttribute(android.media.ExifInterface.TAG_MAKE) != null || ex.getAttribute(android.media.ExifInterface.TAG_MODEL) != null
+                    || ex.getAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME) != null || ex.getAttribute(android.media.ExifInterface.TAG_F_NUMBER) != null;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public com.tarun.kahani.core.PicSense.Info info(Item it) {
+        com.tarun.kahani.core.PicSense.Info in = com.tarun.kahani.core.PicSense.Info.fromMeta(it.meta);
+        if (in == null && !it.builtIn && it.type.equals(PIC)) { analysePicture(it); save(); in = com.tarun.kahani.core.PicSense.Info.fromMeta(it.meta); }
+        return in;
     }
 
     /** What kind of voice a sample is (from its pitch), so the studio can suggest it for fitting characters. */

@@ -171,6 +171,31 @@ public final class Cloud {
         return b.length() == 0 ? null : b.toString();
     }
 
+    /** Looks at a picture (JPEG) and answers: Gemini when a key is set, otherwise the free keyless vision model. */
+    public String vision(String prompt, byte[] jpeg) throws IOException {
+        if (hasGemini()) {
+            try {
+                List<byte[]> ims = new ArrayList<byte[]>();
+                ims.add(jpeg);
+                return gemini("You are a careful film director's assistant.", prompt, true, ims, null);
+            } catch (IOException e) {
+                lastError = e.getMessage();
+            }
+        }
+        List<Object> content = new ArrayList<Object>();
+        content.add(map("type", "text", "text", prompt));
+        content.add(map("type", "image_url", "image_url", map("url", "data:image/jpeg;base64," + b64(jpeg))));
+        final Map<String, Object> body = map("model", "openai", "messages", list(map("role", "user", "content", content)), "private", true);
+        return retry(new Call<String>() {
+            public String run() throws IOException {
+                Object r = postJson(pollinationsText, body);
+                List<Object> ch = Json.arr(r, "choices");
+                if (ch == null || ch.isEmpty()) throw new IOException("vision: empty answer");
+                return Json.str(Json.obj(ch.get(0), "message"), "content", "");
+            }
+        }, 2);
+    }
+
     public String pollinations(String system, String prompt, boolean json) throws IOException {
         List<Object> msgs = new ArrayList<Object>();
         if (system != null && system.length() > 0) msgs.add(map("role", "system", "content", system));

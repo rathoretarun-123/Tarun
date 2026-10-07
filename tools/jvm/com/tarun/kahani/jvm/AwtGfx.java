@@ -95,6 +95,16 @@ public class AwtGfx implements Gfx {
         g.draw(path);
     }
 
+    private static boolean hasDevanagari(String s) {
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) >= '\u0900' && s.charAt(i) <= '\u097F') return true;
+        return false;
+    }
+
+    private Font fontFor(String s, float size, boolean bold) {
+        if (hasDevanagari(s)) return font(size, bold);
+        return new Font("SansSerif", bold ? Font.BOLD : Font.PLAIN, 1).deriveFont(size);
+    }
+
     private Font font(float size, boolean bold) {
         if (base == null) {
             try {
@@ -111,14 +121,14 @@ public class AwtGfx implements Gfx {
 
     public void text(String s, float x, float y, float size, boolean bold, int align) {
         apply();
-        Font f = font(size, bold);
+        Font f = fontFor(s, size, bold);
         g.setFont(f);
         float w = (float) f.getStringBounds(s, g.getFontRenderContext()).getWidth();
         float dx = align == 1 ? -w / 2 : align == 2 ? -w : 0;
         g.drawString(s, x + dx, y);
     }
     public float textWidth(String s, float size, boolean bold) {
-        Font f = font(size, bold);
+        Font f = fontFor(s, size, bold);
         return (float) f.getStringBounds(s, g.getFontRenderContext()).getWidth();
     }
 

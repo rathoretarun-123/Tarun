@@ -32,11 +32,35 @@ public final class VideoWriter {
     }
 
     /** Encodes the whole soundtrack first (fast), then prepares the video encoder. */
-    public void start(File out, short[] pcm, int sr) throws IOException {
+    public void start(File out, short[] pcm, int sr) throws IOException { start(out, new ArraySource(pcm), sr, 0.16f); }
+
+    /** Soundtrack source: fills buf with up to buf.length samples, returns how many (0 = end). */
+    public interface PcmSource { int read(short[] buf) throws IOException; }
+
+    static final class ArraySource implements PcmSource {
+        final short[] a; int pos;
+        ArraySource(short[] a) { this.a = a; }
+        public int read(short[] buf) { int n = Math.min(buf.length, a.length - pos); System.arraycopy(a, pos, buf, 0, n); pos += n; return n; }
+    }
+
+    /** Reads 16-bit little-endian mono PCM from a file. */
+    public static final class FileSource implements PcmSource {
+        final java.io.InputStream in; final byte[] b = new byte[8192];
+        public FileSource(File f) throws IOException { in = new java.io.BufferedInputStream(new java.io.FileInputStream(f), 1 << 16); }
+        public int read(short[] buf) throws IOException {
+            int want = Math.min(buf.length, b.length / 2) * 2, got = 0;
+            while (got < want) { int n = in.read(b, got, want - got); if (n <= 0) break; got += n; }
+            for (int i = 0; i < got / 2; i++) buf[i] = (short) ((b[2 * i] & 0xFF) | (b[2 * i + 1] << 8));
+            if (got == 0) in.close();
+            return got / 2;
+        }
+    }
+
+    public void start(File out, PcmSource pcm, int sr, float bitsPerPixel) throws IOException {
         encodeAudio(pcm, sr);
         MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h);
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
-        f.setInteger(MediaFormat.KEY_BIT_RATE, Math.max(1500000, (int) (w * (long) h * fps * 0.16f)));
+        f.setInteger(MediaFormat.KEY_BIT_RATE, Math.max(1000000, (int) (w * (long) h * fps * bitsPerPixel)));
         f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
         video = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
@@ -46,7 +70,7 @@ public final class VideoWriter {
         yRow = new byte[w];
     }
 
-    private void encodeAudio(short[] pcm, int sr) throws IOException {
+    private void encodeAudio(PcmSource src, int sr) throws IOException {
         MediaFormat f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sr, 1);
         f.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         f.setInteger(MediaFormat.KEY_BIT_RATE, 128000);
@@ -54,7 +78,8 @@ public final class VideoWriter {
         MediaCodec a = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
         a.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         a.start();
-        int pos = 0;
+        long pos = 0;
+        short[] chunk = new short[4096];
         boolean inputDone = false, outputDone = false;
         MediaCodec.BufferInfo bi = new MediaCodec.BufferInfo();
         long guard = System.currentTimeMillis();
@@ -64,14 +89,15 @@ public final class VideoWriter {
                 if (ix >= 0) {
                     ByteBuffer buf = a.getInputBuffer(ix);
                     buf.clear();
-                    int samples = Math.min(buf.capacity() / 2, Math.min(4096, pcm.length - pos));
+                    if (chunk.length > buf.capacity() / 2) chunk = new short[buf.capacity() / 2];
+                    int samples = src.read(chunk);
                     long pts = pos * 1000000L / sr;
                     if (samples <= 0) {
                         a.queueInputBuffer(ix, 0, 0, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                         inputDone = true;
                     } else {
                         for (int i = 0; i < samples; i++) {
-                            short s = pcm[pos + i];
+                            short s = chunk[i];
                             buf.put((byte) (s & 0xFF));
                             buf.put((byte) ((s >> 8) & 0xFF));
                         }
@@ -97,7 +123,7 @@ public final class VideoWriter {
                 a.releaseOutputBuffer(ox, false);
                 if ((bi.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
             }
-            if (System.currentTimeMillis() - guard > 120000) throw new IOException("आवाज़ एन्कोड नहीं हो सकी");
+            if (System.currentTimeMillis() - guard > 900000) throw new IOException("आवाज़ एन्कोड नहीं हो सकी");
         }
         a.stop();
         a.release();
@@ -249,21 +275,28 @@ public final class VideoWriter {
         muxer = null;
     }
 
-    /** Largest size (16:9) this phone's H.264 encoder supports, starting from the wanted height. */
-    public static int[] supportedSize(int wantH) {
-        int[] heights = {1080, 720, 540, 480, 360};
+    /** Largest size of the wanted shape this phone's H.264 encoder supports, starting from the wanted size. */
+    public static int[] supportedSize(int wantW, int wantH) {
+        float[] scales = {1f, 0.75f, 0.6667f, 0.5f, 0.4444f, 0.3333f};
+        MediaCodecInfo.VideoCapabilities vc = null;
         try {
             MediaCodec c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-            MediaCodecInfo.VideoCapabilities vc = c.getCodecInfo().getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).getVideoCapabilities();
+            vc = c.getCodecInfo().getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).getVideoCapabilities();
             c.release();
-            for (int hh : heights) {
-                if (hh > wantH) continue;
-                int ww = hh * 16 / 9;
-                ww -= ww % 16;
-                if (vc.isSizeSupported(ww, hh)) return new int[]{ww, hh};
-            }
         } catch (Exception ignored) {
         }
-        return new int[]{1280, 720};
+        for (float s : scales) {
+            int ww = Math.round(wantW * s), hh = Math.round(wantH * s);
+            ww -= ww % 16; hh -= hh % 16;
+            if (ww < 160 || hh < 160) break;
+            if (vc == null) return new int[]{ww, hh};
+            try { if (vc.isSizeSupported(ww, hh)) return new int[]{ww, hh}; } catch (Exception ignored) {}
+        }
+        return new int[]{wantW >= wantH ? 1280 : 720, wantW >= wantH ? 720 : 1280};
+    }
+
+    public static int[] supportedSize(int wantH) {
+        int w = wantH * 16 / 9;
+        return supportedSize(w - w % 16, wantH);
     }
 }

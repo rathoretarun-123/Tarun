@@ -19,7 +19,7 @@ B=build
 rm -rf $B && mkdir -p $B/gen $B/classes
 echo "[1/6] resources"
 aapt2 compile --dir app/src/main/res -o $B/res.zip
-aapt2 link -o $B/base.apk -I "$ANDROID_JAR" --manifest app/src/main/AndroidManifest.xml \
+aapt2 link -o $B/base.apk -I "$ALL_JAR" --manifest app/src/main/AndroidManifest.xml \
   -A app/src/main/assets --java $B/gen --min-sdk-version 26 --target-sdk-version 34 \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" -0 jpg -0 png $B/res.zip
 echo "[2/6] compile java"

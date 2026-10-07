@@ -140,6 +140,7 @@ public final class Film {
         public Story.CharacterDef who;   // null = narrator
         public String text;              // what is spoken
         public String shown;             // what is shown as subtitle
+        public String manner = "";       // acting direction from the script, e.g. "डरते हुए, धीरे से"
         public int emotion;
         public boolean whisper, echo;
         public float dur;                // seconds, filled after synthesis

@@ -81,45 +81,111 @@ public class AppTest {
         ff.set(o, v);
     }
 
+    static String dialogText() {
+        android.app.Dialog d = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        if (d == null || d.getWindow() == null) return "";
+        return texts(d.getWindow().getDecorView(), new ArrayList<String>()).toString();
+    }
+
     @Test
-    public void dashboardEditorCastAndFaceScreensOpenWithoutCrashing() throws Exception {
+    public void loginDashboardStoryStudioLibrarySettingsOpenWithoutCrashing() throws Exception {
         ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
         MainActivity a = ac.get();
         View root = a.getWindow().getDecorView();
+        List<String> login = texts(root, new ArrayList<String>());
+        System.out.println("LOGIN: " + login);
+        assertTrue(login.toString().contains("Gmail से साइन इन"));
+        find(root, "अभी नहीं").performClick();
+        idle();
         List<String> home = texts(root, new ArrayList<String>());
         System.out.println("HOME: " + home);
-        assertTrue(home.toString().contains("नई फ़िल्म बनाएँ"));
+        assertTrue(home.toString().contains("नई फ़िल्म"));
+        assertTrue(home.toString().contains("लाइब्रेरी"));
 
-        // new empty film -> editor -> back
-        find(root, "नई फ़िल्म बनाएँ").performClick();
+        // new empty film -> story screen (clear button, platforms) -> back
+        find(root, "नई फ़िल्म").performClick();
         idle();
         List<String> ed = texts(root, new ArrayList<String>());
-        System.out.println("EDITOR: " + ed);
+        System.out.println("STORY: " + ed);
         assertTrue(ed.toString().contains("1. कहानी"));
+        assertTrue(ed.toString().contains("साफ़ करें"));
+        assertTrue(ed.toString().contains("Instagram Reel"));
         a.onBackPressed();
         idle();
 
-        // sample project -> editor -> director's check -> face screen
+        // sample project -> story -> studio
         Project p = sampleProject();
         set(a, "project", p);
-        call(a, "showEditor", new Class<?>[0]);
+        call(a, "showStory", new Class<?>[0]);
         idle();
-        assertTrue(texts(root, new ArrayList<String>()).toString().contains("शुरुआत का चित्र"));
-        find(root, "निर्देशक से जाँच").performClick();
+        find(root, "स्टूडियो खोलें").performClick();
         idle();
-        List<String> cast = texts(root, new ArrayList<String>());
-        System.out.println("CAST: " + cast);
-        assertTrue(cast.toString().contains("वानुषा"));
-        assertTrue(cast.toString().contains("निर्देशक की योजना"));
+        List<String> st = texts(root, new ArrayList<String>());
+        System.out.println("STUDIO: " + st);
+        assertTrue(st.toString().contains("वानुषा"));
+        assertTrue(st.toString().contains("प्रोडक्शन फ़ाइल"));
+        assertTrue(st.toString().contains("क्या बाकी है"));
+        assertTrue(st.toString().contains("निर्देशक की योजना"));
+
+        // picture chooser shows 4 at a time with "next 4"
+        call(a, "choosePicture", new Class<?>[]{String.class, String.class}, "char:वृंदा", "वृंदा");
+        idle();
+        String pick = dialogText();
+        System.out.println("PICKER: " + pick);
+        assertTrue(pick.contains("अगले 4"));
+        assertTrue(pick.contains("कैमरा"));
+        org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
+
+        // voice chooser
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        call(a, "chooseVoice", new Class<?>[]{String.class, Story.class, Story.CharacterDef.class}, "वृंदा", story, story.characters.get(0));
+        idle();
+        String vp = dialogText();
+        System.out.println("VOICE PICKER: " + vp);
+        assertTrue(vp.contains("रिकॉर्ड"));
+        org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
+
+        // record-each-line screen
+        call(a, "showLines", new Class<?>[0]);
+        idle();
+        assertTrue(texts(root, new ArrayList<String>()).toString().contains("रिकॉर्ड"));
         call(a, "showFace", new Class<?>[]{String.class}, "वृंदा");
         Thread.sleep(3000);
         idle();
-        System.out.println("FACE: " + texts(root, new ArrayList<String>()));
         a.onBackPressed();
         idle();
-        // progress screen with no job and player with no film must not crash
+
+        // library tabs and settings
+        call(a, "showLibrary", new Class<?>[0]);
+        idle();
+        List<String> lib = texts(root, new ArrayList<String>());
+        System.out.println("LIBRARY: " + lib.subList(0, Math.min(14, lib.size())));
+        assertTrue(lib.toString().contains("फ़ोन से"));
+        set(a, "libTab", "sound");
+        call(a, "showLibrary", new Class<?>[0]);
+        idle();
+        assertTrue(texts(root, new ArrayList<String>()).toString().contains("ध्वनियाँ"));
+        call(a, "showSettings", new Class<?>[0]);
+        idle();
+        List<String> se = texts(root, new ArrayList<String>());
+        assertTrue(se.toString().contains("Gemini"));
+        assertTrue(se.toString().contains("लॉग आउट") || se.toString().contains("साइन इन"));
+
+        // player + natural-language command box (film file faked)
+        set(a, "project", p);
+        Files.write(p.film().toPath(), new byte[100]);
         call(a, "showPlayer", new Class<?>[0]);
         idle();
+        TextView status = new TextView(a);
+        android.widget.EditText box = new android.widget.EditText(a);
+        call(a, "applyCommand", new Class<?>[]{String.class, TextView.class, android.widget.EditText.class},
+                "संगीत धीमा करो और वृंदा की आवाज़ तेज़ करो, subtitles लगाओ", status, box);
+        idle();
+        System.out.println("COMMAND: " + status.getText());
+        String edits = p.read("edits.json");
+        System.out.println("EDITS: " + edits);
+        assertTrue(edits.contains("\"subtitles\":true"));
+        assertTrue(edits.contains("वृंदा"));
         ac.pause().stop().destroy();
     }
 
@@ -140,7 +206,16 @@ public class AppTest {
                 + "दृश्य 1: बगीचे में\n(स्थान: महल का बगीचा। सुबह। मीना तितली के पीछे दौड़ रही है।)\n"
                 + "मीना (हँसते हुए): \"राजू, देखो तितली!\"\n(राजू बंदर पेड़ से छलाँग मार कर आता है।)\n";
         p.write("script.txt", script);
-        p.setSetting("quality", "360");
+        p.write("edits.json", "{\"height\":360,\"aspect\":\"9:16\",\"brightness\":0.2,\"music\":0.7}");
+        // the user recorded Meena's line in their own voice: it must be used (and drive the lip sync)
+        String line = com.tarun.kahani.core.Txt.forSpeech("राजू, देखो तितली!");
+        File lines = new File(p.dir, "lines");
+        lines.mkdirs();
+        float[] tone = new float[32000];
+        for (int i = 0; i < tone.length; i++) tone[i] = (float) (0.3 * Math.sin(i * 0.05) * (0.5 + 0.5 * Math.sin(i * 0.0007)));
+        java.lang.reflect.Method h = com.tarun.kahani.app.FilmJob.class.getDeclaredMethod("hash", String.class);
+        h.setAccessible(true);
+        com.tarun.kahani.app.AudioIO.writeWav(new File(lines, h.invoke(null, "मीना|" + line) + ".wav"), tone, 32000);
         com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(RuntimeEnvironment.getApplication(), p);
         long t0 = System.currentTimeMillis();
         job.run();
@@ -148,6 +223,7 @@ public class AppTest {
                 + " stage=" + job.stage + " secs=" + job.filmSeconds + " took=" + (System.currentTimeMillis() - t0) + "ms");
         assertTrue("job failed: " + job.error, job.done);
         assertTrue(p.film().exists());
+        assertTrue("recorded line not used: " + job.voicedLines, job.voicedLines == 1);
     }
 
     @Test

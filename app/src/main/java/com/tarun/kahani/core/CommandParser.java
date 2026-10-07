@@ -101,12 +101,12 @@ public final class CommandParser {
     static {
         String[][] m = {{"क", "k"}, {"ख", "k"}, {"ग", "g"}, {"घ", "g"}, {"च", "k"}, {"छ", "k"}, {"ज", "j"}, {"झ", "j"}, {"ट", "t"}, {"ठ", "t"},
                 {"ड", "d"}, {"ढ", "d"}, {"ण", "n"}, {"त", "t"}, {"थ", "t"}, {"द", "d"}, {"ध", "d"}, {"न", "n"}, {"प", "p"}, {"फ", "f"},
-                {"ब", "b"}, {"भ", "b"}, {"म", "m"}, {"य", "y"}, {"र", "r"}, {"ल", "l"}, {"व", "v"}, {"श", "s"}, {"ष", "s"}, {"स", "s"},
+                {"ब", "b"}, {"भ", "b"}, {"म", "m"}, {"य", ""}, {"र", "r"}, {"ल", "l"}, {"व", "v"}, {"श", "s"}, {"ष", "s"}, {"स", "s"},
                 {"ह", ""}, {"ं", "n"}, {"ञ", "n"}, {"ङ", "n"}, {"ृ", "r"}};
         for (String[] e : m) DEV.put(e[0].charAt(0), e[1]);
     }
 
-    private static boolean nameIn(String text, String name) {
+    static boolean nameIn(String text, String name) {
         for (String part : name.split("\\s+")) {
             if (part.length() < 2 || ScriptParser.isTitleWord(part)) continue;
             if (Txt.has(text, part)) return true;

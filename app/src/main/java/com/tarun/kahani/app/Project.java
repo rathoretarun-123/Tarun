@@ -154,7 +154,11 @@ public final class Project {
     public String savePicture(Context c, android.net.Uri uri, String base) throws IOException {
         InputStream in = c.getContentResolver().openInputStream(uri);
         if (in == null) throw new IOException("चित्र नहीं खुला");
-        byte[] data = readAll(in);
+        return savePicture(readAll(in), base);
+    }
+
+    /** Saves picture bytes (any format Android can read) into the project, downscaled. Returns the file name. */
+    public String savePicture(byte[] data, String base) throws IOException {
         BitmapFactory.Options o = new BitmapFactory.Options();
         o.inJustDecodeBounds = true;
         BitmapFactory.decodeByteArray(data, 0, data.length, o);
@@ -166,7 +170,7 @@ public final class Project {
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
         if (b == null) throw new IOException("यह चित्र पढ़ा नहीं जा सका");
         boolean png = b.hasAlpha();
-        String name = base + "_" + (System.currentTimeMillis() % 100000) + (png ? ".png" : ".jpg");
+        String name = base + "_" + (System.nanoTime() % 100000000L) + (png ? ".png" : ".jpg");
         OutputStream out = new FileOutputStream(new File(dir, name));
         b.compress(png ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG, 92, out);
         out.close();

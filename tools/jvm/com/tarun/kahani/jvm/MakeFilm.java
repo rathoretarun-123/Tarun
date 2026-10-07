@@ -74,6 +74,7 @@ public class MakeFilm {
         File wav = new File(tmp, "mix.wav");
         writeWav(wav, pcm, Synth.SR);
         System.out.println("audio mixed (" + (System.currentTimeMillis() - t0) + "ms)");
+        if (System.getenv("AUDIO_ONLY") != null) { Files.copy(wav.toPath(), new File(out).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); return; }
 
         float dur = Math.min(film.duration, maxSec);
         Process ff = new ProcessBuilder("ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", width + "x" + height,

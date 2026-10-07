@@ -106,6 +106,12 @@ public final class Voices {
         public int voice = -1;     // index into voices, -1 = engine default
         public float pitch = 1f, rate = 1f;
         public float shift = 1f;   // extra pitch shift by resampling (monster)
+        public float[] sample;     // the user's voice sample for this character (Synth.SR), or null
+        public String sampleId = "";
+        public String gemini;      // Gemini voice name when AI voices are used
+        public String signature() {
+            return voice + "|" + pitch + "|" + rate + "|" + shift + "|" + sampleId + "|" + (gemini == null ? "" : gemini);
+        }
     }
 
     /** Picks a voice, pitch and speed for every character (overridable per project). */
@@ -153,23 +159,44 @@ public final class Voices {
 
     // -------------------------------------------------------------- synthesis
 
-    /** Speaks one line into PCM at Synth.SR, or returns null if the engine fails. */
-    public float[] synth(Film.Line line, Cast cast, File tmpDir, int idx) {
-        if (!ready || tts == null || line.text.trim().length() == 0) return null;
-        Cast k = cast != null ? cast : new Cast();
-        float pitch = k.pitch, rate = k.rate;
-        switch (line.emotion) {
-            case Pose.ANGRY: rate *= 1.05f; pitch *= 0.95f; break;
-            case Pose.SAD: rate *= 0.9f; pitch *= 0.97f; break;
-            case Pose.SCARED: rate *= 1.08f; pitch *= 1.04f; break;
-            case Pose.LAUGH: case Pose.HAPPY: pitch *= 1.04f; break;
-            case Pose.WHISPER: rate *= 0.9f; break;
-            case Pose.PAIN: rate *= 1.1f; pitch *= 1.08f; break;
-            case Pose.EVIL: rate *= 0.92f; break;
-            default:
+    /** How an emotion changes speed and pitch (applied after matching the user's sample, so it is never lost). */
+    static float[] emotionFactors(int emotion) {
+        switch (emotion) {
+            case Pose.ANGRY: return new float[]{1.06f, 0.94f};
+            case Pose.SAD: return new float[]{0.88f, 0.96f};
+            case Pose.SCARED: return new float[]{1.1f, 1.06f};
+            case Pose.LAUGH: return new float[]{1.04f, 1.07f};
+            case Pose.HAPPY: return new float[]{1.02f, 1.04f};
+            case Pose.SURPRISED: return new float[]{1.03f, 1.08f};
+            case Pose.WHISPER: return new float[]{0.9f, 1f};
+            case Pose.PAIN: return new float[]{1.1f, 1.08f};
+            case Pose.EVIL: return new float[]{0.92f, 0.95f};
+            case Pose.PROUD: return new float[]{0.96f, 0.98f};
+            default: return new float[]{1f, 1f};
         }
+    }
+
+    /** Acting direction for the AI voice, e.g. "Say in a scared, trembling whisper (डरते हुए)". */
+    static String direction(Film.Line line, Story.CharacterDef who) {
+        String e = com.tarun.kahani.core.Bible.emotionWord(line.emotion, false);
+        StringBuilder b = new StringBuilder("Say this line ");
+        if (line.whisper) b.append("in a soft whisper, ");
+        b.append("in a ").append(e).append(" voice");
+        if (who != null && who.look != null) {
+            if (who.look.isChild()) b.append(", like a ").append(who.age > 0 ? who.age + "-year-old " : "young ").append(who.look.female ? "girl" : "boy");
+            else if (who.look.kind == Look.MONSTER) b.append(", like a huge scary monster in a children's cartoon");
+            else if (who.look.kind == Look.WITCH) b.append(", like a cunning witch in a children's cartoon");
+            else if (who.look.kind == Look.OLD_MAN) b.append(", like an old man");
+        } else if (who == null) b.append(", like a warm storyteller");
+        if (line.manner != null && line.manner.length() > 0) b.append(" (").append(line.manner).append(")");
+        return b.toString();
+    }
+
+    /** Phone text-to-speech for one line at the given pitch and speed. */
+    float[] phoneTts(String text, int voice, float pitch, float rate, File tmpDir, int idx) {
+        if (!ready || tts == null || text.trim().length() == 0) return null;
         try {
-            if (k.voice >= 0 && k.voice < voices.size()) tts.setVoice(voices.get(k.voice));
+            if (voice >= 0 && voice < voices.size()) tts.setVoice(voices.get(voice));
             else tts.setLanguage(locale);
             tts.setPitch(pitch);
             tts.setSpeechRate(rate);
@@ -179,9 +206,9 @@ public final class Voices {
             CountDownLatch latch = new CountDownLatch(1);
             waits.put(id, latch);
             Bundle params = new Bundle();
-            int r = tts.synthesizeToFile(line.text, params, out, id);
+            int r = tts.synthesizeToFile(text, params, out, id);
             if (r != TextToSpeech.SUCCESS) { waits.remove(id); return null; }
-            long timeout = 20000 + line.text.length() * 300L;
+            long timeout = 20000 + text.length() * 300L;
             boolean done = latch.await(timeout, TimeUnit.MILLISECONDS);
             waits.remove(id);
             Boolean good = ok.remove(id);
@@ -189,11 +216,63 @@ public final class Voices {
             float[] pcm = readWav(out);
             out.delete();
             if (pcm == null || pcm.length < Synth.SR / 10) return null;
-            if (k.shift != 1f) pcm = shift(pcm, k.shift);
-            return trim(pcm);
+            return pcm;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** Speaks one line into PCM at Synth.SR, or returns null if the engine fails. */
+    public float[] synth(Film.Line line, Cast cast, File tmpDir, int idx) {
+        return speak(line, cast, tmpDir, idx, null, null);
+    }
+
+    /** Result note from the last speak(): which engine made the voice. */
+    public volatile String lastEngine = "";
+    /** Set when the AI voice service refused (no key, quota used up); further lines use the phone voice. */
+    public volatile boolean aiOff;
+
+    /**
+     * Makes one line of dialogue: AI voice (Gemini, with acting direction) or the phone's voice, then — when the
+     * user gave a voice sample for this character — moved to the sample's pitch and tone, and finally the emotion's
+     * speed/pitch modulation. Returns PCM at Synth.SR or null.
+     */
+    public float[] speak(Film.Line line, Cast cast, File tmpDir, int idx, com.tarun.kahani.core.Cloud cloud, String[] err) {
+        Cast k = cast != null ? cast : new Cast();
+        float[] ef = emotionFactors(line.emotion);
+        float[] pcm = null;
+        boolean fromAi = false;
+        if (cloud != null && !aiOff && k.gemini != null && cloud.hasGemini()) {
+            try {
+                float[] raw = cloud.geminiSpeak(direction(line, line.who), line.text, k.gemini);
+                pcm = Mixer.resample(raw, 24000);
+                fromAi = true;
+                lastEngine = "AI";
+            } catch (Exception e) {
+                if (err != null) err[0] = e.getMessage();
+                String m = e.getMessage() == null ? "" : e.getMessage();
+                if (m.contains("429") || m.contains("403") || m.contains("400") || m.contains("API key")) aiOff = true;
+            }
+        }
+        if (pcm == null) {
+            boolean useSample = k.sample != null;
+            // with a sample the phone voice is only the "words"; pitch comes from the sample
+            float pitch = useSample ? 1f : k.pitch * (fromAi ? 1f : ef[1]);
+            float rate = k.rate * ef[0];
+            pcm = phoneTts(line.text, k.voice, pitch, rate, tmpDir, idx);
+            if (pcm == null) return null;
+            lastEngine = "phone";
+            if (!useSample && k.shift != 1f) pcm = shift(pcm, k.shift);
+        }
+        if (k.sample != null) {
+            pcm = com.tarun.kahani.core.VoiceFx.matchVoice(pcm, k.sample, Synth.SR);
+            if (ef[1] != 1f) pcm = com.tarun.kahani.core.VoiceFx.pitch(pcm, ef[1]);
+            lastEngine += "+sample";
+        }
+        if (line.whisper) {
+            for (int i = 1; i < pcm.length; i++) pcm[i] = pcm[i] * 0.75f + (float) (Math.random() - 0.5) * 0.004f;
+        }
+        return trim(pcm);
     }
 
     /** Lower (factor < 1) or raise the voice by resampling. */

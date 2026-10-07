@@ -20,6 +20,8 @@ public final class Prefs {
 
     public static String geminiKey(Context c) { return get(c, "geminiKey", ""); }
     public static boolean online(Context c) { return !"0".equals(get(c, "online", "1")); }
+    /** Natural neural voices over the internet (free, no key). On by default. */
+    public static boolean naturalVoices(Context c) { return !"0".equals(get(c, "naturalVoices", "1")); }
     public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }
 
     /** A Cloud client configured from the settings. */

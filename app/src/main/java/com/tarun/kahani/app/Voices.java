@@ -109,8 +109,10 @@ public final class Voices {
         public com.tarun.kahani.core.VoiceFx.Profile sample; // the user's voice sample for this character, or null
         public String sampleId = "";
         public String gemini;      // Gemini voice name when AI voices are used
+        public com.tarun.kahani.core.EdgeVoice.Cast edge;   // natural neural voice (online), or null
         public String signature() {
-            return voice + "|" + pitch + "|" + rate + "|" + shift + "|" + sampleId + "|" + (gemini == null ? "" : gemini);
+            return voice + "|" + pitch + "|" + rate + "|" + shift + "|" + sampleId + "|" + (gemini == null ? "" : gemini)
+                    + "|" + (edge == null ? "" : edge.key());
         }
     }
 
@@ -140,19 +142,20 @@ public final class Voices {
 
     public static Cast defaultCast(Look l) {
         Cast k = new Cast();
+        // kept close to the engine's natural pitch: large jumps make phone voices sound robotic
         switch (l.kind) {
-            case Look.GIRL: k.pitch = l.height < 0.68f ? 1.55f : 1.32f; k.rate = 1.0f; break;
-            case Look.BOY: k.pitch = l.height < 0.68f ? 1.45f : 1.22f; break;
-            case Look.WOMAN: k.pitch = 1.1f; k.rate = 0.95f; break;
-            case Look.WITCH: k.pitch = 1.25f; k.rate = 0.88f; break;
-            case Look.MONSTER: k.pitch = 0.6f; k.rate = 0.85f; k.shift = 0.86f; break;
-            case Look.MONKEY: k.pitch = 1.9f; k.rate = 1.2f; break;
-            case Look.OLD_MAN: k.pitch = 0.72f; k.rate = 0.85f; break;
+            case Look.GIRL: k.pitch = l.height < 0.68f ? 1.22f : 1.12f; k.rate = 1.0f; break;
+            case Look.BOY: k.pitch = l.height < 0.68f ? 1.18f : 1.08f; break;
+            case Look.WOMAN: k.pitch = 1.03f; k.rate = 0.96f; break;
+            case Look.WITCH: k.pitch = 0.95f; k.rate = 0.9f; break;
+            case Look.MONSTER: k.pitch = 0.8f; k.rate = 0.88f; k.shift = 0.9f; break;
+            case Look.MONKEY: k.pitch = 1.3f; k.rate = 1.1f; break;
+            case Look.OLD_MAN: k.pitch = 0.88f; k.rate = 0.88f; break;
             case Look.ANIMAL: case Look.BIRD:
-                k.pitch = l.height < 0.3f ? 1.6f : l.height < 0.5f ? 1.25f : l.height < 0.8f ? 0.9f : 0.7f;
-                k.rate = l.height < 0.3f ? 1.1f : 0.95f;
+                k.pitch = l.height < 0.3f ? 1.3f : l.height < 0.5f ? 1.15f : l.height < 0.8f ? 0.95f : 0.85f;
+                k.rate = l.height < 0.3f ? 1.08f : 0.96f;
                 break;
-            default: k.pitch = l.girth > 1.1f ? 0.88f : 0.8f; k.rate = 0.97f;
+            default: k.pitch = l.girth > 1.1f ? 0.92f : 0.97f; k.rate = 0.98f;
         }
         return k;
     }
@@ -237,16 +240,53 @@ public final class Voices {
      * user gave a voice sample for this character — moved to the sample's pitch and tone, and finally the emotion's
      * speed/pitch modulation. Returns PCM at Synth.SR or null.
      */
+    /** Natural neural voices (online, free). Set by the caller; null = not used. */
+    public com.tarun.kahani.core.EdgeVoice edge;
+    /** Set after repeated failures of the natural voice service; later lines use the phone voice. */
+    public volatile boolean edgeOff;
+    private int edgeFails;
+    /** True when the last line came from a fallback engine (should not be cached as final). */
+    public volatile boolean usedFallback;
+
+    /** Natural voice for one line: MP3 from the service, decoded to PCM at Synth.SR. */
+    float[] edgeSpeak(String text, com.tarun.kahani.core.EdgeVoice.Cast c, int emotion, File tmpDir, int idx) throws Exception {
+        java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
+        for (String part : com.tarun.kahani.core.EdgeVoice.chunks(text, 700)) {
+            byte[] mp3 = null;
+            Exception last = null;
+            for (int attempt = 0; attempt < 2 && mp3 == null; attempt++) {
+                try { mp3 = edge.speak(part, c, com.tarun.kahani.core.EdgeVoice.emotion(emotion)); }
+                catch (Exception e) { last = e; Thread.sleep(800); }
+            }
+            if (mp3 == null) throw last;
+            all.write(mp3);
+        }
+        File f = new File(tmpDir, "edge" + idx + ".mp3");
+        java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+        o.write(all.toByteArray());
+        o.close();
+        float[] pcm = AudioIO.decode(null, f.getAbsolutePath());
+        f.delete();
+        if (pcm == null || pcm.length < Synth.SR / 10) throw new java.io.IOException("could not decode the natural voice");
+        return pcm;
+    }
+
+    /**
+     * Makes one line of dialogue: AI voice (Gemini, optional) or the natural neural voice (online, free) or the
+     * phone's own voice. When the user gave a voice sample for this character it is then moved to the sample's
+     * pitch and tone, and finally the emotion's pitch modulation is applied. Returns PCM at Synth.SR or null.
+     */
     public float[] speak(Film.Line line, Cast cast, File tmpDir, int idx, com.tarun.kahani.core.Cloud cloud, String[] err) {
         Cast k = cast != null ? cast : new Cast();
         float[] ef = emotionFactors(line.emotion);
         float[] pcm = null;
-        boolean fromAi = false;
+        boolean shaped = false;      // the engine already applied emotion and character pitch
+        usedFallback = false;
         if (cloud != null && !aiOff && k.gemini != null && cloud.hasGemini()) {
             try {
                 float[] raw = cloud.geminiSpeak(direction(line, line.who), line.text, k.gemini);
                 pcm = Mixer.resample(raw, 24000);
-                fromAi = true;
+                shaped = true;
                 lastEngine = "AI";
             } catch (Exception e) {
                 if (err != null) err[0] = e.getMessage();
@@ -254,19 +294,35 @@ public final class Voices {
                 if (m.contains("429") || m.contains("403") || m.contains("400") || m.contains("API key")) aiOff = true;
             }
         }
+        if (pcm == null && edge != null && !edgeOff && k.edge != null) {
+            try {
+                com.tarun.kahani.core.EdgeVoice.Cast ec = k.edge;
+                // with a sample, speak plainly in the matching gender; the sample decides the pitch
+                if (k.sample != null) ec = new com.tarun.kahani.core.EdgeVoice.Cast(ec.voice, 0, ec.ratePct);
+                pcm = edgeSpeak(line.text, ec, k.sample != null ? Pose.NEUTRAL : line.emotion, tmpDir, idx);
+                shaped = k.sample == null;
+                lastEngine = "natural";
+                edgeFails = 0;
+            } catch (Exception e) {
+                if (err != null) err[0] = e.getMessage();
+                if (++edgeFails >= 3) edgeOff = true;
+                usedFallback = true;
+            }
+        }
         if (pcm == null) {
             boolean useSample = k.sample != null;
             // with a sample the phone voice is only the "words"; pitch comes from the sample
-            float pitch = useSample ? 1f : k.pitch * (fromAi ? 1f : ef[1]);
+            float pitch = useSample ? 1f : k.pitch * ef[1];
             float rate = k.rate * ef[0];
             pcm = phoneTts(line.text, k.voice, pitch, rate, tmpDir, idx);
             if (pcm == null) return null;
             lastEngine = "phone";
             if (!useSample && k.shift != 1f) pcm = shift(pcm, k.shift);
+            shaped = !useSample;
         }
         if (k.sample != null) {
             pcm = com.tarun.kahani.core.VoiceFx.matchVoice(pcm, k.sample, Synth.SR);
-            if (ef[1] != 1f) pcm = com.tarun.kahani.core.VoiceFx.pitch(pcm, ef[1]);
+            if (!shaped && ef[1] != 1f) pcm = com.tarun.kahani.core.VoiceFx.pitch(pcm, ef[1]);
             lastEngine += "+sample";
         }
         if (line.whisper) {

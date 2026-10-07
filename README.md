@@ -42,6 +42,8 @@
 
 ## सीमाएँ (ईमानदारी से)
 
+* **आवाज़ें कहाँ से आती हैं**: इंटरनेट हो तो ऐप Microsoft की मुफ़्त **प्राकृतिक (न्यूरल) आवाज़ें** लेता है: हिंदी में स्वरा (महिला) और मधुर (पुरुष), और अंग्रेज़ी में कई आवाज़ें। ये असली इंसान जैसी लगती हैं। हर पात्र के लिए पिच और गति अलग रखी जाती है। इसके लिए कुंजी नहीं चाहिए। यह सेवा आधिकारिक रूप से ऐप्स के लिए नहीं है, इसलिए कभी बंद हो सकती है। तब ऐप अपने आप फ़ोन की आवाज़ पर चला जाता है।
+* जो वीडियो मैंने पहले जाँच के लिए बनाया था, उसमें **espeak** नाम की कंप्यूटर वाली आवाज़ थी। बनाने वाली मशीन पर कोई अच्छी आवाज़ नहीं थी, इसलिए वह आवाज़ खराब थी। फ़ोन पर वह आवाज़ इस्तेमाल नहीं होती।
 * **आवाज़**: आपके नमूने से आवाज़ की पिच और रंगत मिलाई जाती है। यह असली "voice cloning" नहीं है। शब्द फ़ोन की Text-to-Speech आवाज़ बोलती है, और उसे आपके नमूने जैसा बनाया जाता है। बिल्कुल असली आवाज़ चाहिए तो **🎙 संवाद रिकॉर्ड करें** इस्तेमाल करें।
 * **AI आवाज़ें (Gemini)** की मुफ़्त दैनिक सीमा बहुत कम है। सीमा पूरी होने पर बाकी संवाद फ़ोन की आवाज़ में बनते हैं। इसलिए यह सुविधा पहले से बंद रहती है।
 * **एनिमेशन**: फ़िल्म 2D कार्टून की है, 3D (Pixar जैसी) नहीं। होंठ आपके चित्र के मुँह पर आवाज़ के साथ हिलते हैं। पूरा चेहरा 3D में नहीं हिलता।
@@ -55,6 +57,7 @@
 * `app/src/main/java/com/tarun/kahani/core` holds the platform-independent engine:
   * `ScriptParser` turns a script into a `Story`. `ScriptAI` (LLM via `Cloud`) rewrites prose stories into the screenplay layout, maps free-form edit requests to commands, and identifies uploaded pictures.
   * `LookDesigner`, `Director`, `Renderer`, `Puppet`, `Sets`: design, staging, camera and drawing. Scene cards and subtitles are off by default.
+  * `EdgeVoice` is a minimal WebSocket client for the Edge read-aloud neural voices (Sec-MS-GEC token, SSML prosody per character/emotion, MP3 out). It was verified against a protocol mock built from the `edge-tts` reference.
   * `Mixer.mixTo` streams the soundtrack in 8-second chunks with lazily built clips and a limiter. `SoundLib` provides recorded sounds. `VoiceFx` does pitch shifting (WSOLA) and voice-sample matching (pitch + spectral tone). `Grade` applies colour edits.
   * `Edits` and `CommandParser` handle the post-preview command box (Hindi/English).
   * `Bible` writes the production file. `Toon` is the photo-to-cartoon filter. `Cloud` wraps Gemini (text, vision, TTS), Pollinations (keyless text and image), and Openverse/Wikimedia (keyless search).

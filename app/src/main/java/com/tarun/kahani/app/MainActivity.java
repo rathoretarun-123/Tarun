@@ -740,7 +740,8 @@ public class MainActivity extends Activity {
         boolean mouthSet = line != null && line.split("\\|").length >= 11;
         info.addView(Ui.text(this, file != null ? "🖼 आपका चित्र" + (mouthSet ? " • 👄 मुँह सेट" : " • 👄 अपने आप") : "🎨 स्टूडियो का कार्टून", 13, file != null ? Ui.GREEN : Ui.SUB, false));
         Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
-        String vtxt = vs != null ? "🎙 आवाज़: आपका नमूना \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ आवाज़: AI (भाव के साथ)" : "📱 आवाज़: फ़ोन की आवाज़");
+        String vtxt = vs != null ? "🎙 आवाज़: आपका नमूना \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ आवाज़: AI (भाव के साथ)"
+                : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 आवाज़: प्राकृतिक (न्यूरल)" : "📱 आवाज़: फ़ोन की आवाज़");
         info.addView(Ui.text(this, vtxt, 13, vs != null ? Ui.GREEN : Ui.SUB, false));
         top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(top);
@@ -1280,19 +1281,39 @@ public class MainActivity extends Activity {
         final String text = sample;
         background(previewVoices == null ? "आवाज़ तैयार हो रही है…" : null, new Work() {
             public Object run() throws Exception {
+                boolean natural = Prefs.online(MainActivity.this) && Prefs.naturalVoices(MainActivity.this);
                 if (previewVoices == null) {
                     Voices v = new Voices();
-                    if (!v.init(MainActivity.this, st.hindi)) throw new Exception("फ़ोन में Text-to-Speech नहीं मिला");
+                    if (!v.init(MainActivity.this, st.hindi) && !natural) throw new Exception("फ़ोन में Text-to-Speech नहीं मिला");
                     previewVoices = v;
                 }
+                previewVoices.edgeOff = false;
+                previewVoices.edge = natural ? new com.tarun.kahani.core.EdgeVoice() : null;
                 Map<Story.CharacterDef, Voices.Cast> cast = previewVoices.castAll(st, project);
                 Voices.Cast k = cast.get(c);
+                if (k == null) k = Voices.defaultCast(c.look);
                 int n = previewVoices.voices.size();
-                if (!keepVoice && vs == null && n > 0 && project.setting("voice." + c.displayName, "").length() > 0) k.voice = (k.voice + 1) % n;
-                if (n > 0) project.setSetting("voice." + c.displayName, String.valueOf(k.voice < 0 ? 0 : k.voice));
+                int choice = 0, choices = 0;
                 if (vs != null) {
                     float[] pcm = AudioIO.decode(MainActivity.this, vs.path);
                     if (pcm != null) { k.sample = com.tarun.kahani.core.VoiceFx.profile(pcm, com.tarun.kahani.core.Synth.SR); k.sampleId = vs.id; }
+                }
+                if (natural) {
+                    // natural voices: each tap on 🔊 tries the next variation and remembers it
+                    List<com.tarun.kahani.core.EdgeVoice.Cast> opts = com.tarun.kahani.core.EdgeVoice.options(c.look, c.age, st.hindi, st.characters.indexOf(c));
+                    String key = "evoiceIdx." + c.displayName;
+                    String cur = project.setting(key, "");
+                    try { choice = cur.length() == 0 ? 0 : Integer.parseInt(cur); } catch (NumberFormatException ignored) {}
+                    if (!keepVoice && vs == null && cur.length() > 0) choice = (choice + 1) % opts.size();
+                    choices = opts.size();
+                    project.setSetting(key, String.valueOf(choice));
+                    project.setSetting("evoice." + c.displayName, opts.get(choice).key());
+                    k.edge = k.sample != null ? com.tarun.kahani.core.EdgeVoice.forSample(k.sample.pitch, st.hindi) : opts.get(choice);
+                } else {
+                    if (!keepVoice && vs == null && n > 0 && project.setting("voice." + c.displayName, "").length() > 0) k.voice = (k.voice + 1) % n;
+                    if (n > 0) project.setSetting("voice." + c.displayName, String.valueOf(k.voice < 0 ? 0 : k.voice));
+                    choice = k.voice < 0 ? 0 : k.voice;
+                    choices = n;
                 }
                 Cloud cl = Prefs.online(MainActivity.this) && Prefs.aiVoices(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null;
                 if (cl != null && cl.hasGemini()) {
@@ -1309,7 +1330,7 @@ public class MainActivity extends Activity {
                 if (pcm == null) throw new Exception("आवाज़ नहीं बन सकी — Text-to-Speech सेटिंग देखें");
                 File f = new File(tmp, "preview.wav");
                 AudioIO.writeWav(f, pcm, com.tarun.kahani.core.Synth.SR);
-                return new Object[]{f, k.voice, n, previewVoices.lastEngine, previewVoices.languageOk};
+                return new Object[]{f, choice, choices, previewVoices.lastEngine, previewVoices.languageOk};
             }
         }, new Done() {
             public void done(Object r, Exception e) {
@@ -1317,8 +1338,11 @@ public class MainActivity extends Activity {
                 Object[] o = (Object[]) r;
                 Picker.play(MainActivity.this, ((File) o[0]).getAbsolutePath());
                 String eng = (String) o[3];
-                toast("🔊 " + (eng.contains("sample") ? "आपके नमूने वाली आवाज़" : eng.startsWith("AI") ? "AI आवाज़" : "फ़ोन की आवाज़ " + ((Integer) o[1] + 1) + "/" + Math.max(1, (Integer) o[2]) + " — फिर 🔊 दबाएँ तो अगली"));
-                if (!(Boolean) o[4] && !eng.startsWith("AI")) offerTtsInstall();
+                String pos = " " + ((Integer) o[1] + 1) + "/" + Math.max(1, (Integer) o[2]) + " — पसंद न आए तो फिर 🔊 दबाएँ";
+                toast("🔊 " + (eng.contains("sample") ? "आपके नमूने वाली आवाज़" : eng.startsWith("AI") ? "AI आवाज़"
+                        : eng.startsWith("natural") ? "प्राकृतिक आवाज़" + pos : "फ़ोन की आवाज़" + pos));
+                if (eng.startsWith("phone") && previewVoices.edge != null) toast("प्राकृतिक आवाज़ की सेवा नहीं मिली (इंटरनेट देखें) — अभी फ़ोन की आवाज़ सुनाई गई");
+                else if (!(Boolean) o[4] && eng.startsWith("phone")) offerTtsInstall();
             }
         });
     }
@@ -2192,6 +2216,13 @@ public class MainActivity extends Activity {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "online", on ? "1" : "0"); }
         });
         ai.addView(online);
+        CheckBox nv = new CheckBox(this);
+        nv.setText("प्राकृतिक आवाज़ें (Microsoft की मुफ़्त न्यूरल आवाज़ें, इंटरनेट चाहिए, कुंजी नहीं) — सलाह: चालू रखें");
+        nv.setChecked(Prefs.naturalVoices(this));
+        nv.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "naturalVoices", on ? "1" : "0"); }
+        });
+        ai.addView(nv);
         CheckBox av = new CheckBox(this);
         av.setText("AI आवाज़ें (भाव के साथ; कुंजी ज़रूरी)। मुफ़्त सीमा बहुत कम है — छोटी फ़िल्मों के लिए। सीमा पूरी होने पर बाकी संवाद फ़ोन की आवाज़ में।");
         av.setChecked(Prefs.aiVoices(this));

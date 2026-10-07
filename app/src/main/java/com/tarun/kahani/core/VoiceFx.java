@@ -189,10 +189,11 @@ public final class VoiceFx {
         float p0 = medianPitch(speech, sr);
         float[] y = speech;
         if (p0 > 0 && target.pitch > 0) {
-            float f = Math.max(0.5f, Math.min(2.4f, target.pitch / p0));
+            // beyond about ±0.8 octave any pitch shifter sounds artificial, so stay within that
+            float f = Math.max(0.6f, Math.min(1.8f, target.pitch / p0));
             y = pitch(y, f);
         }
-        return matchTone(y, sr, target.tone, 0.7f);
+        return matchTone(y, sr, target.tone, 0.6f);
     }
 
     // ---------------------------------------------------------------- FFT (radix 2, in place)

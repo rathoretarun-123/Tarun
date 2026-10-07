@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import com.tarun.kahani.core.Art;
 import com.tarun.kahani.core.Cloud;
 import com.tarun.kahani.core.Edits;
+import com.tarun.kahani.core.EdgeVoice;
 import com.tarun.kahani.core.Grade;
 import com.tarun.kahani.core.VoiceFx;
 import com.tarun.kahani.core.Director;
@@ -127,8 +128,10 @@ public final class FilmJob implements Runnable {
             boolean ttsOk = voices.init(ctx, story.hindi);
             Cloud cloud = Prefs.online(ctx) && Prefs.aiVoices(ctx) ? Prefs.cloud(ctx) : null;
             boolean aiVoices = cloud != null && cloud.hasGemini();
-            if (!ttsOk && !aiVoices) warning = "फ़ोन में बोलने वाला इंजन (Text-to-Speech) नहीं मिला — सेटिंग्स > Text-to-speech देखें।";
-            else if (ttsOk && !voices.languageOk && !aiVoices) warning = (story.hindi ? "हिंदी" : "English") + " आवाज़ फ़ोन में डाउनलोड नहीं है — सेटिंग्स > Text-to-speech में जाकर डाउनलोड करें।";
+            boolean natural = Prefs.online(ctx) && Prefs.naturalVoices(ctx);
+            if (natural) voices.edge = new EdgeVoice();
+            if (!ttsOk && !aiVoices && !natural) warning = "फ़ोन में बोलने वाला इंजन (Text-to-Speech) नहीं मिला — सेटिंग्स > Text-to-speech देखें।";
+            else if (ttsOk && !voices.languageOk && !aiVoices && !natural) warning = (story.hindi ? "हिंदी" : "English") + " आवाज़ फ़ोन में डाउनलोड नहीं है — सेटिंग्स > Text-to-speech में जाकर डाउनलोड करें।";
             Map<Story.CharacterDef, Voices.Cast> cast = voices.castAll(story, project);
             Library lib = new Library(ctx);
             int ci = 0;
@@ -141,6 +144,11 @@ public final class FilmJob implements Runnable {
                     float[] pcm = AudioIO.decode(ctx, it.path);
                     if (pcm != null) { k.sample = VoiceFx.profile(pcm, Synth.SR); k.sampleId = it.id; }
                 }
+                if (natural) {
+                    EdgeVoice.Cast chosen = EdgeVoice.Cast.parse(project.setting("evoice." + c.displayName, ""));
+                    k.edge = k.sample != null ? EdgeVoice.forSample(k.sample.pitch, story.hindi)
+                            : chosen != null ? chosen : EdgeVoice.castFor(c.look, c.age, story.hindi, ci);
+                }
                 if (aiVoices) {
                     String gv = project.setting("gvoice." + c.displayName, "");
                     k.gemini = gv.length() > 0 ? gv : Cloud.geminiVoiceFor(c.look, ci);
@@ -150,16 +158,18 @@ public final class FilmJob implements Runnable {
             Voices.Cast narratorCast = new Voices.Cast();
             narratorCast.pitch = 1.0f; narratorCast.rate = 0.92f;
             if (aiVoices) narratorCast.gemini = "Charon";
+            if (natural) narratorCast.edge = EdgeVoice.narrator(story.hindi);
             Library.Item ns = lib.byId(project.setting("vsample.narrator", ""));
             if (ns != null) {
                 float[] pcm = AudioIO.decode(ctx, ns.path);
                 if (pcm != null) { narratorCast.sample = VoiceFx.profile(pcm, Synth.SR); narratorCast.sampleId = ns.id; }
+                if (natural && narratorCast.sample != null) narratorCast.edge = EdgeVoice.forSample(narratorCast.sample.pitch, story.hindi);
             }
 
             File vdir = new File(project.dir, "voices");
             vdir.mkdirs();
             final File[] lineFiles = new File[film.lines.size()];
-            int failedLines = 0, aiLines = 0;
+            int failedLines = 0, aiLines = 0, naturalLines = 0;
             String[] err = new String[1];
             for (int i = 0; i < film.lines.size(); i++) {
                 check();
@@ -177,11 +187,13 @@ public final class FilmJob implements Runnable {
                 File cached = new File(vdir, hash(who + "|" + l.text + "|" + l.emotion + "|" + l.manner + "|" + (k == null ? "" : k.signature())) + ".wav");
                 if (v == null && cached.exists()) v = AudioIO.readRaw(cached);
                 // 3) speak it now
-                if (v == null && (ttsOk || aiVoices)) {
+                if (v == null && (ttsOk || aiVoices || natural)) {
                     v = voices.speak(l, k, tmp, i, aiVoices ? cloud : null, err);
                     if (v != null) {
                         if (voices.lastEngine.startsWith("AI")) aiLines++;
-                        try { AudioIO.writeRaw(cached, v); } catch (IOException ignored) {}
+                        if (voices.lastEngine.startsWith("natural")) naturalLines++;
+                        // a fallback voice is not kept, so the next "फिर बनाएँ" tries the natural voice again
+                        if (!voices.usedFallback) try { AudioIO.writeRaw(cached, v); } catch (IOException ignored) {}
                     }
                 }
                 if (v != null) {
@@ -202,6 +214,8 @@ public final class FilmJob implements Runnable {
             }
             if (aiVoices && voices.aiOff && warning.length() == 0)
                 warning = "AI आवाज़ की आज की सीमा पूरी हो गई या कुंजी गलत है — बाकी संवाद फ़ोन की आवाज़ में बने। " + (err[0] == null ? "" : err[0]);
+            if (natural && voices.edgeOff && warning.length() == 0)
+                warning = "प्राकृतिक आवाज़ की सेवा से जुड़ नहीं सका (इंटरनेट देखें) — कुछ संवाद फ़ोन की आवाज़ में बने। इंटरनेट के साथ \"फिर बनाएँ\" दबाएँ। " + (err[0] == null ? "" : err[0]);
             if (failedLines > 0 && warning.length() == 0)
                 warning = failedLines + " संवाद बोले नहीं जा सके — फ़ोन की Text-to-Speech सेटिंग देखें।";
             voices.shutdown();

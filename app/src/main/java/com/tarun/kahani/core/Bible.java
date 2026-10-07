@@ -131,6 +131,14 @@ public final class Bible {
             b.append("   ").append(hi ? "आवाज़: " : "Voice: ").append(voiceHint(c, hi));
             if (haveVoice != null && contains(haveVoice, c)) b.append(hi ? "  ✔ नमूना मिला" : "  ✔ sample given");
             b.append("\n");
+            // what the studio does to the voice because of the description
+            List<String> made = new ArrayList<String>(VoiceMatch.want(c).words);
+            made.addAll(VoiceStyle.forCharacter(c).words);
+            if (!made.isEmpty()) {
+                b.append("   Voice from the description: ");
+                for (int w = 0; w < made.size(); w++) b.append(w > 0 ? ", " : "").append(made.get(w));
+                b.append("\n");
+            }
             b.append("   ").append(hi ? "चित्र: " : "Picture: ").append(havePicture != null && contains(havePicture, c)
                     ? (hi ? "✔ मिल गया" : "✔ given") : (hi ? "✘ चाहिए (या स्टूडियो बनाएगा)" : "✘ needed (or studio makes it)")).append("\n");
             b.append("   Prompt: ").append(characterPrompt(c)).append("\n\n");
@@ -172,6 +180,8 @@ public final class Bible {
                             .append("\n      ").append(who).append(" [").append(emotionWord(emo, hi)).append("]");
                     if (bt.manner.length() > 0) b.append(" (").append(st.shown(bt.manner)).append(")");
                     b.append(": \"").append(st.shown(oneLine(bt.text))).append("\"\n");
+                    String said = VoiceStyle.forLine(null, bt.manner, Txt.has(bt.manner, "फुसफुसा", "whisper", "धीरे से"), false).label();
+                    if (said.length() > 0) b.append("      Voice: ").append(said).append("\n");
                     last = bt.speaker;
                 } else {
                     String t = oneLine(bt.text);

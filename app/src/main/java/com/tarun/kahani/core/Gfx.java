@@ -46,6 +46,11 @@ public interface Gfx {
     void image(Object img, float x, float y, float w, float h);
     /** Draws the source rectangle of an image into the destination rectangle. */
     void imageRect(Object img, float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh);
+    /**
+     * Draws an image bent by a mesh: the image is split into meshW x meshH equal cells and the corner points
+     * of the cells are drawn at verts ((meshW+1)*(meshH+1) x,y pairs, row by row).
+     */
+    void imageMesh(Object img, int meshW, int meshH, float[] verts);
     int imageWidth(Object img);
     int imageHeight(Object img);
 

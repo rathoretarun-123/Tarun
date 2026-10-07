@@ -161,6 +161,13 @@ public final class AndroidGfx implements Gfx {
         c.drawBitmap(b, src, rf, img);
     }
 
+    public void imageMesh(Object im, int meshW, int meshH, float[] verts) {
+        Bitmap b = (Bitmap) im;
+        if (b == null || b.isRecycled()) return;
+        img.setAlpha((int) (255 * alpha));
+        c.drawBitmapMesh(b, meshW, meshH, verts, 0, null, 0, img);
+    }
+
     public int imageWidth(Object im) { return ((Bitmap) im).getWidth(); }
     public int imageHeight(Object im) { return ((Bitmap) im).getHeight(); }
 

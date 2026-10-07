@@ -226,7 +226,7 @@ public final class Renderer {
             g.save();
             g.translate(x, ground);
             Art.Sprite sp = art.sprites.get(c.id);
-            if (sp != null) drawSprite(g, sp, c.look, pose, h, 0);
+            if (sp != null) drawSprite(g, sp, c.look, pose, h, 0, null);
             else Puppet.draw(g, c.look, pose, h);
             g.restore();
         }
@@ -605,9 +605,9 @@ public final class Renderer {
         }
         applyActs(a, p, t);
         if (spk != null) {
-            // talking: small nods with the voice
+            // talking: small nods with the voice (a rigged picture nods its head instead of its whole body)
             float m = p.mouth;
-            mo.rot += (float) Math.sin(t * 5.3f + a.order) * 1.2f * (0.3f + m);
+            if (sp == null || sp.rig == null) mo.rot += (float) Math.sin(t * 5.3f + a.order) * 1.2f * (0.3f + m);
             mo.dy -= m * 3;
             if (p.armR < 30 && a.look.kind != Look.MONKEY) { p.armR = 30 + (float) Math.sin(t * 2.7f) * 15; p.elbowR = 40; }
         }
@@ -660,7 +660,7 @@ public final class Renderer {
         g.translate(x + mo.dx, y + mo.dy);
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;
-        if (sp != null) drawSprite(g, sp, a.look, p, h, mo.rot);
+        if (sp != null) drawSprite(g, sp, a.look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             Puppet.draw(g, a.look, p, h);
@@ -856,9 +856,118 @@ public final class Renderer {
 
     // ================================================================== picture sprites
 
-    private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot) {
+    private final Rig.Frame rf = new Rig.Frame();
+    private final Rig.State rs = new Rig.State(), rsTmp = new Rig.State();
+    private final Pose pose2 = new Pose();
+    private final float[] hand = new float[2];
+
+    /** Draws one character in a given pose at (0,0) = feet (previews and checks). */
+    public void drawPosed(Gfx g, Story.CharacterDef c, Pose p, float h) {
+        Art.Sprite sp = art == null ? null : art.sprites.get(c.id);
+        mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
+        if (sp != null) drawSprite(g, sp, c.look, p, h, 0, null);
+        else Puppet.draw(g, c.look, p, h);
+    }
+
+    /** Arm angle of the cartoon pose (0 down, 90 sideways, 170 up) as an outward swing a picture can show. */
+    static float armSwing(float a) {
+        return Math.max(-6, Math.min(26, (a - 8) * 0.3f));
+    }
+
+    /** The face for an emotion. */
+    static void faceFor(int emotion, Rig.State f, float w) {
+        switch (emotion) {
+            case Pose.HAPPY: f.smile += 0.7f * w; f.squint += 0.25f * w; break;
+            case Pose.LAUGH: f.smile += 1f * w; f.squint += 0.8f * w; break;
+            case Pose.SAD: f.frown += 0.8f * w; f.innerUp += 0.9f * w; break;
+            case Pose.ANGRY: f.anger += 1f * w; f.frown += 0.2f * w; break;
+            case Pose.SCARED: f.innerUp += 0.8f * w; f.wide += 0.9f * w; f.frown += 0.3f * w; break;
+            case Pose.SURPRISED: f.browUp += 1f * w; f.wide += 1f * w; break;
+            case Pose.EVIL: f.smile += 0.6f * w; f.anger += 0.55f * w; break;
+            case Pose.DETERMINED: f.anger += 0.45f * w; break;
+            case Pose.PROUD: f.smile += 0.4f * w; f.browUp += 0.2f * w; break;
+            case Pose.CURIOUS: f.browUpR += 0.8f * w; f.wide += 0.2f * w; break;
+            case Pose.PAIN: f.frown += 0.6f * w; f.squint += 0.9f * w; f.anger += 0.3f * w; break;
+            case Pose.DIZZY: f.squint += 0.4f * w; break;
+            default: f.smile += 0.1f * w;
+        }
+    }
+
+    /** The emotion an actor shows at time t (its key, its line, its gesture), without drawing anything. */
+    private int emotionAt(Film.Actor a, float t) {
+        Film.Key k = a.stateAt(t);
+        Pose q = pose2;
+        q.reset();
+        q.emotion = k.emotion;
+        Film.Speak spk = speakingAt(a, t);
+        if (spk != null && spk.emotion != Pose.NEUTRAL) q.emotion = spk.emotion;
+        float dx = mo.dx, dy = mo.dy, r = mo.rot, sx = mo.sx, sy = mo.sy;
+        applyActs(a, q, t);
+        mo.dx = dx; mo.dy = dy; mo.rot = r; mo.sx = sx; mo.sy = sy;
+        return q.emotion;
+    }
+
+    /** Bones and face of a picture character for this frame, from the same pose the cartoon puppets use. */
+    private Rig.State rigState(Pose p, Film.Actor a) {
+        Rig.State st = rs;
+        st.reset();
+        float t = p.time;
+        st.armL = armSwing(p.armL);
+        st.armR = armSwing(p.armR);
+        st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f + p.seed) * 1.2f;
+        st.lean = p.tilt;
+        st.breathe = (float) Math.sin(t * 2.1f + p.seed);
+        if (p.mouth > 0.02f) {
+            st.headRot += (float) Math.sin(t * 5.3f + p.seed) * 2.6f * (0.3f + p.mouth);
+            st.nod += (float) Math.sin(t * 4.1f + p.seed) * 0.5f * (0.2f + p.mouth);
+        }
+        if (p.walkAmt > 0) {
+            float sw = (float) Math.sin(p.walk);
+            st.legLLift = Math.max(0, sw) * 0.14f * p.walkAmt;
+            st.legRLift = Math.max(0, -sw) * 0.14f * p.walkAmt;
+            st.legLAng = sw * 4 * p.walkAmt;
+            st.legRAng = sw * 4 * p.walkAmt;
+            st.headRot += sw * 1.2f;
+        }
+        switch (p.body) {
+            case Pose.SIT: st.legScale = 0.72f; st.lean -= 2; break;
+            case Pose.KNEEL: st.legScale = 0.7f; st.lean += 4; break;
+            case Pose.CROUCH: st.legScale = 0.75f; st.lean += 9; st.nod += 0.4f; break;
+            default:
+        }
+        // body language of the feeling
+        switch (p.emotion) {
+            case Pose.SAD: st.nod += 0.9f; st.armL -= 2; st.armR -= 2; st.lean += 1.5f; break;
+            case Pose.ANGRY: st.lean += 3; st.nod += 0.3f; st.armL += 4; st.armR += 4; break;
+            case Pose.SCARED: st.lean -= 4; st.armL -= 3; st.armR -= 3; st.headRot += (float) Math.sin(t * 38) * 0.8f; break;
+            case Pose.SURPRISED: st.nod -= 0.6f; st.armL += 6; st.armR += 6; st.lean -= 2; break;
+            case Pose.HAPPY: st.headRot += 3; break;
+            case Pose.LAUGH: st.nod -= 0.7f; st.headRot += (float) Math.sin(t * 7) * 3; st.armL += (float) Math.sin(t * 14) * 3; st.armR += (float) Math.sin(t * 14) * 3; break;
+            case Pose.PROUD: st.nod -= 0.5f; st.lean -= 2; st.breathe += 1; break;
+            case Pose.DETERMINED: st.nod += 0.2f; st.lean += 1.5f; break;
+            case Pose.CURIOUS: st.headRot += 6; break;
+            case Pose.PAIN: st.nod += 0.5f; st.lean += 3; break;
+            case Pose.DIZZY: st.headRot += (float) Math.sin(t * 3) * 8; break;
+            case Pose.EVIL: st.nod += 0.3f; st.headRot -= 3; break;
+            default:
+        }
+        // the face: an average over the last 0.3 s, so expressions melt into each other
+        // (a function of time only, so frames drawn by different threads agree)
+        if (a != null) {
+            int samples = 6;
+            for (int i = 0; i < samples; i++) faceFor(emotionAt(a, t - i * 0.06f), st, 1f / samples);
+        } else {
+            faceFor(p.emotion, st, 1f);
+        }
+        return st;
+    }
+
+    private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot, Film.Actor actor) {
         float scale = h / sp.h;
         float w = sp.w * scale;
+        Rig rig = sp.rig;
+        boolean rigged = rig != null && p.body != Pose.LIE && p.body != Pose.HANG && !(p.noHeadwear && sp.turbanY > 0);
+        Rig.State st = rigged ? rigState(p, actor) : null;
         g.save();
         if (p.body == Pose.LIE) {
             g.translate(0, -w * 0.32f);
@@ -869,8 +978,8 @@ public final class Renderer {
         }
         if (rot != 0) g.rotate(rot);
         float sy = mo.sy, sx = mo.sx;
-        if (p.body == Pose.SIT) sy *= 0.8f;
-        else if (p.body == Pose.KNEEL) sy *= 0.74f;
+        if (!rigged && p.body == Pose.SIT) sy *= 0.8f;
+        else if (!rigged && p.body == Pose.KNEEL) sy *= 0.74f;
         if (p.walkAmt > 0) sy *= 1 + (float) Math.sin(p.walk * 2) * 0.012f * p.walkAmt;
         float mirror = p.facing < 0 ? -1 : 1;
         g.scale(sx * mirror, sy);
@@ -890,6 +999,18 @@ public final class Renderer {
             g.color(Puppet.alpha(0xFFFFFFFF, 0.35f));
             g.oval(fx - fw * 0.3f, fy - fw * 0.3f, fw * 0.3f, fw * 0.1f);
             g.imageRect(sp.img, 0, cut * sp.h, sp.w, sp.h * (1 - cut), left, top + cut * h, w, h * (1 - cut));
+        } else if (rigged) {
+            // sitting / kneeling: the legs fold, so the picture comes down to keep the feet on the ground
+            float rise = rig.feetRise(st, h);
+            if (rise > 0) g.translate(0, rise);
+            rig.bodyMesh(rf, st, left, top, w, h);
+            g.imageMesh(sp.img, Rig.BW, Rig.BH, rf.body);
+            if (rig.face && rig.faceImg != null) {
+                rig.faceMesh(rf, st);
+                g.imageMesh(rig.faceImg, Rig.FW, Rig.FH, rf.face);
+            }
+            // the eyes, mouth and tears below are drawn in the head's own position
+            Rig.applyHead(rf, g);
         } else {
             g.image(sp.img, left, top, w, h);
         }
@@ -924,8 +1045,10 @@ public final class Renderer {
                 g.color(0xCC81D4FA);
                 g.oval(ex2 + er * 2.2f, ey2 - er * 1.6f + (p.time * 15) % (er * 2), er * 0.25f, er * 0.38f);
             }
-            // lip-sync mouth
+            // lip-sync mouth (open in surprise or laughter even when not speaking)
             float m = p.mouth;
+            if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
+            if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.3f + 0.2f * Math.abs((float) Math.sin(p.time * 9));
             if (m > 0.06f) {
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;
                 float hw = sp.mouthHW * w;
@@ -950,6 +1073,11 @@ public final class Renderer {
         // held items (not mirrored text-wise, drawn upright near the hands)
         if (p.holdR != Pose.I_NONE && p.body != Pose.LIE) {
             float hx = p.facing * w * 0.36f, hy = -h * 0.45f;
+            if (rigged) {
+                rig.handAt(rf, st, 1, hand);
+                hx = hand[0] * (p.facing < 0 ? -1 : 1) * mo.sx;
+                hy = hand[1] * mo.sy + rig.feetRise(st, h);
+            }
             if (p.holdR == Pose.I_WOOD_SWORD || p.holdR == Pose.I_SWORD) {
                 g.save();
                 g.translate(hx, hy);

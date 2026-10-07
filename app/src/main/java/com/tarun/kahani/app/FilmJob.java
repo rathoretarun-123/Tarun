@@ -135,6 +135,7 @@ public final class FilmJob implements Runnable {
             opt.narrator = false;
             opt.narrateTitle = false;
             opt.pace = ed.speed;
+            opt.sounds = Library.get(ctx).soundLib();   // the user's own effects play where the story mentions them
             Director dir = new Director(story, opt);
             Film film = dir.prepare();
 
@@ -154,6 +155,8 @@ public final class FilmJob implements Runnable {
             for (Story.CharacterDef c : story.characters) {
                 Voices.Cast k = cast.get(c);
                 if (k == null) { k = Voices.defaultCast(c.look); cast.put(c, k); }
+                // voice effects asked for in the edit box ("make the king's voice raspy")
+                k.style = com.tarun.kahani.core.VoiceStyle.withEdits(k.style != null ? k.style : com.tarun.kahani.core.VoiceStyle.forCharacter(c), ed.styleFor(c.displayName));
                 String sid = project.setting("vsample." + c.displayName, "");
                 Library.Item it = lib.byId(sid);
                 if (it != null) {

@@ -20,6 +20,27 @@ public final class Director {
         public boolean subtitles = false;    // can be switched on later from the command box
         public boolean sceneCards = false;   // "दृश्य N" cards between scenes (off: scenes flow like a film)
         public float pace = 1f;              // >1 = tighter pauses
+        /** The user's own sounds: effects are played where an action or direction mentions them. */
+        public SoundLib sounds;
+    }
+
+    private final Map<String, Float> userSoundAt = new HashMap<String, Float>();
+
+    /** Plays the user's own effect sound that fits this text (not the same one twice within 6 seconds). */
+    private void userEffect(String text, float t) {
+        if (opt.sounds == null || text == null || text.length() == 0) return;
+        SoundLib.Entry e = opt.sounds.bestUser(text, "sfx");
+        if (e == null) return;
+        Float last = userSoundAt.get(e.path);
+        if (last != null && t - last < 6) return;
+        if (!userSoundAt.containsKey(e.path) && userSoundAt.size() < 12) {
+            String said = text.length() > 50 ? text.substring(0, 50) + "…" : text;
+            film.notes.add("🔊 Your sound \"" + e.title + "\" plays at: " + said);
+        }
+        userSoundAt.put(e.path, t);
+        Film.Sfx x = new Film.Sfx(Film.SFX_USER, t + 0.15f, Math.max(0.8f, Math.min(8f, e.seconds > 0 ? e.seconds : 3f)), 0.75f);
+        x.file = e.path;
+        film.sfx.add(x);
     }
 
     private final Story story;
@@ -660,6 +681,7 @@ public final class Director {
 
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
         if (m == null || m.length() == 0) return;
+        userEffect(m, t0);
         if (Txt.has(m, "तलवार")) {
             Film.Key k = a.at(t0); k.holdR = Pose.I_WOOD_SWORD;
             a.acts.add(new Film.Act(t0, t1, Txt.has(m, "रोक") ? Film.G_BLOCK : Film.G_SWORD));
@@ -778,7 +800,8 @@ public final class Director {
         float d = 1.4f;
         boolean focusSet = false;
 
-        // ---- sounds named in the text (onomatopoeia)
+        // ---- sounds named in the text (onomatopoeia), and the user's own effects for what happens
+        userEffect(s, t);
         if (Txt.has(s, "कल-कल", "झरन")) film.sfx.add(new Film.Sfx(Film.SFX_STREAM, t, 4, 0.35f));
         if (Txt.has(s, "चह-चह", "चिड़िय")) film.sfx.add(new Film.Sfx(Film.SFX_BIRDS, t, 4, 0.4f));
         if (Txt.has(s, "सर-सर") && !Txt.has(s, "रेंग")) film.sfx.add(new Film.Sfx(Film.SFX_WIND, t, 4, 0.35f));

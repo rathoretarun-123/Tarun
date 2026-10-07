@@ -132,7 +132,7 @@ public final class ScriptAI {
                 + "Reply ONLY with {\"commands\":[...]} . Each command is an object with \"op\" and optional \"who\", \"factor\", \"value\", \"on\". "
                 + "Allowed ops: brightness (factor 1.2 = brighter, value -0.8..0.8), contrast (factor), saturation (factor), "
                 + "warmth (factor 1.2 = warmer), music (factor = volume multiplier), sfx (factor), ambience (factor), voices (factor), "
-                + "narrator (factor), voice_gain (who, factor), voice_pitch (who, factor 1.1 = higher), voice_rate (who, factor 1.1 = faster), "
+                + "narrator (factor), voice_gain (who, factor), voice_pitch (who, factor 1.1 = higher), voice_rate (who, factor 1.1 = faster), voice_style (who, style one of raspy|trembling|booming|robotic|whisper|nasal|ghostly|magical|growl, on true/false), "
                 + "speed (factor), subtitles (on true/false), file_size (factor <1 smaller, >1 larger), resolution (value 480/720/1080), "
                 + "aspect (value \"16:9\"|\"9:16\"|\"1:1\"), reset. Character names: " + names + ". "
                 + "Use factor 1.3 for 'increase', 0.7 for 'decrease', 1.6/0.4 for 'a lot'. If nothing matches reply {\"commands\":[]}.";
@@ -208,6 +208,32 @@ public final class ScriptAI {
         s.realPhoto = Json.bool(o, "real_photo", false);
         s.caption = Json.str(o, "caption", "");
         return s;
+    }
+
+    /** What the AI heard in a sound: kind (amb, sfx, music, voices) and words in English and Hindi. */
+    public static final class Heard {
+        public String kind = "";
+        public String words = "";
+    }
+
+    /** Lets the AI listen to (at most 20 seconds of) a sound and say what it is. */
+    public static Heard listen(Cloud cloud, float[] pcm, int sr) throws IOException {
+        int n = Math.min(pcm.length, sr * 20);
+        float[] x = Mixer.resampleTo(java.util.Arrays.copyOf(pcm, n), sr, 16000);
+        String prompt = "Listen to this sound recording for a children's animated film. Reply only with JSON: "
+                + "{\"kind\":\"background|effect|music|voices\",\"words\":[\"up to 6 short English words for what is heard\", \"then the same words in Hindi (Devanagari)\"]}. "
+                + "background = continuous sound that can loop under a scene (rain, river, birds, wind, traffic); effect = a single event (door, thunder, horse, bell); "
+                + "voices = people talking or a crowd in the background; music = music or singing.";
+        Object o = Cloud.jsonIn(cloud.listen(prompt, Wav.encode16(x, 16000)));
+        Heard h = new Heard();
+        if (o == null) return h;
+        String k = Json.str(o, "kind", "");
+        h.kind = k.startsWith("effect") ? "sfx" : k.startsWith("music") ? "music" : k.startsWith("voice") ? "voices" : k.startsWith("back") ? "amb" : "";
+        List<Object> ws = Json.arr(o, "words");
+        StringBuilder b = new StringBuilder();
+        if (ws != null) for (Object w : ws) if (w instanceof String && ((String) w).trim().length() > 0) { if (b.length() > 0) b.append(", "); b.append(((String) w).trim()); }
+        h.words = b.toString();
+        return h;
     }
 
     /** Finds a candidate whose name appears in s (Devanagari or Latin spelling). */

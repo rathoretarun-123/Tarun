@@ -47,6 +47,23 @@ public final class Mixer {
         return o;
     }
 
+    /** Linear resample from one rate to another (a light average first when going down, against harshness). */
+    public static float[] resampleTo(float[] in, int from, int to) {
+        if (from == to || in.length == 0) return in;
+        int n = (int) ((long) in.length * to / from);
+        float[] o = new float[n];
+        double step = from / (double) to;
+        int span = Math.max(1, (int) Math.floor(step));
+        for (int i = 0; i < n; i++) {
+            int a = (int) (i * step);
+            float sum = 0;
+            int c = 0;
+            for (int k = 0; k < span && a + k < in.length; k++) { sum += in[a + k]; c++; }
+            o[i] = c == 0 ? 0 : sum / c;
+        }
+        return o;
+    }
+
     /** Adds a cave-like echo. */
     static float[] echo(float[] v) {
         int d1 = (int) (0.11f * Synth.SR), d2 = (int) (0.23f * Synth.SR);
@@ -249,7 +266,8 @@ public final class Mixer {
                     || s.type == Film.SFX_DRIP || s.type == Film.SFX_CROWD;
             float g = s.gain * 0.55f * (ambient ? ed.ambience : ed.sfx);
             String f = lib == null ? null : sfxFile(s.type);
-            final float[] src = f == null ? null : lib.pcm(lib.byFile(f));
+            final float[] src = lib == null ? null : s.file != null ? lib.pcm(lib.byPath(s.file)) : f == null ? null : lib.pcm(lib.byFile(f));
+            if (s.type == Film.SFX_USER && src == null) continue;     // the user's sound is gone: nothing else fits
             int st = (int) (s.t * Synth.SR);
             if (src != null && src.length >= Synth.SR / 4 && (ambient || s.dur > src.length / (float) Synth.SR)) {
                 clips.add(new LoopClip(src, st, s.dur, ambient ? 1f : 0.05f, g));

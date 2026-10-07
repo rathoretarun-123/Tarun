@@ -154,11 +154,13 @@ public final class Film {
     public static final int SFX_STREAM = 0, SFX_BIRDS = 1, SFX_WIND = 2, SFX_CLACK = 3, SFX_POP = 4, SFX_CHIME = 5, SFX_MONKEY = 6,
             SFX_RUSTLE = 7, SFX_THUD = 8, SFX_WHOOSH = 9, SFX_BELL = 10, SFX_DRUMS = 11, SFX_NIGHT = 12, SFX_ROAR = 13, SFX_CLAP = 14,
             SFX_ANKLET = 15, SFX_HISS = 16, SFX_DRIP = 17, SFX_SCREAM_FX = 18, SFX_SPLASH = 19, SFX_NET = 20, SFX_WHOOSH_CARD = 21,
-            SFX_FANFARE = 22, SFX_END_CHORD = 23, SFX_MAGIC = 24, SFX_STEPS = 25, SFX_CROWD = 26, SFX_GLASS = 27, SFX_SWORD = 28;
+            SFX_FANFARE = 22, SFX_END_CHORD = 23, SFX_MAGIC = 24, SFX_STEPS = 25, SFX_CROWD = 26, SFX_GLASS = 27, SFX_SWORD = 28,
+            SFX_USER = 29;
 
     public static final class Sfx {
         public float t, dur, gain;
         public int type;
+        public String file;      // SFX_USER: the user's own sound (library path)
         public Sfx(int type, float t, float dur, float gain) { this.type = type; this.t = t; this.dur = dur; this.gain = gain; }
     }
 

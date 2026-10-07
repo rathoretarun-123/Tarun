@@ -116,9 +116,11 @@ public final class Voices {
         public String sampleId = "";
         public String gemini;      // Gemini voice name when AI voices are used
         public com.tarun.kahani.core.EdgeVoice.Cast edge;   // natural neural voice (online), or null
+        /** Raspy, trembling, booming… as the script describes the voice (applied as sound processing). */
+        public com.tarun.kahani.core.VoiceStyle style;
         public String signature() {
             return voice + "|" + pitch + "|" + rate + "|" + shift + "|" + sampleId + "|" + (gemini == null ? "" : gemini)
-                    + "|" + (edge == null ? "" : edge.key());
+                    + "|" + (edge == null ? "" : edge.key()) + "|" + (style == null ? "" : style.signature());
         }
     }
 
@@ -141,6 +143,13 @@ public final class Voices {
                 try { if (pi.length() > 0) k.pitch = Float.parseFloat(pi); } catch (NumberFormatException ignored) {}
             }
             if (k.voice >= voices.size()) k.voice = voices.isEmpty() ? -1 : k.voice % voices.size();
+            // the voice the script describes: deeper / higher / slower / faster, and raspy, trembling, booming…
+            com.tarun.kahani.core.VoiceMatch.Want w = com.tarun.kahani.core.VoiceMatch.want(c);
+            if (w.deep && !w.high) k.pitch *= 0.93f;
+            if (w.high && !w.deep) k.pitch *= 1.07f;
+            if (w.slow && !w.fast) k.rate *= 0.92f;
+            if (w.fast && !w.slow) k.rate *= 1.08f;
+            k.style = com.tarun.kahani.core.VoiceStyle.forCharacter(c);
             m.put(c, k);
         }
         return m;
@@ -261,13 +270,13 @@ public final class Voices {
     public volatile boolean usedFallback;
 
     /** Natural voice for one line: MP3 from the service, decoded to PCM at Synth.SR. */
-    float[] edgeSpeak(String text, com.tarun.kahani.core.EdgeVoice.Cast c, int emotion, File tmpDir, int idx) throws Exception {
+    float[] edgeSpeak(String text, com.tarun.kahani.core.EdgeVoice.Cast c, int[] prosody, File tmpDir, int idx) throws Exception {
         java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
         for (String part : com.tarun.kahani.core.EdgeVoice.chunks(text, 700)) {
             byte[] mp3 = null;
             Exception last = null;
             for (int attempt = 0; attempt < 2 && mp3 == null; attempt++) {
-                try { mp3 = edge.speak(part, c, com.tarun.kahani.core.EdgeVoice.emotion(emotion)); }
+                try { mp3 = edge.speak(part, c, prosody); }
                 catch (Exception e) { last = e; Thread.sleep(800); }
             }
             if (mp3 == null) throw last;
@@ -291,6 +300,9 @@ public final class Voices {
     public float[] speak(Film.Line line, Cast cast, File tmpDir, int idx, com.tarun.kahani.core.Cloud cloud, String[] err) {
         Cast k = cast != null ? cast : new Cast();
         float[] ef = emotionFactors(line.emotion);
+        // how this line is said (shouting, crying, slowly…) on top of the character's own voice qualities
+        com.tarun.kahani.core.VoiceStyle ls = com.tarun.kahani.core.VoiceStyle.forLine(k.style, line.manner, line.whisper, false);
+        boolean ai = false;
         float[] pcm = null;
         boolean shaped = false;      // the engine already applied emotion and character pitch
         usedFallback = false;
@@ -299,6 +311,7 @@ public final class Voices {
                 float[] raw = cloud.geminiSpeak(direction(line, line.who), line.text, k.gemini);
                 pcm = Mixer.resample(raw, 24000);
                 shaped = true;
+                ai = true;
                 lastEngine = "AI";
             } catch (Exception e) {
                 if (err != null) err[0] = e.getMessage();
@@ -311,7 +324,9 @@ public final class Voices {
                 com.tarun.kahani.core.EdgeVoice.Cast ec = com.tarun.kahani.core.EdgeVoice.forLanguage(k.edge, line.hindi);
                 // with a sample, speak plainly in the matching gender; the sample decides the pitch
                 if (k.sample != null) ec = new com.tarun.kahani.core.EdgeVoice.Cast(ec.voice, 0, ec.ratePct);
-                pcm = edgeSpeak(line.text, ec, k.sample != null ? Pose.NEUTRAL : line.emotion, tmpDir, idx);
+                int[] pro = com.tarun.kahani.core.EdgeVoice.emotion(k.sample != null ? Pose.NEUTRAL : line.emotion);
+                pro = new int[]{pro[0] + ls.ratePct, pro[1] + (k.sample != null ? 0 : ls.pitchHz)};
+                pcm = edgeSpeak(line.text, ec, pro, tmpDir, idx);
                 shaped = k.sample == null;
                 lastEngine = "natural";
                 edgeFails = 0;
@@ -324,8 +339,8 @@ public final class Voices {
         if (pcm == null) {
             boolean useSample = k.sample != null;
             // with a sample the phone voice is only the "words"; pitch comes from the sample
-            float pitch = useSample ? 1f : k.pitch * ef[1];
-            float rate = k.rate * ef[0];
+            float pitch = useSample ? 1f : k.pitch * ef[1] * (1 + ls.pitchHz / 150f);
+            float rate = k.rate * ef[0] * (1 + ls.ratePct / 100f);
             pcm = phoneTts(line.text, line.hindi == storyHindi ? k.voice : -1, pitch, rate, tmpDir, idx, line.hindi);
             if (pcm == null) return null;
             lastEngine = "phone";
@@ -337,10 +352,9 @@ public final class Voices {
             if (!shaped && ef[1] != 1f) pcm = com.tarun.kahani.core.VoiceFx.pitch(pcm, ef[1]);
             lastEngine += "+sample";
         }
-        if (line.whisper) {
-            for (int i = 1; i < pcm.length; i++) pcm[i] = pcm[i] * 0.75f + (float) (Math.random() - 0.5) * 0.004f;
-        }
-        return trim(pcm);
+        pcm = trim(pcm);
+        if (ls.any()) pcm = ls.apply(pcm, Synth.SR, ai);
+        return pcm;
     }
 
     /** Lower (factor < 1) or raise the voice by resampling. */

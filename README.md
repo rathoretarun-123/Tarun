@@ -1,4 +1,4 @@
-# Kahani Film — v6
+# Kahani Film — v7
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -39,9 +39,21 @@ All screens and instructions in the app are in English; the story, dialogue and 
      * 🎬 let the studio choose
 
      A real photo can also be turned into a **🎨 cartoon avatar**.
+   * **Voices follow the description** (`आवाज़: खरखरी, काँपती आवाज़`, `Voice: booming`, `awaaz: patli aur chanchal`):
+     * deeper, higher, slower or faster
+     * real sound effects for **raspy, breathy, trembling, booming / echoing, nasal, squeaky, robotic, ghostly, magical and growling** voices
+     * a witch is a little raspy, a giant booms, an old person's voice trembles slightly, even without a description
+
+     The character card shows "🎚 From the story: …" and the production file lists it.
+   * **Each line follows its acting direction** in brackets: `(चिल्लाते हुए)` shouts, `(रोते हुए)` sobs and trembles, `(हँसते हुए)` laughs through the words, `(फुसफुसाते हुए)` whispers, `(हाँफते हुए)` pants, `(गाते हुए)` sings, `(धीरे-धीरे)` / `(जल्दी से)` slows down or speeds up, `(दूर से)` sounds far away. This works the same in English (`shouting`, `crying`, `slowly`…).
    * **🎙 Voice**: one list with your recorded voices and the studio's built-in voices, 4 at a time. ★ marks the voices that suit the character's age, gender and described voice, best first, and each of your voices shows what it sounds like and why it fits. **Best match** is the studio voice made deeper, higher, slower or faster as the description asks. Tap ▶ to hear one, or record 10–20 seconds or pick an audio file. **All of that character's lines are made in this voice**, close to your sample's pitch and tone, and changed with feeling (anger, fear, joy…). Tap **🔊** to listen first; tap it again to try another variation.
    * **🎙 Record lines in your own voice**: record any line in your (or your children's) real voice. The film uses it, and the lips move with it.
-   * Each place gets a **🔊 Sound** (forest, waterfall, palace, night…) chosen automatically. You can change it.
+   * Each place gets a **🔊 Sound** (forest, waterfall, palace, night…) chosen automatically — **your own sounds first** when they fit the place's description. You can change it.
+   * **Your own sounds** (📚 Library → 🔊 Sounds → Record or File): nature sounds, background voices (a market, a crowd), effects (a door, thunder, a horse) and music.
+     * The studio listens to each one: is it a **background** that loops under a scene, an **effect** that plays once, **music**, or **background voices**, and what it sounds like (rain, river, wind, birds, crickets, bells, thumps, steps…). With a Gemini key the AI listens too and names it much better.
+     * You then confirm it in one step: **What is this sound?** — words in English or Hindi (e.g. `rain, बारिश` or `horse galloping`) and its kind. ✎ in the library changes it later.
+     * English and Hindi words are linked, so a sound called "rain" is found for a story that says "बारिश", and a crowd recording for "बाज़ार".
+     * Backgrounds play under the places that match; effects play at the moment an action or a direction mentions them (e.g. `घोड़ा दौड़ता हुआ आया` plays your horse sound). The **Director's plan** in the studio lists where your sounds will play. Your sounds work in every story.
    * Tap **👄** on a character picture and tap the mouth and eyes, so the lips and eyelids move in the right place.
 4. **Where will you post it?** Choose one:
    * YouTube (16:9)
@@ -51,7 +63,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
    Then choose the quality: 480p, 720p or 1080p.
 5. **🎬 Make film**. You can lock the phone or use other apps meanwhile. The notification shows progress and **time left**.
 6. **Watch and change.** The film plays inside the app. Describe changes below it in plain English, e.g.
-   *the music is too loud • I can't hear Vrinda • make Khan sound deeper and a bit slower • brighter and warmer • make it black and white • turn the birds down and add captions • the film drags, speed it up • smaller file for WhatsApp • make it for Instagram*
+   *the music is too loud • I can't hear Vrinda • make Khan sound deeper and a bit slower • make the king's voice raspy • give the witch a trembling voice • the ghost should have an echo • brighter and warmer • make it black and white • turn the birds down and add captions • the film drags, speed it up • smaller file for WhatsApp • make it for Instagram*
 
    Then tap **🔁 Make again**. Voices are reused, so this is quicker. When you like it, tap **💾 Download** (Gallery → Movies/KahaniFilm) or **📤 Share**.
 
@@ -67,6 +79,14 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
+* **Your pictures move like characters**, not like flat cut-outs:
+  * the head nods, tilts and turns while talking
+  * the arms swing out to gesture, point, clap, or when angry or surprised
+  * the legs step when walking
+  * the body leans, breathes, slumps when sad and leans back when scared
+  * the **face changes with the feeling**: a smile with lifted cheeks, a frown, raised brows in surprise, worried brows when sad or scared, lowered brows and narrowed eyes in anger, squinting when laughing — blended smoothly from line to line, with the lips moving to the voice
+  * the studio finds the head, shoulders, waist, legs and hands from the picture's outline, and the eyes and mouth from the face (tap 👄 to correct them)
+* Characters drawn by the studio (when you give no picture) have full arms, legs and faces too.
 * The camera follows the speaker and comes close in emotional moments, with a soft background (depth of field). Colour grading follows the mood of the scene.
 * Music, birds, waterfalls, wind, caves, crowds, swords and bells are real recordings.
 * **Music follows the situation inside every scene**:
@@ -102,6 +122,9 @@ For better story reading, picture recognition and expressive AI voices, add a **
 * **3D:** the film looks 3D when its pictures are 3D-style: your uploads, or the studio's AI pictures, which are always requested in 3D animated style. The camera, depth, light and parallax add a 2.5D cinematic feel.
   * The characters are still flat pictures that move, turn and lip-sync. They are not rigged 3D models, so they don't walk around in true 3D like a Pixar film. That isn't possible with the phone engine.
   * Characters drawn by the studio offline are flat cartoons.
+* **Picture characters' movement** is a bending of the flat picture. Small and medium movements look natural. A picture cannot raise its arm over its head, turn around, or truly sit down: sitting and kneeling only fold the legs a little. Arms that are drawn touching the body move less cleanly, and the expressions are only as good as the eye and mouth points (check them with 👄).
+* **Recognising sounds offline** is a guess. On the 47 sounds built into the app, the kind (background, effect, music, voices) was right for 43; what it sounds like was close for about two thirds (fire, village, palace and cave sounds were confused). Those are the same sounds the rules were tuned on, so expect less on your own recordings. The words you give always count first. AI listening (Gemini key) was not tested against the live service.
+* **Voice effects** were checked by measuring them (roughness, wobble, brightness), not by listening tests with people.
 * **Recognising pictures offline** is a best guess. On the sample story's 10 character pictures, the right character was the first guess for 7 and in the top three for 8. The three guards wear identical uniforms and can't be told apart. Places were right for 3 of 8 offline. Check the suggestions; with internet, the AI vision model does this much better.
 * **Voice matching** measures pitch reliably. Speed and tone are rougher readings: they were checked with computer voices at known speeds, not with many real recordings. If the story doesn't describe a voice, only age and gender are used.
 * **Speed:** a 10-minute 720p film should take roughly 15–30 minutes on a phone with 8 GB of RAM, and longer at 1080p. This is an estimate; it has not been measured on a phone.
@@ -119,6 +142,9 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * `EdgeVoice` is a minimal WebSocket client for the Edge read-aloud neural voices. It handles the Sec-MS-GEC token and per-character/emotion SSML prosody, and returns MP3. It was verified against a protocol mock built from the `edge-tts` reference.
   * `Mixer.mixTo` streams the soundtrack in chunks with a limiter. `SoundLib` provides the recorded sounds. `VoiceFx` does pitch/tempo changes and voice-sample matching. `Grade` applies colour edits.
   * `PicSense` analyses pictures offline: photo vs artwork signals, figure vs place, clothing colours from the dress part of descriptions, traits (dress style, moustache, beard, bindi, headwear, hair, spear, fur) read from the figure that `Cutout` finds, place details, and person/background separation. `Toon.avatar` turns photos into avatars.
+  * `VoiceStyle` reads voice qualities from descriptions and acting directions and applies them as sound processing (rasp, breath, vibrato/tremolo, growl, ring-mod robot, EQ, reverb, shimmer).
+  * `Rig` bends picture characters with a bone-weighted mesh (head, arms, legs, lean, breathing) and a fine face mesh for expressions; `Gfx.imageMesh` draws it (Android `drawBitmapMesh`).
+  * `SoundSense` classifies sounds offline; `SoundWords` links English, Hindi and Hinglish sound words; `Director` places the user's effects on matching actions.
   * `VoiceMatch` turns a character's description into the voice it should have and scores measured samples (`VoiceFx.features`: pitch, liveliness, syllable rate, brightness, roughness) against it.
   * `Director.scoreMusic` builds the in-scene score with swells, dips and stingers. `Renderer` draws the cinematic look: ground-anchored parallax, camera roll and drift, light, a blurred foreground, grain and letterbox.
   * `Edits` and `CommandParser` turn the plain-English change requests typed after the preview into edits (an LLM handles anything the rules miss).
@@ -131,5 +157,5 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * Tools: `aapt2`, `dalvik-exchange`, `zipalign`, `apksigner` and `android-sdk-platform-23` from Ubuntu, plus JDK 17+.
   * Resources are linked against the Android 14 framework from Robolectric's `android-all` jar.
 * **Tests:**
-  * `tools/robotest` (Robolectric, real Android graphics): screens with an English-only check, pickers, the command box, Hinglish reading, pictures and voices from the library placed by description, a full film job in 9:16, and frames drawn through `android.graphics.Canvas`. Run with `gradle test`.
-  * `tools/jvm`: `MakeFilm` (desktop MP4 with espeak; env `ASPECT`, `EDITS`, `SAMPLE=name=wav`, `AUDIO_ONLY`), `BibleDump`, `CmdTest`.
+  * `tools/robotest` (Robolectric, real Android graphics): screens with an English-only check, pickers, the command box, Hinglish reading, pictures, voices and sounds from the library placed by description, a full film job in 9:16, and frames drawn through `android.graphics.Canvas`. Run with `gradle test`.
+  * `tools/jvm`: `MakeFilm` (desktop MP4 with espeak; env `ASPECT`, `EDITS`, `SAMPLE=name=wav`, `AUDIO_ONLY`), `BibleDump`, `CmdTest`, `RigSheet` (picture characters in many poses and feelings, for checking by eye).

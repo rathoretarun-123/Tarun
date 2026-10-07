@@ -23,6 +23,7 @@ public final class SoundLib {
         public String[] words = new String[0];
         public float seconds;
         public String owner = ""; // character name for voice/character sounds ("" = any)
+        public boolean user;      // added by the user (recorded, from a file or a search)
     }
 
     public final List<Entry> entries = new ArrayList<Entry>();
@@ -66,7 +67,7 @@ public final class SoundLib {
         for (Entry e : entries) {
             if (type != null && !type.equals(e.type)) continue;
             int score = 0;
-            for (String w : e.words) if (t.contains(w)) score += 10 + w.length();
+            for (String w : e.words) if (mentions(t, w)) score += 10 + w.length();
             if (owner != null && owner.length() > 0 && e.owner.length() > 0) {
                 if (Txt.norm(owner).contains(Txt.norm(e.owner)) || Txt.norm(e.owner).contains(Txt.norm(owner))) score += 50;
                 else continue;
@@ -75,6 +76,39 @@ public final class SoundLib {
             if (score > bestScore) { bestScore = score; best = e; }
         }
         return best;
+    }
+
+    /** A word in a text: English words must stand alone ("rain" is not in "brain"), Hindi words may carry endings. */
+    static boolean mentions(String text, String w) {
+        int at = text.indexOf(w);
+        if (at < 0) return false;
+        if (w.charAt(0) >= 0x0900) return true;
+        for (; at >= 0; at = text.indexOf(w, at + 1)) {
+            boolean before = at == 0 || !Character.isLetterOrDigit(text.charAt(at - 1));
+            int end = at + w.length();
+            boolean after = end >= text.length() || !Character.isLetterOrDigit(text.charAt(end)) || (text.charAt(end) == 's' && (end + 1 >= text.length() || !Character.isLetter(text.charAt(end + 1))));
+            if (before && after) return true;
+        }
+        return false;
+    }
+
+    /** The user's own sound of a type that fits the text best, or null. */
+    public Entry bestUser(String text, String type) {
+        String t = Txt.norm(text);
+        Entry best = null;
+        int bestScore = 0;
+        for (Entry e : entries) {
+            if (!e.user || (type != null && !type.equals(e.type))) continue;
+            int score = 0;
+            for (String w : e.words) if (mentions(t, w)) score += 10 + w.length();
+            if (score > bestScore) { bestScore = score; best = e; }
+        }
+        return best;
+    }
+
+    public Entry byPath(String path) {
+        for (Entry e : entries) if (e.path.equals(path)) return e;
+        return null;
     }
 
     public Entry byFile(String name) {

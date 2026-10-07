@@ -23,6 +23,14 @@ public final class Edits {
     public final Map<String, Float> voiceGain = new LinkedHashMap<String, Float>();
     public final Map<String, Float> voicePitch = new LinkedHashMap<String, Float>();
     public final Map<String, Float> voiceRate = new LinkedHashMap<String, Float>();
+    /** Voice effects asked for in the edit box, per character: "raspy,booming" ("-raspy" = switched off). */
+    public final Map<String, String> voiceStyle = new LinkedHashMap<String, String>();
+
+    public String styleFor(String who) {
+        if (who == null) return "";
+        String s = voiceStyle.get(who);
+        return s == null ? "" : s;
+    }
 
     public float gainFor(String who) {
         if (who == null || who.length() == 0) return voices * narrator;
@@ -69,6 +77,9 @@ public final class Edits {
         m.put("voices", (double) voices); m.put("narrator", (double) narrator); m.put("speed", (double) speed);
         m.put("subtitles", subtitles); m.put("height", (long) height); m.put("aspect", aspect); m.put("quality", (long) quality);
         m.put("voiceGain", toObj(voiceGain)); m.put("voicePitch", toObj(voicePitch)); m.put("voiceRate", toObj(voiceRate));
+        Map<String, Object> vs = new LinkedHashMap<String, Object>();
+        vs.putAll(voiceStyle);
+        m.put("voiceStyle", vs);
         return Json.write(m);
     }
 
@@ -91,6 +102,8 @@ public final class Edits {
         readMap(Json.obj(o, "voiceGain"), e.voiceGain);
         readMap(Json.obj(o, "voicePitch"), e.voicePitch);
         readMap(Json.obj(o, "voiceRate"), e.voiceRate);
+        Map<String, Object> vs = Json.obj(o, "voiceStyle");
+        if (vs != null) for (Map.Entry<String, Object> x : vs.entrySet()) if (x.getValue() instanceof String) e.voiceStyle.put(x.getKey(), (String) x.getValue());
         return e;
     }
 
@@ -134,6 +147,18 @@ public final class Edits {
                 float nv = clamp(Float.isNaN(v) ? (cur == null ? 1 : cur) * f : v, 0.5f, 2f);
                 voiceRate.put(who, nv); return who + " speaking speed: " + fmt(nv);
             }
+            case "voice_style": {
+                String st = Json.str(c, "style", "").toLowerCase(java.util.Locale.ROOT).trim();
+                if (st.length() == 0) return null;
+                boolean on = Json.bool(c, "on", true);
+                java.util.List<String> keep = new java.util.ArrayList<String>();
+                for (String x : styleFor(who).split(",")) if (x.length() > 0 && !x.replace("-", "").equals(st)) keep.add(x);
+                keep.add(on ? st : "-" + st);
+                StringBuilder b = new StringBuilder();
+                for (String x : keep) { if (b.length() > 0) b.append(','); b.append(x); }
+                voiceStyle.put(who, b.toString());
+                return who + " voice: " + (on ? st : "not " + st);
+            }
             case "speed": speed = clamp(Float.isNaN(v) ? speed * f : v, 0.6f, 1.5f); return "Film pace: " + fmt(speed);
             case "subtitles": subtitles = Json.bool(c, "on", !subtitles); return subtitles ? "Subtitles: on" : "Subtitles: off";
             case "file_size": quality = (int) clamp(Float.isNaN(v) ? quality + (f > 1 ? 1 : -1) : v, 1, 3);
@@ -148,7 +173,7 @@ public final class Edits {
     private void copyFrom(Edits d) {
         brightness = d.brightness; contrast = d.contrast; saturation = d.saturation; warmth = d.warmth; music = d.music; sfx = d.sfx;
         ambience = d.ambience; voices = d.voices; narrator = d.narrator; speed = d.speed; subtitles = d.subtitles;
-        voiceGain.clear(); voicePitch.clear(); voiceRate.clear();
+        voiceGain.clear(); voicePitch.clear(); voiceRate.clear(); voiceStyle.clear();
     }
 
     private static String pct(float v) { return (v >= 0 ? "+" : "") + Math.round(v * 100) + "%"; }

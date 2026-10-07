@@ -133,7 +133,25 @@ public final class CommandParser {
         for (String[] e : m) DEV.put(e[0].charAt(0), e[1]);
     }
 
+    /** English role words and the Hindi words a character's name may carry ("the king" finds "राजा तरुण"). */
+    static final String[][] ROLES = {
+            {"king", "राजा"}, {"queen", "रानी"}, {"princess", "राजकुमारी"}, {"prince", "राजकुमार"}, {"witch", "चुड़ैल", "डायन"},
+            {"monster", "राक्षस", "दानव"}, {"demon", "राक्षस", "दानव"}, {"giant", "राक्षस", "दैत्य"}, {"monkey", "बंदर"},
+            {"guard", "गार्ड", "सिपाही", "पहरेदार"}, {"soldier", "सैनिक", "सिपाही"}, {"mother", "माँ", "माता", "अम्मा"}, {"mom", "माँ", "माता"},
+            {"father", "पिता", "बापू"}, {"dad", "पिता", "बापू"}, {"grandmother", "दादी", "नानी"}, {"granny", "दादी", "नानी"},
+            {"grandfather", "दादा", "नाना"}, {"grandpa", "दादा", "नाना"}, {"teacher", "गुरु", "अध्यापक", "मास्टर"}, {"ghost", "भूत"},
+            {"fairy", "परी"}, {"lion", "शेर", "सिंह"}, {"tiger", "बाघ"}, {"elephant", "हाथी"}, {"crow", "कौवा", "कौआ"}, {"fox", "लोमड़ी"},
+            {"rabbit", "खरगोश"}, {"tortoise", "कछुआ"}, {"sage", "ऋषि", "साधु", "बाबा"}, {"minister", "मंत्री"}, {"aunt", "आंटी", "चाची", "मौसी"},
+            {"uncle", "चाचा", "मामा", "अंकल"}, {"farmer", "किसान"}, {"merchant", "सेठ", "व्यापारी"}, {"thief", "चोर"}, {"dog", "कुत्ता"},
+            {"cat", "बिल्ली"}, {"parrot", "तोता"}, {"snake", "साँप", "नाग"}, {"owl", "उल्लू"}, {"bear", "भालू"}, {"wolf", "भेड़िया"},
+    };
+
     static boolean nameIn(String text, String name) {
+        String low = " " + text.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]+", " ") + " ";
+        for (String[] r : ROLES) {
+            if (!low.contains(" " + r[0] + " ") && !low.contains(" " + r[0] + "s ") && !low.contains(" " + r[0] + "'s ")) continue;
+            for (int i = 1; i < r.length; i++) if (Txt.has(name, r[i])) return true;
+        }
         for (String part : name.split("\\s+")) {
             if (part.length() < 2 || ScriptParser.isTitleWord(part)) continue;
             if (Txt.has(text, part)) return true;
@@ -192,7 +210,7 @@ public final class CommandParser {
             return c;
         }
         // ---------- file size
-        if (has(t, "file size", "size", "साइज़", "साइज", "आकार", "mb", "एमबी", "compress", "फ़ाइल", "file", "upload", "whatsapp")) {
+        if (has(t, "file size", "size", "साइज़", "साइज", "आकार", "एमबी", "compress", "फ़ाइल", "file", "upload", "whatsapp") || word(t, "mb")) {
             Map<String, Object> c = cmd("file_size");
             c.put("factor", (double) (has(t, "कम", "छोटा", "छोटी", "small", "reduce", "compress", "decrease", "less", "kam", "too big", "too large",
                     "upload", "whatsapp", "lighter") || down ? 0.5f : 1.5f));
@@ -230,6 +248,23 @@ public final class CommandParser {
         if (names != null) for (String n : names) if (nameIn(t, n)) { who = n; break; }
         boolean voiceWord = has(t, "आवाज़", "आवाज", "voice", "awaaz", "awaz", "volume", "बोल", "sound", "level");
         if (who != null) {
+            // voice effects: "make the king's voice raspy", "give the ghost an echo", "no more robot voice for Tinku"
+            String style = has(t, "raspy", "hoarse", "gravelly", "husky", "rough voice", "croaky") ? "raspy"
+                    : has(t, "trembl", "shaky", "quiver", "wobbl") ? "trembling"
+                    : has(t, "echo", "boom", "resonant", "thunderous") ? "booming"
+                    : has(t, "robot", "metallic", "mechanical") ? "robotic"
+                    : has(t, "whisper", "breathy", "airy") ? "whisper"
+                    : has(t, "nasal", "whiny") ? "nasal"
+                    : has(t, "ghost", "spooky", "eerie") ? "ghostly"
+                    : has(t, "magical", "divine", "angelic", "ethereal", "heavenly") ? "magical"
+                    : has(t, "growl", "snarl") ? "growl" : null;
+            if (style != null) {
+                Map<String, Object> c = cmd("voice_style");
+                c.put("who", who);
+                c.put("style", style);
+                c.put("on", !(word(t, "no", "not", "without", "remove", "less", "stop", "off", "normal") || has(t, "too much", "too ")));
+                return c;
+            }
             if (has(t, "pitch", "पिच", "सुर", "मोटी", "मोटा", "भारी", "पतली", "पतला", "deeper", "deep", "higher pitch", "moti", "patli", "bhari",
                     "squeaky", "squeakier", "younger", "older", "childlike", "thinner", "heavier", "manlier", "lighter voice")) {
                 Map<String, Object> c = cmd("voice_pitch");

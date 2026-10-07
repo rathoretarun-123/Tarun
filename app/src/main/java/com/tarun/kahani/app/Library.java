@@ -186,7 +186,7 @@ public final class Library {
         }
     }
 
-    public synchronized Item add(String type, String kind, String name, String tags, File src, String ext, String source) throws IOException {
+    public Item add(String type, String kind, String name, String tags, File src, String ext, String source) throws IOException {
         Item it = new Item();
         it.id = type + "_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 1000);
         it.type = type; it.kind = kind == null ? "" : kind; it.name = name == null ? "" : name; it.tags = tags == null ? "" : tags;
@@ -199,9 +199,12 @@ public final class Library {
             src.delete();
         }
         it.path = dst.getAbsolutePath();
+        // measuring takes a few seconds (and may ask the AI): never while the library is locked, so the
+        // screens stay responsive (if the app stops meanwhile, the file is taken back in on the next start)
         if (type.equals(VOICE)) analyseVoice(it);
         if (type.equals(PIC)) analysePicture(it);
-        items.add(0, it);
+        if (type.equals(SOUND)) analyseSound(it);
+        synchronized (this) { items.add(0, it); }
         save();
         Backup.copy(ctx, it);
         return it;
@@ -284,18 +287,70 @@ public final class Library {
         return it == null ? null : com.tarun.kahani.core.VoiceMatch.parse(it.meta("vf"));
     }
 
-    /** Voices saved by an older version (pitch only) are measured once in the background. */
+    /** Voices and sounds saved by an older version are measured once in the background. */
     private void measureOldVoices() {
         new Thread(new Runnable() {
             public void run() {
                 boolean changed = false;
                 for (Item it : items) {
-                    if (it.builtIn || !VOICE.equals(it.type) || it.meta("vf") != null) continue;
-                    try { analyseVoice(it); changed = true; } catch (Throwable ignored) {}
+                    if (it.builtIn) continue;
+                    try {
+                        if (VOICE.equals(it.type) && it.meta("vf") == null) { analyseVoice(it); changed = true; }
+                        if (SOUND.equals(it.type) && it.meta("sk") == null) { analyseSound(it); changed = true; }
+                    } catch (Throwable ignored) {}
                 }
                 if (changed) save();
             }
         }, "measure-voices").start();
+    }
+
+    /**
+     * Listens to a sound once: is it a background that loops under a scene, a one-off effect, music or people
+     * talking, and what does it sound like (water, wind, birds, bells…). A kind the user chose is kept.
+     */
+    void analyseSound(Item it) {
+        float[] pcm = AudioIO.decode(ctx, it.path, 30);
+        if (pcm == null) { it.setMeta("sk", "-"); return; }
+        com.tarun.kahani.core.SoundSense.Info in = com.tarun.kahani.core.SoundSense.analyse(pcm, com.tarun.kahani.core.Synth.SR);
+        it.setMeta("sk", in.kind);
+        it.setMeta("sl", in.words());
+        it.setMeta("sec", String.valueOf(Math.round(in.seconds * 10) / 10f));
+        if (!"1".equals(it.meta("kindSet"))) it.kind = in.kind.equals("voices") ? "amb" : in.kind;
+        // with a Gemini key the AI listens too: it names the sound far better than the offline guess
+        if (Prefs.online(ctx) && it.meta("ai") == null) {
+            com.tarun.kahani.core.Cloud cl = Prefs.cloud(ctx);
+            if (cl != null && cl.hasGemini()) {
+                try {
+                    com.tarun.kahani.core.ScriptAI.Heard h = com.tarun.kahani.core.ScriptAI.listen(cl, pcm, com.tarun.kahani.core.Synth.SR);
+                    if (h.words.length() > 0) it.setMeta("ai", h.words.replace(';', ','));
+                    if (h.kind.length() > 0) {
+                        it.setMeta("sk", h.kind);
+                        if (!"1".equals(it.meta("kindSet"))) it.kind = h.kind.equals("voices") ? "amb" : h.kind;
+                    }
+                } catch (Exception ignored) {
+                    // offline guess stays
+                }
+            }
+        }
+    }
+
+    /** Drops words that say nothing about a sound: numbers and file-name parts like "AUD-2025…", "recording 3". */
+    static String meaningful(String words) {
+        StringBuilder b = new StringBuilder();
+        for (String w : words.split("[,;_\\-.\\s]+")) {
+            String t = w.trim().toLowerCase(java.util.Locale.ROOT);
+            if (t.length() < 2 || t.matches(".*\\d.*") || t.matches("aud|audio|recording|record|rec|sound|sounds|voice|file|new|wa|whatsapp|ptt|mp3|m4a|wav|ogg|aac|opus|clip|track|untitled")) continue;
+            if (b.length() > 0) b.append(',');
+            b.append(w.trim());
+        }
+        return b.toString();
+    }
+
+    /** "Background", "Effect", "Music" for a sound item. */
+    public static String soundKindLabel(Item it) {
+        String k = it.kind;
+        if ("voices".equals(it.meta("sk")) && "amb".equals(k)) return "Background voices";
+        return "sfx".equals(k) ? "Effect (plays once)" : "music".equals(k) ? "Music" : "Background (loops)";
     }
 
     /** Puts a backed-up item back with its original id (used by restore). */
@@ -314,8 +369,8 @@ public final class Library {
         return it;
     }
 
-    public synchronized Item addBytes(String type, String kind, String name, String tags, byte[] data, String ext, String source) throws IOException {
-        File tmp = new File(dir, "incoming" + ext);
+    public Item addBytes(String type, String kind, String name, String tags, byte[] data, String ext, String source) throws IOException {
+        File tmp = File.createTempFile("incoming", ext, dir);
         FileOutputStream o = new FileOutputStream(tmp);
         o.write(data);
         o.close();
@@ -375,8 +430,15 @@ public final class Library {
             SoundLib.Entry e = new SoundLib.Entry();
             e.path = it.path;
             e.type = it.kind.length() > 0 ? it.kind : "sfx";
+            if (e.type.equals("voices")) e.type = "amb";
             e.title = it.label();
-            e.words = SoundLib.splitWords(it.name + "," + it.tags);
+            e.user = true;
+            // the name and words the user gave (or the AI heard), in English and Hindi; the offline guess
+            // only when nothing else describes the sound
+            String words = meaningful(it.name + "," + it.tags) + (it.meta("ai") != null ? "," + it.meta("ai") : "");
+            if (words.replace(",", "").trim().length() < 3 && it.meta("sl") != null) words += "," + it.meta("sl");
+            e.words = com.tarun.kahani.core.SoundWords.expand(words).toArray(new String[0]);
+            try { e.seconds = Float.parseFloat(it.meta("sec")); } catch (Exception ignored) {}
             lib.entries.add(e);
         }
         return lib;

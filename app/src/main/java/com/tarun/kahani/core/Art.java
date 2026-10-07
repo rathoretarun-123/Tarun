@@ -32,6 +32,8 @@ public final class Art {
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E, lid = 0xFFC88A66;
         public boolean faceKnown;
         public transient Cutout.Result pixelsForSampling;
+        /** Bones and face for moving the picture (null = moved as one piece). */
+        public Rig rig;
     }
 
     public static final class Backdrop {
@@ -172,6 +174,8 @@ public final class Art {
                         if (f.length >= 12) s.turbanY = Float.parseFloat(f[11].trim());
                         resample(s);
                     }
+                    // head, arms, legs and face for animating the picture (needs the final face points)
+                    try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
                     s.pixelsForSampling = null;
                     art.sprites.put(c.id, s);
                 } else if (f[0].equals("scene") && f.length >= 3) {

@@ -144,6 +144,54 @@ public class AwtGfx implements Gfx {
         g.drawImage((Image) im, 0, 0, Math.round(sw), Math.round(sh), Math.round(sx), Math.round(sy), Math.round(sx + sw), Math.round(sy + sh), null);
         g.setTransform(saved);
     }
+    /** Each mesh cell is drawn as two triangles, each an affine-mapped, clipped piece of the image. */
+    public void imageMesh(Object im, int meshW, int meshH, float[] v) {
+        apply();
+        BufferedImage bi = (BufferedImage) im;
+        float cw = bi.getWidth() / (float) meshW, ch = bi.getHeight() / (float) meshH;
+        AffineTransform saved = g.getTransform();
+        Shape savedClip = g.getClip();
+        for (int j = 0; j < meshH; j++) {
+            for (int i = 0; i < meshW; i++) {
+                int a = (j * (meshW + 1) + i) * 2, b = a + 2, c = a + (meshW + 1) * 2, d = c + 2;
+                float sx = i * cw, sy = j * ch;
+                tri(bi, sx, sy, sx + cw, sy, sx, sy + ch, v[a], v[a + 1], v[b], v[b + 1], v[c], v[c + 1], saved, savedClip);
+                tri(bi, sx + cw, sy, sx + cw, sy + ch, sx, sy + ch, v[b], v[b + 1], v[d], v[d + 1], v[c], v[c + 1], saved, savedClip);
+            }
+        }
+        g.setTransform(saved);
+        g.setClip(savedClip);
+    }
+
+    private void tri(BufferedImage bi, float s0x, float s0y, float s1x, float s1y, float s2x, float s2y,
+                     float d0x, float d0y, float d1x, float d1y, float d2x, float d2y, AffineTransform base, Shape clip) {
+        // affine map source triangle -> destination triangle
+        double ux = s1x - s0x, uy = s1y - s0y, vx = s2x - s0x, vy = s2y - s0y;
+        double det = ux * vy - uy * vx;
+        if (Math.abs(det) < 1e-9) return;
+        double px = d1x - d0x, py = d1y - d0y, qx = d2x - d0x, qy = d2y - d0y;
+        double m00 = (px * vy - qx * uy) / det, m01 = (qx * ux - px * vx) / det;
+        double m10 = (py * vy - qy * uy) / det, m11 = (qy * ux - py * vx) / det;
+        double tx = d0x - m00 * s0x - m01 * s0y, ty = d0y - m10 * s0x - m11 * s0y;
+        // clip to the destination triangle, grown slightly so neighbours overlap without gaps
+        float cx = (d0x + d1x + d2x) / 3, cy = (d0y + d1y + d2y) / 3;
+        Path2D.Float t = new Path2D.Float();
+        t.moveTo(grow(d0x, cx), grow(d0y, cy));
+        t.lineTo(grow(d1x, cx), grow(d1y, cy));
+        t.lineTo(grow(d2x, cx), grow(d2y, cy));
+        t.closePath();
+        g.setTransform(base);
+        g.setClip(clip);
+        g.clip(t);
+        g.transform(new AffineTransform(m00, m10, m01, m11, tx, ty));
+        int x0 = (int) Math.floor(Math.min(s0x, Math.min(s1x, s2x))) - 1, y0 = (int) Math.floor(Math.min(s0y, Math.min(s1y, s2y))) - 1;
+        int x1 = (int) Math.ceil(Math.max(s0x, Math.max(s1x, s2x))) + 1, y1 = (int) Math.ceil(Math.max(s0y, Math.max(s1y, s2y))) + 1;
+        x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(bi.getWidth(), x1); y1 = Math.min(bi.getHeight(), y1);
+        g.drawImage(bi, x0, y0, x1, y1, x0, y0, x1, y1, null);
+    }
+
+    private static float grow(float p, float c) { return p + (p - c) * 0.04f + Math.signum(p - c) * 0.4f; }
+
     public int imageWidth(Object im) { return ((BufferedImage) im).getWidth(); }
     public int imageHeight(Object im) { return ((BufferedImage) im).getHeight(); }
 

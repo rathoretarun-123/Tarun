@@ -160,6 +160,20 @@ public final class Cloud {
         return t;
     }
 
+    /** Gemini listens to a sound (WAV bytes) and answers the prompt. Needs a Gemini key. */
+    public String listen(String prompt, byte[] wav) throws IOException {
+        if (!hasGemini()) throw new IOException("listening needs a Gemini key");
+        List<Object> parts = new ArrayList<Object>();
+        parts.add(map("inlineData", map("mimeType", "audio/wav", "data", b64(wav))));
+        parts.add(map("text", prompt));
+        Map<String, Object> body = map("contents", list(map("role", "user", "parts", parts)));
+        body.put("generationConfig", map("temperature", 0.2, "responseMimeType", "application/json"));
+        Object r = postJson(geminiBase + "/models/" + textModel + ":generateContent?key=" + enc(geminiKey.trim()), body);
+        String t = geminiText(r);
+        if (t == null) throw new IOException("Gemini: empty answer");
+        return t;
+    }
+
     static String geminiText(Object r) {
         List<Object> cands = Json.arr(r, "candidates");
         if (cands == null || cands.isEmpty()) return null;

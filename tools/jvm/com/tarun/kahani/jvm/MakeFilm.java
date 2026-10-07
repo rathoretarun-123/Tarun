@@ -51,6 +51,11 @@ public class MakeFilm {
             voices[i] = espeak(l, tmp, i);
             if (voices[i] != null && sampleProfile != null && l.who != null && l.who.displayName.equals(sampleWho))
                 voices[i] = VoiceFx.matchVoice(voices[i], sampleProfile, Synth.SR);
+            // raspy / trembling / booming… from the description, shouting / crying… from the line (as on the phone)
+            if (voices[i] != null) {
+                VoiceStyle vs = VoiceStyle.forLine(l.who == null ? null : VoiceStyle.forCharacter(l.who), l.manner, l.whisper, false);
+                if (vs.any()) voices[i] = vs.apply(voices[i], Synth.SR, false);
+            }
             if (voices[i] != null) {
                 l.dur = voices[i].length / (float) Synth.SR;
                 l.env = Mixer.envelope(voices[i], Synth.SR);

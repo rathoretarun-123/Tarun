@@ -691,7 +691,9 @@ public class MainActivity extends Activity {
         LinearLayout plan = Ui.card(this);
         plan.addView(Ui.title(this, "🎬 Director's plan"));
         try {
-            Director d = new Director(st, new Director.Options());
+            Director.Options po = new Director.Options();
+            po.sounds = sl;      // shows where your own sounds will play
+            Director d = new Director(st, po);
             d.prepare();
             Film f = d.direct(new Art());
             StringBuilder sb = new StringBuilder();
@@ -773,6 +775,10 @@ public class MainActivity extends Activity {
         Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
         String vtxt = vs != null ? "🎙 Voice: your sample \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ Voice: AI (with feeling)"
                 : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 Voice: " + presetLabel(project.setting("evoice." + c.displayName, ""), "natural (best match)") : "📱 Voice: phone voice");
+        // what the description asks of the voice (deep, slow…) and the effects the studio adds (raspy, trembling…)
+        List<String> vw = new ArrayList<String>(com.tarun.kahani.core.VoiceMatch.want(c).words);
+        vw.addAll(com.tarun.kahani.core.VoiceStyle.forCharacter(c).words);
+        if (!vw.isEmpty()) vtxt += "\n🎚 From the story: " + join(vw);
         info.addView(Ui.text(this, vtxt, 13, vs != null ? Ui.GREEN : Ui.SUB, false));
         top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(top);
@@ -821,7 +827,8 @@ public class MainActivity extends Activity {
         } else card.addView(Ui.text(this, "🎨 Background made by the studio", 13, Ui.SUB, false));
         Library.Item amb = library.byId(project.setting("amb." + key, ""));
         SoundLib.Entry auto = sl.best(sc.setting + " " + sc.title, "amb", null);
-        card.addView(Ui.text(this, "🔊 Background sound: " + (amb != null ? amb.label() + " (your choice)" : (auto != null ? auto.title + " (automatic)" : "Automatic")), 13, amb != null ? Ui.GREEN : Ui.SUB, false));
+        card.addView(Ui.text(this, "🔊 Background sound: " + (amb != null ? amb.label() + " (your choice)"
+                : auto != null ? auto.title + (auto.user ? " (yours — it fits the description)" : " (automatic)") : "Automatic"), 13, amb != null || (auto != null && auto.user) ? Ui.GREEN : Ui.SUB, false));
         LinearLayout r = Ui.row(this);
         r.addView(Ui.small(this, "🖼 Background", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { choosePicture("scene:" + key, sc.setting); }
@@ -1535,7 +1542,63 @@ public class MainActivity extends Activity {
                 });
     }
 
-    private void useSound(Library.Item it) {
+    private void useSound(final Library.Item it) {
+        // a new sound: say what it is (pre-filled with what the studio heard), so it is used in the right places
+        if (Library.SOUND.equals(it.type) && !it.builtIn && !"1".equals(it.meta("kindSet"))) {
+            describeSound(it, new Runnable() { public void run() { useSoundNow(it); } });
+            return;
+        }
+        useSoundNow(it);
+    }
+
+    /** "What is this sound?": its words (English or Hindi) and whether it loops, plays once, is music or voices. */
+    private void describeSound(final Library.Item it, final Runnable then) {
+        LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 16), Ui.dp(this, 6), Ui.dp(this, 16), Ui.dp(this, 6));
+        String heard = it.meta("ai") != null ? "AI heard: " + it.meta("ai")
+                : it.meta("sl") != null && it.meta("sl").length() > 0 ? "Sounds like (a guess): " + it.meta("sl") : "";
+        if (heard.length() > 0) body.addView(Ui.text(this, heard, 13, Ui.SUB, false));
+        body.addView(Ui.text(this, "Words for this sound — the director plays it where the story mentions them (English or Hindi):", 14, Ui.TEXT, false));
+        final EditText words = new EditText(this);
+        String given = Library.meaningful(it.name + "," + it.tags);
+        String guess = it.meta("ai") != null ? it.meta("ai") : it.meta("sl") == null ? "" : it.meta("sl");
+        words.setText(given.length() >= 3 ? given : guess);
+        words.setHint("e.g. rain, बारिश  •  horse galloping  •  people talking in a market");
+        body.addView(words);
+        final RadioGroup rg = new RadioGroup(this);
+        final String[][] kinds = {{"amb", "Background — loops under a scene (rain, river, birds, wind)"}, {"voices", "Background voices — people talking, a crowd"},
+                {"sfx", "Effect — plays once (door, thunder, horse, bell)"}, {"music", "Music"}};
+        String cur = "voices".equals(it.meta("sk")) && "amb".equals(it.kind) ? "voices" : it.kind;
+        for (int i = 0; i < kinds.length; i++) {
+            RadioButton b = new RadioButton(this);
+            b.setId(1000 + i);
+            b.setText(kinds[i][1]);
+            rg.addView(b);
+            if (kinds[i][0].equals(cur)) rg.check(1000 + i);
+        }
+        if (rg.getCheckedRadioButtonId() < 0) rg.check(1000);
+        body.addView(rg);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body);
+        new AlertDialog.Builder(this).setTitle("🔊 What is this sound?").setView(sv)
+                .setPositiveButton("✔ Save", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        int k = Math.max(0, Math.min(kinds.length - 1, rg.getCheckedRadioButtonId() - 1000));
+                        String kind = kinds[k][0];
+                        it.kind = kind.equals("voices") ? "amb" : kind;
+                        if (kind.equals("voices")) it.setMeta("sk", "voices");
+                        String ws = words.getText().toString().trim().replace(';', ',');
+                        if (ws.length() > 0) it.tags = ws + (kind.equals("voices") ? ", people talking, crowd" : "");
+                        it.setMeta("kindSet", "1");
+                        library.save();
+                        then.run();
+                    }
+                }).setNegativeButton("Later", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { then.run(); }
+                }).show();
+    }
+
+    private void useSoundNow(Library.Item it) {
         String tgt = target;
         if (tgt != null && tgt.startsWith("amb:") && project != null) {
             project.setSetting("amb." + tgt.substring(4), it.id);
@@ -2638,7 +2701,8 @@ public class MainActivity extends Activity {
             r.addView(Ui.small(this, "📂 From file", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pick("audio/*", REQ_AUDIO, false); } }));
             add.addView(r);
         } else {
-            add.addView(Ui.text(this, "Natural sounds, music and effects. The studio uses them in the right places by their names and words.", 13, Ui.SUB, false));
+            add.addView(Ui.text(this, "Nature sounds (rain, river, birds), background voices (a market, a crowd), effects (a door, thunder, a horse) and music. "
+                    + "Say what each one is — in English or Hindi — and the director uses it wherever a story describes it: backgrounds under the matching places, effects at the moment they happen.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
             r.addView(Ui.small(this, "🎙 Record", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; record(Library.SOUND, ""); } }));
             r.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; pick("audio/*", REQ_AUDIO, false); } }));
@@ -2685,8 +2749,18 @@ public class MainActivity extends Activity {
                 LinearLayout r = Ui.row(this);
                 r.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 8), 0);
                 r.setGravity(Gravity.CENTER_VERTICAL);
-                r.addView(Ui.text(this, it.label() + (it.builtIn ? "  (app)" : ""), 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                String sub = "";
+                if (!it.builtIn && Library.SOUND.equals(it.type)) {
+                    String ws = Library.meaningful(it.name + "," + it.tags);
+                    sub = "\n" + Library.soundKindLabel(it) + (ws.length() > 0 ? " • " + ws : it.meta("sl") != null && it.meta("sl").length() > 0 ? " • sounds like " + it.meta("sl") : "");
+                } else if (!it.builtIn && Library.VOICE.equals(it.type) && it.meta("vdesc") != null) {
+                    sub = "\n" + it.meta("vdesc");
+                }
+                r.addView(Ui.text(this, it.label() + (it.builtIn ? "  (app)" : "") + sub, 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { Picker.play(MainActivity.this, it.path); } }));
+                if (!it.builtIn && Library.SOUND.equals(it.type)) r.addView(Ui.small(this, "✎", Ui.GREEN, new View.OnClickListener() {
+                    public void onClick(View v) { describeSound(it, new Runnable() { public void run() { showLibrary(); } }); }
+                }));
                 if (!it.builtIn) r.addView(Ui.small(this, "🗑", Ui.RED, new View.OnClickListener() { public void onClick(View v) { confirmRemove(it); } }));
                 body.addView(r);
             }

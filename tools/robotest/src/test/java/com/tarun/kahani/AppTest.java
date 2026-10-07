@@ -319,6 +319,51 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    static byte[] wav16(float[] x, int sr) { return com.tarun.kahani.core.Wav.encode16(x, sr); }
+
+    /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
+    @Test
+    public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {
+        RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(RuntimeEnvironment.getApplication());
+        int sr = 32000;
+        java.util.Random rnd = new java.util.Random(5);
+        // 12 s of steady bright noise, like rain, saved with a meaningless phone file name
+        float[] rain = new float[sr * 12];
+        float prev = 0;
+        for (int i = 0; i < rain.length; i++) { float n = rnd.nextFloat() * 2 - 1; rain[i] = (n - prev) * 0.3f; prev = n; }
+        com.tarun.kahani.app.Library.Item r = lib.addBytes("sound", "amb", "AUD-20250101-WA0003", "", wav16(rain, sr), ".wav", "test");
+        System.out.println("RAIN: kind=" + r.kind + " meta=" + r.meta);
+        assertTrue(r.meta, "amb".equals(r.kind));
+        assertTrue(r.meta, r.meta("sl").contains("rain") || r.meta("sl").contains("water"));
+        // a short effect the user called "horse"
+        float[] hooves = new float[sr * 2];
+        for (int k = 0; k < 8; k++) for (int i = 0; i < 900; i++) hooves[k * sr / 4 + i] = (float) Math.sin(i * 0.2) * (1 - i / 900f) * 0.8f;
+        com.tarun.kahani.app.Library.Item h = lib.addBytes("sound", "amb", "horse", "horse galloping", wav16(hooves, sr), ".wav", "test");
+        System.out.println("HORSE: kind=" + h.kind + " meta=" + h.meta);
+        assertTrue(h.meta, "sfx".equals(h.kind));
+        String script = "पात्र:\n1. राजू (10 वर्ष): गाँव का लड़का\n\nदृश्य 1: गाँव\n(स्थान: गाँव, बारिश वाली रात)\n"
+                + "घोड़ा दौड़ता हुआ आया।\nराजू: \"अरे! यह घोड़ा कहाँ से आया?\"\n";
+        Story st = ScriptParser.parse(script);
+        com.tarun.kahani.core.SoundLib sl = lib.soundLib();
+        Director.Options o = new Director.Options();
+        o.sounds = sl;
+        Director d = new Director(st, o);
+        d.prepare();
+        Film f = d.direct(new Art());
+        boolean horse = false;
+        for (Film.Sfx x : f.sfx) if (x.type == Film.SFX_USER && h.path.equals(x.file)) horse = true;
+        for (String n : f.notes) if (n.contains("🔊")) System.out.println("NOTE: " + n);
+        assertTrue("the horse sound is not used", horse);
+        boolean rainUsed = false;
+        for (Film.Amb a : f.ambience) {
+            com.tarun.kahani.core.SoundLib.Entry e = sl.best(a.words, "amb", null);
+            System.out.println("AMBIENCE for \"" + a.words + "\" -> " + (e == null ? "-" : e.title));
+            if (e != null && e.path.equals(r.path)) rainUsed = true;
+        }
+        assertTrue("the rain sound is not used for the rainy place", rainUsed);
+    }
+
     /** Whole background job with a short script: no TTS available, fake hardware encoders. Must finish, not hang. */
     @Test
     public void filmJobFinishesEndToEnd() throws Exception {

@@ -8,6 +8,11 @@ public class CmdTest {
     public static void main(String[] a) {
         List<String> names = Arrays.asList("वृंदा", "वानुषा", "खान राक्षस", "आंटी चुड़ैल", "राजू बंदर", "रतनलाल");
         String[] tests = {
+            "make Khan's voice raspy",
+            "give the witch a trembling voice and make Raju sound robotic",
+            "Khan should have an echo",
+            "Ratanlal's voice is too raspy",
+            "make Vrinda whisper",
             "the background music is too loud",
             "I can't hear Vrinda properly",
             "make Khan sound deeper and a bit slower",

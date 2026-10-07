@@ -174,6 +174,21 @@ public final class Film {
     public static final class Music {
         public float t0, t1;
         public int mood;
+        /** Loudness over time (seconds -> 0..1.3): swells at dramatic moments, dips under whispers. */
+        public float[] envT, envV;
+        /** Soft, muffled sound (sad or night-time moods). */
+        public boolean soft;
+        public float level(float t) {
+            if (envT == null || envT.length == 0) return 1f;
+            if (t <= envT[0]) return envV[0];
+            for (int i = 1; i < envT.length; i++) {
+                if (t < envT[i]) {
+                    float f = (t - envT[i - 1]) / Math.max(1e-3f, envT[i] - envT[i - 1]);
+                    return envV[i - 1] + (envV[i] - envV[i - 1]) * f;
+                }
+            }
+            return envV[envV.length - 1];
+        }
         public Music(int mood, float t0, float t1) { this.mood = mood; this.t0 = t0; this.t1 = t1; }
     }
 

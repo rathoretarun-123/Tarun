@@ -209,7 +209,122 @@ public final class Director {
         film.sfx.add(new Film.Sfx(Film.SFX_MAGIC, t + 0.6f, 2f, 0.5f));
         film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
+        scoreMusic();
         return film;
+    }
+
+    // ------------------------------------------------------------------ the film score
+
+    /** Mood a single line asks for, given the scene's mood. */
+    private static int lineMood(Film.Line l, int base) {
+        boolean villain = l.who != null && l.who.look != null && !l.who.look.hero;
+        switch (l.emotion) {
+            case Pose.EVIL: return Film.M_VILLAIN;
+            case Pose.ANGRY: return villain ? Film.M_VILLAIN : base == Film.M_ACTION ? Film.M_ACTION : Film.M_TENSE;
+            case Pose.SCARED: case Pose.PAIN: return Film.M_TENSE;
+            case Pose.SAD: return Film.M_SAD;
+            case Pose.LAUGH: case Pose.HAPPY: return base == Film.M_CELEBRATE ? base : base == Film.M_HAPPY ? Film.M_HAPPY : Film.M_PLAYFUL;
+            case Pose.DETERMINED: case Pose.PROUD: return base == Film.M_TENSE || base == Film.M_VILLAIN ? Film.M_ACTION : base;
+            default: return villain && base != Film.M_CELEBRATE ? Film.M_TENSE : base;
+        }
+    }
+
+    static float moodLevel(int m) {
+        switch (m) {
+            case Film.M_ACTION: case Film.M_CELEBRATE: case Film.M_TITLE: return 1f;
+            case Film.M_TENSE: case Film.M_VILLAIN: return 0.9f;
+            case Film.M_PLAYFUL: return 0.85f;
+            case Film.M_SAD: case Film.M_END: return 0.8f;
+            case Film.M_NIGHT: return 0.7f;
+            default: return 0.72f;
+        }
+    }
+
+    /**
+     * Turns one music cue per scene into a real film score: the music follows what happens inside the scene
+     * (a villain speaks -> menacing, someone is scared -> tense, laughter -> playful, sorrow -> soft sad piano),
+     * swells before shocks, dips under whispers, and short drum hits mark surprises.
+     */
+    private void scoreMusic() {
+        List<Film.Music> out = new ArrayList<Film.Music>();
+        for (Film.Music m : film.music) {
+            if (m.mood == Film.M_TITLE || m.mood == Film.M_END) { shape(m, null); out.add(m); continue; }
+            // lines inside this cue, in time order
+            List<Film.Line> ls = new ArrayList<Film.Line>();
+            for (Film.Line l : film.lines) if (l.start >= m.t0 && l.start < m.t1 && l.dur > 0) ls.add(l);
+            java.util.Collections.sort(ls, new java.util.Comparator<Film.Line>() {
+                public int compare(Film.Line a, Film.Line b) { return Float.compare(a.start, b.start); }
+            });
+            // mood regions
+            List<float[]> regions = new ArrayList<float[]>();   // {t0, t1, mood}
+            float cur = m.t0;
+            int mood = m.mood;
+            for (Film.Line l : ls) {
+                int lm = lineMood(l, m.mood);
+                if (lm != mood) {
+                    regions.add(new float[]{cur, Math.max(cur, l.start - 0.6f), mood});
+                    cur = Math.max(cur, l.start - 0.6f);
+                    mood = lm;
+                }
+            }
+            regions.add(new float[]{cur, m.t1, mood});
+            // short regions are merged into the one before (music should not jump every line)
+            List<float[]> merged = new ArrayList<float[]>();
+            for (float[] r : regions) {
+                if (r[1] - r[0] < 0.05f) continue;
+                if (!merged.isEmpty()) {
+                    float[] last = merged.get(merged.size() - 1);
+                    if (last[2] == r[2] || r[1] - r[0] < 7f) { last[1] = r[1]; continue; }
+                    if (last[1] - last[0] < 7f) { last[1] = r[1]; last[2] = r[2]; continue; }
+                }
+                merged.add(new float[]{r[0], r[1], r[2]});
+            }
+            for (int i = 0; i < merged.size(); i++) {
+                float[] r = merged.get(i);
+                // overlap neighbours by 1.5 s so one mood crossfades into the next
+                Film.Music c = new Film.Music((int) r[2], i == 0 ? r[0] : r[0] - 0.75f, i == merged.size() - 1 ? r[1] : r[1] + 0.75f);
+                shape(c, ls);
+                out.add(c);
+            }
+            // drum hit before surprises and a villain's first menacing line
+            boolean villainHeard = false;
+            for (Film.Line l : ls) {
+                boolean villain = l.who != null && l.who.look != null && !l.who.look.hero;
+                if (l.emotion == Pose.SURPRISED || (villain && !villainHeard && (l.emotion == Pose.EVIL || l.emotion == Pose.ANGRY))) {
+                    film.sfx.add(new Film.Sfx(Film.SFX_DRUMS, Math.max(m.t0, l.start - 0.45f), 0.9f, 0.4f));
+                }
+                if (villain) villainHeard = true;
+            }
+        }
+        film.music.clear();
+        film.music.addAll(out);
+    }
+
+    /** Loudness curve of one cue: in-scene swells and dips around the lines. */
+    private void shape(Film.Music m, List<Film.Line> ls) {
+        float base = moodLevel(m.mood);
+        m.soft = m.mood == Film.M_SAD || m.mood == Film.M_NIGHT;
+        List<float[]> pts = new ArrayList<float[]>();
+        pts.add(new float[]{m.t0, base});
+        if (ls != null) for (Film.Line l : ls) {
+            if (l.start < m.t0 || l.start >= m.t1) continue;
+            float lv = base;
+            if (l.emotion == Pose.SURPRISED || l.emotion == Pose.SCARED || l.emotion == Pose.ANGRY || l.emotion == Pose.EVIL) lv = Math.min(1.3f, base + 0.25f);
+            else if (l.whisper || l.emotion == Pose.WHISPER) lv = base * 0.6f;
+            else if (l.emotion == Pose.SAD) lv = base * 0.85f;
+            if (lv == base) continue;
+            pts.add(new float[]{Math.max(m.t0, l.start - 1.2f), base});
+            pts.add(new float[]{l.start, lv});
+            pts.add(new float[]{l.start + l.dur, lv});
+            pts.add(new float[]{Math.min(m.t1, l.start + l.dur + 1.5f), base});
+        }
+        pts.add(new float[]{m.t1, base});
+        java.util.Collections.sort(pts, new java.util.Comparator<float[]>() {
+            public int compare(float[] a, float[] b) { return Float.compare(a[0], b[0]); }
+        });
+        m.envT = new float[pts.size()];
+        m.envV = new float[pts.size()];
+        for (int i = 0; i < pts.size(); i++) { m.envT[i] = pts.get(i)[0]; m.envV[i] = pts.get(i)[1]; }
     }
 
     static String firstSentence(String s) {

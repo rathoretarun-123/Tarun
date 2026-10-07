@@ -81,6 +81,23 @@ public final class Mixer {
         }
     }
 
+    /** Words that find music for a mood (the user's tagged music first, then the built-in tracks). */
+    static String moodWords(int mood) {
+        switch (mood) {
+            case Film.M_TITLE: return "adventure exciting journey title";
+            case Film.M_HAPPY: return "calm peaceful gentle morning";
+            case Film.M_PLAYFUL: return "happy cheerful playful funny";
+            case Film.M_TENSE: return "tense suspense danger chase";
+            case Film.M_VILLAIN: return "villain evil menacing dark mystery";
+            case Film.M_SAD: return "sad sorrow emotional";
+            case Film.M_ACTION: return "epic battle heroic climax action";
+            case Film.M_CELEBRATE: return "festive festival celebration";
+            case Film.M_NIGHT: return "night mystery";
+            case Film.M_END: return "happy ending joyful";
+            default: return "calm";
+        }
+    }
+
     /** Sound effect -> recorded file (null = use the synthesiser). */
     static String sfxFile(int type) {
         switch (type) {
@@ -136,6 +153,8 @@ public final class Mixer {
         int start, len;      // in samples
         float gain;
         boolean voice;
+        Film.Music music;    // loudness curve and softness of a music cue
+        float lpA, lp;       // one-pole low-pass (soft moods)
         abstract void prepare();
         abstract float at(int i);  // i in [0, len)
         void free() {}
@@ -199,11 +218,21 @@ public final class Mixer {
         for (final Film.Music m : film.music) {
             final float dur = m.t1 - m.t0 + 0.6f;
             float g = (lib != null ? 0.22f : 0.30f) * ed.music;
-            float[] src = lib == null ? null : lib.pcm(lib.byFile(musicFile(m.mood)));
-            if (src != null && src.length >= Synth.SR / 4) clips.add(new LoopClip(src, (int) (m.t0 * Synth.SR), dur, 1.2f, g));
-            else clips.add(new LazyClip((int) (m.t0 * Synth.SR), (int) (dur * Synth.SR), g, new LazyClip.Maker() {
+            float[] src = null;
+            if (lib != null) {
+                // the user's own music for this mood (from any earlier story) wins over the built-in track
+                SoundLib.Entry e = lib.best(moodWords(m.mood), "music", null);
+                if (e == null || e.path.startsWith("asset:")) e = lib.byFile(musicFile(m.mood));
+                src = lib.pcm(e);
+            }
+            Clip c;
+            if (src != null && src.length >= Synth.SR / 4) c = new LoopClip(src, (int) (m.t0 * Synth.SR), dur, 1.2f, g);
+            else c = new LazyClip((int) (m.t0 * Synth.SR), (int) (dur * Synth.SR), g, new LazyClip.Maker() {
                 public float[] make() { return syn.music(m.mood, dur); }
-            }));
+            });
+            c.music = m;
+            if (m.soft) c.lpA = 0.18f;   // ~1.1 kHz: muffled, gentle
+            clips.add(c);
         }
         // ---- ambience beds
         if (lib != null) for (Film.Amb a : film.ambience) {
@@ -276,7 +305,16 @@ public final class Mixer {
                 Clip c = active.get(k);
                 float[] dst = c.voice ? voice : bed;
                 int from = Math.max(a, c.start), to = Math.min(b, c.start + c.len);
-                for (int t = from; t < to; t++) dst[t - a] += c.at(t - c.start) * c.gain;
+                if (c.music == null && c.lpA == 0) {
+                    for (int t = from; t < to; t++) dst[t - a] += c.at(t - c.start) * c.gain;
+                } else {
+                    for (int t = from; t < to; t++) {
+                        float v = c.at(t - c.start);
+                        if (c.lpA > 0) { c.lp += c.lpA * (v - c.lp); v = c.lp * 1.25f; }
+                        float lv = c.music == null ? 1f : c.music.level(t / (float) Synth.SR);
+                        dst[t - a] += v * c.gain * lv;
+                    }
+                }
                 if (c.start + c.len <= b) { c.free(); active.remove(k); }
             }
             for (int i = 0; i < n; i++) {

@@ -31,7 +31,7 @@ public final class VoiceMatch {
     static final String[] LOUD = {"ज़ोरदार", "जोरदार", "गूँजती", "गूंजती", "कड़क", "loud", "booming", "thundering", "echoing", "commanding"};
 
     /** The parts of a description that talk about the voice (or the whole text if it never says "voice"). */
-    static String voiceText(String d) {
+    public static String voiceText(String d) {
         if (d == null) return "";
         StringBuilder b = new StringBuilder();
         for (String part : d.split("[।.;\n]")) if (Txt.has(part, "आवाज़", "आवाज", "स्वर", "voice", "awaaz", "बोल", "speaks", "talks")) b.append(part).append(' ');

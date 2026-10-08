@@ -1,4 +1,4 @@
-# Kahani Film — v8
+# Kahani Film — v9
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -89,6 +89,9 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
+* **Very fine meshes:** every picture is bent through a very fine grid — up to 48 × 96 points over a person, 96 × 48 over an animal, 48 × 48 over the face and 128 × 72 over a place, title page or close-up shot. The grid gets as fine as the picture's size on screen needs (about one cell every 6 pixels), so bends are smooth in close-ups and small far-away figures stay quick to draw.
+* **Lip-sync with the real lips:** the face mesh opens the jaw — the lower lip and chin come down and the lips part, showing teeth and tongue inside. The mouth shape follows the sound of each moment: wide for "ee" and "s", round for "oo" and "o", closed between words.
+* **Follow-through:** loose hair and the hem of a skirt keep swaying a little after every move (more while walking), and breathing gently lifts the shoulders.
 * **Your pictures move like characters**, not like flat cut-outs:
   * the head nods, tilts and turns while talking
   * the arms swing out to gesture, point, clap, or when angry or surprised
@@ -127,11 +130,19 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * **Animal pictures move like animals:** the head turns and nods, the **jaw opens with the words** (lip-sync), ears flick and fold back when angry or scared, the **tail wags** when happy, hangs when sad and tucks in when afraid, legs walk in pairs, and an animal lies down by folding its legs. The background seen between the legs is cut out too.
 * **Animal voices:** a talking lion or tiger rumbles, an elephant booms, a mouse or sparrow squeaks, a crow is hoarse, a cat or parrot is a little nasal. The words stay clear.
 
+## Sound
+
+* **Stereo:** each voice comes from where its speaker stands on screen (left, middle or right), and nature and crowd backgrounds are spread wide around you. Phones with one speaker simply play both sides together.
+* **The sound of the place:** voices and effects get the echo of the place on screen — a cave rings for about two seconds, a palace hall about one and a half, a courtyard gives a short slap, and outdoors stays almost dry. The echo glides from place to place when the scene changes.
+* **Dialogue polish, like a film's sound editor:** rumble below ~90 Hz is removed, every line is brought to the same speaking loudness (phone, natural, AI voices and your own recordings sit together), and a gentle compressor keeps every word clear. Music and backgrounds dip under speech.
+* **Breaths:** a soft breath before long or emotional lines.
+
 ## Voices
 
 * **Natural voices (default, needs internet, no key):** Microsoft's free neural voices sound like real people. Hindi uses Swara (female) and Madhur (male); English has Indian, British and children's voices. Every character gets its own pitch and speed. This is the free voice behind Edge's "Read aloud" and is not an official service for apps, so it could stop working. If it does, the app falls back to the phone's own voice and tells you.
 * **Your voice samples** move the voice towards your sample's pitch and tone. This is not true voice cloning. For a fully real voice, use **Record lines in your own voice**.
 * **AI voices (Gemini, optional)** are expressive, but the free daily limit is very small, so they are off by default.
+* **ElevenLabs (optional, your own key): the most lifelike voices**, in Hindi and English (multilingual model). Add the key in ⚙ Settings → Free pictures & sounds. Each character gets the voice from your account that fits it best — gender, age and the voice the script describes ("deep", "sweet", "raspy"…) — and keeps it in every later film. Feelings make the voice steadier or more expressive. The free plan gives about 10,000 characters a month; when they run out, or without a key, the free natural voices are used. A character with your own voice sample keeps your sample.
 * The first test video I made earlier used **espeak**, a robotic computer voice, because the build machine has no good voice. The phone never uses espeak.
 
 ## Free pictures and sounds (optional keys)
@@ -149,6 +160,12 @@ The app works **without any key**. Story reading and AI pictures use free servic
 For better story reading, picture recognition and expressive AI voices, add a **free Google Gemini key** in ⚙ Settings (aistudio.google.com/apikey). The key stays only on your phone. Never send it to anyone or put it on GitHub.
 
 ## Honest limits
+
+* **"Pixar level":** Pixar films are made from full 3D models with thousands of animation controls, hand-animated by teams and rendered on large computer farms. This app bends your pictures on a phone. The fine meshes, real-lip lip-sync, follow-through, light, depth, stereo sound and room echo bring it much closer to a cinematic film, but it is **not** Pixar quality and cannot be. The picture quality depends mostly on your pictures: 3D-style pictures give a 3D-looking film.
+* **Speed with the finer meshes:** drawing the finer meshes takes longer. On the build computer, a 640-wide test film drew about 20 % slower than before. On a phone, a 10-minute 720p film may now take roughly 20–40 minutes. This is an estimate; it has not been measured on a phone.
+* **Voices:** the free natural voices (Microsoft neural) already sound like real people. ElevenLabs sounds closest to real actors but needs your key and has a monthly limit. The test films made on the build computer use a robotic computer voice (espeak) because it has no internet; the phone never uses it.
+* **ElevenLabs was tested only against a mock server** built from its published API (voices list, text-to-speech, key header, quota error), not the live service.
+* **Mouth shapes** come from how bright the sound is, so they follow vowels roughly (wide / round / closed). They do not come from a phoneme-by-phoneme analysis.
 
 * **3D:** the film looks 3D when its pictures are 3D-style: your uploads, or the studio's AI pictures, which are always requested in 3D animated style. The camera, depth, light and parallax add a 2.5D cinematic feel.
   * The characters are still flat pictures that move, turn and lip-sync. They are not rigged 3D models, so they don't walk around in true 3D like a Pixar film. That isn't possible with the phone engine.
@@ -180,7 +197,9 @@ For better story reading, picture recognition and expressive AI voices, add a **
   * `VoiceStyle` reads voice qualities from descriptions and acting directions and applies them as sound processing (rasp, breath, vibrato/tremolo, growl, ring-mod robot, EQ, reverb, shimmer).
   * `Rig` bends picture characters with a bone-weighted mesh (head, arms, legs, lean, breathing) and a fine face mesh for expressions; `Gfx.imageMesh` draws it (Android `drawBitmapMesh`).
   * `Nature` is the nature engine: it finds sky, water, waterfalls and plants in place pictures and draws weather, fire and light, water and projectiles as pure functions of time (so frames drawn in parallel agree). `Film.Weather` holds the weather timeline; `Director.weatherFrom` / `natureFrom` read it from the words and `ScriptAI.natureCues` from an AI reading.
-  * `Rig` also handles animals (`buildAnimal`): head with jaw and ears, tail and legs found from the outline.
+  * `Rig` also handles animals (`buildAnimal`): head with jaw and ears, tail and legs found from the outline. Meshes are adaptive (`bodyMesh(…, screenPx)`, up to 48×96 / 96×48, face 48×48); the face mesh opens the jaw and shapes the lips from `Film.Line.shape` (`Mixer.shape`: brightness of the voice, 100 Hz).
+  * `Mixer` makes a stereo soundtrack: panned dialogue (`panOf`), wide ambience (`LoopClip.wide`), `dialogue()` polish (high-pass, loudness), a dialogue compressor, `breath()`, and `Room` (Freeverb-style stereo room per place) on the voice/effects send. `VideoWriter` writes 2-channel AAC.
+  * `Eleven` is the ElevenLabs client (voices list, text-to-speech, cast assignment by gender/age/voice words).
   * `SoundSense` classifies sounds offline; `SoundWords` links English, Hindi and Hinglish sound words; `Director` places the user's effects on matching actions.
   * `VoiceMatch` turns a character's description into the voice it should have and scores measured samples (`VoiceFx.features`: pitch, liveliness, syllable rate, brightness, roughness) against it.
   * `Director.scoreMusic` builds the in-scene score with swells, dips and stingers. `Renderer` draws the cinematic look: ground-anchored parallax, camera roll and drift, light, a blurred foreground, grain and letterbox.

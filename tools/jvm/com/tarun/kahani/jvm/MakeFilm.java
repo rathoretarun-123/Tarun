@@ -92,7 +92,7 @@ public class MakeFilm {
         film.subtitles = edits.subtitles;
         short[] pcm = Mixer.mix(film, voices, lib, edits, null);
         File wav = new File(tmp, "mix.wav");
-        writeWav(wav, pcm, Synth.SR);
+        writeWav(wav, pcm, Synth.SR, Mixer.CHANNELS);
         System.out.println("audio mixed (" + (System.currentTimeMillis() - t0) + "ms)");
         if (System.getenv("AUDIO_ONLY") != null) { Files.copy(wav.toPath(), new File(out).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); return; }
 
@@ -175,12 +175,14 @@ public class MakeFilm {
         return Mixer.resample(o, sr);
     }
 
-    static void writeWav(File f, short[] pcm, int sr) throws IOException {
+    static void writeWav(File f, short[] pcm, int sr) throws IOException { writeWav(f, pcm, sr, 1); }
+
+    static void writeWav(File f, short[] pcm, int sr, int ch) throws IOException {
         DataOutputStream o = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(f)));
         int len = pcm.length * 2;
         o.writeBytes("RIFF"); o.writeInt(Integer.reverseBytes(36 + len)); o.writeBytes("WAVEfmt ");
-        o.writeInt(Integer.reverseBytes(16)); o.writeShort(Short.reverseBytes((short) 1)); o.writeShort(Short.reverseBytes((short) 1));
-        o.writeInt(Integer.reverseBytes(sr)); o.writeInt(Integer.reverseBytes(sr * 2)); o.writeShort(Short.reverseBytes((short) 2));
+        o.writeInt(Integer.reverseBytes(16)); o.writeShort(Short.reverseBytes((short) 1)); o.writeShort(Short.reverseBytes((short) ch));
+        o.writeInt(Integer.reverseBytes(sr)); o.writeInt(Integer.reverseBytes(sr * 2 * ch)); o.writeShort(Short.reverseBytes((short) (2 * ch)));
         o.writeShort(Short.reverseBytes((short) 16)); o.writeBytes("data"); o.writeInt(Integer.reverseBytes(len));
         for (short s : pcm) o.writeShort(Short.reverseBytes(s));
         o.close();

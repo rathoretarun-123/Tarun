@@ -2946,8 +2946,11 @@ public class MainActivity extends Activity {
         media.addView(Ui.text(this, "Without any key the director already finds free-licence pictures and real sound recordings "
                 + "(Openverse, Wikimedia Commons) and saves them in your library. With these free keys it finds more and better ones. "
                 + "Each key stays only on this phone.\n• Freesound: freesound.org/apiv2/apply (sign in, \"Create new API credentials\", copy the API key)\n"
-                + "• Pixabay: pixabay.com/api/docs (sign in, your key is shown on that page)\n• Pexels: pexels.com/api (sign in, \"Your API key\")", 13, Ui.SUB, false));
-        final String[][] mk = {{"freesoundKey", "Freesound API key (sounds)"}, {"pixabayKey", "Pixabay API key (pictures)"}, {"pexelsKey", "Pexels API key (photos)"}};
+                + "• Pixabay: pixabay.com/api/docs (sign in, your key is shown on that page)\n• Pexels: pexels.com/api (sign in, \"Your API key\")\n"
+                + "• ElevenLabs (the most lifelike voices, Hindi and English): elevenlabs.io → sign in → your profile → API keys. "
+                + "The free plan gives about 10,000 characters a month (roughly two or three short films); when they run out, the free natural voices take over.", 13, Ui.SUB, false));
+        final String[][] mk = {{"freesoundKey", "Freesound API key (sounds)"}, {"pixabayKey", "Pixabay API key (pictures)"}, {"pexelsKey", "Pexels API key (photos)"},
+                {"elevenKey", "ElevenLabs API key (most lifelike voices)"}};
         final EditText[] mf = new EditText[mk.length];
         for (int i = 0; i < mk.length; i++) {
             mf[i] = new EditText(this);

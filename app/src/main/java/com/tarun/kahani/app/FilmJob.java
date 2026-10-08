@@ -21,6 +21,7 @@ import com.tarun.kahani.core.Synth;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -172,6 +173,20 @@ public final class FilmJob implements Runnable {
             else if (ttsOk && !voices.languageOk && !aiVoices && !natural) warning = (story.hindi ? "Hindi" : "English") + " voice is not downloaded on this phone — download it in Settings > Text-to-speech.";
             Map<Story.CharacterDef, Voices.Cast> cast = voices.castAll(story, project);
             Library lib = Library.get(ctx);
+            // ElevenLabs with the user's own key: the most lifelike voices; each character keeps its voice
+            java.util.List<com.tarun.kahani.core.Eleven.Voice> elv = null;
+            String elKey = Prefs.get(ctx, "elevenKey", "");
+            if (Prefs.online(ctx) && elKey.trim().length() > 10) {
+                try {
+                    voices.eleven = new com.tarun.kahani.core.Eleven(Prefs.cloud(ctx), elKey);
+                    elv = voices.eleven.voices();
+                    if (elv.isEmpty()) { voices.eleven = null; elv = null; }
+                } catch (Exception e) {
+                    voices.eleven = null;
+                    warning = "ElevenLabs could not be reached (" + e.getMessage() + ") — the natural voices were used.";
+                }
+            }
+            java.util.Set<String> elUsed = new java.util.HashSet<String>();
             int ci = 0;
             for (Story.CharacterDef c : story.characters) {
                 Voices.Cast k = cast.get(c);
@@ -196,10 +211,48 @@ public final class FilmJob implements Runnable {
                 }
                 ci++;
             }
+            if (elv != null) {
+                // the whole cast at once, closest fits first; a character keeps its voice in every later film
+                List<Story.CharacterDef> need = new java.util.ArrayList<Story.CharacterDef>();
+                for (Story.CharacterDef c : story.characters) {
+                    String id = project.setting("elvoice." + c.displayName, "");
+                    boolean known = false;
+                    for (com.tarun.kahani.core.Eleven.Voice v : elv) if (v.id.equals(id)) known = true;
+                    if (known) { cast.get(c).eleven = id; elUsed.add(id); } else need.add(c);
+                }
+                if (!need.isEmpty()) {
+                    java.util.List<com.tarun.kahani.core.Eleven.Voice> free = new java.util.ArrayList<com.tarun.kahani.core.Eleven.Voice>();
+                    for (com.tarun.kahani.core.Eleven.Voice v : elv) if (!elUsed.contains(v.id)) free.add(v);
+                    if (free.isEmpty()) free = elv;
+                    com.tarun.kahani.core.Look[] ls = new com.tarun.kahani.core.Look[need.size()];
+                    int[] ages = new int[need.size()];
+                    String[] ws = new String[need.size()];
+                    for (int i = 0; i < need.size(); i++) {
+                        Story.CharacterDef c = need.get(i);
+                        Voices.Cast k = cast.get(c);
+                        ls[i] = c.look; ages[i] = c.age;
+                        ws[i] = com.tarun.kahani.core.VoiceMatch.voiceText(c.description) + " " + (k.style == null ? "" : k.style.label());
+                    }
+                    int[] got = com.tarun.kahani.core.Eleven.assign(free, ls, ages, ws, story.hindi);
+                    for (int i = 0; i < need.size(); i++) {
+                        if (got[i] < 0) continue;
+                        String id = free.get(got[i]).id;
+                        cast.get(need.get(i)).eleven = id;
+                        elUsed.add(id);
+                        project.setSetting("elvoice." + need.get(i).displayName, id);
+                    }
+                }
+            }
             Voices.Cast narratorCast = new Voices.Cast();
             narratorCast.pitch = 1.0f; narratorCast.rate = 0.92f;
             if (aiVoices) narratorCast.gemini = "Charon";
             if (natural) narratorCast.edge = EdgeVoice.narrator(story.hindi);
+            if (elv != null) {
+                com.tarun.kahani.core.Look nl = new com.tarun.kahani.core.Look();
+                nl.kind = com.tarun.kahani.core.Look.MAN;
+                com.tarun.kahani.core.Eleven.Voice nv = com.tarun.kahani.core.Eleven.pick(elv, nl, 45, "warm calm deep", story.hindi, elUsed);
+                if (nv != null) narratorCast.eleven = nv.id;
+            }
             Library.Item ns = lib.byId(project.setting("vsample.narrator", ""));
             if (ns != null) {
                 float[] pcm = AudioIO.decode(ctx, ns.path, 60);
@@ -292,7 +345,7 @@ public final class FilmJob implements Runnable {
             step("Mixing music and sounds…", 0.30f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
-            final byte[] mb = new byte[Synth.SR * 8 * 2];
+            final byte[] mb = new byte[Synth.SR * 8 * 2 * Mixer.CHANNELS];
             Mixer.mixTo(film, new Mixer.VoiceSource() {
                 public float[] voice(int i) { return i < lineFiles.length && lineFiles[i] != null ? AudioIO.readRaw(lineFiles[i]) : null; }
             }, lib.soundLib(), ed, new Mixer.Sink() {

@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Encodes ARGB frames + a mono PCM soundtrack into an MP4 (H.264 + AAC) with exact timestamps. */
+/** Encodes ARGB frames + a stereo PCM soundtrack (interleaved L/R) into an MP4 (H.264 + AAC) with exact timestamps. */
 public final class VideoWriter {
     private final int w, h, fps;
     private MediaCodec video;
@@ -43,7 +43,7 @@ public final class VideoWriter {
         public int read(short[] buf) { int n = Math.min(buf.length, a.length - pos); System.arraycopy(a, pos, buf, 0, n); pos += n; return n; }
     }
 
-    /** Reads 16-bit little-endian mono PCM from a file. */
+    /** Reads 16-bit little-endian PCM (interleaved stereo) from a file. */
     public static final class FileSource implements PcmSource {
         final java.io.InputStream in; final byte[] b = new byte[8192];
         public FileSource(File f) throws IOException { in = new java.io.BufferedInputStream(new java.io.FileInputStream(f), 1 << 16); }
@@ -71,9 +71,10 @@ public final class VideoWriter {
     }
 
     private void encodeAudio(PcmSource src, int sr) throws IOException {
-        MediaFormat f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sr, 1);
+        final int ch = com.tarun.kahani.core.Mixer.CHANNELS;
+        MediaFormat f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sr, ch);
         f.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
-        f.setInteger(MediaFormat.KEY_BIT_RATE, 128000);
+        f.setInteger(MediaFormat.KEY_BIT_RATE, ch == 2 ? 192000 : 128000);
         f.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
         MediaCodec a = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
         a.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -89,9 +90,9 @@ public final class VideoWriter {
                 if (ix >= 0) {
                     ByteBuffer buf = a.getInputBuffer(ix);
                     buf.clear();
-                    if (chunk.length > buf.capacity() / 2) chunk = new short[buf.capacity() / 2];
+                    if (chunk.length > buf.capacity() / 2) chunk = new short[buf.capacity() / 2 / ch * ch];
                     int samples = src.read(chunk);
-                    long pts = pos * 1000000L / sr;
+                    long pts = pos / ch * 1000000L / sr;
                     if (samples <= 0) {
                         a.queueInputBuffer(ix, 0, 0, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                         inputDone = true;

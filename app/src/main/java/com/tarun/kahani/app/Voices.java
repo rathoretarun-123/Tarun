@@ -116,11 +116,12 @@ public final class Voices {
         public String sampleId = "";
         public String gemini;      // Gemini voice name when AI voices are used
         public com.tarun.kahani.core.EdgeVoice.Cast edge;   // natural neural voice (online), or null
+        public String eleven;      // ElevenLabs voice id (the user's own key), or null
         /** Raspy, trembling, booming… as the script describes the voice (applied as sound processing). */
         public com.tarun.kahani.core.VoiceStyle style;
         public String signature() {
             return voice + "|" + pitch + "|" + rate + "|" + shift + "|" + sampleId + "|" + (gemini == null ? "" : gemini)
-                    + "|" + (edge == null ? "" : edge.key()) + "|" + (style == null ? "" : style.signature());
+                    + "|" + (edge == null ? "" : edge.key()) + "|" + (style == null ? "" : style.signature()) + "|" + (eleven == null ? "" : "el:" + eleven);
         }
     }
 
@@ -261,6 +262,11 @@ public final class Voices {
      * user gave a voice sample for this character — moved to the sample's pitch and tone, and finally the emotion's
      * speed/pitch modulation. Returns PCM at Synth.SR or null.
      */
+    /** ElevenLabs voices (the user's own key). Set by the caller; null = not used. */
+    public com.tarun.kahani.core.Eleven eleven;
+    /** Set when ElevenLabs refuses (key wrong, the month's characters used up); later lines use the next voice. */
+    public volatile boolean elevenOff;
+
     /** Natural neural voices (online, free). Set by the caller; null = not used. */
     public com.tarun.kahani.core.EdgeVoice edge;
     /** Set after repeated failures of the natural voice service; later lines use the phone voice. */
@@ -306,7 +312,26 @@ public final class Voices {
         float[] pcm = null;
         boolean shaped = false;      // the engine already applied emotion and character pitch
         usedFallback = false;
-        if (cloud != null && !aiOff && k.gemini != null && cloud.hasGemini()) {
+        // the most lifelike voice first: ElevenLabs with the user's key (unless the user gave a voice sample)
+        if (eleven != null && !elevenOff && k.eleven != null && k.sample == null) {
+            try {
+                byte[] mp3 = eleven.speak(line.text, k.eleven, line.emotion, line.whisper);
+                File f = new File(tmpDir, "eleven" + idx + ".mp3");
+                java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+                o.write(mp3);
+                o.close();
+                pcm = AudioIO.decode(null, f.getAbsolutePath());
+                f.delete();
+                if (pcm != null && pcm.length > Synth.SR / 10) { shaped = true; ai = true; lastEngine = "ElevenLabs"; }
+                else pcm = null;
+            } catch (Exception e) {
+                if (err != null) err[0] = e.getMessage();
+                String m = e.getMessage() == null ? "" : e.getMessage();
+                if (m.contains("401") || m.contains("quota") || m.contains("429") || m.contains("403")) elevenOff = true;
+                usedFallback = true;
+            }
+        }
+        if (pcm == null && cloud != null && !aiOff && k.gemini != null && cloud.hasGemini()) {
             try {
                 float[] raw = cloud.geminiSpeak(direction(line, line.who), line.text, k.gemini);
                 pcm = Mixer.resample(raw, 24000);

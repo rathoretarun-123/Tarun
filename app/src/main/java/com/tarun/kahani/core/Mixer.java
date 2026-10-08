@@ -168,11 +168,14 @@ public final class Mixer {
     /** Gives the voice of film.lines[i] at Synth.SR (null = silent). Lets long films keep voices on storage. */
     public interface VoiceSource { float[] voice(int i); }
 
-    /** Receives the finished soundtrack piece by piece (16-bit mono at Synth.SR). */
+    /** The soundtrack is stereo: left and right samples take turns (L, R, L, R…). */
+    public static final int CHANNELS = 2;
+
+    /** Receives the finished soundtrack piece by piece (16-bit stereo at Synth.SR, interleaved; n = values). */
     public interface Sink { void write(short[] buf, int n) throws java.io.IOException; }
 
     public static short[] mix(Film film, final float[][] voices, SoundLib lib, Edits ed, Progress pr) {
-        final int n = (int) (film.duration * Synth.SR) + Synth.SR;
+        final int n = ((int) (film.duration * Synth.SR) + Synth.SR) * CHANNELS;
         final short[] out = new short[n];
         final int[] pos = {0};
         try {
@@ -196,10 +199,14 @@ public final class Mixer {
         int start, len;      // in samples
         float gain;
         boolean voice;
+        float pan;           // -1 left .. +1 right (where the speaker stands)
+        float send;          // how much goes into the room (echo of the place)
         Film.Music music;    // loudness curve and softness of a music cue
         float lpA, lp;       // one-pole low-pass (soft moods)
         abstract void prepare();
         abstract float at(int i);  // i in [0, len)
+        /** The right channel (the same as the left unless the clip is spread wide). */
+        float atR(int i) { return at(i); }
         void free() {}
     }
 
@@ -223,14 +230,21 @@ public final class Mixer {
             fade = Math.min(len / 2, (int) (fadeSec * Synth.SR));
         }
         void prepare() {}
-        float at(int i) {
+        /** Right channel starts this many samples later in the recording: a wide, natural stereo bed. */
+        int wide;
+        float core(int i) {
             int k = i / step, j = i - k * step;
             float v = src[j] * (k > 0 && j < xf ? j / (float) xf : 1f);
             if (k > 0 && j < xf) v += src[j + step] * ((src.length - (j + step)) / (float) xf);
-            if (i < fade) v *= i / (float) fade;
-            else if (i >= len - fade) v *= (len - 1 - i) / (float) fade;
             return v;
         }
+        float fadeAt(int i) {
+            if (i < fade) return i / (float) fade;
+            if (i >= len - fade) return (len - 1 - i) / (float) fade;
+            return 1f;
+        }
+        float at(int i) { return core(i) * fadeAt(i); }
+        float atR(int i) { return wide > 0 ? core(i + wide) * fadeAt(i) : at(i); }
     }
 
     /** Builds a clip's samples only when it starts playing. */
@@ -282,8 +296,11 @@ public final class Mixer {
             // "#path" = the background sound the user chose for this part of the story
             SoundLib.Entry e = a.words.startsWith("#") ? lib.byFile(a.words.substring(1)) : lib.best(a.words, "amb", null);
             float[] src = lib.pcm(e);
-            if (src != null && src.length >= Synth.SR / 4 && a.t1 > a.t0)
-                clips.add(new LoopClip(src, (int) (a.t0 * Synth.SR), a.t1 - a.t0, 1.5f, 0.32f * ed.ambience));
+            if (src != null && src.length >= Synth.SR / 4 && a.t1 > a.t0) {
+                LoopClip lc = new LoopClip(src, (int) (a.t0 * Synth.SR), a.t1 - a.t0, 1.5f, 0.32f * ed.ambience);
+                lc.wide = Math.max(1, (int) (src.length * 0.37f));
+                clips.add(lc);
+            }
         }
         // ---- effects
         for (final Film.Sfx s : film.sfx) {
@@ -296,7 +313,10 @@ public final class Mixer {
             if (s.type == Film.SFX_USER && src == null) continue;     // the user's sound is gone: nothing else fits
             int st = (int) (s.t * Synth.SR);
             if (src != null && src.length >= Synth.SR / 4 && (ambient || s.dur > src.length / (float) Synth.SR)) {
-                clips.add(new LoopClip(src, st, s.dur, ambient ? 1f : 0.05f, g));
+                LoopClip lc = new LoopClip(src, st, s.dur, ambient ? 1f : 0.05f, g);
+                if (ambient) lc.wide = Math.max(1, (int) (src.length * 0.41f));
+                else lc.send = 0.5f;
+                clips.add(lc);
             } else {
                 clips.add(new LazyClip(st, (int) (Math.max(s.dur, 0.6f) * Synth.SR), g, new LazyClip.Maker() {
                     public float[] make() {
@@ -309,9 +329,12 @@ public final class Mixer {
                         return fx;
                     }
                 }));
+                clips.get(clips.size() - 1).send = ambient ? 0 : 0.5f;   // a door, a bell, thunder ring in the room
             }
         }
-        // ---- voices (loaded from the source only when they start)
+        // ---- voices (loaded from the source only when they start), each from where its speaker stands, every
+        // line brought to the same loudness, with a soft breath before long or emotional lines
+        float prevEnd = -10f;
         for (int i = 0; i < film.lines.size(); i++) {
             final Film.Line l = film.lines.get(i);
             final int idx = i;
@@ -319,22 +342,41 @@ public final class Mixer {
             LazyClip c = new LazyClip((int) (l.start * Synth.SR), (int) (Math.max(0.1f, l.dur) * Synth.SR), g, new LazyClip.Maker() {
                 public float[] make() {
                     float[] v = vs == null ? null : vs.voice(idx);
+                    v = dialogue(v, l.whisper);
                     return v != null && l.echo ? echo(v) : v;
                 }
             });
             c.voice = true;
+            c.pan = panOf(film, l);
+            c.send = 1f;
             clips.add(c);
+            boolean feeling = l.emotion == Pose.SCARED || l.emotion == Pose.ANGRY || l.emotion == Pose.SURPRISED || l.emotion == Pose.PAIN
+                    || l.emotion == Pose.SAD;
+            if (l.env != null && (l.dur > 2.2f || feeling) && l.start - prevEnd > 0.55f && l.start > 0.5f) {
+                final int seed = i * 31 + 7;
+                final boolean deep = feeling;
+                LazyClip br = new LazyClip((int) ((l.start - 0.42f) * Synth.SR), (int) (0.34f * Synth.SR), g, new LazyClip.Maker() {
+                    public float[] make() { return breath(seed, 0.34f, deep ? 0.016f : 0.011f); }
+                });
+                br.voice = true;
+                br.pan = c.pan;
+                br.send = 0.6f;
+                clips.add(br);
+            }
+            prevEnd = Math.max(prevEnd, l.start + l.dur);
         }
         java.util.Collections.sort(clips, new java.util.Comparator<Clip>() {
             public int compare(Clip a, Clip b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; }
         });
 
         final int chunk = Synth.SR * 8;
-        float[] bed = new float[chunk], voice = new float[chunk];
-        short[] out = new short[chunk];
+        float[] bedL = new float[chunk], bedR = new float[chunk], voiceL = new float[chunk], voiceR = new float[chunk], send = new float[chunk];
+        short[] out = new short[chunk * CHANNELS];
         java.util.ArrayList<Clip> active = new java.util.ArrayList<Clip>();
         int next = 0;
-        float env = 0, lim = 1f;
+        float env = 0, lim = 1f, comp = 0;
+        Room room = new Room(Synth.SR);
+        float[] wetLR = new float[2];
         for (int a = 0; a < total; a += chunk) {
             int n = Math.min(chunk, total - a), b = a + n;
             while (next < clips.size() && clips.get(next).start < b) {
@@ -343,42 +385,131 @@ public final class Mixer {
                 if (c.len > 0 && c.start + c.len > a) active.add(c);
                 else c.free();
             }
-            java.util.Arrays.fill(bed, 0, n, 0f);
-            java.util.Arrays.fill(voice, 0, n, 0f);
+            java.util.Arrays.fill(bedL, 0, n, 0f);
+            java.util.Arrays.fill(bedR, 0, n, 0f);
+            java.util.Arrays.fill(voiceL, 0, n, 0f);
+            java.util.Arrays.fill(voiceR, 0, n, 0f);
+            java.util.Arrays.fill(send, 0, n, 0f);
             for (int k = active.size() - 1; k >= 0; k--) {
                 Clip c = active.get(k);
-                float[] dst = c.voice ? voice : bed;
+                float[] dl = c.voice ? voiceL : bedL, dr = c.voice ? voiceR : bedR;
                 int from = Math.max(a, c.start), to = Math.min(b, c.start + c.len);
-                if (c.music == null && c.lpA == 0) {
-                    for (int t = from; t < to; t++) dst[t - a] += c.at(t - c.start) * c.gain;
-                } else {
-                    for (int t = from; t < to; t++) {
-                        float v = c.at(t - c.start);
-                        if (c.lpA > 0) { c.lp += c.lpA * (v - c.lp); v = c.lp * 1.25f; }
-                        float lv = c.music == null ? 1f : c.music.level(t / (float) Synth.SR);
-                        dst[t - a] += v * c.gain * lv;
-                    }
+                // balance: the far side gets quieter, the near side stays as it is
+                float gl = c.gain * Math.min(1f, 1f - c.pan), gr = c.gain * Math.min(1f, 1f + c.pan);
+                for (int t = from; t < to; t++) {
+                    int i = t - c.start;
+                    float v = c.at(i), vr = c.atR(i);
+                    if (c.lpA > 0) { c.lp += c.lpA * (v - c.lp); v = c.lp * 1.25f; vr = v; }
+                    float lv = c.music == null ? 1f : c.music.level(t / (float) Synth.SR);
+                    dl[t - a] += v * gl * lv;
+                    dr[t - a] += vr * gr * lv;
+                    if (c.send > 0) send[t - a] += (v + vr) * 0.5f * c.gain * c.send;
                 }
                 if (c.start + c.len <= b) { c.free(); active.remove(k); }
             }
+            int sub = Synth.SR / 4;
             for (int i = 0; i < n; i++) {
-                float av = Math.abs(voice[i]);
+                // the room of the place on screen now (looked up four times a second, glides between places)
+                if (i % sub == 0) room.target(Room.of(film.segAt((a + i) / (float) Synth.SR)));
+                // dialogue: a gentle compressor keeps every word clear and even
+                float vl = voiceL[i], vr = voiceR[i];
+                float lv = Math.max(Math.abs(vl), Math.abs(vr));
+                comp += (lv > comp ? 0.02f : 0.0003f) * (lv - comp);
+                float cg = comp > 0.2f ? (float) Math.pow(0.2f / comp, 0.6f) : 1f;
+                vl *= cg * 1.12f; vr *= cg * 1.12f;
+                float av = Math.max(Math.abs(vl), Math.abs(vr));
                 env += (av > env ? 0.01f : 0.00012f) * (av - env);
                 float duck = 1f - Math.min(0.6f, env * 6f);
-                float s = voice[i] + bed[i] * duck;
-                // limiter: instant attack, ~0.5 s release, keeps peaks under 0.95
-                float as = Math.abs(s) * lim;
-                if (as > 0.95f) lim = 0.95f / Math.abs(s);
+                room.process(send[i], wetLR);
+                float sl = vl + bedL[i] * duck + wetLR[0], sr = vr + bedR[i] * duck + wetLR[1];
+                // limiter on both sides together: instant attack, ~0.5 s release, keeps peaks under 0.95
+                float as = Math.max(Math.abs(sl), Math.abs(sr)) * lim;
+                if (as > 0.95f) lim = 0.95f / Math.max(Math.abs(sl), Math.abs(sr));
                 else lim += (1f - lim) * 0.00006f;
-                s *= lim;
-                if (s > 0.8f) s = 0.8f + (s - 0.8f) * 0.4f;
-                else if (s < -0.8f) s = -0.8f + (s + 0.8f) * 0.4f;
-                out[i] = (short) (Math.max(-1f, Math.min(1f, s)) * 32000);
+                sl *= lim; sr *= lim;
+                out[2 * i] = (short) (soft(sl) * 32000);
+                out[2 * i + 1] = (short) (soft(sr) * 32000);
             }
-            sink.write(out, n);
+            sink.write(out, n * CHANNELS);
             if (pr != null) pr.update(b / (float) total);
         }
         if (pr != null) pr.update(1f);
+    }
+
+    static float soft(float s) {
+        if (s > 0.8f) s = 0.8f + (s - 0.8f) * 0.4f;
+        else if (s < -0.8f) s = -0.8f + (s + 0.8f) * 0.4f;
+        return Math.max(-1f, Math.min(1f, s));
+    }
+
+    /** Where the speaker stands on the stage: -0.5 (left) .. +0.5 (right); the narrator is in the middle. */
+    static float panOf(Film film, Film.Line l) {
+        if (l.who == null) return 0;
+        float t = l.start + 0.05f;
+        Film.Seg s = film.segAt(t);
+        if (s == null) return 0;
+        for (Film.Actor a : s.actors) {
+            if (a.c != l.who) continue;
+            float x = Director.xAt(a, t);
+            return Math.max(-0.5f, Math.min(0.5f, (x - 640f) / 640f * 0.5f));
+        }
+        return 0;
+    }
+
+    /**
+     * Dialogue polish, the way a film's sound editor prepares each line: low rumble and pops below ~90 Hz are
+     * removed and every line is brought to the same speaking loudness (phone voice, natural voice, AI voice
+     * or the user's own recording all sit together). Whispers stay a little quieter.
+     */
+    public static float[] dialogue(float[] v, boolean whisper) {
+        if (v == null || v.length == 0) return v;
+        float[] y = new float[v.length];
+        float a = (float) Math.exp(-2 * Math.PI * 90 / Synth.SR), px = 0, py = 0;
+        for (int i = 0; i < v.length; i++) { py = a * (py + v[i] - px); px = v[i]; y[i] = py; }
+        int win = Synth.SR / 50;
+        int frames = Math.max(1, y.length / win);
+        float[] rms = new float[frames];
+        float maxR = 0, peak = 0;
+        for (int f = 0; f < frames; f++) {
+            double sum = 0;
+            for (int i = f * win; i < Math.min(y.length, (f + 1) * win); i++) sum += y[i] * y[i];
+            rms[f] = (float) Math.sqrt(sum / win);
+            maxR = Math.max(maxR, rms[f]);
+        }
+        for (float x : y) peak = Math.max(peak, Math.abs(x));
+        if (maxR < 1e-5f) return y;
+        double sum = 0;
+        int n = 0;
+        for (float r : rms) if (r > maxR * 0.12f) { sum += r * r; n++; }
+        float speech = (float) Math.sqrt(sum / Math.max(1, n));
+        float target = whisper ? 0.075f : 0.11f;
+        float g = Math.max(0.25f, Math.min(5f, target / Math.max(1e-5f, speech)));
+        g = Math.min(g, 0.97f / Math.max(1e-5f, peak));
+        for (int i = 0; i < y.length; i++) y[i] *= g;
+        return y;
+    }
+
+    /** A soft breath in (filtered air noise that swells and stops), rms = how loud. */
+    public static float[] breath(int seed, float dur, float rms) {
+        int n = Math.max(16, (int) (dur * Synth.SR));
+        float[] b = new float[n];
+        java.util.Random r = new java.util.Random(seed);
+        float lp = 0, lp2 = 0, hp = 0, prev = 0;
+        double sum = 0;
+        for (int i = 0; i < n; i++) {
+            float w = r.nextFloat() * 2 - 1;
+            lp += 0.32f * (w - lp);
+            lp2 += 0.5f * (lp - lp2);
+            hp = 0.96f * (hp + lp2 - prev);
+            prev = lp2;
+            float u = i / (float) n;
+            float e = u < 0.62f ? (float) Math.pow(Math.sin(u / 0.62f * Math.PI / 2), 2) : (float) Math.pow(Math.cos((u - 0.62f) / 0.38f * Math.PI / 2), 2);
+            b[i] = hp * e;
+            sum += b[i] * b[i];
+        }
+        float g = rms / (float) Math.max(1e-6, Math.sqrt(sum / n));
+        for (int i = 0; i < n; i++) b[i] *= g;
+        return b;
     }
 
     static void add(float[] dst, float[] src, float t, float g) {

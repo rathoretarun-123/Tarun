@@ -48,6 +48,11 @@ public final class Cloud {
     }
 
     public byte[] request(String method, String url, String contentType, byte[] body) throws IOException {
+        return request(method, url, contentType, body, null);
+    }
+
+    /** headers: {name, value, name, value…} sent with this one request (e.g. a service's own key header). */
+    public byte[] request(String method, String url, String contentType, byte[] body, String[] headers) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(20000);
         c.setReadTimeout(timeoutMs);
@@ -55,6 +60,7 @@ public final class Cloud {
         c.setRequestProperty("User-Agent", "KahaniFilm/6 (Android; children's film maker)");
         c.setRequestProperty("Accept", "*/*");
         if (authHeader != null) c.setRequestProperty("Authorization", authHeader);
+        if (headers != null) for (int i = 0; i + 1 < headers.length; i += 2) c.setRequestProperty(headers[i], headers[i + 1]);
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", contentType);

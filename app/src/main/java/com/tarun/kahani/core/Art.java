@@ -183,11 +183,47 @@ public final class Art {
                 int[] px = new int[d[0] * d[1]];
                 System.arraycopy(d, 2, px, 0, px.length);
                 b.scan = Nature.scan(px, d[0], d[1]);
+                b.ground = findGround(px, d[0], d[1], b);
             }
         } catch (RuntimeException ignored) {
         }
         return b;
     }
+
+    /**
+     * Where the characters' feet go in a place picture: on its floor (the ground, a courtyard, a hall's floor),
+     * found as the band at the bottom of the picture whose colours carry on from the very bottom rows, and
+     * the feet a little more than half way down that band (the near part of the floor, never in the sky or up
+     * a wall). As a fraction of the crop window's height.
+     */
+    public static float findGround(int[] px, int w, int h, Backdrop b) {
+        int cx0 = (int) (b.x0 * w), cx1 = Math.max(cx0 + 4, (int) (b.x1 * w)), cy0 = (int) (b.y0 * h), cy1 = Math.max(cy0 + 8, (int) (b.y1 * h));
+        cx1 = Math.min(w, cx1); cy1 = Math.min(h, cy1);
+        int ch = cy1 - cy0;
+        int x0 = cx0 + (cx1 - cx0) / 10, x1 = cx1 - (cx1 - cx0) / 10;
+        // the floor's colours (bottom 10 % of the picture) against the colours of the rest (its top half)
+        int band = Math.max(2, ch / 10);
+        float[] fl = new float[4096], up = new float[4096];
+        float nf = 0, nu = 0;
+        for (int y = cy1 - band; y < cy1; y++) for (int x = x0; x < x1; x++) { fl[bin(px[y * w + x])]++; nf++; }
+        for (int y = cy0; y < cy0 + ch / 2; y++) for (int x = x0; x < x1; x += 2) { up[bin(px[y * w + x])]++; nu++; }
+        if (nf == 0 || nu == 0) return 0.9f;
+        boolean[] floorish = new boolean[4096];
+        for (int k = 0; k < 4096; k++) floorish[k] = fl[k] / nf > 0.0005f && fl[k] / nf > 1.5f * up[k] / nu;
+        // going up: the first rows where most of the picture no longer looks like the floor
+        int top = cy1 - band, miss = 0;
+        for (int y = cy1 - band; y > cy0 + ch / 3; y--) {
+            int like = 0, cnt = 0;
+            for (int x = x0; x < x1; x += 2) { if (floorish[bin(px[y * w + x])]) like++; cnt++; }
+            if (like < cnt * 0.5f) { if (++miss >= Math.max(2, ch / 60)) break; }
+            else { miss = 0; top = y; }
+        }
+        float floorTop = (top - cy0) / (float) ch;
+        float g = floorTop + 0.6f * (1 - floorTop);
+        return Math.max(0.8f, Math.min(0.93f, g));
+    }
+
+    static int bin(int c) { return (((c >> 20) & 15) << 8) | (((c >> 12) & 15) << 4) | ((c >> 4) & 15); }
 
     // ------------------------------------------------------------------ manifest
 

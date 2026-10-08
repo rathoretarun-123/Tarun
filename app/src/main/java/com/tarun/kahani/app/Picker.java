@@ -109,6 +109,46 @@ final class Picker {
     static void stop() {
         try { if (player != null) { player.stop(); player.release(); } } catch (Exception ignored) {}
         player = null;
+        playing = null;
+        if (playBtn != null) playBtn.setText("▶");
+        playBtn = null;
+    }
+
+    private static String playing;
+    private static android.widget.Button playBtn;
+
+    /**
+     * Play / pause / stop for one sound in a list: ▶ starts it (and stops any other), the same button then shows
+     * ⏸ to pause and ▶ again to carry on; ■ stops it. When the sound ends the button goes back to ▶.
+     */
+    static View controls(final Activity a, final String path) {
+        LinearLayout r = Ui.row(a);
+        final android.widget.Button[] pb = new android.widget.Button[1];
+        pb[0] = Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (path.equals(playing) && player != null) {
+                    try {
+                        if (player.isPlaying()) { player.pause(); pb[0].setText("▶"); }
+                        else { player.start(); pb[0].setText("⏸"); }
+                    } catch (Exception e) { stop(); }
+                    return;
+                }
+                play(a, path);
+                if (player == null) return;
+                playing = path;
+                playBtn = pb[0];
+                pb[0].setText("⏸");
+                final MediaPlayer mine = player;
+                mine.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    public void onCompletion(MediaPlayer p) { if (p == player) { pb[0].setText("▶"); stop(); } }
+                });
+            }
+        });
+        r.addView(pb[0]);
+        r.addView(Ui.small(a, "■", Ui.SUB, new View.OnClickListener() {
+            public void onClick(View v) { if (path.equals(playing)) stop(); }
+        }));
+        return r;
     }
 
     /**
@@ -173,9 +213,10 @@ final class Picker {
                         } else {
                             r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                         }
-                        r.addView(Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
-                            public void onClick(View v) { if (it.path.startsWith("preset:") && presetPlayer != null) presetPlayer.play(it); else play(a, it.path); }
+                        if (it.path.startsWith("preset:") && presetPlayer != null) r.addView(Ui.small(a, "▶", Ui.BLUE, new View.OnClickListener() {
+                            public void onClick(View v) { presetPlayer.play(it); }
                         }));
+                        else r.addView(controls(a, it.path));
                         r.addView(Ui.small(a, "Choose", Ui.GREEN, new View.OnClickListener() {
                             public void onClick(View v) { stop(); d[0].dismiss(); l.picked(it); }
                         }));

@@ -31,7 +31,7 @@ public final class ShotBook {
             {"zooms", ""}, {"zoomed", ""}, {"pans", ""}, {"shaky", ""}, {"handheld", ""}, {"cropped", ""}, {"16:9", ""}, {"9:16", ""},
             {" wide ", " full "}, {"jumps", "steps"}, {"jumping", "standing"}};
 
-    static final String[] OBJECTS = {"तलवार", "sword", "भाला", "spear", "ढाल", "shield", "छड़ी", "wand", "stick", "शीशा", "दर्पण", "mirror",
+    public static final String[] OBJECTS = {"तलवार", "sword", "भाला", "spear", "ढाल", "shield", "छड़ी", "wand", "stick", "शीशा", "दर्पण", "mirror",
             "पोटली", "potli", "satchel", "bag", "थैला", "घंटा", "घंटी", "bell", "दीया", "दीपक", "diya", "lamp", "लालटेन", "lantern", "मशाल", "torch",
             "रस्सी", "rope", "जाल", "net", "पत्थर", "stone", "rock", "चाबी", "key", "किताब", "book", "पत्र", "चिट्ठी", "letter", "नक्शा", "map", "ताज", "मुकुट",
             "crown", "हार", "necklace", "अंगूठी", "ring", "गेंद", "ball", "फल", "आम", "mango", "fruit", "फूल", "flower", "कली", "bud", "टोकरी", "basket",

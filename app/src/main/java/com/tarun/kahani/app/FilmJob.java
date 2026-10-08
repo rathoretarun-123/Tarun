@@ -76,6 +76,22 @@ public final class FilmJob implements Runnable {
 
     public void cancel() { cancelled = true; }
 
+    /** Paused by the user: every stage waits (drawing, voices, saving) until resumed, nothing is lost. */
+    public volatile boolean paused;
+    private volatile long pausedMs;
+
+    public void pause(boolean p) { paused = p; }
+
+    /** Waits here while paused (called between steps and before every frame). */
+    void waitWhilePaused() {
+        if (!paused) return;
+        long t = System.currentTimeMillis();
+        while (paused && !cancelled) {
+            try { Thread.sleep(250); } catch (InterruptedException e) { break; }
+        }
+        pausedMs += System.currentTimeMillis() - t;
+    }
+
     private void step(String s, float p) { stage = s; progress = p; }
 
     /** "about 3 min 20 s left" while making the video. */
@@ -486,7 +502,7 @@ public final class FilmJob implements Runnable {
 
     static final class CancelledException extends RuntimeException {}
 
-    private void check() { if (cancelled) throw new CancelledException(); }
+    private void check() { waitWhilePaused(); if (cancelled) throw new CancelledException(); }
 
     // ---------------------------------------------------------------- parallel frame rendering
 
@@ -516,6 +532,7 @@ public final class FilmJob implements Runnable {
                             synchronized (lock) {
                                 while (f - nextToEncode[0] >= slots.length && !cancelled && workerError[0] == null) lock.wait(200);
                             }
+                            waitWhilePaused();
                             if (cancelled || workerError[0] != null) return;
                             r.render(g, f / fpsF);
                             int[] buf = px;
@@ -546,6 +563,7 @@ public final class FilmJob implements Runnable {
             step("Making the video…", 0.36f);
             vw.start(out, new VideoWriter.FileSource(audio), Synth.SR, bpp);
             long t0 = System.currentTimeMillis();
+            pausedMs = 0;
             for (int f = 0; f < frames; f++) {
                 int[] px;
                 int slot = f % slots.length;
@@ -565,7 +583,7 @@ public final class FilmJob implements Runnable {
                     lock.notifyAll();
                 }
                 if (f % 12 == 0) {
-                    long el = System.currentTimeMillis() - t0;
+                    long el = System.currentTimeMillis() - t0 - pausedMs;
                     long eta = f > 30 ? el * (frames - f) / f / 1000 : -1;
                     etaSeconds = eta;
                     stage = "Making the video… " + (f * 100 / frames) + "%";

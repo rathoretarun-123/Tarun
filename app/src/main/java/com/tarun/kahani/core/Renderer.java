@@ -1428,7 +1428,15 @@ public final class Renderer {
         float mirror = p.facing < 0 ? -1 : 1;
         g.scale(sx * mirror, sy);
         // shadow
-        if (p.body != Pose.LIE && p.body != Pose.HANG) { g.color(0x40000000); g.oval(0, 0, w * 0.42f, h * 0.025f); }
+        if (p.body != Pose.LIE && p.body != Pose.HANG) {
+            // a soft contact shadow (wide and faint, dark only right under the feet), so the character stands on
+            // the floor of the picture instead of floating over it
+            for (int i = 0; i < 5; i++) {
+                float k = 1 - i * 0.17f;
+                g.color(i < 4 ? 0x12000000 : 0x2A000000);
+                g.oval(0, -h * 0.002f, w * 0.5f * k, h * 0.032f * k);
+            }
+        }
         float left = -w / 2, top = -h;
         if (p.noHeadwear && sp.turbanY > 0 && !bare) {
             float cut = sp.turbanY;

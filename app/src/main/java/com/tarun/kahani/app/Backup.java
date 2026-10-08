@@ -32,6 +32,8 @@ final class Backup {
     private Backup() {}
 
     static final String FOLDER = "KahaniFilm/Library";
+    /** Added to backed-up files so galleries and music players leave them alone. */
+    static final String PRIVATE = ".kfbak";
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
 
     /** Copies the item's file and its description in the background (never slows the app down). */
@@ -42,10 +44,50 @@ final class Backup {
             public void run() {
                 try {
                     File f = new File(it.path);
-                    write(app, f.getName(), new FileInputStream(f), mime(f.getName()));
+                    // kept private: saved as ".kfbak" (not a picture or song to the phone), so the photos and voices
+                    // of the library never show up in the gallery or the music player
+                    write(app, f.getName() + PRIVATE, new FileInputStream(f), "application/octet-stream");
                     write(app, f.getName() + ".json", new java.io.ByteArrayInputStream(Library.describe(it).getBytes("UTF-8")), "application/json");
                 } catch (Throwable ignored) {
                     // the library inside the app is still complete; the backup is an extra
+                }
+            }
+        });
+    }
+
+    /**
+     * Older versions backed up the library as ordinary pictures and sounds, which galleries show. This moves
+     * those copies (the app's own files only) to the private form once, in the background.
+     */
+    static void privatizeOld(final Context ctx) {
+        if (Build.VERSION.SDK_INT < 29) return;
+        final Context app = ctx.getApplicationContext();
+        IO.execute(new Runnable() {
+            public void run() {
+                try {
+                    ContentResolver cr = app.getContentResolver();
+                    Uri base = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                    Cursor c = cr.query(base, new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE},
+                            MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?", new String[]{Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER + "%"}, null);
+                    if (c == null) return;
+                    List<Object[]> old = new ArrayList<Object[]>();
+                    try {
+                        while (c.moveToNext()) {
+                            String name = c.getString(1), mime = c.getString(2);
+                            if (name == null || name.endsWith(PRIVATE) || name.endsWith(".json")) continue;
+                            if (mime == null || !(mime.startsWith("image/") || mime.startsWith("audio/"))) continue;
+                            old.add(new Object[]{c.getLong(0), name});
+                        }
+                    } finally {
+                        c.close();
+                    }
+                    for (Object[] o : old) {
+                        Uri u = android.content.ContentUris.withAppendedId(base, (Long) o[0]);
+                        write(app, o[1] + PRIVATE, cr.openInputStream(u), "application/octet-stream");
+                        cr.delete(u, null, null);
+                    }
+                } catch (Throwable ignored) {
+                    // not ours to move, or no access: the copies simply stay where they are
                 }
             }
         });
@@ -79,6 +121,7 @@ final class Backup {
             }
             File d = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER);
             d.mkdirs();
+            try { new File(d, ".nomedia").createNewFile(); } catch (Exception ignored) {}
             Project.copy(in, new java.io.FileOutputStream(new File(d, name)));
         }
     }
@@ -109,7 +152,8 @@ final class Backup {
             if (d == null) continue;
             String id = Json.str(d, "id", ""), file = Json.str(d, "file", "");
             if (id.length() == 0 || have.contains(id)) continue;
-            Uri media = files.get(file);
+            Uri media = files.get(file + PRIVATE);
+            if (media == null) media = files.get(file);          // backups made by older versions
             if (media == null) continue;
             String ext = file.contains(".") ? file.substring(file.lastIndexOf('.')) : ".bin";
             byte[] data = Project.readAll(cr.openInputStream(media));

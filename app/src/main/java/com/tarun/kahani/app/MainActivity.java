@@ -120,6 +120,8 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() { try { AutoLibrary.adoptOldStories(app, library); } catch (Throwable ignored) {} }
         }, "adopt-old-stories").start();
+        // library copies saved by older versions as plain photos: made private once, out of the gallery
+        if (!"1".equals(Prefs.get(this, "privateBackup", "0"))) { Backup.privatizeOld(this); Prefs.put(this, "privateBackup", "1"); }
         if (b != null) {
             String pd = b.getString("project");
             if (pd != null && new File(pd).isDirectory()) project = new Project(new File(pd));
@@ -1692,9 +1694,7 @@ public class MainActivity extends Activity {
             r.setGravity(Gravity.CENTER_VERTICAL);
             r.addView(Ui.text(this, f.title + (f.seconds > 0 ? " (" + Math.round(f.seconds) + "s)" : ""), 13, Ui.TEXT, false),
                     new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() {
-                public void onClick(View v) { Picker.play(MainActivity.this, f.url); }
-            }));
+            r.addView(Picker.controls(this, f.url));
             r.addView(Ui.small(this, "Choose", Ui.GREEN, new View.OnClickListener() {
                 public void onClick(View v) { Picker.stop(); d[0].dismiss(); downloadSound(f, query); }
             }));
@@ -1855,9 +1855,7 @@ public class MainActivity extends Activity {
             });
             r.addView(rec);
             if (file.exists()) {
-                r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() {
-                    public void onClick(View v) { Picker.play(MainActivity.this, file.getAbsolutePath()); }
-                }));
+                r.addView(Picker.controls(this, file.getAbsolutePath()));
                 r.addView(Ui.small(this, "✖", Ui.SUB, new View.OnClickListener() {
                     public void onClick(View v) { file.delete(); showLines(); }
                 }));
@@ -2389,9 +2387,7 @@ public class MainActivity extends Activity {
             cb.setText(c.shown() + "  →  🎙 " + it.label() + "\n" + (fits.length() > 0 ? "fits: " + fits + "  •  " : "") + (sc >= 0.85f ? "good match" : "possible match"));
             cb.setTextSize(14);
             r.addView(cb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() {
-                public void onClick(View v) { Picker.play(MainActivity.this, it.path); }
-            }));
+            r.addView(Picker.controls(this, it.path));
             body.addView(r);
             rowsC.add(c);
             rowsV.add(it);
@@ -2580,10 +2576,22 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 new AlertDialog.Builder(MainActivity.this).setTitle("Stop?").setMessage("The film being made will stop.")
                         .setPositiveButton("Yes, stop", new DialogInterface.OnClickListener() {
-                            public void onClick(DialogInterface d, int w) { FilmJob j = FilmJob.current; if (j != null) j.cancel(); }
+                            public void onClick(DialogInterface d, int w) { FilmJob j = FilmJob.current; if (j != null) { j.cancel(); j.pause(false); } }
                         }).setNegativeButton("No", null).show();
             }
         });
+        final Button pause = Ui.button(this, "⏸  Pause", Ui.BLUE, null);
+        pause.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                FilmJob j = FilmJob.current;
+                if (j == null) return;
+                j.pause(!j.paused);
+                pause.setText(j.paused ? "▶  Resume" : "⏸  Pause");
+            }
+        });
+        FilmJob cur = FilmJob.current;
+        if (cur != null && cur.paused) pause.setText("▶  Resume");
+        c.addView(pause);
         c.addView(stop);
         body.addView(c);
         ui.post(new Runnable() {
@@ -2591,8 +2599,8 @@ public class MainActivity extends Activity {
                 if (screen != S_PROGRESS) return;
                 FilmJob j = FilmJob.current;
                 if (j == null) { showStory(); return; }
-                stage.setText(j.stage);
-                eta.setText(j.eta());
+                stage.setText(j.paused ? "⏸ Paused — tap Resume to carry on" : j.stage);
+                eta.setText(j.paused ? "" : j.eta());
                 bar.setProgress((int) (j.progress * 1000));
                 if (j.preview != null) preview.setImageBitmap(j.preview);
                 if (j.warning.length() > 0) warn.setText("⚠ " + j.warning);
@@ -2609,6 +2617,7 @@ public class MainActivity extends Activity {
                     stage.setText(j.failed ? "❌ The film could not be made" : "Stopped");
                     eta.setText("");
                     if (j.failed) warn.setText(j.error);
+                    pause.setVisibility(View.GONE);
                     stop.setText("← Back");
                     stop.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showStory(); } });
                     return;
@@ -2892,7 +2901,7 @@ public class MainActivity extends Activity {
                     sub = "\n" + it.meta("vdesc");
                 }
                 r.addView(Ui.text(this, it.label() + (it.builtIn ? "  (app)" : "") + sub, 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-                r.addView(Ui.small(this, "▶", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { Picker.play(MainActivity.this, it.path); } }));
+                if (!it.path.startsWith("preset:")) r.addView(Picker.controls(this, it.path));
                 if (!it.builtIn && Library.SOUND.equals(it.type)) r.addView(Ui.small(this, "✎", Ui.GREEN, new View.OnClickListener() {
                     public void onClick(View v) { describeSound(it, new Runnable() { public void run() { showLibrary(); } }); }
                 }));

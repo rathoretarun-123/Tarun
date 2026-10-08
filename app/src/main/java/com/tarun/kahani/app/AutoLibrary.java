@@ -3,9 +3,11 @@ package com.tarun.kahani.app;
 import android.content.Context;
 
 import com.tarun.kahani.core.Bible;
+import com.tarun.kahani.core.Cloud;
 import com.tarun.kahani.core.PicSense;
 import com.tarun.kahani.core.ScriptAI;
 import com.tarun.kahani.core.ScriptParser;
+import com.tarun.kahani.core.ShotBook;
 import com.tarun.kahani.core.Story;
 import com.tarun.kahani.core.Txt;
 import com.tarun.kahani.core.VoiceMatch;
@@ -34,7 +36,9 @@ final class AutoLibrary {
         Library lib = Library.get(ctx);
         List<String> notes = new ArrayList<String>();
         try { adoptOldStories(ctx, lib); } catch (Throwable ignored) {}
-        try { pictures(lib, project, st, notes); } catch (Throwable ignored) {}
+        Cloud cloud = null;
+        try { if (Prefs.online(ctx)) cloud = Prefs.cloud(ctx); } catch (Throwable ignored) {}
+        try { pictures(lib, project, st, notes, cloud); } catch (Throwable ignored) {}
         try { voices(lib, project, st, notes); } catch (Throwable ignored) {}
         StringBuilder b = new StringBuilder();
         for (String n : notes) b.append(b.length() > 0 ? ", " : "").append(n);
@@ -63,6 +67,23 @@ final class AutoLibrary {
             for (Story.Scene sc : st.scenes) if (placeOf(sc, p[0]) && !haveScene.contains(String.valueOf(sc.number))) needed = true;
             if (needed) t.add(new String[]{"place:" + p[0], st.shown(p[0]), p[1]});
         }
+        // insert shots: an object the action of a scene is about (a mirror, a bell, a letter) can be shown in
+        // close-up from a library picture of it
+        Set<String> haveShot = new HashSet<String>();
+        for (String l : project.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 4 && f[0].equals("shot")) for (String k : f[2].split(",")) haveShot.add(f[1] + ":" + k.trim());
+        }
+        Set<String> objSeen = new HashSet<String>();
+        for (Story.Scene sc : st.scenes) {
+            for (Story.Beat bt : sc.beats) {
+                if (bt.type != Story.Beat.DIRECTION) continue;          // what is done, not what is said
+                for (String o : ShotBook.OBJECTS) {
+                    if (!Txt.has(bt.text, o) || haveShot.contains(sc.number + ":" + o) || !objSeen.add(sc.number + ":" + o)) continue;
+                    t.add(new String[]{"shot:" + sc.number + ":" + o, o + " (scene " + sc.number + ")", "close-up insert shot of the " + o + ": " + Bible.oneLine(bt.text)});
+                }
+            }
+        }
         if (!title) t.add(new String[]{"title", "Title page", "title picture / movie poster of " + st.title});
         if (!end) t.add(new String[]{"end", "End page", "ending picture, calm landscape, sunset, the end"});
         return t;
@@ -74,7 +95,10 @@ final class AutoLibrary {
         return Bible.similar(place, first) || Txt.norm(first).contains(Txt.norm(place)) || Bible.similar(Bible.firstClauseOf(first), place);
     }
 
-    static void pictures(Library lib, Project project, Story st, List<String> notes) throws Exception {
+    /** How many library pictures the AI may look at per film (each takes a few seconds online). */
+    static final int VISION_LOOKS = 30;
+
+    static void pictures(Library lib, Project project, Story st, List<String> notes, Cloud cloud) throws Exception {
         List<String[]> targets = missingTargets(project, st);
         if (targets.isEmpty()) return;
         // every name in the story: a picture named after someone (or somewhere) else is theirs, not a look-alike
@@ -119,7 +143,41 @@ final class AutoLibrary {
                 s = Math.max(s, PicSense.textMatch(it.name + " " + it.tags, targets.get(t)[1], targets.get(t)[2]));
                 if (byName != null && byName.equals(targets.get(t)[1])) s = 1f;
                 if ((tg.equals("title") || tg.equals("end")) && byName == null) s = Math.min(s, 0.5f);   // only when named so
+                if (tg.startsWith("shot:") && "person".equals(it.kind)) s = 0;                          // a character is not an object
                 score[i][t] = s;
+            }
+        }
+        // online: the AI looks at the pictures the offline analysis is unsure about (unnamed photos above all) and
+        // says whom or what each shows; its answer is remembered with the picture, so it is asked only once
+        if (cloud != null) {
+            List<String[]> cands = new ArrayList<String[]>();
+            for (String[] t : targets) cands.add(new String[]{t[1], t[2]});
+            int looks = 0;
+            for (int i = 0; i < pics.size() && looks < VISION_LOOKS; i++) {
+                Library.Item it = pics.get(i);
+                float top = 0;
+                for (int t = 0; t < targets.size(); t++) top = Math.max(top, score[i][t]);
+                if (top >= 0.95f) continue;
+                String key = "ai:" + Integer.toHexString(labels.toString().hashCode());
+                String known = it.meta(key);
+                if (known == null) {
+                    byte[] small = shrink(Project.readAll(lib.open(it)), 640);
+                    if (small == null) continue;
+                    looks++;
+                    try {
+                        ScriptAI.Seen seen = ScriptAI.look(cloud, small, cands);
+                        if (seen.caption.length() > 0 && !it.tags.contains(seen.caption)) it.tags = (it.tags + ", " + seen.caption).replaceAll("^, ", "");
+                        if (seen.realPhoto) it.setMeta("realphoto", "1");
+                        known = seen.match == null ? "-" : seen.match;
+                        it.setMeta(key, known);
+                    } catch (Exception e) {
+                        break;      // offline after all: the offline analysis decides
+                    }
+                }
+                for (int t = 0; t < targets.size(); t++) {
+                    if (targets.get(t)[1].equals(known)) score[i][t] = Math.max(score[i][t], 0.95f);
+                    else if (it.tags.length() > 0) score[i][t] = Math.max(score[i][t], PicSense.textMatch(it.tags, targets.get(t)[1], targets.get(t)[2]));
+                }
             }
         }
         lib.save();
@@ -132,6 +190,9 @@ final class AutoLibrary {
             if (t[0].startsWith("char:")) {
                 String key = t[0].substring(5);
                 project.setManifest("char", key, "char|" + key + "|" + f);
+            } else if (t[0].startsWith("shot:")) {
+                String[] sk = t[0].split(":", 3);
+                project.setManifest("shot", sk[1] + ":" + sk[2], "shot|" + sk[1] + "|" + sk[2] + "|" + f);
             } else if (t[0].equals("title") || t[0].equals("end")) {
                 project.setManifest(t[0], t[0], t[0] + "|" + f + "|1");
             } else {
@@ -151,6 +212,8 @@ final class AutoLibrary {
             notes.add(t[1] + " ← picture \"" + it.label() + "\"");
         }
     }
+
+    static byte[] shrink(byte[] data, int max) { return MainActivity.shrink(data, max); }
 
     // ------------------------------------------------------------------ voices
 

@@ -222,6 +222,14 @@ public final class LookDesigner {
         l.hair = Look.H_NONE;
         l.outfit = -1;
         l.female = Txt.has(all, "मादा", "चिड़िया", "बिल्ली", "गाय", "बकरी", "मुर्गी", "she ", " her ");
+        // a robot animal: metal where the fur would be, screens for eyes
+        l.robot = wordIn(all, "robot") || wordIn(all, "रोबोट") || wordIn(all, "रोबो") || wordIn(all, "robo") || Txt.has(all, "robot dog", "robo-dog", "mechanical dog");
+        if (l.robot && cols.isEmpty()) { l.furColor = 0xFFB0B8C4; l.skin = 0xFFDDE3EA; }
+        // a little jacket and a bandana (a dog's, a monkey's)
+        String clothes = sentenceWith(all, "jacket", "जैकेट", "बंडी", "कोट", "sweater", "स्वेटर");
+        if (clothes.length() > 0) { l.outfit = Look.O_JACKET; List<Integer> jc = colorsIn(clothes); if (!jc.isEmpty()) l.primary = jc.get(0); }
+        String band = sentenceWith(all, "bandana", "रुमाल", "scarf", "गले में");
+        if (band.length() > 0) { List<Integer> bc = colorsIn(band.substring(Math.max(0, Txt.firstIndex(band, "गले", "bandana", "रुमाल", "scarf")))); if (!bc.isEmpty()) l.secondary = bc.get(0); }
     }
 
     public static Look design(Story.CharacterDef c, Look base) {
@@ -233,18 +241,24 @@ public final class LookDesigner {
         Look l = base != null ? base.copy() : new Look();
 
         // ---- kind
-        boolean monster = Txt.has(all, "राक्षस", "दानव", "दैत्य", "असुर", "monster", "demon", "ogre");
-        boolean witch = Txt.has(all, "चुड़ैल", "डायन", "witch", "जादूगरनी");
+        // whole words only: a "डायनासोर" (dinosaur) on a t-shirt is no "डायन" (witch), a "switch" no witch
+        boolean monster = wordIn(all, "राक्षस") || wordIn(all, "दानव") || wordIn(all, "दैत्य") || wordIn(all, "असुर") || wordIn(all, "monster") || wordIn(all, "demon") || wordIn(all, "ogre");
+        boolean witch = wordIn(all, "चुड़ैल") || wordIn(all, "डायन") || wordIn(all, "witch") || wordIn(all, "जादूगरनी")
+                || (c.role != null && (wordIn(c.role, "witch") || wordIn(c.role, "डायन") || wordIn(c.role, "चुड़ैल")));
         boolean monkey = Txt.has(all, "बंदर", "वानर", "मकाक", "monkey", "macaque");
         int species = monkey ? -1 : speciesOf(c.fullName + " " + c.description);
         String noPrincess = Txt.norm(all).replace(Txt.norm("राजकुमारी"), "");
         int fem = 0, mal = 0;
         String[] femW = {"राजकुमारी", "रानी", "लड़की", "बेटी", "सहेली", "माँ", "दादी", "नानी", "बहन", "दीदी", "बिंदी", "साड़ी",
-                "लहंगा", "घाघरा", "चोली", "सिंदूर", "चूड़ि", "princess", "queen", "girl", "woman", "mother", "lady", "aunt", "आंटी", "she ", " her "};
+                "लहंगा", "घाघरा", "चोली", "सिंदूर", "चूड़ि", "princess", "queen", "girl", "woman", "mother", "lady", "aunt", "आंटी", "she ", " her ",
+                "गोरी", "दुबली", "मोटी", "सुंदरी", "बहादुर लड़की", "sister", "daughter", "grandmother", "बुआ", "मौसी", "चाची", "मैडम", "madam", "miss "};
         String[] malW = {"राजा", "राजकुमार", "लड़का", "बेटा", "पिता", "दादा", "भाई", "भैया", "गार्ड", "सिपाही", "सैनिक", "मूँछ", "मूंछ",
-                "दाढ़ी", "पगड़ी", "अचकन", "king", "prince", "boy", "man ", "father", "guard", "soldier", " he ", " his "};
+                "दाढ़ी", "पगड़ी", "अचकन", "king", "prince", "boy", "man ", "father", "guard", "soldier", " he ", " his ",
+                "गोरा ", "दुबला", "मोटा", "mister", "मिस्टर", "sir ", "uncle", "अंकल", "चाचा", "मामा", "grandfather", "brother", "son "};
         for (String w : femW) if (Txt.has(all, w)) fem++;
         for (String w : malW) if (noPrincess.contains(Txt.norm(w))) mal++;
+        // the script's own verbs decide a tie ("निकालती है" is a she, "दौड़ता है" a he)
+        if (c.genderHint > 0) fem += fem == mal ? 1 : 0; else if (c.genderHint < 0) mal += fem == mal ? 1 : 0;
         int age = c.age;
         boolean old = Txt.has(all, "बूढ़", "बुज़ुर्ग", "old ", "elderly") || age >= 60;
 
@@ -263,6 +277,8 @@ public final class LookDesigner {
                 else l.kind = l.female ? Look.WOMAN : Look.MAN;
             }
             l.hero = !(monster || witch || Txt.has(all, "दुष्ट", "खलनायक", "villain", "evil", "चालाक", "धूर्त", "cunning"));
+            // the role after the name says which side they are on ("The Corporate Rakshas", "AI Witch"), without changing what they are
+            if (c.role != null && Txt.has(c.role, "राक्षस", "rakshas", "villain", "witch", "डायन", "चुड़ैल", "evil", "thief", "चोर", "dark lord", "demon", "boss", "khalnayak")) l.hero = false;
             if (species == Look.SP_FOX || species == Look.SP_WOLF) l.hero = !Txt.has(all, "चालाक", "धूर्त", "दुष्ट", "cunning", "wicked", "sly") && l.hero;
         }
 
@@ -307,9 +323,10 @@ public final class LookDesigner {
         }
 
         // ---- hair
-        String hairS = sentenceWith(face, "बाल", "चोटी", "चोटि", "hair", "braid", "जूड़ा");
+        String hairS = sentenceWith(face, "बाल", "चोटी", "चोटि", "hair", "braid", "जूड़ा", "ponytail", "पोनीटेल", "bun");
         l.curly = Txt.has(hairS, "घुंघराले", "घुँघराले", "curly");
         if (Txt.has(hairS, "दो चोटि", "दो साधारण चोटि", "two braids", "pigtail")) l.hair = Look.H_PIGTAILS;
+        else if (Txt.has(hairS, "ponytail", "पोनीटेल", "पोनी")) l.hair = Look.H_PONYTAIL;
         else if (Txt.has(hairS, "चोटी", "braid")) l.hair = Look.H_BRAID;
         else if (Txt.has(hairS, "जूड़ा", "bun")) l.hair = Look.H_BUN;
         else if (base == null) {
@@ -351,8 +368,13 @@ public final class LookDesigner {
             l.eyeColor = Txt.has(eyeS, "लाल") ? 0xFFFF5A1F : Txt.has(eyeS, "हरी") ? 0xFFB8E04A : ec.get(0);
         } else if (Txt.has(eyeS, "बादामी", "hazel")) l.eyeColor = 0xFF6B4423;
 
-        // ---- outfit
-        if (Txt.has(clothes, "घाघरा", "लहंगा", "lehenga", "ghagra")) l.outfit = Look.O_LEHENGA;
+        // ---- outfit (today's clothes first: a hoodie, a t-shirt, a suit, a coat, jeans)
+        if (Txt.has(clothes, "trench", "overcoat", "ओवरकोट", "long coat", "लंबा कोट", "coat", "कोट")) l.outfit = Look.O_COAT;
+        else if (Txt.has(clothes, "hoodie", "हुडी", "हूडी", "sweatshirt")) l.outfit = Look.O_HOODIE;
+        else if (Txt.has(clothes, "t-shirt", "tshirt", "टी-शर्ट", "टीशर्ट", "tee ", "shorts", "हाफ पैंट", "निकर")) l.outfit = Look.O_TSHIRT;
+        else if (Txt.has(clothes, "suit", "सूट", "blazer", "ब्लेज़र", "tuxedo", "formal")) l.outfit = Look.O_SUIT;
+        else if (Txt.has(clothes, "jeans", "जींस", "जीन्स", "trousers", "pants", "पैंट", "denim")) l.outfit = Look.O_JEANS;
+        else if (Txt.has(clothes, "घाघरा", "लहंगा", "lehenga", "ghagra")) l.outfit = Look.O_LEHENGA;
         else if (Txt.has(clothes, "साड़ी", "saree", "sari")) l.outfit = Look.O_SAREE;
         else if (Txt.has(clothes, "सलवार", "salwar")) l.outfit = Look.O_SALWAR;
         else if (Txt.has(clothes, "अचकन", "शेरवानी", "achkan", "sherwani")) l.outfit = Look.O_ACHKAN;
@@ -373,7 +395,7 @@ public final class LookDesigner {
             }
         }
         String firstClothes = sentenceWith(clothes.replaceFirst("^[^:]*:", ""), "रंग", "का", "की", "colour", "color", "वर्दी", "पोशाक",
-                "लबादा", "कवच", "बंडी", "साड़ी", "अचकन");
+                "लबादा", "कवच", "बंडी", "साड़ी", "अचकन", "hoodie", "t-shirt", "suit", "coat", "kurta");
         List<Integer> cc = colorsIn(firstClothes);
         if (cc.isEmpty()) cc = colorsIn(clothes);
         if (!cc.isEmpty()) {
@@ -393,14 +415,27 @@ public final class LookDesigner {
             List<Integer> bc = colorsIn(band.length() > 0 ? band.substring(Math.max(0, Txt.firstIndex(band, "गले", "रुमाल", "bandana"))) : "");
             l.secondary = bc.isEmpty() ? 0xFFF2C230 : bc.get(0);
         }
-        String shoeS = sentenceWith(clothes, "जूति", "जूते", "shoes", "juti");
+        String shoeS = sentenceWith(clothes, "जूति", "जूते", "shoes", "juti", "sneakers", "स्नीकर", "boots", "बूट", "sandals", "चप्पल");
         List<Integer> sc = colorsIn(shoeS);
         if (!sc.isEmpty()) l.shoeColor = sc.get(0);
+        l.lightShoes = Txt.has(shoeS, "लाइट", "light", "led", "चमक", "glow");
+        // ---- glasses, gadgets, little lights
+        String glassS = sentenceWith(face + "\n" + clothes, "चश्म", "glass", "spectacle", "specs", "goggle", "visor");
+        if (glassS.length() > 0) {
+            l.glasses = Txt.has(glassS, "AR glass", "ar glass", "काला चश्मा", "dark glass", "sunglass", "goggle", "visor", "काले चश्म", "black glass") ? 2 : 1;
+            l.glowGlasses = l.glasses == 2 && Txt.has(glassS, "चमक", "glow", "लाल");
+        }
+        if (Txt.has(all, "controller", "कंट्रोलर", "joystick", "जॉयस्टिक", "gamepad")) l.gadget = Look.GD_CONTROLLER;
+        else if (wordIn(all, "iphone") || wordIn(all, "phone") || wordIn(all, "फ़ोन") || wordIn(all, "फोन") || wordIn(all, "मोबाइल") || wordIn(all, "mobile") || wordIn(all, "smartphone")) l.gadget = Look.GD_PHONE;
+        else if (Txt.has(all, "laptop", "लैपटॉप", "tablet", "टैबलेट")) l.gadget = Look.GD_LAPTOP;
+        if (Txt.has(all, "selfie stick", "सेल्फी स्टिक", "सेल्फी-स्टिक")) { l.wand = true; l.techWand = true; }
+        l.ledClip = Txt.has(all, "LED क्लिप", "led clip", "hair light", "बालों में लाइट", "चमकती क्लिप");
+        l.earphones = Txt.has(all, "earphone", "ईयरफोन", "headphone", "हेडफोन", "earbuds");
 
         // ---- headwear
         String headS = sentenceWith(all, "पगड़ी", "साफ़ा", "साफा", "turban", "टोपी", "hat", "cap", "मुकुट", "crown", "पल्लू", "घूँघट", "सींग", "horns");
         // a cap (a guard's or a soldier's) comes off and goes on like a turban; a witch's hat stays her own
-        boolean cap = Txt.has(headS, "टोपी", "cap", "topi") && l.kind != Look.WITCH;
+        boolean cap = Txt.has(headS, "टोपी", "cap", "topi") && l.kind != Look.WITCH && !Txt.has(headS, "hoodie cap", "hood");
         if (Txt.has(headS, "पगड़ी", "साफ़ा", "साफा", "turban", "pagdi", "pagri") || cap) {
             l.headwear = Look.HW_TURBAN;
             String ts = headS.substring(Math.max(0, Txt.firstIndex(headS, "पगड़ी", "turban", "साफ", "टोपी", "cap") - 30));
@@ -413,6 +448,7 @@ public final class LookDesigner {
             l.kalgi = Txt.has(headS, "कलगी", "plume", "रत्नजड़ित");
         } else if (Txt.has(headS, "मुकुट", "crown")) l.headwear = Look.HW_CROWN;
         else if (Txt.has(headS, "सींग", "horns")) l.headwear = Look.HW_HORNS;
+        else if (Txt.has(all, "hoodie cap", "hood ", "हुड", "hooded", "hood,", "hood.", "hood up")) l.headwear = Look.HW_HOOD;
         else if (Txt.has(headS, "टोपी", "hat") && l.kind == Look.WITCH) l.headwear = Look.HW_WITCH_HAT;
         else if (Txt.has(headS, "पल्लू", "घूँघट", "दुपट्टा")) l.headwear = Look.HW_PALLU;
         else if (base == null && l.kind == Look.WITCH) l.headwear = Look.HW_WITCH_HAT;

@@ -56,8 +56,8 @@ public final class PixarLead {
                     "face in the centre 70% circle"),
             new Format("INSTA_PORTRAIT_4_5", "4:5", "Instagram portrait 4:5", 0.8f, 1080, 1350, 0.15f, 0.12f, 0.15f, 0.45f, 0.60f, 0.70f, "50mm",
                     "face in the centre 70%"),
-            new Format("CINEMA_2_39_1", "2.39:1", "Cinema — 2.39:1 widescreen", 2.39f, 1920, 804, 0.15f, 0.05f, 0.10f, 0.38f, 0.60f, 0.80f, "85mm",
-                    "letterbox, never a crop of heads"),
+            new Format("CINEMA_2_39_1", "2.39:1", "Cinema — 2.39:1 widescreen", 2.39f, 1920, 804, 0.20f, 0.05f, 0.10f, 0.38f, 0.60f, 0.80f, "85mm",
+                    "letterbox black bars top and bottom, 20% empty on top, never a crop of heads"),
     };
 
     public static final Format THUMBNAIL = new Format("THUMBNAIL_16_9", "16:9", "Thumbnail 16:9", 16 / 9f, 1280, 720, 0.08f, 0.15f, 0.10f, 0.42f, 0.60f, 0.60f, "85mm",
@@ -82,12 +82,33 @@ public final class PixarLead {
     // ================================================================== the story engine
 
     public static final String[] STORY_RULES = {
-            "R1: You admire a character for trying more than for their successes.",
+            "R1: You admire a character for trying more than for their successes. (Show trying, not winning.)",
+            "R2: Keep in mind what is interesting to the audience, not what is fun to make.",
+            "R3: You only know the theme at the end — so the ending shot is made first (the director reads the last scene before the first).",
             "R4: Once upon a time there was ___. Every day, ___. One day ___. Because of that, ___. Because of that, ___. Until finally ___.",
             "R5: Simplify. Focus. Combine characters. Hop over detours. At most 4 characters per 60 seconds.",
+            "R6: What is your hero good at? Give them the opposite problem.",
             "R7: Come up with your ending before you figure out your middle.",
-            "R13: Give your characters opinions. Passive / malleable might seem likable to you as you write, but it's poison.",
+            "R12: The first idea is the obvious one; throw it away. The sixth is good.",
+            "R13: Give your characters opinions. Not \"okay\" — \"I will not go\" or \"I must go\".",
+            "R15: How would you feel if you were that character? Make the feeling honest.",
+            "R16: What is at stake? Show the risk of failing.",
             "R19: Coincidences to get characters into trouble are great; coincidences to get them out of it are cheating."};
+
+    /** Disney's numbers, hardcoded: squash to 80 % on landing, stretch to 120 % on take-off, 24 frames for a heavy lift, 6 for a light flower, 150 % exaggeration. */
+    public static final float SQUASH = 0.8f, STRETCH = 1.2f, EXAGGERATION = 1.5f;
+    public static final int FRAMES_HEAVY = 24, FRAMES_LIGHT = 6;
+
+    /** The final checklist before export (the "PIXAR IS THE BOSS" rules), answered by the app in the descriptions. */
+    public static final String[] CHECKLIST = {
+            "Is the picture in the correct width x height for the format?",
+            "Is the face the same as the lock sheet, not long or wide?",
+            "Is the head not cut, with some empty space on top?",
+            "Are the feet visible with a shadow?",
+            "Is the face inside the safe zone?",
+            "Is the background static and not moving?",
+            "Was the format set as a number setting, not a word?",
+            "Was the picture made native size, never stretched from another size?"};
 
     static final String[] TROUBLE = {"नफरत", "कैद", "अपहरण", "गायब", "खतरा", "डर", "चोरी", "चुरा", "हमला", "शाप", "जाल", "धोखा", "बीमार", "खो ", "खो गया", "खो गई",
             "भाग गया", "तूफ़ान", "तूफान", "बाढ़", "आग लग", "राक्षस", "चुड़ैल", "दुश्मन", "शत्रु", "hate", "kidnap", "danger", "fear", "steal", "stole", "attack",
@@ -102,6 +123,7 @@ public final class PixarLead {
         Story.CharacterDef best = null;
         int bestN = -1;
         for (Story.CharacterDef c : st.characters) {
+            if (c.voiceOnly) continue;
             int n = 0;
             for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.type == Story.Beat.DIALOGUE && b.speaker == c) n++;
             if (n > bestN) { bestN = n; best = c; }
@@ -175,8 +197,8 @@ public final class PixarLead {
 
     // ================================================================== the Braintrust loop
 
-    public static final String[] BRAINTRUST_QUESTIONS = {"Is the story clear without dialogue?", "Does the character have a strong opinion?",
-            "Is there a ma pause (a quiet moment)?", "Is the costume culturally accurate?"};
+    public static final String[] BRAINTRUST_QUESTIONS = {"Is the story clear without dialogue?", "Does the character have a strong opinion (trying hard)?",
+            "Is there a ma pause (a quiet moment)?", "Is the costume culturally accurate?", "Is the face the same as the lock sheet?"};
     public static final String AUTHORITY = "AUTHORITY: the Braintrust suggests only; the director decides.";
 
     /** Words of will and opinion in a line (R13). */
@@ -206,7 +228,7 @@ public final class PixarLead {
         List<Film.Shot> shots = film.shots;
         // costume (Q4), once per character
         List<String> plain = new ArrayList<String>();
-        for (Story.CharacterDef c : st.characters) {
+        for (Story.CharacterDef c : st.cast()) {
             r.costumeTotal++;
             if (costumeCultural(c.description)) r.costumeOk++; else plain.add(c.shown());
         }
@@ -248,6 +270,7 @@ public final class PixarLead {
         b.append(String.format(Locale.US, "• Q3 a ma pause (quiet moment): %d of %d rounds%n", r.ma, r.windows));
         b.append(String.format(Locale.US, "• Q4 costume culturally accurate (real garment names): %d of %d characters%s%n", r.costumeOk, r.costumeTotal,
                 plain.isEmpty() ? "" : " — generic: " + join(plain) + " (name the real garment: ghagra-choli, Banarasi saree, achkan…)"));
+        b.append("• Q5 the face is the same as the lock sheet: yes — every character keeps one picture (its lock sheet) for the whole film; the face layer is cut from it, never redrawn\n");
         b.append("• R5 at most four characters per 60 s: ").append(r.crowded.isEmpty() ? "yes" : "no — " + join(r.crowded) + " (the director keeps every shot on one or two of them; combining characters is the writer's call)").append('\n');
         for (String n : r.notes) b.append("• suggestion: ").append(n).append('\n');
         r.text = b.toString();
@@ -277,7 +300,10 @@ public final class PixarLead {
         if (set == Sets.CAVE_IN || set == Sets.CAVE_MOUTH) { k.dir = -0.6f; k.color = 0xFF9BE89B; k.strength = 0.55f; k.name = "Key: green-tinted shaft of light from the cave mouth, top left"; k.bounce = "Bounce: very low, from the wet cave floor"; }
         else if (tod == Sets.MORNING) { k.dir = -1; k.color = 0xFFFFE2A8; k.strength = 0.7f; k.name = "Key: warm low sun from the left, 30 deg"; k.bounce = "Bounce: soft sky light from the right"; }
         else if (tod == Sets.EVENING) { k.dir = 1; k.color = 0xFFFFB070; k.strength = 0.8f; k.name = "Key: orange sunset from the right, 15 deg"; k.bounce = "Bounce: purple sky from the left"; }
+        else if (tod == Sets.NIGHT && (set == Sets.ROOFTOP || set == Sets.STREET)) { k.dir = -0.5f; k.color = 0xFFB388FF; k.strength = 0.4f; k.name = "Key: the city's neon glow, left"; k.bounce = "Bounce: cyan from the solar flowers and the signs"; }
         else if (tod == Sets.NIGHT) { k.dir = 0.6f; k.color = 0xFF9FB4E8; k.strength = 0.35f; k.name = "Key: cool moonlight, top right"; k.bounce = "Bounce: dim blue from the ground"; }
+        else if (set == Sets.BASEMENT) { k.dir = 0f; k.color = 0xFF8AFF9A; k.strength = 0.5f; k.name = "Key: a flickering green tubelight from above"; k.bounce = "Bounce: cold grey from the wet concrete"; }
+        else if (set == Sets.ROOM) { k.dir = 0.7f; k.color = 0xFFFFEFD2; k.strength = 0.55f; k.name = "Key: daylight from the window, right"; k.bounce = "Bounce: soft, from the wall"; }
         else if (set == Sets.HALL) { k.dir = -0.7f; k.color = 0xFFFFE8C8; k.strength = 0.6f; k.name = "Key: warm window light, top left 45 deg"; k.bounce = "Bounce: soft, from the marble floor"; }
         else { k.dir = -0.8f; k.color = 0xFFFFF0D0; k.strength = 0.6f; k.name = "Key: warm sun, top left 45 deg"; k.bounce = "Bounce: soft, from the ground"; }
         return k;
@@ -288,6 +314,9 @@ public final class PixarLead {
         out.warmth = 0.08f; out.saturation = 1.03f; out.contrast = 1f; out.bloom = 0.14f; out.green = 0;
         boolean cave = set == Sets.CAVE_IN || set == Sets.CAVE_MOUTH;
         if (cave) { out.warmth = -0.05f; out.green = 0.22f; out.saturation = 0.95f; out.contrast = 1.08f; out.bloom = 0.12f; }      // cave: green with orange accents
+        else if (set == Sets.BASEMENT) { out.warmth = -0.15f; out.green = 0.28f; out.saturation = 0.9f; out.contrast = 1.12f; out.bloom = 0.16f; }   // basement: sick green, deep shadows
+        else if (set == Sets.ROOFTOP && (tod == Sets.NIGHT || tod == Sets.EVENING)) { out.warmth = -0.3f; out.green = -0.06f; out.saturation = 1.12f; out.contrast = 1.05f; out.bloom = 0.24f; }   // neon night: blue-magenta, glowing
+        else if (set == Sets.ROOFTOP) { out.warmth = 0.12f; out.saturation = 1.06f; out.bloom = 0.18f; }                                   // a bright terrace
         else if (tod == Sets.NIGHT) { out.warmth = -0.42f; out.green = -0.04f; out.saturation = 0.9f; out.contrast = 1.04f; out.bloom = 0.16f; }   // night: blue
         else if (set == Sets.GARDEN || set == Sets.COURTYARD || set == Sets.GATE || set == Sets.VILLAGE || set == Sets.GENERIC_OUT) {
             out.warmth = 0.22f; out.saturation = 1.06f; out.bloom = 0.18f;                                                          // garden: warm yellow
@@ -324,7 +353,7 @@ public final class PixarLead {
 
     public static final int FPS_EXPERT = 24, FPS_LEARNER = 12, FPS_REBEL = 8;
     static final String[] REBEL = {"नटखट", "शरारती", "शैतान", "बागी", "विद्रोही", "mischie", "naughty", "rebel", "trickster", "cheeky"};
-    static final String[] LEARNER = {"सीख", "नई", "नया", "नन्ह", "learner", "learning", "beginner", "clumsy", "अनाड़ी"};
+    static final String[] LEARNER = {"सीख रह", "सीखने", "सीखती", "सीखता", "नौसिखि", "नन्ह", "learner", "learning", "beginner", "clumsy", "अनाड़ी", "trainee", "apprentice", "first time"};
     static final String[] EXPERT = {"तलवारबाज़", "तलवार", "योद्धा", "बहादुर", "निडर", "माहिर", "expert", "warrior", "brave", "skilled", "master", "सैनिक", "guard", "राजा", "king", "queen", "रानी"};
 
     /** The frame rate a character is animated on: experts move on ones (24), learners on twos (12), rebels on threes (8). */
@@ -399,7 +428,8 @@ public final class PixarLead {
     }
 
     /** The protocol in one line each, for the top of the descriptions and the QC screen. */
-    public static final String SUMMARY = "PIXAR-LEAD PROTOCOL v4.0 — PIXAR_LEAD = StorySpine + Braintrust + Deakins2Light + 12Principles + SafeZoneResizing[format] + AntiStretchValidation\n"
+    public static final String SUMMARY = "PIXAR-LEAD PROTOCOL v4.0 (refined and extended) — PIXAR_LEAD = StorySpine + Braintrust + Deakins2Light + 12Principles + SafeZoneResizing[format] + AntiStretchValidation\n"
+            + "Good film = Pixar story spine + Disney movement + real dust (Nolan) + quiet pause (Miyazaki) + real Indian dress (Narsimha) + same hero colour (Marvel) + song feeling (Gunn) + correct frame rate (Spider-Verse) + native size per format (never stretch).\n"
             + "Story engine: R1 trying over success, R4 the six-beat spine, R5 at most 4 characters per 60 s, R7 the ending first, R13 opinions, R19 no coincidence out of trouble.\n"
             + "Braintrust: every 5 shots — story clear without dialogue? strong opinion? a ma pause? costume culturally accurate? — suggestions only, the director decides.\n"
             + "Deakins: two lights only (key + bounce); one colour script per act — garden warm yellow, cave green and orange, night blue; the background dictates the colour.\n"

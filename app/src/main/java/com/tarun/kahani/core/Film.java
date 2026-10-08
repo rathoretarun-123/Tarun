@@ -120,7 +120,9 @@ public final class Film {
             G_ROAR = 37, G_BLOCK = 38, G_STEP_BACK = 39, G_OFFER = 40, G_HOLD_HAND = 41, G_BOW = 42, G_WAVE = 43, G_NOD = 44,
             G_TURN = 45, G_LOOK_AWAY = 46,
             G_HEAD_SCRATCH = 47,  // the comic beat (Russo / Gunn): a puzzled scratch of the head, a shrug
-            G_WEIGHT_SHIFT = 48;  // secondary action while idle: the weight moves from one foot to the other, a glance aside
+            G_WEIGHT_SHIFT = 48,  // secondary action while idle: the weight moves from one foot to the other, a glance aside
+            G_SHIELD_EYES = 49,   // an arm up against a blinding light, the head turned away
+            G_PULL = 50;          // a hard pull (a plug, a wire, a rope): lean back and yank
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;
@@ -176,7 +178,19 @@ public final class Film {
             FX_THROW = 25,        // a: thrower, b: target (or x, y); kind: what flies
             FX_FALL = 26,         // something falls from above at x (kind) and bounces
             FX_SEAT = 27,         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a
-            FX_SHADOW_PASS = 28;  // Gunn: one scary shadow sweeping over the ground in a funny scene (x = where it starts)
+            FX_SHADOW_PASS = 28,  // Gunn: one scary shadow sweeping over the ground in a funny scene (x = where it starts)
+            // the cues of any script (Cues): light, machines, little things that fly or spark
+            FX_GLOW_AREA = 29,    // lights come on across the stage (a garden of lamps or flowers lighting up); color = their colour
+            FX_TWINKLE = 30,      // small lights twinkling over an area around x, y
+            FX_FLICKER = 31,      // the light of the whole frame flickers
+            FX_LIGHTS_OFF = 32,   // the lights go out: the frame darkens and stays dark until t1
+            FX_GLITCH = 33,       // a digital glitch: bands of the picture slip, static
+            FX_DRONE = 34,        // a small drone flies about near actor a (or x, y)
+            FX_HEARTS = 35,       // little hearts rise above actor a
+            FX_NOTIFY = 36,       // a glowing notification card pops up above actor a
+            FX_DATA = 37,         // a stream of light particles flows from x, y away (data leaving)
+            FX_SPARKS = 38,       // electric sparks at x, y (near actor a's hands)
+            FX_STEAM = 39;        // steam or smoke rising at x, y
 
     public static final class Fx {
         public float t0, t1;
@@ -228,7 +242,25 @@ public final class Film {
             SFX_FANFARE = 22, SFX_END_CHORD = 23, SFX_MAGIC = 24, SFX_STEPS = 25, SFX_CROWD = 26, SFX_GLASS = 27, SFX_SWORD = 28,
             SFX_USER = 29, SFX_THUNDER = 30,
             SFX_STEPS_HARD = 31,  // Nolan: real sounds — steps on stone, marble, a cave floor
-            SFX_STEPS_RUN = 32;   // running steps
+            SFX_STEPS_RUN = 32,   // running steps
+            // the sounds of a city and of machines (synthesized), and the generic cue sounds of any script
+            SFX_HUM = 33,         // an electric hum (a tubelight, a server room)
+            SFX_TRAFFIC = 34,     // distant traffic
+            SFX_DRONE = 35,       // a drone's buzz passing
+            SFX_BEEP = 36,        // beeps (a robot, a device)
+            SFX_CLICK = 37,       // a click, a clack, a switch
+            SFX_TYPING = 38,      // keyboard typing
+            SFX_BUZZ = 39,        // a buzz / hum of an insect or a machine
+            SFX_GLITCH = 40,      // digital glitch, static
+            SFX_POWER_DOWN = 41,  // lights and machines going off
+            SFX_SPARK = 42,       // an electric spark, a wire pulled
+            SFX_HEARTBEAT = 43,   // a heartbeat (Gunn: scary = silence + heartbeat)
+            SFX_TWINKLE = 44,     // small lights twinkling
+            SFX_BLIP = 45,        // a notification pop
+            SFX_CRACKLE = 46,     // crackling (an old machine, fire, static)
+            SFX_HISS_SHORT = 47,  // a short hiss ("फूँ", "फुस्स")
+            SFX_TAP = 48,         // light taps ("टप-टप")
+            SFX_BOOM = 49;        // a boom, an explosion
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

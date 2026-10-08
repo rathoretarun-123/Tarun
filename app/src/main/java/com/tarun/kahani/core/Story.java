@@ -40,6 +40,12 @@ public final class Story {
         public boolean fromScript;   // false when invented for an unknown speaker
         public Look look;
         public String label;          // name as the user wrote it (Hinglish), or null
+        /** "The Coder Didi", "Robo-Dog": the role written after the name in the character list (never used for the look). */
+        public String role = "";
+        /** A voice only ("मधुर AI आवाज़", an announcer, a radio): heard, never standing on the stage. */
+        public boolean voiceOnly;
+        /** From the verbs the script uses for this character: +1 feminine forms, -1 masculine, 0 unknown. */
+        public int genderHint;
         public String shown() { return label != null ? label : displayName; }
         public String toString() { return displayName; }
     }
@@ -66,8 +72,17 @@ public final class Story {
         public String manner = "";       // text inside parentheses after speaker
         public String text = "";
         public boolean narrator;         // voice-over line (no character on screen)
+        /** Spoken from off-screen ("एल्गोरा की आवाज़ …:"): the speaker is heard, not brought on to the stage. */
+        public boolean offScreen;
         public String cue = "";          // nature cues read by the AI ("rain", "boat"…), not shown
         public static Beat direction(String t) { Beat b = new Beat(); b.type = DIRECTION; b.text = t; return b; }
+    }
+
+    /** The characters who stand in the film (voices from the air, a radio or a device are never pictured). */
+    public List<CharacterDef> cast() {
+        List<CharacterDef> out = new ArrayList<CharacterDef>();
+        for (CharacterDef c : characters) if (!c.voiceOnly) out.add(c);
+        return out;
     }
 
     public CharacterDef find(String id) {

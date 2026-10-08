@@ -10,11 +10,18 @@ public final class Look {
             SP_CROW = 20, SP_SPARROW = 21, SP_PARROT = 22, SP_PEACOCK = 23, SP_OWL = 24, SP_HEN = 25, SP_EAGLE = 26, SP_DUCK = 27;
     // outfits
     public static final int O_LEHENGA = 0, O_SALWAR = 1, O_SAREE = 2, O_ACHKAN = 3, O_UNIFORM = 4, O_CLOAK = 5,
-            O_ARMOR = 6, O_JACKET = 7, O_KURTA = 8, O_FROCK = 9;
+            O_ARMOR = 6, O_JACKET = 7, O_KURTA = 8, O_FROCK = 9,
+            O_HOODIE = 10,   // oversized hoodie with a pocket and drawstrings, jeans
+            O_TSHIRT = 11,   // t-shirt (short sleeves) and shorts
+            O_SUIT = 12,     // formal suit: jacket with lapels, shirt, tie, trousers
+            O_COAT = 13,     // long coat (a trench coat), trousers
+            O_JEANS = 14;    // a kurta or top with jeans
     // hair
-    public static final int H_NONE = 0, H_BRAID = 1, H_PIGTAILS = 2, H_BUN = 3, H_SHORT = 4, H_LONG = 5;
+    public static final int H_NONE = 0, H_BRAID = 1, H_PIGTAILS = 2, H_BUN = 3, H_SHORT = 4, H_LONG = 5, H_PONYTAIL = 6;
     // headwear
-    public static final int HW_NONE = 0, HW_TURBAN = 1, HW_WITCH_HAT = 2, HW_PALLU = 3, HW_HORNS = 4, HW_CROWN = 5;
+    public static final int HW_NONE = 0, HW_TURBAN = 1, HW_WITCH_HAT = 2, HW_PALLU = 3, HW_HORNS = 4, HW_CROWN = 5, HW_HOOD = 6;
+    // gadgets held when nothing else is in the hands
+    public static final int GD_NONE = 0, GD_PHONE = 1, GD_CONTROLLER = 2, GD_LAPTOP = 3;
 
     public int kind = MAN;
     public boolean female;
@@ -48,6 +55,16 @@ public final class Look {
     /** 1 = upright and proud (chin up, chest out), 0 normal, -1 = closed and shy (shoulders in, head down). */
     public float poise = 0f;
     public boolean hero = true;      // villains placed right side
+    /** 0 none, 1 round spectacles, 2 dark / AR glasses (glowing red when glowGlasses). */
+    public int glasses;
+    public boolean glowGlasses;
+    /** A gadget in the hand when idle (GD_*); a selfie stick is a wand with techWand. */
+    public int gadget;
+    public boolean techWand;
+    /** A robot (an animal of metal with LED screens for eyes). */
+    public boolean robot;
+    /** Small lights: an LED clip in the hair, earphones around the neck, light-up shoes. */
+    public boolean ledClip, earphones, lightShoes;
 
     public Look copy() {
         Look l = new Look();
@@ -61,6 +78,8 @@ public final class Look {
         l.satchel = satchel; l.chains = chains; l.necklace = necklace; l.bangles = bangles; l.earrings = earrings;
         l.anklets = anklets; l.shoeColor = shoeColor; l.variant = variant; l.hero = hero; l.species = species;
         l.energy = energy; l.poise = poise;
+        l.glasses = glasses; l.glowGlasses = glowGlasses; l.gadget = gadget; l.techWand = techWand; l.robot = robot;
+        l.ledClip = ledClip; l.earphones = earphones; l.lightShoes = lightShoes;
         return l;
     }
 

@@ -468,7 +468,7 @@ public class MainActivity extends Activity {
 
         LinearLayout c1 = Ui.card(this);
         c1.addView(Ui.title(this, "1. Story"));
-        c1.addView(Ui.text(this, "Write it any way you like — Hindi, English or Hinglish, as a story or as a script (Name (feeling): \"dialogue\"). Descriptions of characters and places are only used for the pictures; they are never read aloud.", 13, Ui.SUB, false));
+        c1.addView(Ui.text(this, "Hindi, English or Hinglish — a story or a script. Character and place descriptions are used for the pictures, never read aloud.", 13, Ui.SUB, false));
         scriptBox = new EditText(this);
         scriptBox.setText(project.read("script.txt"));
         scriptBox.setHint("Paste your story here…");
@@ -504,26 +504,10 @@ public class MainActivity extends Activity {
         r1.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("text/*", REQ_SCRIPT, false); }
         }));
-        c1.addView(r1);
-        boolean hasAi = project.has("script_ai.txt");
-        final boolean useAi = "1".equals(project.setting("useAi", "0")) && hasAi;
-        c1.addView(Ui.button(this, "🤖  Read with AI (make a script)", Ui.BLUE, new View.OnClickListener() {
+        r1.addView(Ui.small(this, "🤖 AI script", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { aiRead(); }
         }));
-        if (hasAi) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText("Use the script made by AI");
-            cb.setChecked(useAi);
-            cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-                public void onCheckedChanged(CompoundButton b, boolean on) { project.setSetting("useAi", on ? "1" : "0"); }
-            });
-            c1.addView(cb);
-            c1.addView(Ui.small(this, "See the AI script", Ui.SUB, new View.OnClickListener() {
-                public void onClick(View v) { showText("AI script", project.read("script_ai.txt")); }
-            }));
-        }
-        // right after the story is read: everything described, to make it in other apps if wanted
-        c1.addView(Ui.button(this, "📄  Descriptions of every character, place, object, shot, sound and voice", Ui.PRIMARY_DARK, new View.OnClickListener() {
+        r1.addView(Ui.small(this, "📄 Descriptions", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 saveScript();
                 Story st = loadStory();
@@ -531,58 +515,41 @@ public class MainActivity extends Activity {
                 productionFile(st);
             }
         }));
+        c1.addView(r1);
+        boolean hasAi = project.has("script_ai.txt");
+        final boolean useAi = "1".equals(project.setting("useAi", "0")) && hasAi;
+        if (hasAi) {
+            LinearLayout r2 = Ui.row(this);
+            r2.setGravity(Gravity.CENTER_VERTICAL);
+            CheckBox cb = new CheckBox(this);
+            cb.setText("Use the script made by AI");
+            cb.setTextSize(14);
+            cb.setChecked(useAi);
+            cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(CompoundButton b, boolean on) { project.setSetting("useAi", on ? "1" : "0"); }
+            });
+            r2.addView(cb, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            r2.addView(Ui.small(this, "See it", Ui.SUB, new View.OnClickListener() {
+                public void onClick(View v) { showText("AI script", project.read("script_ai.txt")); }
+            }));
+            c1.addView(r2);
+        }
         body.addView(c1);
 
         LinearLayout c2 = Ui.card(this);
-        c2.addView(Ui.title(this, "2. Studio: characters, voices, places"));
-        c2.addView(Ui.text(this, "The director reads your story and lists everything needed. Add pictures and voices, or let the studio choose. Download the production file here too.", 13, Ui.SUB, false));
+        c2.addView(Ui.title(this, "2. Studio — pictures and voices (optional)"));
+        c2.addView(Ui.text(this, "The director lists what the story needs and picks from your library; add your own or let the studio choose.", 13, Ui.SUB, false));
         c2.addView(Ui.button(this, "🎭  Open studio", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { saveScript(); showStudio(); }
         }));
         body.addView(c2);
 
-        LinearLayout c3 = Ui.card(this);
-        c3.addView(Ui.title(this, "3. Where will you post it?"));
-        final Edits ed = edits();
-        final String[][] plats = {{"YouTube (wide 16:9)", "16:9"}, {"Instagram Reel / YouTube Shorts (tall 9:16)", "9:16"},
-                {"Facebook / Instagram post (square 1:1)", "1:1"}};
-        RadioGroup rg = new RadioGroup(this);
-        for (int i = 0; i < plats.length; i++) {
-            RadioButton rb = new RadioButton(this);
-            rb.setText(plats[i][0]);
-            rb.setTextSize(15);
-            rb.setId(2000 + i);
-            rg.addView(rb);
-            if (plats[i][1].equals(ed.aspect)) rb.setChecked(true);
-        }
-        rg.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
-            public void onCheckedChanged(RadioGroup g, int id) { Edits e = edits(); e.aspect = plats[id - 2000][1]; saveEdits(e); }
-        });
-        c3.addView(rg);
-        c3.addView(Ui.text(this, "Quality:", 14, Ui.SUB, false));
-        RadioGroup qg = new RadioGroup(this);
-        qg.setOrientation(RadioGroup.HORIZONTAL);
-        final int[] qs = {480, 720, 1080};
-        final String[] ql = {"480p (fast)", "720p HD", "1080p Full HD"};
-        for (int i = 0; i < qs.length; i++) {
-            RadioButton rb = new RadioButton(this);
-            rb.setText(ql[i]);
-            rb.setTextSize(14);
-            rb.setId(3000 + i);
-            qg.addView(rb);
-            if (qs[i] == ed.height) rb.setChecked(true);
-        }
-        qg.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
-            public void onCheckedChanged(RadioGroup g, int id) { Edits e = edits(); e.height = qs[id - 3000]; saveEdits(e); }
-        });
-        c3.addView(qg);
-        body.addView(c3);
-
         LinearLayout c4 = Ui.card(this);
+        c4.addView(Ui.title(this, "3. Film"));
         c4.addView(Ui.button(this, "🎬  Make film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { makeFilm(); }
         }));
-        c4.addView(Ui.text(this, "While the film is being made you can lock the phone or use other apps — it keeps working.", 13, Ui.SUB, false));
+        c4.addView(Ui.text(this, "The director asks where it will be shown and at what quality, then works on while you use other apps.", 13, Ui.SUB, false));
         if (project.film().exists()) {
             c4.addView(Ui.button(this, "▶  Watch the film / make changes", Ui.PRIMARY, new View.OnClickListener() {
                 public void onClick(View v) { showPlayer(); }
@@ -643,7 +610,7 @@ public class MainActivity extends Activity {
         }
         // ---- summary and what is missing
         int noPic = 0, noVoice = 0, noBg = 0;
-        for (Story.CharacterDef c : st.characters) {
+        for (Story.CharacterDef c : st.cast()) {
             if (charFile(c) == null) noPic++;
             if (library.byId(project.setting("vsample." + c.displayName, "")) == null) noVoice++;
         }
@@ -696,7 +663,8 @@ public class MainActivity extends Activity {
 
         // ---- characters
         heading(body, "Characters (pictures and voices)");
-        for (Story.CharacterDef c : st.characters) body.addView(characterCard(st, c));
+        for (Story.CharacterDef c : st.cast()) body.addView(characterCard(st, c));
+        for (Story.CharacterDef c : st.characters) if (c.voiceOnly) body.addView(Ui.text(this, "🔊 " + c.shown() + " — a voice only (heard, never pictured); its voice is chosen like the others' below", 13, Ui.SUB, false));
         if (st.hasNarrator) body.addView(narratorCard());
 
         // ---- parts of the story
@@ -2560,6 +2528,21 @@ public class MainActivity extends Activity {
         }
         if (rg.getCheckedRadioButtonId() == -1) rg.check(1000);
         body.addView(rg);
+        body.addView(Ui.text(this, "Quality", 14, Ui.SUB, true));
+        final android.widget.RadioGroup qg = new android.widget.RadioGroup(this);
+        qg.setOrientation(android.widget.RadioGroup.HORIZONTAL);
+        final int[] qs = {480, 720, 1080};
+        final String[] ql = {"480p (fast)", "720p HD", "1080p"};
+        for (int i = 0; i < qs.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(this);
+            rb.setText(ql[i]);
+            rb.setTextSize(14);
+            rb.setId(3000 + i);
+            qg.addView(rb);
+            if (qs[i] == ed.height) rb.setChecked(true);
+        }
+        if (qg.getCheckedRadioButtonId() == -1) qg.check(3001);
+        body.addView(qg);
         // pictures still missing (the library is searched first; the rest can be made with AI)
         final CheckBox ai = new CheckBox(this);
         try {
@@ -2592,6 +2575,8 @@ public class MainActivity extends Activity {
                         int k = rg.getCheckedRadioButtonId() - 1000;
                         Edits e = edits();
                         e.aspect = ars[Math.max(0, Math.min(ars.length - 1, k))];
+                        int q = qg.getCheckedRadioButtonId() - 3000;
+                        if (q >= 0 && q < qs.length) e.height = qs[q];
                         saveEdits(e);
                         if (ai.getParent() != null) Prefs.put(MainActivity.this, "autoArt", ai.isChecked() ? "1" : "0");
                         Prefs.put(MainActivity.this, "humanQc", qc.isChecked() ? "1" : "0");
@@ -3159,166 +3144,116 @@ public class MainActivity extends Activity {
 
     private void showSettings() {
         LinearLayout body = page(S_SETTINGS, "⚙ Settings", true);
-        LinearLayout acc = Ui.card(this);
-        String a = Prefs.account(this);
-        acc.addView(Ui.title(this, "Account"));
-        acc.addView(Ui.text(this, a.length() > 0 ? "👤 " + a : "Not signed in", 15, Ui.TEXT, false));
-        acc.addView(Ui.small(this, a.length() > 0 ? "Log out" : "Sign in with Gmail", a.length() > 0 ? Ui.RED : Ui.BLUE, new View.OnClickListener() {
-            public void onClick(View v) { if (Prefs.account(MainActivity.this).length() > 0) logout(); else login(); }
-        }));
-        body.addView(acc);
 
-        LinearLayout ai = Ui.card(this);
-        ai.addView(Ui.title(this, "🔑 Google Gemini — smarter story reading, picture recognition, AI voices"));
-        ai.addView(Ui.text(this, "The app works without any key (free AI pictures and story reading). For better story reading, picture recognition and expressive AI voices, add a free Google Gemini key:\n1. Open aistudio.google.com/apikey (same Gmail)\n2. Tap \"Create API key\" and copy it\n3. Paste it here. The key stays only on this phone.", 13, Ui.SUB, false));
-        final EditText key = new EditText(this);
-        key.setHint("Gemini API key (AIza…)");
-        key.setSingleLine(true);
-        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        key.setText(Prefs.geminiKey(this));
-        ai.addView(key);
-        LinearLayout kr = Ui.row(this);
-        kr.addView(Ui.small(this, "💾 Save", Ui.GREEN, new View.OnClickListener() {
-            public void onClick(View v) { Prefs.put(MainActivity.this, "geminiKey", key.getText().toString().trim()); toast("Saved"); }
-        }));
-        kr.addView(Ui.small(this, "🧪 Test", Ui.BLUE, new View.OnClickListener() {
-            public void onClick(View v) {
-                Prefs.put(MainActivity.this, "geminiKey", key.getText().toString().trim());
-                background("Testing…", new Work() {
-                    public Object run() throws Exception { return Prefs.cloud(MainActivity.this).gemini(null, "Reply with the single word OK", false, null, null); }
-                }, new Done() {
-                    public void done(Object r, Exception e) { toast(e == null ? "✅ The key works" : "❌ " + e.getMessage()); }
-                });
-            }
-        }));
-        ai.addView(kr);
-        CheckBox online = new CheckBox(this);
-        online.setText("Online features (AI, free picture/sound search)");
-        online.setChecked(Prefs.online(this));
-        online.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "online", on ? "1" : "0"); }
-        });
-        ai.addView(online);
-        CheckBox aa = new CheckBox(this);
-        aa.setText("Studio creates missing characters and backgrounds with free AI in 3D animated style (internet) — recommended");
-        aa.setChecked(Prefs.autoArt(this));
-        aa.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "autoArt", on ? "1" : "0"); }
-        });
-        ai.addView(aa);
-        CheckBox hq = new CheckBox(this);
-        hq.setText("Human QC: before a film is made, show me the first frame of every shot to check and fix — recommended");
-        hq.setChecked(Prefs.humanQc(this));
-        hq.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "humanQc", on ? "1" : "0"); }
-        });
-        ai.addView(hq);
-        CheckBox tw = new CheckBox(this);
-        tw.setText("Animate on twos (Spider-Verse): experts move every frame, learners on twos (12 fps), naughty characters on threes (8 fps) — off = everyone smooth");
-        tw.setChecked(Prefs.onTwos(this));
-        tw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "onTwos", on ? "1" : "0"); }
-        });
-        ai.addView(tw);
-        ai.addView(Ui.small(this, "📜 The director's protocols (hardcoded)", Ui.PRIMARY, new View.OnClickListener() {
-            public void onClick(View v) { showProtocol(); }
-        }));
-        CheckBox nv = new CheckBox(this);
-        nv.setText("Natural voices (Microsoft's free neural voices, needs internet, no key) — recommended");
-        nv.setChecked(Prefs.naturalVoices(this));
-        nv.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "naturalVoices", on ? "1" : "0"); }
-        });
-        ai.addView(nv);
-        CheckBox av = new CheckBox(this);
-        av.setText("AI voices (expressive; needs the key). The free limit is very small — for short films. After the limit, remaining lines use another voice.");
-        av.setChecked(Prefs.aiVoices(this));
-        av.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "aiVoices", on ? "1" : "0"); }
-        });
-        ai.addView(av);
-        body.addView(ai);
-
-        // every tool that takes a key gets its own card, clearly labelled, with where to get the key
-        LinearLayout built = Ui.card(this);
-        built.addView(Ui.title(this, "✅ Built in — no key needed"));
-        built.addView(Ui.text(this, "These work straight away (with internet):\n"
-                + "• Natural voices — Microsoft Edge neural voices (Hindi and English)\n"
-                + "• AI pictures and story reading — Pollinations\n"
-                + "• Free pictures and real sound recordings — Openverse and Wikimedia Commons\n"
-                + "• The phone's own voice, offline\n\n"
-                + "Why no keys come inside the app: a key is a personal password tied to one account. A key built into an app "
-                + "can be read by anyone who has the app (and this app's code is public), so it is misused and switched off "
-                + "within days. Each key below is free; make your own in a minute and it stays only on this phone.", 13, Ui.SUB, false));
-        body.addView(built);
+        // ---- 1. keys, right at the top: every tool that takes a key, where to get it, one line each
+        LinearLayout keys = Ui.card(this);
+        keys.addView(Ui.title(this, "🔑 Your keys (optional)"));
+        keys.addView(Ui.text(this, "Everything works without a key. A key only adds: smarter story reading and picture recognition (Gemini), "
+                + "the most lifelike voices (ElevenLabs), more real sound recordings (Freesound) and more photos (Pixabay, Pexels). "
+                + "Each key is free to make and stays only on this phone.", 13, Ui.SUB, false));
         final String[][] tools = {
-                {"elevenKey", "🔑 ElevenLabs — the most lifelike voices",
-                        "Lifelike Hindi and English voices; each character gets its own voice and keeps it.\nGet the key: elevenlabs.io → sign in → your profile (bottom left) → API keys → Create. Free plan: about 10,000 characters a month.",
-                        "ElevenLabs API key (sk_…)"},
-                {"freesoundKey", "🔑 Freesound — real sound recordings",
-                        "Thousands of real recordings (rain, rivers, crowds, animals) for the backgrounds and effects.\nGet the key: freesound.org/apiv2/apply → sign in → Create new API credentials → copy \"Client secret/Api key\".",
-                        "Freesound API key"},
-                {"pixabayKey", "🔑 Pixabay — pictures and illustrations",
-                        "Free photos and illustrations for places, objects and title pages.\nGet the key: pixabay.com/api/docs → sign in → your key is shown on that page under \"Parameters\".",
-                        "Pixabay API key"},
-                {"pexelsKey", "🔑 Pexels — photos",
-                        "Free high-quality photos for places and objects.\nGet the key: pexels.com/api → sign in → Your API key.",
-                        "Pexels API key"},
+                {"geminiKey", "Google Gemini", "aistudio.google.com/apikey → Create API key", "AIza…"},
+                {"elevenKey", "ElevenLabs voices", "elevenlabs.io → profile → API keys → Create", "sk_…"},
+                {"freesoundKey", "Freesound recordings", "freesound.org/apiv2/apply → Create new API credentials", "key"},
+                {"pixabayKey", "Pixabay pictures", "pixabay.com/api/docs → signed in, the key is on that page", "key"},
+                {"pexelsKey", "Pexels photos", "pexels.com/api → Your API key", "key"},
         };
         for (final String[] tl : tools) {
-            LinearLayout card = Ui.card(this);
-            card.addView(Ui.title(this, tl[1]));
-            card.addView(Ui.text(this, tl[2], 13, Ui.SUB, false));
-            final EditText f = new EditText(this);
-            f.setHint(tl[3]);
-            f.setSingleLine(true);
-            f.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            f.setText(Prefs.get(this, tl[0], ""));
-            card.addView(f);
-            final TextView state = Ui.text(this, Prefs.get(this, tl[0], "").length() > 10 ? "Key saved on this phone" : "No key yet — the built-in free tools are used", 12,
-                    Prefs.get(this, tl[0], "").length() > 10 ? Ui.GREEN : Ui.SUB, false);
-            card.addView(state);
-            LinearLayout r = Ui.row(this);
-            r.addView(Ui.small(this, "💾 Save", Ui.GREEN, new View.OnClickListener() {
-                public void onClick(View v) {
-                    Prefs.put(MainActivity.this, tl[0], f.getText().toString().trim());
-                    state.setText(f.getText().toString().trim().length() > 10 ? "Key saved on this phone" : "Key removed");
-                    toast("Saved on this phone");
-                }
+            final boolean have = Prefs.get(this, tl[0], "").length() > 10;
+            LinearLayout row = Ui.row(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            final TextView name = Ui.text(this, (have ? "✅ " : "○ ") + tl[1], 14, have ? Ui.GREEN : Ui.TEXT, true);
+            row.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(Ui.small(this, have ? "Change" : "Add", have ? Ui.SUB : Ui.PRIMARY, new View.OnClickListener() {
+                public void onClick(View v) { editKey(tl, name); }
             }));
-            r.addView(Ui.small(this, "🧪 Test", Ui.BLUE, new View.OnClickListener() {
-                public void onClick(View v) {
-                    Prefs.put(MainActivity.this, tl[0], f.getText().toString().trim());
-                    background("Testing…", new Work() {
-                        public Object run() throws Exception { return testKey(tl[0]); }
-                    }, new Done() {
-                        public void done(Object res, Exception e) {
-                            String m = e == null ? "✅ The key works" + (res == null ? "" : " — " + res) : "❌ " + e.getMessage();
-                            state.setText(m);
-                            toast(m);
-                        }
-                    });
-                }
-            }));
-            r.addView(Ui.small(this, "🗑 Clear", Ui.RED, new View.OnClickListener() {
-                public void onClick(View v) { f.setText(""); Prefs.put(MainActivity.this, tl[0], ""); state.setText("Key removed"); }
-            }));
-            card.addView(r);
-            body.addView(card);
+            keys.addView(row);
         }
+        keys.addView(Ui.text(this, "Built in, no key: Microsoft neural voices, Pollinations AI pictures and story reading, Openverse and Wikimedia pictures, the phone's own voice offline. "
+                + "No keys come inside the app because its code is public — a key built in would be misused and switched off within days.", 12, Ui.SUB, false));
+        body.addView(keys);
 
-        LinearLayout ph = Ui.card(this);
-        ph.addView(Ui.title(this, "Phone"));
-        ph.addView(Ui.small(this, "🔊 Phone voices (Text-to-Speech)", Ui.PRIMARY, new View.OnClickListener() {
+        // ---- 2. the director, in one card of short switches
+        LinearLayout dir = Ui.card(this);
+        dir.addView(Ui.title(this, "🎬 The director"));
+        dir.addView(toggle("Online features (AI, free pictures and sounds)", "online", true));
+        dir.addView(toggle("Make missing pictures with free AI (3D animated style)", "autoArt", true));
+        dir.addView(toggle("Human QC: show me every shot's first frame before the film is made", "humanQc", true));
+        dir.addView(toggle("Natural voices (Microsoft neural, no key)", "naturalVoices", true));
+        dir.addView(toggle("Expressive AI voices (needs a key; small free limit)", "aiVoices", false));
+        dir.addView(toggle("Animate on twos (Spider-Verse: learners 12 fps, rebels 8 fps)", "onTwos", false));
+        dir.addView(Ui.small(this, "📜 The director's protocols (hardcoded)", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { showProtocol(); }
+        }));
+        body.addView(dir);
+
+        // ---- 3. account and phone
+        LinearLayout acc = Ui.card(this);
+        String a = Prefs.account(this);
+        acc.addView(Ui.title(this, "Account and phone"));
+        LinearLayout ar = Ui.row(this);
+        ar.setGravity(Gravity.CENTER_VERTICAL);
+        ar.addView(Ui.text(this, a.length() > 0 ? "👤 " + a : "Not signed in", 14, Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ar.addView(Ui.small(this, a.length() > 0 ? "Log out" : "Sign in", a.length() > 0 ? Ui.RED : Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { if (Prefs.account(MainActivity.this).length() > 0) logout(); else login(); }
+        }));
+        acc.addView(ar);
+        LinearLayout pr = Ui.row(this);
+        pr.addView(Ui.small(this, "🔊 Phone voices", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { offerTtsInstall(); }
         }));
-        ph.addView(Ui.small(this, "🔐 Give permissions", Ui.PRIMARY, new View.OnClickListener() {
+        pr.addView(Ui.small(this, "🔐 Permissions", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) {
                 String[] m = neededPermissions();
                 if (m.length == 0) toast("✅ All permissions are given");
                 else requestPermissions(m, REQ_PERMS);
             }
         }));
-        body.addView(ph);
+        acc.addView(pr);
+        body.addView(acc);
     }
+
+    /** A one-line switch bound to a preference. */
+    private CheckBox toggle(String label, final String key, boolean def) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(label);
+        cb.setTextSize(14);
+        cb.setChecked(def ? !"0".equals(Prefs.get(this, key, "1")) : "1".equals(Prefs.get(this, key, "0")));
+        cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, key, on ? "1" : "0"); }
+        });
+        return cb;
+    }
+
+    /** Edits one key in a small dialog: paste, test, save or clear. */
+    private void editKey(final String[] tl, final TextView name) {
+        LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 18), Ui.dp(this, 6), Ui.dp(this, 18), Ui.dp(this, 6));
+        body.addView(Ui.text(this, "Where to get it: " + tl[2] + "\nThe key stays only on this phone.", 13, Ui.SUB, false));
+        final EditText f = new EditText(this);
+        f.setHint(tl[3]);
+        f.setSingleLine(true);
+        f.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        f.setText(Prefs.get(this, tl[0], ""));
+        body.addView(f);
+        new AlertDialog.Builder(this).setTitle("🔑 " + tl[1]).setView(body)
+                .setPositiveButton("💾 Save and test", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        final String k = f.getText().toString().trim();
+                        Prefs.put(MainActivity.this, tl[0], k);
+                        name.setText((k.length() > 10 ? "✅ " : "○ ") + tl[1]);
+                        name.setTextColor(k.length() > 10 ? Ui.GREEN : Ui.TEXT);
+                        if (k.length() <= 10) { toast("Key removed — the built-in free tools are used"); return; }
+                        background("Testing the key…", new Work() {
+                            public Object run() throws Exception {
+                                if (tl[0].equals("geminiKey")) return Prefs.cloud(MainActivity.this).gemini(null, "Reply with the single word OK", false, null, null);
+                                return testKey(tl[0]);
+                            }
+                        }, new Done() {
+                            public void done(Object r, Exception e) { toast(e == null ? "✅ The key works" : "❌ " + e.getMessage()); }
+                        });
+                    }
+                }).setNegativeButton("Cancel", null).show();
+    }
+
 }

@@ -127,6 +127,8 @@ public final class Bible {
             for (Story.Scene sc : st.scenes) for (Story.Beat bt : sc.beats) if (bt.speaker == c) lines++;
             b.append(i++).append(". ").append(st.shown(c.fullName != null && c.fullName.length() > 0 ? c.fullName : c.displayName));
             if (c.age > 0) b.append(" (").append(c.age).append(hi ? " वर्ष)" : " yrs)");
+            if (c.role != null && c.role.length() > 0) b.append(" — ").append(c.role);
+            if (c.voiceOnly) b.append(hi ? " (सिर्फ़ आवाज़ — कोई चित्र नहीं चाहिए)" : " (a voice only — no picture needed)");
             b.append("\n");
             if (c.description.length() > 0) b.append("   ").append(hi ? "विवरण: " : "Description: ").append(oneLine(c.description)).append("\n");
             b.append("   ").append(hi ? "संवाद: " : "Lines: ").append(lines).append("\n");
@@ -239,7 +241,8 @@ public final class Bible {
     static String firstClause(String s, String stops) {
         int cut = s.length();
         for (int i = 0; i < stops.length(); i++) {
-            int k = s.indexOf(stops.charAt(i));
+            // a hyphen inside a name ("स्काई-लाइन", "Neo-Mumbai") joins; only " - " between words separates
+            int k = stops.charAt(i) == '-' ? s.indexOf(" - ") : s.indexOf(stops.charAt(i));
             if (k > 0 && k < cut) cut = k;
         }
         return s.substring(0, cut).trim();

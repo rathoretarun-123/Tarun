@@ -37,6 +37,24 @@ public final class Synth {
             // hard ground (stone, marble, a cave floor): a sharper click with a short ring, less thump
             case Film.SFX_STEPS_HARD: { float t = 0; while (t < dur) { thump(o, t, 220, 0.12f); burst(o, t, 0.012f, 0.9f, 0.22f); burst(o, t + 0.02f, 0.03f, 0.5f, 0.08f); t += 0.3f; } break; }
             case Film.SFX_STEPS_RUN: { float t = 0; while (t < dur) { thump(o, t, 110, 0.3f); burst(o, t, 0.04f, 0.5f, 0.14f); t += 0.21f; } break; }
+            // ---- machines and the city
+            case Film.SFX_HUM: { tone(o, 0, dur, 100, 100, 0.08f, 1); tone(o, 0, dur, 200, 200, 0.03f, 0); noiseBed(o, 0.004f, 0.1f, 0.5f, 0.3f); fadeEnds(o, 0.4f); break; }
+            case Film.SFX_TRAFFIC: { noiseBed(o, 0.03f, 0.18f, 1.2f, 0.4f); lowpass(o, 0.08f); for (float t = 1.5f; t < dur - 0.5f; t += 3.5f + Math.abs(rnd()) * 4) tone(o, t, 0.25f, 420 + rnd() * 80, 400, 0.05f, 1); fadeEnds(o, 0.5f); break; }
+            case Film.SFX_DRONE: { for (float t = 0; t < dur; t += 0.02f) tone(o, t, 0.025f, 210 + (float) Math.sin(t * 3) * 25 + rnd() * 6, 210, 0.07f * (float) Math.sin(Math.PI * Math.min(1, t / dur)), 1); break; }
+            case Film.SFX_BEEP: { float t = 0.02f; int k = 0; while (t < dur - 0.08f) { tone(o, t, 0.09f, k % 2 == 0 ? 880 : 1175, k % 2 == 0 ? 880 : 1175, 0.28f, 1); t += 0.16f; k++; } break; }
+            case Film.SFX_CLICK: { knock(o, 0.01f, 2600, 0.5f); burst(o, 0.01f, 0.02f, 0.95f, 0.3f); if (dur > 0.3f) knock(o, 0.18f, 1900, 0.3f); break; }
+            case Film.SFX_TYPING: { float t = 0.02f; while (t < dur - 0.05f) { knock(o, t, 1800 + rnd() * 600, 0.14f); burst(o, t, 0.012f, 0.9f, 0.08f); t += 0.07f + Math.abs(rnd()) * 0.08f; } break; }
+            case Film.SFX_BUZZ: { for (float t = 0; t < dur; t += 0.02f) tone(o, t, 0.025f, 150 + rnd() * 15, 150, 0.12f, 1); fadeEnds(o, 0.15f); break; }
+            case Film.SFX_GLITCH: { for (float t = 0; t < dur; t += 0.06f + Math.abs(rnd()) * 0.1f) { burst(o, t, 0.03f + Math.abs(rnd()) * 0.05f, 0.3f + Math.abs(rnd()) * 0.6f, 0.3f); tone(o, t, 0.04f, 300 + Math.abs(rnd()) * 2500, 200, 0.15f, 1); } break; }
+            case Film.SFX_POWER_DOWN: { tone(o, 0, Math.min(dur, 1.4f), 520, 60, 0.3f, 1); noiseBed(o, 0.02f, 0.3f, 2f, 0.4f); fadeEnds(o, 0.3f); break; }
+            case Film.SFX_SPARK: { for (float t = 0; t < Math.min(dur, 0.6f); t += 0.03f + Math.abs(rnd()) * 0.05f) burst(o, t, 0.01f, 0.98f, 0.5f); tone(o, 0, 0.3f, 3000, 2200, 0.08f, 1); break; }
+            case Film.SFX_HEARTBEAT: { float t = 0.1f; while (t < dur - 0.3f) { thump(o, t, 55, 0.7f); thump(o, t + 0.22f, 50, 0.45f); t += 0.95f; } break; }
+            case Film.SFX_TWINKLE: { for (int i = 0; i < Math.max(3, (int) (dur * 4)); i++) bellTone(o, i * 0.11f + Math.abs(rnd()) * 0.08f, midi(88 + (int) (Math.abs(rnd()) * 12)), 0.5f, 0.12f); break; }
+            case Film.SFX_BLIP: { tone(o, 0, 0.09f, 660, 990, 0.3f, 0); tone(o, 0.1f, 0.14f, 990, 1320, 0.3f, 0); break; }
+            case Film.SFX_CRACKLE: { for (float t = 0; t < dur; t += 0.04f + Math.abs(rnd()) * 0.12f) burst(o, t, 0.015f, 0.8f, 0.25f); noiseBed(o, 0.006f, 0.2f, 0.8f, 0.5f); fadeEnds(o, 0.1f); break; }
+            case Film.SFX_HISS_SHORT: { noiseBed(o, 0.3f, 0.3f, 3f, 0.6f); fadeEnds(o, Math.min(0.25f, dur / 2)); break; }
+            case Film.SFX_TAP: { float t = 0; while (t < dur) { knock(o, t, 1400, 0.3f); t += 0.26f; } break; }
+            case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }
             case Film.SFX_DRUMS: dhol(o, 0, dur, 0.6f); break;

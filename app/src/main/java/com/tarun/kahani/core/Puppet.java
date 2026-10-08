@@ -163,6 +163,10 @@ public final class Puppet {
             case Look.O_UNIFORM: legColor = l.secondary; break;
             case Look.O_ARMOR: legColor = l.furColor; break;
             case Look.O_KURTA: legColor = 0xFFF1EBDD; break;
+            case Look.O_HOODIE: case Look.O_JEANS: legColor = 0xFF3B5B8A; break;          // denim
+            case Look.O_TSHIRT: legColor = faceSkin(l, p); break;                        // bare legs under shorts
+            case Look.O_SUIT: legColor = shade(l.primary, 0.9f); break;
+            case Look.O_COAT: legColor = 0xFF26262B; break;
             default: legColor = shade(l.primary, 0.8f);
         }
         if (l.kind == Look.MONSTER) legColor = l.furColor;
@@ -188,6 +192,11 @@ public final class Puppet {
                     g.line(hx, b.hipY, fx, fy - b.legW * 0.6f, b.legW * 2f);
                 }
             }
+            if (l.outfit == Look.O_TSHIRT && p.body != Pose.SIT && p.body != Pose.KNEEL) {
+                // shorts: the upper half of the leg in the shorts' colour
+                g.color(l.secondary == 0 ? 0xFFC62828 : l.secondary);
+                g.line(hx, b.hipY, hx + (fx - hx) * 0.42f, b.hipY + (fy - b.legW * 0.6f - b.hipY) * 0.42f, b.legW * 2.3f);
+            }
             // foot / shoe
             if (l.kind == Look.MONSTER) {
                 g.color(shade(l.furColor, 0.7f));
@@ -208,6 +217,14 @@ public final class Puppet {
                 if (l.outfit == Look.O_LEHENGA || l.outfit == Look.O_ACHKAN) { // juti curl
                     g.color(l.secondary);
                     g.oval(fx + p.facing * fw * 1.3f, fy - fw * 0.3f, fw * 0.18f, fw * 0.18f);
+                }
+                if (l.lightShoes) {
+                    // light-up shoes: a little LED on the side that blinks with each step ("टिम-टिम")
+                    float blink = p.walkAmt > 0.05f ? 0.5f + 0.5f * (float) Math.sin(p.walk * 2 + side) : 0.35f + 0.15f * (float) Math.sin(p.time * 3 + side);
+                    g.color(alpha(0xFF40C4FF, 0.4f + 0.6f * blink));
+                    g.oval(fx + p.facing * fw * 0.3f, fy - fw * 0.42f, fw * 0.22f, fw * 0.14f);
+                    g.color(alpha(0xFFFFFFFF, 0.7f * blink));
+                    g.oval(fx + p.facing * fw * 0.3f, fy - fw * 0.42f, fw * 0.1f, fw * 0.07f);
                 }
             }
         }
@@ -492,6 +509,121 @@ public final class Puppet {
                 g.fillPath();
                 break;
             }
+            case Look.O_HOODIE: {
+                // an oversized hoodie: a wide soft body to below the hips, a kangaroo pocket, drawstrings, the hood folded at the neck
+                float kw = hw * 1.3f;
+                g.begin();
+                g.moveTo(-sw * 1.05f, shY + b.T * 0.02f); g.lineTo(sw * 1.05f, shY + b.T * 0.02f);
+                g.quadTo(kw * 1.08f, waistY, kw * (1 + sway * 0.5f), hipY + b.L * 0.22f);
+                g.lineTo(-kw * (1 - sway * 0.5f), hipY + b.L * 0.22f);
+                g.quadTo(-kw * 1.08f, waistY, -sw * 1.05f, shY + b.T * 0.02f); g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY + b.L * 0.2f, lighten(l.primary, 0.08f), shade(l.primary, 0.9f)); g.fillPath();
+                // ribbed hem and the pocket
+                g.color(shade(l.primary, 0.78f));
+                g.rect(-kw * 0.98f, hipY + b.L * 0.14f, kw * 1.96f, b.L * 0.08f);
+                g.roundRect(-hw * 0.7f, waistY + b.T * 0.12f, hw * 1.4f, b.T * 0.26f, 6);
+                g.color(shade(l.primary, 0.62f));
+                g.line(-hw * 0.7f, waistY + b.T * 0.12f, -hw * 0.45f, waistY + b.T * 0.38f, 2.5f);
+                g.line(hw * 0.7f, waistY + b.T * 0.12f, hw * 0.45f, waistY + b.T * 0.38f, 2.5f);
+                // the folded hood behind the neck and the drawstrings
+                if (l.headwear != Look.HW_HOOD) {
+                    g.color(shade(l.primary, 0.85f));
+                    g.oval(0, shY - b.headR * 0.05f, sw * 0.9f, b.T * 0.14f);
+                }
+                g.color(l.secondary == 0 ? 0xFFEEEEEE : l.secondary);
+                g.line(-sw * 0.15f, shY + b.T * 0.08f, -sw * 0.2f, shY + b.T * 0.42f, 2.2f);
+                g.line(sw * 0.15f, shY + b.T * 0.08f, sw * 0.22f, shY + b.T * 0.44f, 2.2f);
+                // a word of code across the chest
+                g.color(alpha(l.secondary == 0 ? 0xFFFFFFFF : l.secondary, 0.85f));
+                for (int i = 0; i < 4; i++) g.rect(-sw * 0.5f + i * sw * 0.27f, shY + b.T * 0.5f, sw * 0.18f, b.T * 0.045f);
+                break;
+            }
+            case Look.O_TSHIRT: {
+                // a bright t-shirt to the hips with a print on the chest
+                float tw = hw * 1.12f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.04f); g.lineTo(sw, shY + b.T * 0.04f);
+                g.lineTo(tw * (1 + sway * 0.4f), hipY + b.L * 0.06f); g.lineTo(-tw * (1 - sway * 0.4f), hipY + b.L * 0.06f); g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY, lighten(l.primary, 0.1f), l.primary); g.fillPath();
+                // round neck
+                g.color(shade(l.primary, 0.8f));
+                arc(g, 0, shY + b.T * 0.02f, sw * 0.35f, b.T * 0.09f, 3);
+                // the print (a little dinosaur-ish blob in the second colour)
+                int print = l.secondary == 0 || l.secondary == l.primary ? lighten(l.primary, 0.35f) : l.secondary;
+                g.color(print);
+                g.oval(-sw * 0.05f, shY + b.T * 0.4f, sw * 0.34f, b.T * 0.16f);
+                g.oval(sw * 0.3f, shY + b.T * 0.3f, sw * 0.16f, b.T * 0.11f);
+                g.begin(); g.moveTo(-sw * 0.35f, shY + b.T * 0.42f); g.lineTo(-sw * 0.6f, shY + b.T * 0.36f); g.lineTo(-sw * 0.32f, shY + b.T * 0.5f); g.close(); g.fillPath();
+                for (int i = 0; i < 3; i++) { g.begin(); g.moveTo(-sw * 0.15f + i * sw * 0.14f, shY + b.T * 0.33f); g.lineTo(-sw * 0.08f + i * sw * 0.14f, shY + b.T * 0.24f); g.lineTo(sw * 0.0f + i * sw * 0.14f, shY + b.T * 0.33f); g.close(); g.fillPath(); }
+                break;
+            }
+            case Look.O_SUIT: {
+                // a formal suit: jacket with lapels over a white shirt and a tie, buttons, a breast pocket
+                float cw = hw * 1.2f;
+                g.begin();
+                g.moveTo(-sw * 1.05f, shY + b.T * 0.02f); g.lineTo(sw * 1.05f, shY + b.T * 0.02f);
+                g.lineTo(cw, hipY + b.L * 0.12f); g.lineTo(-cw, hipY + b.L * 0.12f); g.close();
+                g.color(shade(l.primary, 0.5f)); g.strokePath(3);
+                g.linear(-cw, 0, cw, 0, lighten(l.primary, 0.06f), shade(l.primary, 0.85f)); g.fillPath();
+                // shirt and tie
+                g.color(0xFFF7F7F2);
+                g.begin(); g.moveTo(-sw * 0.3f, shY + b.T * 0.02f); g.lineTo(sw * 0.3f, shY + b.T * 0.02f); g.lineTo(0, waistY + b.T * 0.15f); g.close(); g.fillPath();
+                int tie = l.secondary == 0 || l.secondary == l.primary ? 0xFFB71C1C : l.secondary;
+                g.color(tie);
+                g.begin(); g.moveTo(-sw * 0.08f, shY + b.T * 0.06f); g.lineTo(sw * 0.08f, shY + b.T * 0.06f); g.lineTo(sw * 0.1f, waistY + b.T * 0.1f); g.lineTo(0, waistY + b.T * 0.18f); g.lineTo(-sw * 0.1f, waistY + b.T * 0.1f); g.close(); g.fillPath();
+                // lapels
+                g.color(shade(l.primary, 0.7f));
+                g.begin(); g.moveTo(-sw * 0.62f, shY + b.T * 0.02f); g.lineTo(-sw * 0.3f, shY + b.T * 0.02f); g.lineTo(-sw * 0.18f, waistY); g.lineTo(-sw * 0.45f, waistY - b.T * 0.1f); g.close(); g.fillPath();
+                g.begin(); g.moveTo(sw * 0.62f, shY + b.T * 0.02f); g.lineTo(sw * 0.3f, shY + b.T * 0.02f); g.lineTo(sw * 0.18f, waistY); g.lineTo(sw * 0.45f, waistY - b.T * 0.1f); g.close(); g.fillPath();
+                // buttons and an LED lining line (a modern suit)
+                g.color(0xFFE0E0E0);
+                g.oval(sw * 0.08f, waistY + b.T * 0.1f, 3, 3); g.oval(sw * 0.08f, waistY + b.T * 0.24f, 3, 3);
+                if (l.accent != 0 && l.accent != 0xFFE0A526) { g.color(alpha(l.accent, 0.8f)); g.line(-cw * 0.9f, hipY + b.L * 0.1f, cw * 0.9f, hipY + b.L * 0.1f, 2); }
+                break;
+            }
+            case Look.O_COAT: {
+                // a long coat to below the knees, wide lapels, a belt; wires may hang from it
+                float cw = sw * 1.35f;
+                g.begin();
+                g.moveTo(-sw * 1.05f, shY); g.lineTo(sw * 1.05f, shY);
+                g.quadTo(cw * 1.1f, waistY + b.T * 0.3f, cw * (1 + sway * 0.6f), -b.L * 0.2f);
+                g.lineTo(-cw * (1 - sway * 0.6f), -b.L * 0.2f);
+                g.quadTo(-cw * 1.1f, waistY + b.T * 0.3f, -sw * 1.05f, shY); g.close();
+                g.color(0xFF141216); g.strokePath(3);
+                g.linear(0, shY, 0, 0, l.primary, shade(l.primary, 0.75f)); g.fillPath();
+                // layers: the opening down the middle and a belt
+                g.color(shade(l.primary, 0.65f));
+                g.line(0, waistY, 0, -b.L * 0.2f, 3);
+                g.rect(-hw * 1.12f, waistY + b.T * 0.16f, hw * 2.24f, b.T * 0.1f);
+                g.color(shade(l.primary, 0.8f));
+                g.begin(); g.moveTo(-sw * 0.6f, shY); g.lineTo(-sw * 0.25f, shY); g.lineTo(-sw * 0.15f, waistY + b.T * 0.05f); g.lineTo(-sw * 0.5f, waistY - b.T * 0.15f); g.close(); g.fillPath();
+                g.begin(); g.moveTo(sw * 0.6f, shY); g.lineTo(sw * 0.25f, shY); g.lineTo(sw * 0.15f, waistY + b.T * 0.05f); g.lineTo(sw * 0.5f, waistY - b.T * 0.15f); g.close(); g.fillPath();
+                // wires and lights hanging from the coat (a witch of the machines)
+                if (l.kind == Look.WITCH || l.earphones) {
+                    int[] wire = {0xFFE53935, 0xFF1E88E5, 0xFF43A047, 0xFFFDD835};
+                    for (int i = 0; i < 4; i++) {
+                        float x0 = -cw * 0.6f + i * cw * 0.4f, sw2 = (float) Math.sin(p.time * 2.5f + i) * 4;
+                        g.color(wire[i]);
+                        g.line(x0, waistY + b.T * 0.3f, x0 + sw2, -b.L * 0.35f + i * 6, 2);
+                    }
+                }
+                break;
+            }
+            case Look.O_JEANS: {
+                // a short kurta or top with jeans
+                float kw = hw * 1.15f;
+                g.begin();
+                g.moveTo(-sw, shY + b.T * 0.04f); g.lineTo(sw, shY + b.T * 0.04f);
+                g.lineTo(kw * (1 + sway * 0.4f), hipY + b.L * 0.2f); g.lineTo(-kw * (1 - sway * 0.4f), hipY + b.L * 0.2f); g.close();
+                g.color(shade(l.primary, 0.6f)); g.strokePath(3);
+                g.linear(0, shY, 0, hipY + b.L * 0.2f, lighten(l.primary, 0.1f), l.primary); g.fillPath();
+                g.color(l.secondary == 0 ? 0xFFF4F1EA : l.secondary);
+                g.line(0, shY + b.T * 0.08f, 0, shY + b.T * 0.45f, 3);
+                g.rect(-kw * 0.95f, hipY + b.L * 0.14f, kw * 1.9f, b.L * 0.05f);
+                break;
+            }
             default: { // kurta (men)
                 float kw = hw * 1.18f;
                 g.begin();
@@ -502,6 +634,14 @@ public final class Puppet {
                 g.color(l.secondary);
                 g.line(0, shY + b.T * 0.06f, 0, shY + b.T * 0.4f, 3);
             }
+        }
+        // earphones hanging around the neck
+        if (l.earphones && l.isHumanoid()) {
+            g.color(0xFFF5F5F5);
+            arc(g, 0, shY - b.T * 0.02f, sw * 0.4f, b.T * 0.2f, 2.5f);
+            g.line(-sw * 0.25f, shY + b.T * 0.14f, -sw * 0.3f, shY + b.T * 0.4f, 2);
+            g.oval(-sw * 0.3f, shY + b.T * 0.42f, 3.5f, 4);
+            g.oval(sw * 0.33f, shY + b.T * 0.1f, 3.5f, 4);
         }
         // necklaces
         float ny = shY + b.T * 0.1f;
@@ -652,6 +792,9 @@ public final class Puppet {
             case Look.O_ACHKAN: case Look.O_UNIFORM: case Look.O_KURTA: sleeve = l.primary; fullSleeve = true; break;
             case Look.O_CLOAK: sleeve = l.primary; fullSleeve = true; break;
             case Look.O_ARMOR: sleeve = l.furColor; fullSleeve = true; break;
+            case Look.O_TSHIRT: sleeve = l.primary; fullSleeve = false; break;
+            case Look.O_SUIT: sleeve = shade(l.primary, 0.95f); fullSleeve = true; break;
+            case Look.O_COAT: sleeve = l.primary; fullSleeve = true; break;
             default: sleeve = l.primary; fullSleeve = true;
         }
         if (p.disguised && l.kind == Look.WITCH) sleeve = 0xFFC9772E;
@@ -718,7 +861,24 @@ public final class Puppet {
                 g.strokeOval(hx, hy - 4, b.headR * 0.62f, b.headR * 0.62f, 3);
                 g.oval(hx, hy - 4, 5, 5);
             }
-            if (side == 1 && l.wand && !p.disguised) drawWand(g, hx, hy, b, p.glowWand, p.time);
+            if (side == 1 && l.wand && !p.disguised) { if (l.techWand) drawTechWand(g, hx, hy, b, p.glowWand, p.time); else drawWand(g, hx, hy, b, p.glowWand, p.time); }
+            if (side == 1 && l.gadget == Look.GD_PHONE) {
+                // a phone in the hand, its screen lit
+                g.color(0xFF1E1E22); g.roundRect(hx - b.headR * 0.12f, hy - b.headR * 0.22f, b.headR * 0.24f, b.headR * 0.42f, 3);
+                g.color(0xFF80D8FF); g.roundRect(hx - b.headR * 0.09f, hy - b.headR * 0.18f, b.headR * 0.18f, b.headR * 0.34f, 2);
+            }
+            if (side == 1 && l.gadget == Look.GD_CONTROLLER) {
+                // a game controller held in front
+                g.color(0xFF263238); g.roundRect(hx - b.headR * 0.32f, hy - b.headR * 0.1f, b.headR * 0.64f, b.headR * 0.26f, 8);
+                g.color(0xFFE53935); g.oval(hx + b.headR * 0.18f, hy - b.headR * 0.02f, 3, 3);
+                g.color(0xFF43A047); g.oval(hx + b.headR * 0.24f, hy + b.headR * 0.04f, 3, 3);
+                g.color(0xFF90A4AE); g.rect(hx - b.headR * 0.25f, hy - b.headR * 0.01f, b.headR * 0.1f, 3); g.rect(hx - b.headR * 0.215f, hy - b.headR * 0.05f, 3, b.headR * 0.1f);
+            }
+            if (side == -1 && l.gadget == Look.GD_LAPTOP) {
+                // a slim laptop under the arm
+                g.color(0xFF90A4AE); g.roundRect(hx - b.headR * 0.5f, hy - b.headR * 0.08f, b.headR * 0.9f, b.headR * 0.16f, 3);
+                g.color(0xFF546E7A); g.rect(hx - b.headR * 0.5f, hy + b.headR * 0.02f, b.headR * 0.9f, 2);
+            }
             if (side == -1 && l.kind == Look.MONSTER && l.mace) {
                 g.color(0xFF5D4037);
                 g.line(hx, hy, hx, hy + b.L * 0.55f, 7);
@@ -785,6 +945,19 @@ public final class Puppet {
         }
     }
 
+    /** A selfie stick with RGB lights (a witch's wand of today): the glow cycles through the colours. */
+    static void drawTechWand(Gfx g, float hx, float hy, Body b, boolean glow, float t) {
+        g.color(0xFF37474F);
+        g.begin(); g.moveTo(hx, hy + 16); g.quadTo(hx - 5, hy - b.H * 0.14f, hx + 3, hy - b.H * 0.3f); g.strokePath(4);
+        float gx = hx + 3, gy = hy - b.H * 0.33f;
+        float h = (t * 0.7f) % 1f;
+        int c = h < 0.33f ? 0xFFFF1744 : h < 0.66f ? 0xFF00E676 : 0xFF2979FF;
+        if (glow) { g.radial(gx, gy, 42, alpha(c, 0.6f), alpha(c, 0f)); g.oval(gx, gy, 42, 42); }
+        g.color(0xFF1E1E22); g.roundRect(gx - 7, gy - 11, 14, 22, 3);
+        g.color(c); g.roundRect(gx - 5, gy - 9, 10, 18, 2);
+        g.color(alpha(0xFFFFFFFF, 0.6f)); g.oval(gx - 2, gy - 5, 2.5f, 2.5f);
+    }
+
     static void drawWand(Gfx g, float hx, float hy, Body b, boolean glow, float t) {
         g.color(0xFF6D4C41);
         g.begin(); g.moveTo(hx, hy + 20);
@@ -847,6 +1020,28 @@ public final class Puppet {
             g.moveTo(-r * 1.25f, r * 1.25f);
             g.cubicTo(-r * 1.45f, -r * 1.55f, r * 1.45f, -r * 1.55f, r * 1.25f, r * 1.25f);
             g.strokePath(3);
+        }
+        // a hood over the head (behind it; its edge comes over the hair in drawHeadwear)
+        if (l.headwear == Look.HW_HOOD && !p.noHeadwear) {
+            g.color(shade(l.primary, 0.85f));
+            g.begin();
+            g.moveTo(-r * 1.3f, r * 1.3f);
+            g.cubicTo(-r * 1.5f, -r * 1.6f, r * 1.5f, -r * 1.6f, r * 1.3f, r * 1.3f);
+            g.close(); g.fillPath();
+        }
+        // a ponytail swinging behind the head (follow-through: it settles after the head)
+        if (l.hair == Look.H_PONYTAIL) {
+            float px = -f * r * 0.72f, swing = (float) Math.sin(p.time * 2.6f) * 4 + p.wind * 10 - p.nod * 6;
+            g.color(l.hairColor);
+            g.begin(); g.moveTo(px, -r * 0.55f);
+            g.quadTo(px - f * r * 0.45f + swing * 0.3f, r * 0.3f, px - f * r * 0.2f + swing, r * 1.25f);
+            g.quadTo(px - f * r * 0.05f + swing * 0.6f, r * 0.5f, px + f * r * 0.1f, -r * 0.45f);
+            g.close(); g.fillPath();
+            if (l.curly) for (int i = 0; i < 3; i++) g.oval(px - f * r * 0.2f + swing * (0.4f + i * 0.2f), r * (0.5f + i * 0.28f), r * 0.17f, r * 0.17f);
+            // the band and an LED clip
+            g.color(l.ledClip ? 0xFF40C4FF : 0xFFC62828);
+            g.oval(px, -r * 0.5f, r * 0.13f, r * 0.1f);
+            if (l.ledClip) { g.color(alpha(0xFF40C4FF, 0.35f + 0.25f * (float) Math.sin(p.time * 4))); g.oval(px, -r * 0.5f, r * 0.3f, r * 0.24f); }
         }
         // pigtails (behind ears)
         if (l.hair == Look.H_PIGTAILS) {
@@ -980,6 +1175,26 @@ public final class Puppet {
             g.oval(r * 0.7f, -r * 0.45f + ((p.time * 20) % 10), r * 0.07f, r * 0.11f);
         }
 
+        // glasses over the eyes
+        if (l.glasses == 1) {
+            g.color(0xFF37474F);
+            g.strokeOval(ex - r * 0.36f, -r * 0.08f, r * 0.24f, r * 0.2f, 2.2f);
+            g.strokeOval(ex + r * 0.36f, -r * 0.08f, r * 0.24f, r * 0.2f, 2.2f);
+            g.line(ex - r * 0.12f, -r * 0.1f, ex + r * 0.12f, -r * 0.1f, 2);
+            g.color(alpha(0xFFFFFFFF, 0.25f));
+            g.oval(ex - r * 0.42f, -r * 0.14f, r * 0.08f, r * 0.05f);
+            g.oval(ex + r * 0.3f, -r * 0.14f, r * 0.08f, r * 0.05f);
+        } else if (l.glasses == 2) {
+            // dark AR glasses: one visor across the eyes, a red line of light when they glow
+            g.color(0xFF101418);
+            g.roundRect(ex - r * 0.68f, -r * 0.24f, r * 1.36f, r * 0.34f, r * 0.12f);
+            g.color(alpha(0xFF4FC3F7, 0.18f));
+            g.roundRect(ex - r * 0.62f, -r * 0.2f, r * 0.5f, r * 0.12f, r * 0.05f);
+            if (l.glowGlasses) {
+                g.color(alpha(0xFFFF1744, 0.55f + 0.3f * (float) Math.sin(p.time * 3)));
+                g.rect(ex - r * 0.6f, -r * 0.1f, r * 1.2f, r * 0.05f);
+            }
+        }
         // headwear on top
         drawHeadwear(g, l, p, r);
     }
@@ -1000,7 +1215,7 @@ public final class Puppet {
             g.close(); g.fillPath();
             return;
         }
-        if (l.hair == Look.H_SHORT || p.noHeadwear) {
+        if (l.hair == Look.H_SHORT || l.hair == Look.H_PONYTAIL || p.noHeadwear) {
             if (p.noHeadwear && l.headwear == Look.HW_TURBAN) {
                 // bald-ish head with a little hair (turban stolen)
                 g.color(shade(l.skin, 0.95f));
@@ -1207,6 +1422,18 @@ public final class Puppet {
             case Look.HW_TURBAN:
                 drawTurbanShape(g, 0, -r * 0.62f, r, l.headColor, l.headBand, l.kalgi);
                 break;
+            case Look.HW_HOOD: {
+                // the front edge of the hood over the hair line
+                g.color(shade(l.primary, 0.85f));
+                g.begin();
+                g.moveTo(-r * 1.05f, -r * 0.15f);
+                g.cubicTo(-r * 1.05f, -r * 1.25f, r * 1.05f, -r * 1.25f, r * 1.05f, -r * 0.15f);
+                g.cubicTo(r * 0.85f, -r * 0.72f, -r * 0.85f, -r * 0.72f, -r * 1.05f, -r * 0.15f);
+                g.close(); g.fillPath();
+                g.color(shade(l.primary, 0.65f));
+                g.begin(); g.moveTo(-r * 1.05f, -r * 0.15f); g.cubicTo(-r * 0.85f, -r * 0.72f, r * 0.85f, -r * 0.72f, r * 1.05f, -r * 0.15f); g.strokePath(2.5f);
+                break;
+            }
             case Look.HW_PALLU: {
                 g.color(l.primary);
                 g.begin();
@@ -1548,6 +1775,24 @@ public final class Puppet {
         g.oval(0, bodyY, bodyRx, bodyRy);
         g.color(belly);
         g.oval(H * 0.05f, bodyY + bodyRy * 0.45f, bodyRx * 0.7f, bodyRy * 0.42f);
+        if (l.robot) {
+            // a robot: panel seams, rivets and a small light on the back
+            g.color(alpha(0xFF000000, 0.35f));
+            g.line(-bodyRx * 0.3f, bodyY - bodyRy * 0.9f, -bodyRx * 0.35f, bodyY + bodyRy * 0.8f, 2);
+            g.line(bodyRx * 0.3f, bodyY - bodyRy * 0.9f, bodyRx * 0.25f, bodyY + bodyRy * 0.8f, 2);
+            g.color(alpha(0xFFFFFFFF, 0.5f));
+            for (int i = -2; i <= 2; i++) g.oval(i * bodyRx * 0.3f, bodyY - bodyRy * 0.55f, 2.5f, 2.5f);
+            g.color(alpha(0xFF00E5FF, 0.5f + 0.5f * (float) Math.sin(p.time * 5)));
+            g.oval(-bodyRx * 0.1f, bodyY - bodyRy * 0.98f, H * 0.035f, H * 0.035f);
+        }
+        if (l.outfit == Look.O_JACKET && l.primary != 0) {
+            // a little jacket on the back
+            g.color(l.primary);
+            g.begin(); g.moveTo(-bodyRx * 0.55f, bodyY - bodyRy * 0.95f); g.quadTo(0, bodyY - bodyRy * 1.15f, bodyRx * 0.6f, bodyY - bodyRy * 0.9f);
+            g.lineTo(bodyRx * 0.5f, bodyY + bodyRy * 0.1f); g.quadTo(0, bodyY + bodyRy * 0.2f, -bodyRx * 0.5f, bodyY + bodyRy * 0.1f); g.close(); g.fillPath();
+            g.color(shade(l.primary, 0.7f));
+            g.line(-bodyRx * 0.5f, bodyY + bodyRy * 0.08f, bodyRx * 0.5f, bodyY + bodyRy * 0.08f, 2.5f);
+        }
         if (sp == Look.SP_TIGER) {
             g.color(0xFF2A1A12);
             for (int i = -3; i <= 3; i++) g.line(i * bodyRx * 0.22f, bodyY - bodyRy * 0.95f, i * bodyRx * 0.22f - H * 0.03f, bodyY - bodyRy * 0.2f, H * 0.035f);
@@ -1668,15 +1913,34 @@ public final class Puppet {
             }
             if (sp == Look.SP_GOAT) { g.color(0xFFEDE7DC); g.begin(); g.moveTo(snx, sny + hr * 0.3f); g.lineTo(snx + hr * 0.1f, sny + hr * 0.8f); g.lineTo(snx + hr * 0.3f, sny + hr * 0.3f); g.close(); g.fillPath(); }
         }
+        // a bandana around the neck
+        if (l.outfit == Look.O_JACKET && l.secondary != 0 && l.secondary != l.primary) {
+            g.color(l.secondary);
+            g.begin(); g.moveTo(-hr * 0.8f, hr * 0.55f); g.lineTo(hr * 0.5f, hr * 0.6f); g.lineTo(-hr * 0.2f, hr * 1.15f); g.close(); g.fillPath();
+        }
         // eye
         float ex = hr * 0.25f, ey = -hr * 0.18f;
         float er = hr * 0.17f * (1 - (p.eyesClosed ? 1 : p.blink));
-        g.color(0xFFFFFFFF);
-        g.oval(ex, ey, hr * 0.17f, Math.max(1, er));
-        g.color(0xFF1A120C);
-        g.oval(ex + hr * 0.05f, ey, hr * 0.1f, Math.max(1, Math.min(er, hr * 0.12f)));
-        g.color(0xFFFFFFFF);
-        g.oval(ex + hr * 0.02f, ey - hr * 0.04f, hr * 0.03f, hr * 0.03f);
+        if (l.robot) {
+            // LED screens for eyes: a bright pupil bar; a small frown when sad, an antenna on the head
+            g.color(0xFF0D2137);
+            g.roundRect(ex - hr * 0.24f, ey - hr * 0.16f, hr * 0.48f, hr * 0.32f, hr * 0.06f);
+            int led = p.emotion == Pose.SCARED || p.emotion == Pose.ANGRY ? 0xFFFF5252 : 0xFF40C4FF;
+            g.color(alpha(led, 0.35f)); g.roundRect(ex - hr * 0.2f, ey - hr * 0.12f, hr * 0.4f, hr * 0.24f, hr * 0.05f);
+            g.color(led);
+            if (p.emotion == Pose.SAD) { g.begin(); g.moveTo(ex - hr * 0.14f, ey + hr * 0.06f); g.quadTo(ex, ey - hr * 0.08f, ex + hr * 0.14f, ey + hr * 0.06f); g.strokePath(hr * 0.05f); }
+            else if (p.emotion == Pose.HAPPY || p.emotion == Pose.LAUGH) { g.begin(); g.moveTo(ex - hr * 0.14f, ey - hr * 0.05f); g.quadTo(ex, ey + hr * 0.1f, ex + hr * 0.14f, ey - hr * 0.05f); g.strokePath(hr * 0.05f); }
+            else g.oval(ex + hr * 0.02f, ey, hr * 0.09f * (1 - 0.8f * (p.eyesClosed ? 1 : p.blink)) + 1, hr * 0.09f * (1 - 0.8f * (p.eyesClosed ? 1 : p.blink)) + 1);
+            g.color(0xFF78909C); g.line(-hr * 0.3f, -hr * 0.85f, -hr * 0.45f, -hr * 1.35f, hr * 0.06f);
+            g.color(alpha(0xFFFF1744, 0.5f + 0.5f * (float) Math.sin(p.time * 6))); g.oval(-hr * 0.45f, -hr * 1.38f, hr * 0.09f, hr * 0.09f);
+        } else {
+            g.color(0xFFFFFFFF);
+            g.oval(ex, ey, hr * 0.17f, Math.max(1, er));
+            g.color(0xFF1A120C);
+            g.oval(ex + hr * 0.05f, ey, hr * 0.1f, Math.max(1, Math.min(er, hr * 0.12f)));
+            g.color(0xFFFFFFFF);
+            g.oval(ex + hr * 0.02f, ey - hr * 0.04f, hr * 0.03f, hr * 0.03f);
+        }
         // brow for emotion
         g.color(shade(fur, 0.5f));
         float bi = p.emotion == Pose.ANGRY || p.emotion == Pose.EVIL || p.emotion == Pose.DETERMINED ? hr * 0.08f : p.emotion == Pose.SCARED || p.emotion == Pose.SAD ? -hr * 0.08f : 0;

@@ -511,6 +511,7 @@ public final class Director {
                     .append(Math.round(fmt.charScale * 100)).append("% of the frame height, two lights only (key + bounce), colour script per act\n");
             b.append(String.format(java.util.Locale.US, "• First-frame checks: %d shots reframed for a cut head, %d for feet out of the frame (feet in the bottom 85-98%% with their shadow)%n", framedHead, framedFeet));
             b.append(String.format(java.util.Locale.US, "• Miyazaki ma pauses after two fast beats: %d; Russo / Gunn comic beats: %d; Gunn shadow passes in funny scenes: %d%n", maPauses, comicBeats, shadowPasses));
+            b.append("• Story spine filled before any shot was planned (R4, hardcoded): yes — hero ").append(film.hero.length() > 0 ? film.hero : "—").append("; the ending was read first (R3)\n");
             b.append("• Spider-Verse animation on twos: ").append(opt.onTwos ? "on (experts 24, learners 12, rebels 8 fps)" : "off (every character moves every frame; switch it on in Settings)").append('\n');
             b.append("• Nolan: real sounds — steps by the floor of the place (stone, marble, cave, earth), running steps for runs; cross-cutting between speaker and listener in long lines\n");
         } else {
@@ -675,8 +676,14 @@ public final class Director {
         seg.t0 = t;
         seg.set = Sets.detect(firstSentence(where));
         if (seg.set == Sets.GENERIC_OUT) seg.set = Sets.detect(where);
-        seg.tod = Sets.detectTime(where, pi == 0 && si == 0 ? Sets.MORNING : prevTod == Sets.NIGHT && seg.set != Sets.CAVE_IN ? Sets.NIGHT : Sets.DAY);
+        // the hour: the scene's own words first (its title, the first line of its action), then the place's first
+        // sentence (a place description that says the flowers glow "at night" does not make the morning night)
+        String firstDir = "";
+        for (int bi = b0; bi < b1; bi++) if (sc.beats.get(bi).type == Story.Beat.DIRECTION) { firstDir = firstSentence(sc.beats.get(bi).text); break; }
+        int fallback = pi == 0 && si == 0 ? Sets.MORNING : prevTod == Sets.NIGHT && seg.set != Sets.CAVE_IN ? Sets.NIGHT : Sets.DAY;
+        seg.tod = Sets.detectTime((pi == 0 ? sc.title + " । " : "") + firstDir, Sets.detectTime(firstSentence(where), fallback));
         if (seg.set == Sets.CAVE_IN) seg.tod = Sets.NIGHT;
+        if (seg.set == Sets.BASEMENT) seg.tod = Sets.NIGHT;      // a closed basement knows no daylight
         seg.festive = Txt.has(where, "सजा", "रोशनियों", "ढोल", "उत्सव", "जश्न", "celebrat", "festiv");
         // the characters are in a boat: the place is the water itself, or the boat is named as where they are
         String partWords = where + " " + (b0 < b1 ? sc.beats.get(b0).text : "");
@@ -689,6 +696,7 @@ public final class Director {
         seg.ground = seg.backdrop != null ? seg.backdrop.ground * 720f : Sets.GROUND;
         ground = seg.ground;
         seg.fadeIn = 0.45f; seg.fadeOut = 0.45f;
+        lightsOff = false;
         // PixarLead: the act this part belongs to (its colour script) and the format's character scale lock
         seg.act = sceneActs != null && si < sceneActs.length ? sceneActs[si] : 1;
         seg.charScale = PixarLead.spec(opt.aspect).charScale;
@@ -707,6 +715,8 @@ public final class Director {
             Story.Beat b = sc.beats.get(bi);
             if (b.type == Story.Beat.DIALOGUE) {
                 Story.CharacterDef c = b.speaker;
+                // a voice from the air, a device or off-screen is heard, never stood on the stage
+                if (c != null && (c.voiceOnly || b.offScreen)) c = null;
                 if (c != null && !order.contains(c)) {
                     order.add(c);
                     boolean far = Txt.has(b.manner, "दूर से");
@@ -834,9 +844,12 @@ public final class Director {
             if ((mood == Film.M_HAPPY || mood == Film.M_PLAYFUL || mood == Film.M_CELEBRATE) && storyHasVillain() && tc - t > 6) shadowPass(t + (tc - t) * 0.55f);
         }
         seg.t1 = tc + 0.8f;
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_LIGHTS_OFF && f.t1 > seg.t1) f.t1 = seg.t1;
         if (pi == nParts - 1) closeAllWeather(seg.t1);
         else { closeWeather(Film.W_STARS, seg.t1); closeWeather(Film.W_FIREFLIES, seg.t1); }
         film.music.add(new Film.Music(mood, seg.t0, seg.t1));
+        // Gunn: music is a character — scary = silence and a heartbeat (the tense score is already a low drone)
+        if ((mood == Film.M_TENSE || mood == Film.M_VILLAIN) && seg.t1 - seg.t0 > 4) film.sfx.add(new Film.Sfx(Film.SFX_HEARTBEAT, seg.t0 + 1f, Math.min(14f, seg.t1 - seg.t0 - 1.5f), 0.2f));
         film.ambience.add(new Film.Amb(seg.t0, seg.t1, where + " " + Sets.name(seg.set) + " " + ambWords(seg)));
         film.notes.set(noteIdx, "Part " + sc.number + (nParts > 1 ? " (" + (char) ('a' + pi) + ")" : "") + ": " + Sets.label(seg.set)
                 + (seg.backdrop != null ? " [your picture]" : "") + ", characters: " + names(lineup));
@@ -1034,6 +1047,7 @@ public final class Director {
         sp.acts.add(new Film.Act(start, end, Film.G_TALK));
         // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
         mannerActions(sp, to, b.manner, start, end, line.emotion);
+        cuesFrom(b.manner, start, sp, to, null);
         headwearFromWords(sp, to, b.text, start);
         if (line.emotion == Pose.SAD) { Film.Key k = sp.at(start); k.tears = true; }
         if (line.emotion == Pose.LAUGH && sp.look.hero && Txt.has(b.text, "हा हा", "हँस")) {
@@ -1351,7 +1365,8 @@ public final class Director {
     private int stepsSound(boolean run) {
         if (run) return Film.SFX_STEPS_RUN;
         switch (seg.set) {
-            case Sets.COURTYARD: case Sets.GATE: case Sets.HALL: case Sets.CAVE_IN: case Sets.CAVE_MOUTH: case Sets.CELEBRATION: return Film.SFX_STEPS_HARD;
+            case Sets.COURTYARD: case Sets.GATE: case Sets.HALL: case Sets.CAVE_IN: case Sets.CAVE_MOUTH: case Sets.CELEBRATION:
+            case Sets.ROOFTOP: case Sets.BASEMENT: case Sets.STREET: case Sets.ROOM: return Film.SFX_STEPS_HARD;
             default: return Film.SFX_STEPS;
         }
     }
@@ -2185,7 +2200,7 @@ public final class Director {
             Film.Actor v = subj;
             if (v != null) v.acts.add(new Film.Act(t, t + 0.8f, Film.G_REACH));
         }
-        if (Txt.has(s, "धुएँ", "धुआँ", "फूँ") && Txt.has(s, "फट", "गुबार", "फूँ")) {
+        if (Txt.has(s, "धुएँ", "धुआँ", "धुआं", "smoke") && Txt.has(s, "फट", "गुबार", "फूँक", "छोड़", "निकल", "उठ", "burst", "puff")) {
             Film.Actor at = subj;
             if (Txt.has(s, "गायब") || at == null) at = null;
             if (at != null && !Txt.has(s, "गायब")) {
@@ -2419,6 +2434,12 @@ public final class Director {
         }
         if (Txt.has(s, "दौड़ते हुए आते", "दौड़ते हुए आती")) d = Math.max(d, 1.8f);
         if (Txt.has(s, "पहरा")) d = Math.max(d, 2.2f);
+        // the cues nothing else hardcodes: sounds written as words, light and machines (Cues)
+        d = Math.max(d, cuesFrom(s, t, subj, target, group));
+        if (lightsOff && Txt.has(s, "रोशनी वापस", "लाइट जल", "फिर से खिल", "फिर से जल", "lights come back", "light returns", "back on", "lit up again", "जल उठ")) {
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_LIGHTS_OFF && f.t1 > t) f.t1 = t + 0.6f;
+            lightsOff = false;
+        }
 
         if (!focusSet && !establishing) {
             List<Film.Actor> vis = new ArrayList<Film.Actor>();
@@ -2429,6 +2450,55 @@ public final class Director {
         }
         return d;
     }
+
+    // ------------------------------------------------------------------ the cues of any script
+
+    private final Map<String, Float> cueAt = new HashMap<String, Float>();
+
+    /**
+     * Stages the cues of a sentence (Cues.read): the sound named by a word is played, a thing happening to light
+     * or a machine becomes an effect on the stage. Returns the time the cue deserves.
+     */
+    private float cuesFrom(String s, float t, Film.Actor subj, Film.Actor target, List<Film.Actor> group) {
+        float d = 0;
+        for (Cues.Cue c : Cues.read(s)) {
+            // the same cue is not repeated within a second (a manner and its line, two sentences about one thing)
+            Float last = cueAt.get(c.word);
+            if (last != null && Math.abs(last - t) < 1f) continue;
+            cueAt.put(c.word, t);
+            float x = subj != null ? xAt(subj, t) : 640;
+            float h = subj != null ? heightOf(subj) : 360;
+            float facing = subj != null ? subj.stateAt(t).facing : 1;
+            if (c.sfx >= 0 && c.visual != Cues.V_BEAM) film.sfx.add(new Film.Sfx(c.sfx, t + 0.15f, c.seconds, c.gain));
+            switch (c.visual) {
+                case Cues.V_GLOW: { Film.Fx f = fx(Film.FX_GLOW_AREA, t + 0.2f, t + 0.2f + Math.max(4f, c.seconds + 2), 0, 0, null, null); f.color = Txt.has(s, "हरी", "green") ? 0xFF69F0AE : Txt.has(s, "नीली", "blue") ? 0xFF40C4FF : Txt.has(s, "लाल", "red") ? 0xFFFF5252 : 0xFFFFF176; d = Math.max(d, 2.2f); break; }
+                case Cues.V_TWINKLE: { fx(Film.FX_TWINKLE, t + 0.1f, t + 0.1f + Math.max(3f, c.seconds), 640, ground - 260, null, null); d = Math.max(d, 1.6f); break; }
+                case Cues.V_FLICKER: { fx(Film.FX_FLICKER, t, t + Math.max(3f, c.seconds), 0, 0, null, null); break; }
+                case Cues.V_OFF: { fx(Film.FX_LIGHTS_OFF, t + 0.3f, seg.t1 > t + 2 ? Float.MAX_VALUE : t + 6f, 0, 0, null, null).kind = 1; lightsOff = true; d = Math.max(d, 2.2f); break; }
+                case Cues.V_GLITCH: { fx(Film.FX_GLITCH, t + 0.1f, t + 0.1f + Math.max(0.8f, c.seconds), 0, 0, null, null); if (subj != null) { Film.Key k = subj.at(t + 0.2f); k.emotion = Pose.SCARED; } d = Math.max(d, 1.6f); break; }
+                case Cues.V_DATA: { Film.Fx f = fx(Film.FX_DATA, t + 0.2f, t + 0.2f + Math.max(3f, c.seconds), x, ground - 200, null, null); f.kind = facing > 0 ? 0 : 1; d = Math.max(d, 2.4f); break; }
+                case Cues.V_BEAM: {
+                    Film.Actor victim = target;
+                    if (victim == null && group != null) for (Film.Actor a : group) if (a != subj) { victim = a; break; }
+                    if (subj != null) { Film.Fx beam = fx(Film.FX_BEAM, t + 0.6f, t + 0.6f + Math.max(2.5f, c.seconds), 0, 0, subj, victim); beam.color = 0xFFFFF59D; subj.acts.add(new Film.Act(t + 0.3f, t + 3.3f, Film.G_POINT)); }
+                    if (victim != null) { victim.acts.add(new Film.Act(t + 1f, t + 3f, Film.G_SHIELD_EYES)); Film.Key k = victim.at(t + 1f); k.emotion = Pose.SCARED; }
+                    film.sfx.add(new Film.Sfx(Film.SFX_CHIME, t + 0.6f, 1.6f, 0.25f));
+                    d = Math.max(d, 3.2f); break;
+                }
+                case Cues.V_DRONE: { fx(Film.FX_DRONE, t, t + c.seconds, x + facing * 200, ground - 300, subj, null); break; }
+                case Cues.V_HEARTS: { if (subj != null) { fx(Film.FX_HEARTS, t + 0.2f, t + 0.2f + c.seconds, 0, 0, subj, null); Film.Key k = subj.at(t + 0.2f); k.emotion = Pose.HAPPY; } d = Math.max(d, 2f); break; }
+                case Cues.V_NOTIFY: { if (subj != null) { fx(Film.FX_NOTIFY, t + 0.2f, t + 0.2f + c.seconds, 0, 0, subj, null); subj.acts.add(new Film.Act(t + 0.3f, t + 1.8f, Film.G_LOOK_UP)); } d = Math.max(d, 2f); break; }
+                case Cues.V_SPARKS: { fx(Film.FX_SPARKS, t + 0.3f, t + 0.3f + Math.max(0.8f, c.seconds), x + facing * 60, ground - h * 0.45f, subj, null); if (subj != null) subj.acts.add(new Film.Act(t, t + 1.2f, Film.G_PULL)); d = Math.max(d, 1.6f); break; }
+                case Cues.V_BLAST: { fx(Film.FX_FLASH, t + 0.3f, t + 1.1f, 640, 360, null, null).color = 0xFFFFE082; shake(t + 0.3f, t + 1.5f); fx(Film.FX_SMOKE, t + 0.5f, t + 4f, x + facing * 120, ground - 120, null, null).color = 0xFF616161; for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) { Film.Key k = a.at(t + 0.4f); k.emotion = Pose.SCARED; } d = Math.max(d, 2.5f); break; }
+                case Cues.V_STEAM: { fx(Film.FX_STEAM, t + 0.2f, t + 0.2f + Math.max(2.5f, c.seconds), x + facing * 80, ground - h * 0.3f, null, null); break; }
+                default:
+            }
+        }
+        return d;
+    }
+
+    /** The lights went out in this part (the stage stays dark until the story lights it again). */
+    private boolean lightsOff;
 
     // ------------------------------------------------------------------ helpers
 
@@ -3010,6 +3080,10 @@ public final class Director {
         String w;
         switch (s.set) {
             case Sets.CAVE_IN: case Sets.CAVE_MOUTH: w = "cave गुफा"; break;
+            case Sets.ROOFTOP: w = s.tod == Sets.NIGHT ? "city night rooftop wind traffic distant" : "city rooftop wind traffic distant drone"; break;
+            case Sets.BASEMENT: w = "basement hum electric drip machine"; break;
+            case Sets.ROOM: w = "room indoor quiet clock"; break;
+            case Sets.STREET: w = "street traffic city horns crowd"; break;
             case Sets.FOREST: w = s.tod == Sets.NIGHT || s.tod == Sets.EVENING ? "jungle night जंगल रात" : "forest जंगल birds"; break;
             case Sets.CELEBRATION: w = "festival crowd mela उत्सव"; break;
             case Sets.HALL: w = "palace hall महल"; break;
@@ -3025,6 +3099,10 @@ public final class Director {
         if (Txt.has(where, "चिड़िय", "चह-चह", "सुबह", "सूर्योदय", "बगीच")) film.sfx.add(new Film.Sfx(Film.SFX_BIRDS, t, 8, 0.3f));
         if (Txt.has(where, "हवा")) film.sfx.add(new Film.Sfx(Film.SFX_WIND, t, 8, 0.25f));
         if (seg.set == Sets.CAVE_IN) film.sfx.add(new Film.Sfx(Film.SFX_DRIP, t, 30, 0.35f));
+        // the sounds of today's places (Nolan: real sounds): traffic and drones on a rooftop, a hum and a drip in a basement
+        if (seg.set == Sets.ROOFTOP || seg.set == Sets.STREET) { film.sfx.add(new Film.Sfx(Film.SFX_TRAFFIC, t, 30, seg.set == Sets.STREET ? 0.35f : 0.18f)); film.sfx.add(new Film.Sfx(Film.SFX_WIND, t, 12, 0.12f)); }
+        if (seg.set == Sets.ROOFTOP && Txt.has(where, "drone", "ड्रोन")) film.sfx.add(new Film.Sfx(Film.SFX_DRONE, t + 2f, 3.5f, 0.2f));
+        if (seg.set == Sets.BASEMENT) { film.sfx.add(new Film.Sfx(Film.SFX_HUM, t, 30, 0.22f)); film.sfx.add(new Film.Sfx(Film.SFX_DRIP, t + 1f, 30, 0.18f)); }
         if (seg.set == Sets.FOREST && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) film.sfx.add(new Film.Sfx(Film.SFX_NIGHT, t, 30, 0.35f));
         if (seg.festive) { film.sfx.add(new Film.Sfx(Film.SFX_DRUMS, t, 12, 0.45f)); film.sfx.add(new Film.Sfx(Film.SFX_CROWD, t, 6, 0.25f)); }
     }

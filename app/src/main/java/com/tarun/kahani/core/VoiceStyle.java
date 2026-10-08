@@ -73,6 +73,8 @@ public final class VoiceStyle {
         if (hasWord(v, NASAL)) s.nasal = 0.7f;
         if (hasWord(v, SQUEAK)) s.squeak = 0.7f;
         if (hasWord(v, ROBOT) || hasWord(all, "रोबोट", "robot")) s.robot = 0.7f;
+        // a voice from a machine (an AI, a computer, a phone, an app): a touch of the machine in it
+        if (c.voiceOnly && (all.matches("(?s).*\\bAI\\b.*") || hasWord(all, "कंप्यूटर", "computer", "मशीन", "machine", "app", "ऐप", "phone", "फ़ोन", "robot", "रोबोट"))) s.robot = Math.max(s.robot, 0.45f);
         if (hasWord(v, MAGIC)) s.magic = 0.7f;
         if (hasWord(all, GHOST)) s.ghost = 0.75f;
         if (hasWord(v, GROWL)) s.growl = 0.6f;

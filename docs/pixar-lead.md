@@ -42,8 +42,19 @@ shot, the validation layer).
 | Prompt builder | `TechnicalDirector.IMAGE_TEMPLATE` / `VIDEO_TEMPLATE`: FORMAT line, lens, STYLE and NEGATIVE lines, `resume_from_snapshot_id`, `contains_speech`, duration, fps and PRINCIPLES tags. |
 | FINAL VALIDATION | The validation layer checks every shot and every prompt (aspect as a parameter, face not stretched, head and feet inside, static background, the principle tags); what fails is corrected first. |
 
+## Refined and extended (v15)
+
+The "PIXAR IS THE BOSS — refined and extended" text is stored verbatim in the same asset. What it added to the code:
+rules 2, 3, 6, 12, 15 and 16 (`PixarLead.STORY_RULES`), Braintrust Q5 (the face is the same as the lock sheet — always
+true here, one picture per character), Disney's numbers (`SQUASH` 0.8, `STRETCH` 1.2 on jumps, `FRAMES_HEAVY` 24 /
+`FRAMES_LIGHT` 6, `EXAGGERATION` 1.5), the scared run on twos, the hand-drawn wobble of drawn characters, music as a
+character (a heartbeat under tense parts, the dhol under celebrations), the cinema format's 20 % headroom, and the
+eight-point final checklist (`PixarLead.CHECKLIST`) answered at the end of every descriptions file.
+
 ## Test stories
 
 `tools/testdata/machhuare_ka_beta.txt` (Hindi: a fisherman's son, a boat at sea, a storm, a tiger, diyas at night) and
-`tools/testdata/the_lost_kite.txt` (English: a rooftop, a banyan tree, rain, a candle) are run by the Robolectric tests
-next to the bundled sample story: the protocol holds for any script, not only the sample.
+`tools/testdata/the_lost_kite.txt` (English: a rooftop, a banyan tree, rain, a candle) and
+`tools/testdata/neo_mumbai.txt` (a 21st-century free-form script: a coder girl, a robo-dog, an AI witch, a rooftop neon
+garden, a mall basement, sounds written as words) are run by the Robolectric tests next to the bundled sample story:
+the protocol holds for any script, not only the sample.

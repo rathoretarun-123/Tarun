@@ -61,7 +61,7 @@ final class AutoLibrary {
             else if (f[0].equals("end")) end = true;
         }
         List<String[]> t = new ArrayList<String[]>();
-        for (Story.CharacterDef c : st.characters) if (!haveChar.contains(c)) t.add(new String[]{"char:" + c.displayName, c.shown(), c.description});
+        for (Story.CharacterDef c : st.cast()) if (!haveChar.contains(c)) t.add(new String[]{"char:" + c.displayName, c.shown(), c.description});
         for (String[] p : Bible.places(st)) {
             boolean needed = false;
             for (Story.Scene sc : st.scenes) if (placeOf(sc, p[0]) && !haveScene.contains(String.valueOf(sc.number))) needed = true;

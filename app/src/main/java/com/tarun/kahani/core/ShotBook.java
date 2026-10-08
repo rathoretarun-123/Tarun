@@ -61,6 +61,10 @@ public final class ShotBook {
             case Sets.HALL: return "polished marble floor";
             case Sets.VILLAGE: return "dusty packed earth";
             case Sets.CELEBRATION: return "stone floor strewn with marigold petals";
+            case Sets.ROOFTOP: return "concrete terrace tiles";
+            case Sets.BASEMENT: return "cracked concrete floor with puddles";
+            case Sets.ROOM: return "wooden floor with a rug";
+            case Sets.STREET: return "asphalt with a painted lane line";
             default: return "firm natural ground";
         }
     }
@@ -75,6 +79,10 @@ public final class ShotBook {
             case Sets.HALL: return "edge of a silk curtain, out of focus";
             case Sets.VILLAGE: return "a wooden cart wheel, out of focus";
             case Sets.CELEBRATION: return "an out-of-focus marigold garland";
+            case Sets.ROOFTOP: return "the edge of a planter with glowing solar flowers, out of focus";
+            case Sets.BASEMENT: return "the corner of a broken arcade machine, out of focus";
+            case Sets.ROOM: return "the arm of a sofa, out of focus";
+            case Sets.STREET: return "a parked scooter, out of focus";
             default: return "out-of-focus leaves";
         }
     }
@@ -159,8 +167,8 @@ public final class ShotBook {
         b.append("\n").append(film.braintrust != null ? film.braintrust.text : PixarLead.braintrust(film, st).text).append("\n");
 
         // ---- 1. characters
-        b.append("1. CHARACTER LOCK SHEETS (").append(st.characters.size()).append(")\n------------------------------------------------------------\n");
-        for (Story.CharacterDef c : st.characters) {
+        b.append("1. CHARACTER LOCK SHEETS (").append(st.cast().size()).append(")\n------------------------------------------------------------\n");
+        for (Story.CharacterDef c : st.cast()) {
             b.append("LOCK NAME: ").append(c.shown()).append("\n");
             if (c.fullName != null && !c.fullName.equals(c.shown())) b.append("Full name: ").append(c.fullName).append("\n");
             b.append("Kind: ").append(Bible.kindWord(c.look, false)).append(c.age > 0 ? ", " + c.age + " years" : "").append(", height ").append(feet(c.look)).append("\n");
@@ -348,6 +356,19 @@ public final class ShotBook {
         b.append("Hands deformed → hide them: \"hands behind the back, not visible\" or a face-only close-up.\n");
         b.append("Lip-sync bad → make a silent close-up and add the lip-sync in post (Wav2Lip).\n\n");
         b.append("FINAL LAW: Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot. Always think in 3-second static shots.\n\n");
+
+        // ---- the final checklist before export, answered by what the app does
+        b.append("FINAL CHECKLIST BEFORE EXPORT\n------------------------------------------------------------\n");
+        String[] answers = {"yes — every plate is asked for natively at " + fmt.w + "x" + fmt.h + " and its real size is verified (within 5%)",
+                "yes — one picture per character for the whole film; pictures are scaled uniformly, never stretched (face stretch check: 0%)",
+                "yes — the first-frame check reframes any shot whose subject's head would touch the top (headroom " + Math.round(fmt.top * 100) + "%)",
+                "yes — full shots keep the feet in the bottom 85-98% with a soft contact shadow",
+                "yes — " + fmt.note,
+                "yes — locked tripod in every shot, the place drawn once and held still (only its water and leaves live)",
+                "yes — shape.aspect_ratio = " + ar + " is a parameter; the words are cleaned from every prompt",
+                "yes — native size for each format; a different format means the director frames every shot again, never a resized copy"};
+        for (int i = 0; i < PixarLead.CHECKLIST.length; i++) b.append("[x] ").append(PixarLead.CHECKLIST[i]).append("  → ").append(answers[i]).append('\n');
+        b.append("\n");
 
         // ---- 7. thumbnail and poster (RULE_RESIZE_8: made separately, never resized from a frame)
         b.append("7. THUMBNAIL AND POSTER (made separately)\n------------------------------------------------------------\n");

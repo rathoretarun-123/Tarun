@@ -7,12 +7,17 @@ public final class Sets {
     public static final float W = 1280, H = 720, GROUND = 640;
 
     public static final int GARDEN = 0, COURTYARD = 1, GATE = 2, CAVE_IN = 3, CAVE_MOUTH = 4, FOREST = 5,
-            CELEBRATION = 6, HALL = 7, VILLAGE = 8, GENERIC_OUT = 9;
+            CELEBRATION = 6, HALL = 7, VILLAGE = 8, GENERIC_OUT = 9,
+            ROOFTOP = 10,     // a city rooftop or terrace: skyline, glass towers, planters
+            BASEMENT = 11,    // a dark basement, a closed mall, a server room: machines, a flickering tubelight
+            ROOM = 12,        // a room of today: a home, a classroom, an office
+            STREET = 13;      // a city street
     public static final int MORNING = 0, DAY = 1, EVENING = 2, NIGHT = 3;
 
     /** Sets under the open sky (weather, stars and fireflies belong there). */
     public static boolean outdoorSet(int set) {
-        return set == GARDEN || set == FOREST || set == VILLAGE || set == COURTYARD || set == GATE || set == CELEBRATION || set == CAVE_MOUTH || set == GENERIC_OUT;
+        return set == GARDEN || set == FOREST || set == VILLAGE || set == COURTYARD || set == GATE || set == CELEBRATION || set == CAVE_MOUTH || set == GENERIC_OUT
+                || set == ROOFTOP || set == STREET;
     }
 
     /** English name of a set for the app's screens (name() stays Hindi: it is also used to match sounds). */
@@ -27,6 +32,10 @@ public final class Sets {
             case CELEBRATION: return "celebration";
             case HALL: return "palace hall";
             case VILLAGE: return "village";
+            case ROOFTOP: return "city rooftop";
+            case BASEMENT: return "dark basement";
+            case ROOM: return "room";
+            case STREET: return "city street";
             default: return "open place";
         }
     }
@@ -42,6 +51,10 @@ public final class Sets {
             case CELEBRATION: return "उत्सव";
             case HALL: return "महल (अंदर)";
             case VILLAGE: return "गाँव";
+            case ROOFTOP: return "शहर की छत";
+            case BASEMENT: return "अँधेरा तहखाना";
+            case ROOM: return "कमरा";
+            case STREET: return "शहर की सड़क";
             default: return "खुला स्थान";
         }
     }
@@ -50,13 +63,23 @@ public final class Sets {
     public static int detect(String text) {
         if (Txt.has(text, "गुफा के अंदर", "गुफा में", "inside the cave", "अपनी गुफा")) return CAVE_IN;
         if (Txt.has(text, "मुहान", "गुफा के बाहर", "गुफा के दरवाज", "cave entrance")) return CAVE_MOUTH;
-        if (Txt.has(text, "गुफा", "cave", "तहखान", "कैदखान")) return CAVE_IN;
+        // places of today, before the old ones ("rooftop garden" is a rooftop, not the palace garden)
+        if (Txt.has(text, "basement", "बेसमेंट", "तहखान", "mall", "मॉल", "server room", "सर्वर रूम", "parking", "पार्किंग", "warehouse", "गोदाम", "garage", "गैराज",
+                "factory", "फैक्ट्री", "कारखान", "arcade", "bunker", "लैब", "laboratory")) return BASEMENT;
+        if (Txt.has(text, "rooftop", "roof", "छत पर", "की छत", "terrace", "टैरेस", "balcony", "बालकनी", "high-rise", "highrise", "skyline", "स्काई-लाइन", "स्काईलाइन",
+                "society", "सोसाइटी", "apartment", "अपार्टमेंट", "टावर", "tower", "building", "बिल्डिंग", "20वें फ्लोर", "floor")) return ROOFTOP;
+        if (Txt.has(text, "गुफा", "cave", "कैदखान")) return CAVE_IN;
         if (Txt.has(text, "जंगल", "वन ", "forest", "jungle", "woods")) return FOREST;
         if (Txt.has(text, "सजा", "उत्सव", "जश्न", "रोशनियों", "ढोल", "celebration", "festival")) return CELEBRATION;
         if (Txt.has(text, "मुख्य द्वार", "द्वार", "गेट", "फाटक", "gate")) return GATE;
         if (Txt.has(text, "प्रांगण", "आँगन", "मैदान", "courtyard", "arena")) return COURTYARD;
         if (Txt.has(text, "बगीच", "बाग", "उद्यान", "garden")) return GARDEN;
-        if (Txt.has(text, "दरबार", "कक्ष", "कमरे", "hall", "room", "throne")) return HALL;
+        if (Txt.has(text, "दरबार", "सिंहासन", "throne", "palace hall", "महल के अंदर", "राजमहल", "दरबार") || (Txt.has(text, "महल", "palace") && Txt.has(text, "कक्ष", "कमरे", "hall", "room"))) return HALL;
+        if (Txt.has(text, "living room", "bedroom", "कमरा", "कमरे", "कक्ष", "office", "ऑफिस", "दफ़्तर", "दफ्तर", "classroom", "कक्षा", "school", "स्कूल", "क्लास",
+                "kitchen", "रसोई", "hospital", "अस्पताल", "shop", "दुकान", "library", "पुस्तकालय", "घर के अंदर", "inside the house", "indoors", "studio", "स्टूडियो",
+                "hall", "room", "flat")) return ROOM;
+        if (Txt.has(text, "सड़क", "street", "road", "गली", "lane", "traffic", "चौराहा", "crossing", "station", "स्टेशन", "bus stop", "शहर", "city", "मुंबई", "दिल्ली",
+                "mumbai", "delhi", "metro")) return STREET;
         if (Txt.has(text, "गाँव", "गांव", "बाज़ार", "village", "market")) return VILLAGE;
         if (Txt.has(text, "महल", "palace")) return GARDEN;
         return GENERIC_OUT;
@@ -70,7 +93,7 @@ public final class Sets {
         return fallback;
     }
 
-    public static boolean indoorDark(int set) { return set == CAVE_IN; }
+    public static boolean indoorDark(int set) { return set == CAVE_IN || set == BASEMENT; }
 
     static int lerp(int a, int b, float t) { return Puppet.mix(a, b, t); }
 
@@ -82,6 +105,10 @@ public final class Sets {
             case CAVE_MOUTH: caveMouth(g, tod); return;
             case FOREST: forest(g, tod); return;
             case HALL: hall(g); return;
+            case BASEMENT: basement(g); return;
+            case ROOM: room(g, tod); return;
+            case ROOFTOP: sky(g, tod); rooftop(g, tod); return;
+            case STREET: sky(g, tod); street(g, tod); return;
             default:
         }
         sky(g, tod);
@@ -335,6 +362,152 @@ public final class Sets {
         }
     }
 
+    /** A city skyline: towers of glass with lit windows, drawn from a seed so it is the same every frame. */
+    static void skyline(Gfx g, int tod, float base, float scale) {
+        boolean night = tod == NIGHT, eve = tod == EVENING;
+        int far = night ? 0xFF1A2238 : eve ? 0xFF5A4A78 : 0xFF9FB8CC, near = night ? 0xFF11182A : eve ? 0xFF3C3458 : 0xFF7E97AE;
+        long sd = 7;
+        for (int i = 0; i < 18; i++) {
+            sd = sd * 6364136223846793005L + 1442695040888963407L;
+            float w = (60 + ((sd >>> 33) % 90)) * scale, h = (120 + ((sd >>> 13) % 260)) * scale;
+            float x = -40 + i * 76 * scale;
+            g.color(i % 2 == 0 ? far : near);
+            g.rect(x, base - h, w, h);
+            // windows
+            g.color(night ? 0xCCFFE082 : eve ? 0x88FFD180 : 0x66FFFFFF);
+            for (int r = 0; r < (int) (h / (26 * scale)); r++) for (int c = 0; c < (int) (w / (18 * scale)); c++) {
+                sd = sd * 6364136223846793005L + 1442695040888963407L;
+                if (((sd >>> 40) % 3) == 0) g.rect(x + 6 * scale + c * 18 * scale, base - h + 10 * scale + r * 26 * scale, 8 * scale, 12 * scale);
+            }
+        }
+        // the tallest glass tower
+        g.color(night ? 0xFF1E2A48 : eve ? 0xFF6E5A90 : 0xFFC9DBE8);
+        g.begin(); g.moveTo(900, base); g.lineTo(900, base - 420 * scale); g.lineTo(960, base - 470 * scale); g.lineTo(1020, base - 420 * scale); g.lineTo(1020, base); g.close(); g.fillPath();
+        g.color(night ? 0x55FFFFFF : 0x44FFFFFF);
+        for (int r = 0; r < 14; r++) g.rect(908, base - 400 * scale + r * 28 * scale, 104, 4 * scale);
+    }
+
+    /** A rooftop garden on a high-rise: the skyline behind, a railing, planters with solar flowers. */
+    static void rooftop(Gfx g, int tod) {
+        boolean night = tod == NIGHT;
+        skyline(g, tod, 520, 1f);
+        // haze over the city
+        g.linear(0, 380, 0, 520, 0x00FFFFFF, night ? 0x33101830 : 0x55E6F0F8); g.rect(0, 380, W, 140);
+        // the terrace: concrete floor with tiles
+        g.linear(0, 520, 0, H, night ? 0xFF3A3F4A : 0xFFD6D2C8, night ? 0xFF22262E : 0xFFA9A49A); g.rect(0, 520, W, H - 520);
+        g.color(night ? 0x22FFFFFF : 0x33000000);
+        for (int i = 0; i < 9; i++) g.line(i * 160, 520, i * 160 - 120, H, 2);
+        for (int i = 1; i < 5; i++) g.line(0, 520 + i * 50, W, 520 + i * 50, 2);
+        // glass railing with posts
+        g.color(night ? 0x5580B0D0 : 0x6690C0E0); g.rect(0, 455, W, 65);
+        g.color(night ? 0xFF8A94A6 : 0xFFE8ECF0);
+        for (int i = 0; i <= 8; i++) g.rect(i * 160 - 4, 450, 8, 72);
+        g.rect(0, 450, W, 6);
+        // planters with solar flowers (they glow at night: paintLive adds the pulse)
+        for (int i = 0; i < 5; i++) {
+            float x = 120 + i * 260;
+            g.color(night ? 0xFF4A4E58 : 0xFF8D8D8D); g.roundRect(x - 70, 560, 140, 60, 8);
+            g.color(night ? 0xFF2E5A2E : 0xFF4C9A3E); g.oval(x, 562, 66, 12);
+            for (int k = -1; k <= 1; k++) {
+                g.color(0xFF3E6B3E); g.line(x + k * 36, 560, x + k * 36 + k * 4, 505, 4);
+                g.radial(x + k * 36 + k * 4, 500, 26, night ? 0x9900E5FF : 0x66FFF59D, 0x0000E5FF); g.oval(x + k * 36 + k * 4, 500, 26, 26);
+                g.color(night ? 0xFF80DEEA : 0xFFFFD54F); g.oval(x + k * 36 + k * 4, 500, 14, 14);
+                g.color(0xFF1E88E5); g.oval(x + k * 36 + k * 4, 500, 6, 6);
+            }
+        }
+        // a water tank and an antenna
+        g.color(night ? 0xFF2A2E38 : 0xFF6E7F8E); g.rect(1150, 400, 90, 110); g.oval(1195, 400, 45, 14);
+        g.color(night ? 0xFF8A94A6 : 0xFF455A64); g.line(1230, 400, 1230, 300, 3); g.line(1215, 320, 1245, 320, 3);
+    }
+
+    /** A closed mall's basement: concrete, a rusty shutter, broken arcade machines, a tubelight, pipes. */
+    static void basement(Gfx g) {
+        g.linear(0, 0, 0, H, 0xFF0C1410, 0xFF101A14); g.rect(0, 0, W, H);
+        // back wall of concrete with damp patches and a rusty shutter
+        g.linear(0, 90, 0, 500, 0xFF1E2A22, 0xFF151E18); g.rect(0, 90, W, 410);
+        g.color(0x22000000);
+        for (int i = 0; i < 6; i++) g.oval(150 + i * 200, 200 + (i % 3) * 60, 80, 40);
+        g.color(0xFF4E3A2A); g.rect(540, 170, 220, 330);
+        g.color(0xFF3B2B1E); for (int i = 0; i < 11; i++) g.rect(540, 170 + i * 30, 220, 4);
+        g.color(0xFF7A5230); g.oval(600, 230, 18, 12); g.oval(700, 400, 24, 14);
+        // arcade machines: boxes with dark screens and a crack
+        int[] xs = {120, 300, 950, 1120};
+        for (int i = 0; i < xs.length; i++) {
+            int x = xs[i];
+            g.color(i % 2 == 0 ? 0xFF2A2A36 : 0xFF33222A); g.rect(x - 60, 280, 120, 220);
+            g.color(0xFF1A1E24); g.rect(x - 45, 300, 90, 70);
+            g.color(0xFF2E3A44); g.line(x - 30, 310, x + 20, 360, 1.5f);
+            g.color(0xFF5C6B73); g.rect(x - 45, 390, 90, 12);
+            g.color(0xFFE53935); g.oval(x - 20, 420, 8, 8); g.color(0xFF1E88E5); g.oval(x + 10, 420, 8, 8);
+        }
+        // pipes and a CCTV camera
+        g.color(0xFF37474F); g.rect(0, 60, W, 14); g.rect(200, 60, 14, 120); g.rect(1000, 60, 14, 90);
+        g.color(0xFF263238); g.rect(1180, 120, 40, 22); g.oval(1218, 131, 10, 10);
+        g.color(0xFFFF1744); g.oval(1186, 126, 3, 3);
+        // the tubelight (its flicker is in paintLive)
+        g.color(0xFFB9F6CA); g.roundRect(480, 100, 320, 12, 6);
+        // floor: cracked concrete with puddles
+        g.linear(0, 500, 0, H, 0xFF2A3430, 0xFF141B18); g.rect(0, 500, W, H - 500);
+        g.color(0x442A5A48); g.oval(380, 640, 120, 18); g.oval(900, 680, 150, 20);
+        g.color(0xFF0E1512); g.line(100, 520, 260, 700, 2); g.line(760, 560, 820, 700, 2);
+        // a server rack with cables (the flowers' light is drawn by the story's effects)
+        g.color(0xFF1C2228); g.rect(790, 330, 110, 170);
+        for (int i = 0; i < 6; i++) { g.color(i % 2 == 0 ? 0xFF00E676 : 0xFF1E88E5); g.oval(805, 350 + i * 25, 5, 5); }
+        g.color(0xFF263238); g.line(900, 420, 1000, 500, 3); g.line(790, 480, 700, 500, 3);
+    }
+
+    /** A room of today: a wall with a window, a sofa, a shelf, a table with a lamp. */
+    static void room(Gfx g, int tod) {
+        boolean night = tod == NIGHT || tod == EVENING;
+        g.linear(0, 0, 0, 520, night ? 0xFF3A3F55 : 0xFFF2E8D8, night ? 0xFF2A2E40 : 0xFFE3D6C2); g.rect(0, 0, W, 520);
+        // window
+        g.color(night ? 0xFF1B2342 : 0xFF9ED7F2); g.rect(820, 120, 300, 260);
+        if (night) { g.color(0xCCFFFFFF); for (int i = 0; i < 14; i++) g.oval(840 + (i * 61) % 280, 135 + (i * 37) % 120, 2, 2); }
+        else { g.color(0xCCFFFFFF); cloud(g, 900, 180, 0.7f); }
+        g.color(night ? 0xFF8A94A6 : 0xFFF7F7F2); g.rect(812, 112, 316, 8); g.rect(812, 372, 316, 8); g.rect(812, 112, 8, 268); g.rect(1120, 112, 8, 268); g.rect(966, 112, 6, 268);
+        // curtains
+        g.color(night ? 0xFF4A3A5A : 0xFFE57373); g.rect(770, 100, 50, 300); g.rect(1120, 100, 50, 300);
+        // shelf with books
+        g.color(0xFF8D6E63); g.rect(120, 180, 260, 10); g.rect(120, 290, 260, 10);
+        int[] bc = {0xFFC62828, 0xFF1565C0, 0xFF2E7D32, 0xFFF9A825, 0xFF6A1B9A};
+        for (int i = 0; i < 9; i++) { g.color(bc[i % 5]); g.rect(130 + i * 26, 200, 20, 88); }
+        for (int i = 0; i < 7; i++) { g.color(bc[(i + 2) % 5]); g.rect(140 + i * 32, 240 + 50, 24, 40 - 40); }
+        // floor and a rug
+        g.linear(0, 520, 0, H, night ? 0xFF5A4634 : 0xFFC9A77A, night ? 0xFF3A2E22 : 0xFFA98A5E); g.rect(0, 520, W, H - 520);
+        g.color(night ? 0xFF4A3550 : 0xFFB0574F); g.roundRect(380, 600, 520, 100, 10);
+        g.color(night ? 0x33FFFFFF : 0x44FFFFFF); g.roundRect(400, 615, 480, 70, 8);
+        // sofa and a table with a lamp
+        g.color(night ? 0xFF4C5C6C : 0xFF5C8DB8); g.roundRect(60, 430, 300, 110, 16); g.roundRect(60, 390, 300, 60, 16);
+        g.color(night ? 0xFF3A4858 : 0xFF4A78A0); g.roundRect(80, 400, 120, 50, 12); g.roundRect(220, 400, 120, 50, 12);
+        g.color(0xFF8D6E63); g.rect(1080, 470, 150, 12); g.rect(1095, 482, 10, 60); g.rect(1215, 482, 10, 60);
+        g.color(0xFFFFCC80); g.begin(); g.moveTo(1130, 470); g.lineTo(1180, 470); g.lineTo(1192, 420); g.lineTo(1118, 420); g.close(); g.fillPath();
+        if (night) { g.radial(1155, 445, 120, 0x77FFE0A0, 0x00FFE0A0); g.oval(1155, 445, 120, 120); }
+    }
+
+    /** A city street: buildings, shop fronts, a road with lane marks, a streetlight. */
+    static void street(Gfx g, int tod) {
+        boolean night = tod == NIGHT;
+        skyline(g, tod, 420, 0.8f);
+        // the near buildings with shop fronts
+        int[] cols = {0xFFE0C9A6, 0xFFB7C9D6, 0xFFD9B2A0, 0xFFC8D6B9};
+        for (int i = 0; i < 4; i++) {
+            float x = i * 330 - 40;
+            g.color(night ? shade(cols[i], 0.4f) : cols[i]); g.rect(x, 230, 300, 290);
+            g.color(night ? 0xFF2A2E38 : 0xFF5C6B73); g.rect(x + 30, 420, 240, 100);
+            g.color(night ? 0xCCFFE082 : 0xFF80DEEA); g.rect(x + 45, 435, 210, 70);
+            for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) { g.color(night ? 0xAAFFE082 : 0xFF8FB8D0); g.rect(x + 40 + c * 90, 255 + r * 50, 50, 34); }
+            g.color(i % 2 == 0 ? 0xFFE53935 : 0xFF1E88E5); g.rect(x + 30, 395, 240, 26);
+        }
+        // pavement and the road
+        g.color(night ? 0xFF4A4E58 : 0xFFBDB8AE); g.rect(0, 520, W, 40);
+        g.linear(0, 560, 0, H, night ? 0xFF2A2E36 : 0xFF6E7278, night ? 0xFF1A1D24 : 0xFF4E5258); g.rect(0, 560, W, H - 560);
+        g.color(0xFFF5F5DC); for (int i = 0; i < 8; i++) g.rect(i * 170 + 20, 640, 90, 8);
+        // a streetlight and a parked scooter
+        g.color(0xFF455A64); g.rect(1080, 300, 8, 260); g.rect(1040, 300, 60, 8);
+        if (night) { g.radial(1045, 310, 150, 0x88FFE0A0, 0x00FFE0A0); g.oval(1045, 310, 150, 150); }
+        g.color(0xFFC62828); g.roundRect(220, 580, 90, 40, 14); g.color(0xFF263238); g.oval(230, 625, 16, 16); g.oval(300, 625, 16, 16);
+    }
+
     static void hall(Gfx g) {
         g.linear(0, 0, 0, H, 0xFF8E2C2C, 0xFF4A1414); g.rect(0, 0, W, H);
         g.color(0xFFE5B530);
@@ -434,7 +607,53 @@ public final class Sets {
     // ------------------------------------------------------------------ animated overlays
 
     /** Drawn every frame on top of the static layer (cheap animated details). */
+    /** A flicker that is mostly on: a few drops a second, from a time-based hash (the same every render). */
+    public static float flicker(float t) {
+        float a = (float) Math.sin(t * 37.1) * (float) Math.sin(t * 5.3) * (float) Math.sin(t * 0.7 + 1);
+        float f = 0.82f + 0.18f * (float) Math.sin(t * 23);
+        if (a > 0.55f) f *= 0.15f;
+        return f;
+    }
+
     public static void paintLive(Gfx g, int set, int tod, float t) {
+        switch (set) {
+            case ROOFTOP: {
+                // drones hum across the sky, their lights blinking; the solar flowers pulse at night
+                for (int i = 0; i < 3; i++) {
+                    float x = (t * (40 + i * 25) + i * 500) % (W + 200) - 100, y = 120 + i * 70 + (float) Math.sin(t * 1.5 + i) * 12;
+                    g.color(0xFF37474F); g.oval(x, y, 10, 4); g.line(x - 12, y - 2, x + 12, y - 2, 2);
+                    g.color(0x8837474F); g.oval(x - 12, y - 3, 8, 2); g.oval(x + 12, y - 3, 8, 2);
+                    g.color(((int) (t * 4 + i)) % 2 == 0 ? 0xFFFF1744 : 0xFF00E676); g.oval(x, y + 1, 2.5f, 2.5f);
+                }
+                if (tod == NIGHT || tod == EVENING) {
+                    float pulse = 0.5f + 0.5f * (float) Math.sin(t * 2.2);
+                    for (int i = 0; i < 5; i++) for (int k = -1; k <= 1; k++) {
+                        float x = 120 + i * 260 + k * 36 + k * 4;
+                        g.radial(x, 500, 40, alpha(0xFF00E5FF, 0.35f * pulse), 0x0000E5FF); g.oval(x, 500, 40, 40);
+                    }
+                }
+                break;
+            }
+            case BASEMENT: {
+                // the green tubelight flickers, and the arcade screens with it
+                float f = flicker(t);
+                g.radial(640, 110, 420, alpha(0xFF69F0AE, 0.28f * f), 0x0069F0AE); g.oval(640, 110, 420, 420);
+                g.color(alpha(0xFFB9F6CA, 0.5f + 0.5f * f)); g.roundRect(480, 100, 320, 12, 6);
+                g.color(alpha(0xFF00E676, 0.08f * f)); g.rect(0, 0, W, H);
+                int[] xs = {120, 300, 950, 1120};
+                for (int x : xs) { g.color(alpha(0xFF2E7DFF, 0.1f + 0.15f * (float) Math.max(0, Math.sin(t * 3 + x)))); g.rect(x - 45, 300, 90, 70); }
+                break;
+            }
+            case STREET: {
+                // a car passes far down the road now and then
+                float x = (t * 180) % (W + 600) - 300;
+                g.color(tod == NIGHT ? 0xFF1E2A48 : 0xFF3949AB); g.roundRect(x, 585, 110, 34, 10); g.roundRect(x + 20, 568, 60, 24, 8);
+                g.color(0xFF263238); g.oval(x + 22, 620, 12, 12); g.oval(x + 88, 620, 12, 12);
+                if (tod == NIGHT) { g.color(0xCCFFF59D); g.oval(x + 108, 605, 6, 4); }
+                break;
+            }
+            default:
+        }
         switch (set) {
             case GARDEN: case CELEBRATION: case GENERIC_OUT: case GATE: {
                 if (tod != NIGHT) {
@@ -529,8 +748,13 @@ public final class Sets {
     }
 
     /** Ambient light tint applied over characters so they sit in the scene. */
+    static int alpha(int c, float a) { return Puppet.alpha(c, a); }
+    static int shade(int c, float f) { return Puppet.shade(c, f); }
+
     public static int tint(int set, int tod) {
         if (set == CAVE_IN) return 0x220E2A10;
+        if (set == BASEMENT) return 0x3A0E2A18;
+        if (set == ROOM && (tod == NIGHT || tod == EVENING)) return 0x30201830;
         if (set == FOREST) return tod == NIGHT || tod == EVENING ? 0x55101C3A : 0;
         if (tod == NIGHT) return 0x50101C3A;
         if (tod == EVENING) return 0x22FF7043;

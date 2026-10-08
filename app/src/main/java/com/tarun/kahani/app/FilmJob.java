@@ -596,7 +596,7 @@ public final class FilmJob implements Runnable {
         final int[] fails = {0};
         final int[] made = {0};
         final java.util.List<String[]> todo = new java.util.ArrayList<String[]>();   // {kind, key, prompt, w, h, label, desc}
-        for (Story.CharacterDef c : story.characters) {
+        for (Story.CharacterDef c : story.cast()) {
             if (haveChar.contains(c.id)) continue;
             todo.add(new String[]{"char", c.displayName, com.tarun.kahani.core.Bible.characterPrompt(c), "768", "1152", c.shown(), c.description});
         }

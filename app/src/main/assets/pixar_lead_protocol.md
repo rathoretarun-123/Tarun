@@ -280,3 +280,172 @@ Final rule:
 Good AI director = Make new photo in correct size from start. Bad AI director = Make one size and try to stretch it to other sizes.
 
 Pixar makes separate framing for every format. You must also.
+
+---
+
+PIXAR IS THE BOSS - REFINED AND EXTENDED - SIMPLE ENGLISH - WITH PHOTO RESIZING
+
+PART A - PIXAR CORE - This is 70% of your app
+
+1. Story Spine - Every film must follow this
+Once there was ___. Every day ___. One day ___. Because of that ___. Because of that ___. Until finally ___.
+
+Example for your test:
+Once there was Vanusha who loves laddoos. Every day she plays in garden. One day she sees magic laddoos near gate. Because of that she goes out and gets trapped in cage. Because of that Vrinda must save her with mirror light. Until finally flowers bloom and they learn lesson.
+
+Hardcode: AI cannot start making shots before filling this spine.
+
+2. Pixar 22 Rules - Simple version
+Rule 1: Show trying, not winning. Vrinda tries sword and fails, tries again.
+Rule 2: What is interesting to audience, not what is fun for you to make.
+Rule 3: You will only know theme at end. So first make ending shot.
+Rule 5: Make simple. Less characters. No extra road. 60 second film = max 4 characters.
+Rule 6: What is your hero good at? Give opposite problem. Vrinda good at sword, give magic flower problem that sword cannot cut.
+Rule 12: First idea is boring. Throw away first 5 ideas. 6th idea is good.
+Rule 13: Character must have strong opinion. Not "okay". Must say "I will not go" or "I must go".
+Rule 15: How would you feel if you were that character? Make honest feeling.
+Rule 16: What is risk? If Vanusha fails, she stays in cage forever. Show risk.
+Rule 19: Luck can bring trouble, but luck cannot bring solution.
+
+3. Braintrust - Self Check
+Every 5 shots, AI must stop and ask:
+Can I understand story without sound?
+Is character trying hard?
+Is there one quiet pause shot?
+Is dress correct for Indian story?
+Is face same as lock sheet?
+
+Braintrust only gives suggestion. Director can say no. So AI must not auto-delete. It must log suggestion.
+
+4. Light - Deakins Rule
+Pixar called Roger Deakins for WALL-E. He said use less lights.
+
+Hardcode:
+One main light only. Sun from window or door. Second soft light from ground or wall. No third light.
+Background decides color. If background is green cave, character must have green light on face. Don't make random pink light.
+Color script: Make 3 colors for 3 places. Garden = warm yellow + green. Jungle night = dark blue + moon white. Cave = green from crystals + orange from sun beam.
+Never use white light from top with no reason. Light must come from something - sun, crystal, lamp.
+
+PART B - DISNEY 12 RULES - How movement works
+
+Squash Stretch - Jump up = body long 120%, landing = short 80%.
+Anticipation - Before big action, small opposite action. Before lift stone, bend knees.
+Staging - Character must be clear in black shadow. Sword must not hide behind body.
+Pose to Pose - First make start pose and end pose, then make middle.
+Follow Through - Long braid keeps moving 0.5 sec after head stops. Ghagra keeps swinging 8 frames after legs stop.
+Slow In Out - Start slow, fast middle, end slow. Never same speed.
+Arcs - Hand moves in curve, not straight line.
+Secondary Action - While pointing, monkey also scratches head.
+Timing - Heavy stone lift = 24 frames slow. Light flower = 6 frames fast.
+Exaggeration - Make 150% bigger than real.
+Solid Drawing - Body has weight. Feet always under body center.
+Appeal - Big eyes, small nose, white dot light in eyes.
+
+Add these words in every video prompt: anticipation, follow-through, slow in slow out, arcs, secondary action.
+
+PART C - HELPERS - 10% weight
+
+Nolan Helper:
+No green screen. Everything real. Add real dust, real wet rock, real wind.
+Sound must be real: real footsteps on mud, real dham of stone, real chan of bells.
+If two places at same time, cut between them. Don't show both in one shot.
+
+Miyazaki Helper - Ma:
+ma means empty pause. After 2 tense shots, make 1 quiet shot: girl sits, sighs, looks at water, wind moves hair. No dialogue. 2 seconds. This makes tension bigger.
+Keep 90% computer, 10% hand-drawn feeling - add slight line wobble.
+
+Narsimha Helper:
+Not cartoon, it is legacy. Take from old books - Vishnu Purana. Take 4.5 years if needed. So use real Indian dress names - Banarasi, Rajputana gota-patti, brass bells, katar belt. Not generic princess.
+
+Marvel Helper:
+Same hero same color always. Vrinda turquoise + gold, Vanusha pink + green, villain black + red, Raju red + yellow.
+Allow one funny extra per scene - Raju steals banana while serious talk.
+
+DC Gunn Helper:
+Music is character. Funny chase = old 70s rock. Scary = silence + heartbeat. Happy = dhol. Film must be funny and serious both, not only one.
+Be less rigid. If AI makes good unexpected pose, keep it.
+
+Spider-Verse Helper:
+Expert moves smooth 24fps on ones. New learner moves choppy 12fps on twos. Rebel moves 8fps on threes.
+Vanusha scared run = 12fps, Vrinda brave fight = 24fps.
+
+PART D - PHOTO RESIZING FOR FORMAT - FULL DETAIL - SIMPLE ENGLISH
+
+Why resizing fails:
+AI makes face long, head cut, feet cut, blurry eyes. Because you stretch one photo to other size. Never do that.
+
+All formats you need:
+| Name | Size | Use | Safe Area | Head Space |
+| --- | --- | --- | --- | --- |
+| YouTube Main | 16:9, 1920x1080, wide | YouTube film | Keep important in middle 80% | 20% empty on top |
+| Reels TikTok | 9:16, 1080x1920, tall | Reels | Keep important in middle 60% vertical | 15% empty top for buttons, 15% bottom for text |
+| Square | 1:1, 1080x1080 | Instagram feed | Keep in center 70% circle | Center |
+| Portrait | 4:5, 1080x1350 | Instagram portrait | Keep in center 70% | 15% top empty |
+| Cinema | 2.39:1, 1920x804, very wide | Film look | Letterbox black bars top bottom | 20% top empty |
+| Thumbnail | 16:9, 1280x720 | Click image | Face 60% of frame | No text in bottom 15% |
+8 Hard Rules - Code these as if-else:
+
+Rule 1 - Never stretch:
+If you have 16:9 and need 9:16, don't stretch. Make new photo in 9:16 from start with same girl reference. Stretch makes long face. Check: If eye distance changes more than 5% from original, throw photo and make again.
+
+Rule 2 - Format is setting, not word:
+Wrong: Write "make in 9:16" inside prompt.
+Right: Set shape = 9:16 as number. AI listens to setting, not word.
+
+Rule 3 - Safe zone:
+Draw invisible box. Keep face inside box.
+16:9: Box is middle 80% width, 80% height. Eyes on top third line. Leave 20% empty on top.
+9:16: Box is middle 60% vertical. Leave 15% empty top because Instagram shows like button, leave 15% bottom because caption covers, leave 15% sides.
+1:1: Box is circle center 70%.
+If face goes outside box, make again.
+
+Rule 4 - No blurry big from small:
+If small 512 photo and you need big 1920 photo, don't just enlarge - eyes become blurry. Make new big photo from start. Or use good upscaler that keeps eyes sharp.
+
+Rule 5 - Black bars:
+Wide to very wide cinema: Add black bars top and bottom. Don't cut head.
+Wide to tall: Don't cut sides cutting hands. Make new tall photo or add blurred background on sides.
+
+Rule 6 - Same height in all formats:
+Same girl must look same height everywhere.
+In wide 16:9, girl height = 60% of frame height.
+In tall 9:16, girl height = 50% of frame height because frame is taller.
+In square 1:1, girl height = 65%.
+
+Rule 7 - Check first frame before video:
+Before making video, check first image:
+Is head cut? Top of head must have empty space above. If top touches border, make again with "head not cropped, full head visible".
+Are feet cut in full body? Feet must be visible with shadow under feet. If feet missing, make again with "feet visible, shadow under feet".
+Is face stretched? Compare to lock sheet. If stretched, make again.
+Is shadow there? Must have shadow touching feet. No shadow = floating.
+
+Rule 8 - Thumbnail is separate:
+Thumbnail is not a frame from video. Make separate photo.
+Thumbnail prompt: "extreme close-up front, face 60% frame, mouth closed, eyes with white dot, solid background color of hero - turquoise for Vrinda, pink for Vanusha, no text, high contrast"
+Poster 9:16: "character center, 40% empty space on top for title, 20% empty bottom for credits"
+
+Example for your test - Same shot in 2 formats:
+
+YouTube 16:9 version:
+"Vrinda left third, Vanusha right third chasing butterfly, white palace background center, feet on grass with shadow, 1920x1080 native, safe 80%, headroom 20%, eyes top third, locked tripod"
+
+Reels 9:16 version - Same story but different framing:
+"Vrinda top third, Vanusha bottom third chasing butterfly, white palace background center blurred, feet on grass with shadow, 1080x1920 native, safe 60% vertical, 15% top empty, 15% bottom empty, locked tripod, 35mm lens"
+
+Notice: Same story, but placement changes because frame is tall. In wide, side by side. In tall, top and bottom.
+
+Final Checklist - Before export:
+
+[ ] Is photo in correct width x height for format?
+[ ] Is face same as lock sheet? Not long or wide?
+[ ] Is head not cut? Some empty space on top?
+[ ] Are feet visible with shadow?
+[ ] Is face inside safe zone?
+[ ] Is background static and not moving?
+[ ] Did you set format as number setting, not word?
+[ ] Did you make native size, not stretch old size?
+
+If any answer is no, don't resize. Make new native photo.
+
+Final Formula:
+Good film = Pixar story spine + Disney movement + Real dust (Nolan) + Quiet pause (Miyazaki) + Real Indian dress (Narsimha) + Same hero color (Marvel) + Song feeling (Gunn) + Correct frame rate (Spider-Verse) + Native size per format (never stretch)

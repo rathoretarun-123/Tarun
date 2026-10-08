@@ -146,7 +146,7 @@ public class AppTest {
         for (String t : ed) assertTrue("Hindi left in the story screen: " + t, !hasDevanagari(t));
         assertTrue(ed.toString().contains("1. Story"));
         assertTrue(ed.toString().contains("Clear"));
-        assertTrue(ed.toString().contains("Instagram Reel"));
+        assertTrue(ed.toString().contains("Make film") && ed.toString().contains("Descriptions") && ed.toString().contains("Open studio"));
         a.onBackPressed();
         idle();
 
@@ -622,6 +622,80 @@ public class AppTest {
         int[] px = new int[640 * 360];
         float[] times = {boat.t0 + 3f, night.t0 + 4f};
         for (float t : times) {
+            r.render(g, t);
+            bmp.getPixels(px, 0, 640, 0, 0, 640, 360);
+            int distinct = 0, last = 0;
+            for (int k = 0; k < px.length; k += 331) if (px[k] != last) { distinct++; last = px[k]; }
+            assertTrue("frame blank at " + t, distinct > 30);
+        }
+        g.release();
+    }
+
+    /**
+     * A 21st-century script in free form (roles after names, manner before the colon, laughs inside the narration,
+     * an AI voice, a robot dog, a rooftop and a mall basement, sounds written as words): read, staged and lit right.
+     */
+    @Test
+    public void modernFreeFormScriptIsReadStagedAndCued() throws Exception {
+        File f = new File(ASSETS, "../../../../tools/testdata/neo_mumbai.txt");
+        assertTrue("test story missing: " + f, f.exists());
+        Story story = ScriptParser.parse(new String(Files.readAllBytes(f.toPath()), "UTF-8"));
+        assertTrue("title: " + story.title, story.title.contains("Light Thieves"));
+        assertTrue("characters: " + story.characters.size(), story.characters.size() == 7 && story.cast().size() == 6);
+        Story.CharacterDef tara = ScriptParser.resolve(story, "तारा"), kabir = ScriptParser.resolve(story, "कबीर"), inaya = ScriptParser.resolve(story, "इनाया"),
+                vex = ScriptParser.resolve(story, "वेक्स"), algora = ScriptParser.resolve(story, "एल्गोरा"), bolt = ScriptParser.resolve(story, "बोल्ट");
+        assertTrue("roles", tara.fullName.equals("तारा मल्होत्रा") && tara.role.contains("Coder"));
+        assertTrue("Tara: a girl in a hoodie with a ponytail", tara.look.female && tara.look.outfit == com.tarun.kahani.core.Look.O_HOODIE && tara.look.hair == com.tarun.kahani.core.Look.H_PONYTAIL);
+        assertTrue("Kabir: a boy in a t-shirt with a controller", !kabir.look.female && kabir.look.kind == com.tarun.kahani.core.Look.BOY && kabir.look.outfit == com.tarun.kahani.core.Look.O_TSHIRT
+                && kabir.look.gadget == com.tarun.kahani.core.Look.GD_CONTROLLER && kabir.look.lightShoes);
+        assertTrue("Inaya: a girl (from the verbs) with glasses", inaya.look.female && inaya.look.glasses == 1);
+        assertTrue("Vex: a man in a suit with dark glasses, a villain, not a monster", vex.look.kind == com.tarun.kahani.core.Look.MAN && vex.look.outfit == com.tarun.kahani.core.Look.O_SUIT
+                && vex.look.glasses == 2 && !vex.look.hero);
+        assertTrue("Algora: a witch in a coat with a hood", algora.look.kind == com.tarun.kahani.core.Look.WITCH && algora.look.outfit == com.tarun.kahani.core.Look.O_COAT
+                && algora.look.headwear == com.tarun.kahani.core.Look.HW_HOOD && algora.look.techWand);
+        assertTrue("Bolt: a robot dog", bolt.look.kind == com.tarun.kahani.core.Look.ANIMAL && bolt.look.species == com.tarun.kahani.core.Look.SP_DOG && bolt.look.robot);
+        boolean voice = false;
+        for (Story.CharacterDef c : story.characters) if (c.voiceOnly && c.displayName.contains("AI")) voice = true;
+        assertTrue("the AI voice is a voice only", voice);
+        // the lines: manner before the colon, the laugh inside the narration, the off-screen voice
+        int lines = 0, inayaLines = 0, kabirLaughs = 0; boolean off = false;
+        for (Story.Scene sc : story.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type != Story.Beat.DIALOGUE) continue;
+            lines++;
+            if (b.speaker == inaya) inayaLines++;
+            if (b.speaker == kabir && b.text.startsWith("हा हा")) kabirLaughs++;
+            if (b.offScreen) off = true;
+        }
+        assertTrue("lines " + lines, lines >= 24);
+        assertTrue("Inaya's four lines (manner before the colon)", inayaLines == 4);
+        assertTrue("Kabir laughs inside the narration", kabirLaughs == 2);
+        assertTrue("Algora's off-screen line", off);
+        // the places: scenes without a (स्थान:) line get the named place or the last one; the sets are today's
+        assertTrue(story.scenes.get(4).setting.contains("गार्डन") && story.scenes.get(6).setting.contains("मॉल"));
+        assertTrue(com.tarun.kahani.core.Sets.detect(story.scenes.get(0).setting) == com.tarun.kahani.core.Sets.ROOFTOP);
+        assertTrue(com.tarun.kahani.core.Sets.detect(story.scenes.get(2).setting) == com.tarun.kahani.core.Sets.BASEMENT);
+        // the film: cues become effects and sounds; the voice is never on the stage
+        Director.Options opt = new Director.Options();
+        Director d = new Director(story, opt);
+        d.prepare();
+        Art art = new Art();
+        Film film = d.direct(art);
+        java.util.Set<Integer> fx = new java.util.HashSet<Integer>(), sfx = new java.util.HashSet<Integer>();
+        for (Film.Seg sg : film.segs) { for (Film.Fx x : sg.fx) fx.add(x.type); for (Film.Actor a : sg.actors) assertTrue("a voice on the stage", !a.c.voiceOnly); }
+        for (Film.Sfx x : film.sfx) sfx.add(x.type);
+        for (int must : new int[]{Film.FX_GLOW_AREA, Film.FX_NOTIFY, Film.FX_LIGHTS_OFF, Film.FX_GLITCH, Film.FX_DATA, Film.FX_BEAM, Film.FX_SPARKS, Film.FX_HEARTS, Film.FX_DRONE})
+            assertTrue("effect missing: " + must, fx.contains(must));
+        for (int must : new int[]{Film.SFX_TYPING, Film.SFX_BEEP, Film.SFX_POWER_DOWN, Film.SFX_GLITCH, Film.SFX_SPARK, Film.SFX_HUM, Film.SFX_TRAFFIC, Film.SFX_HEARTBEAT})
+            assertTrue("sound missing: " + must, sfx.contains(must));
+        assertTrue("morning on the rooftop", film.segs.get(1).set == com.tarun.kahani.core.Sets.ROOFTOP && film.segs.get(1).tod == com.tarun.kahani.core.Sets.MORNING);
+        assertTrue("a dark basement", film.segs.get(3).set == com.tarun.kahani.core.Sets.BASEMENT && film.segs.get(3).tod == com.tarun.kahani.core.Sets.NIGHT);
+        for (Film.Shot sh : film.shots) { assertTrue(sh.dur <= 4.05f); if (sh.speech) assertTrue(sh.words <= 6); }
+        // two frames through the Android canvas: the rooftop morning, the basement
+        Bitmap bmp = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer r = new Renderer(film, art);
+        int[] px = new int[640 * 360];
+        for (float t : new float[]{film.segs.get(1).t0 + 3f, film.segs.get(3).t0 + 4f}) {
             r.render(g, t);
             bmp.getPixels(px, 0, 640, 0, 0, 640, 360);
             int distinct = 0, last = 0;

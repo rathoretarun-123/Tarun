@@ -401,11 +401,12 @@ public final class Renderer {
     private void light(Gfx g, Film.Seg s, float t) {
         PixarLead.Key key = PixarLead.keyLight(s.set, s.tod);
         boolean day = s.tod == Sets.MORNING || s.tod == Sets.DAY;
-        boolean cave = s.set == Sets.CAVE_IN || s.set == Sets.CAVE_MOUTH;
-        // 1. the key
+        boolean cave = s.set == Sets.CAVE_IN || s.set == Sets.CAVE_MOUTH || s.set == Sets.BASEMENT;
+        // 1. the key (a basement's tubelight flickers)
         float kx = vw * (0.5f + 0.42f * key.dir) - (camX - 640) * 0.1f;
         int kc = key.color & 0xFFFFFF;
         float ka = key.strength * (cave ? 0.22f : s.tod == Sets.NIGHT ? 0.3f : day && outdoor(s.set) ? 0.38f : 0.28f);
+        if (s.set == Sets.BASEMENT) ka *= 0.6f + 0.6f * Sets.flicker(t);
         g.radial(kx, -vh * 0.12f, vw * (cave ? 0.6f : 0.95f), Puppet.alpha(0xFF000000 | kc, ka), kc);
         g.rect(0, 0, vw, vh);
         if (day && outdoor(s.set)) {
@@ -435,8 +436,12 @@ public final class Renderer {
     /** The colour the floor of a painted place bounces back (the bounce light). */
     static int bounceColor(int set, int tod) {
         if (set == Sets.CAVE_IN || set == Sets.CAVE_MOUTH) return 0xFF30584A;
-        if (tod == Sets.NIGHT) return 0xFF203050;
+        if (set == Sets.BASEMENT) return 0xFF22362A;
+        if (tod == Sets.NIGHT) return set == Sets.ROOFTOP || set == Sets.STREET ? 0xFF2A3A5A : 0xFF203050;
         switch (set) {
+            case Sets.ROOFTOP: return 0xFFB8B4A8;
+            case Sets.ROOM: return 0xFFD8CFC0;
+            case Sets.STREET: return 0xFF9A9A94;
             case Sets.HALL: return 0xFFE8D8C0;
             case Sets.COURTYARD: case Sets.GATE: return 0xFFD9C8A8;
             case Sets.VILLAGE: return 0xFFC8A880;
@@ -756,7 +761,8 @@ public final class Renderer {
             // night: the whole stage darkens; flames, fire and fireflies then shine on top of it
             if (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) {
                 boolean photo = s.backdrop != null;
-                g.color(s.tod == Sets.NIGHT ? (photo ? 0x8C081026 : 0x46081026) : (photo ? 0x30301030 : 0x18301030));
+                int dark = s.set == Sets.BASEMENT ? (photo ? 0x80061410 : 0x40061410) : s.tod == Sets.NIGHT ? (photo ? 0x8C081026 : 0x46081026) : (photo ? 0x30301030 : 0x18301030);
+                g.color(dark);
                 g.rect(-W, -H, W * 3, H * 3);
             }
             float fire = film.weather(Film.W_FIRE, t);
@@ -895,7 +901,10 @@ public final class Renderer {
         if (!k.visible) return;
         // Spider-Verse: a character animated on twos or threes holds each pose for 2-3 frames (the walk, the
         // gestures, the breathing); the place, the camera and the lip-sync stay on ones
-        final float tp = a.stepFps > 0 && a.stepFps < 24 ? (float) (Math.floor(t * a.stepFps) / a.stepFps) : t;
+        // (Spider-Verse: a scared run steps on twos even for an expert — the fear shows in the choppiness)
+        int stepFps = a.stepFps;
+        if (stepFps > 0 && stepFps >= 24 && k.emotion == Pose.SCARED && moving(a, t) != null && moving(a, t).run) stepFps = 12;
+        final float tp = stepFps > 0 && stepFps < 24 ? (float) (Math.floor(t * stepFps) / stepFps) : t;
         Art.Sprite sp = art.sprites.get(a.c.id);
         float h = actorHeight(a.look, a.c, art, s);
         float x = Director.xAt(a, t);
@@ -1088,6 +1097,10 @@ public final class Renderer {
         if (sp != null) drawSprite(g, sp, a.look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
+            // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
+            int boil = (int) (t * 12) * 31 + a.order * 17;
+            float wx = ((boil * 1103515245 + 12345) >>> 16 & 255) / 255f - 0.5f, wy = ((boil * 22695477 + 1) >>> 16 & 255) / 255f - 0.5f;
+            g.translate(wx * 0.9f, wy * 0.9f);
             Puppet.draw(g, a.look, p, h);
         }
         g.restore();
@@ -1245,11 +1258,13 @@ public final class Renderer {
                 case Film.G_JUMP: {
                     // a real jump: crouch, take off, fly on a parabola under gravity, land and squash
                     float d = act.t1 - act.t0, crouch = Math.min(0.15f, d * 0.2f), air = d - crouch - 0.12f;
-                    if (u < crouch) { mo.sy *= 1 - 0.1f * (u / crouch); }
+                    // squash and stretch (Disney): the crouch squashes to 80 %, the take-off stretches to 120 %, the landing squashes again
+                    if (u < crouch) { float k2 = u / crouch; mo.sy *= 1 - 0.2f * k2; mo.sx *= 1 + 0.12f * k2; }
                     else if (u < crouch + air) {
                         float a2 = u - crouch, peak = 80, g2 = 8 * peak / (air * air), v0 = g2 * air / 2;
                         mo.dy -= v0 * a2 - 0.5f * g2 * a2 * a2;
-                        mo.sy *= 1.06f;
+                        float rise = Math.max(0, 1 - a2 / (air * 0.35f));
+                        mo.sy *= 1.04f + 0.16f * rise; mo.sx *= 1 - 0.08f * rise;
                         p.armL = 150; p.armR = 150;
                     } else { mo.sy *= 1 - 0.1f * (1 - (u - crouch - air) / 0.12f); }
                     break;
@@ -1294,6 +1309,25 @@ public final class Renderer {
                 case Film.G_WEIGHT_SHIFT: {
                     mo.dx += (float) Math.sin(u * 1.5f) * 3;
                     mo.rot += (float) Math.sin(u * 1.5f) * 0.6f;
+                    break;
+                }
+                case Film.G_SHIELD_EYES: {
+                    // blinded: the arm comes up over the eyes, the head turns away and the body leans back
+                    p.armR = Math.max(p.armR, 155); p.elbowR = 125;
+                    p.headTilt -= 10 * (p.facing < 0 ? -1 : 1);
+                    mo.rot -= 4 * p.facing;
+                    mo.dx -= 6 * p.facing;
+                    p.eyesClosed = true;
+                    break;
+                }
+                case Film.G_PULL: {
+                    // a hard pull: both arms forward, then the lean back and the yank
+                    float k2 = Math.min(1, u / Math.max(0.3f, act.t1 - act.t0));
+                    float yank = k2 < 0.5f ? 0 : (float) Math.sin((k2 - 0.5f) * 2 * Math.PI);
+                    p.armR = 70 + 20 * k2; p.armL = 65 + 20 * k2; p.elbowR = 20 + 40 * yank; p.elbowL = 20 + 40 * yank;
+                    mo.rot -= (6 + 8 * yank) * p.facing;
+                    mo.dx -= (10 + 18 * yank) * p.facing;
+                    p.emotion = Pose.DETERMINED;
                     break;
                 }
                 case Film.G_SHAKE_HEAD:
@@ -1928,6 +1962,68 @@ public final class Renderer {
                     Nature.flyingObject(g, hx, hy, vx, vy, s.ground + 8, u, f.kind, 1.3f);
                 } break;
                 case Film.FX_LEAVES: if (!behind) leaves(g, f, u); break;
+                case Film.FX_GLOW_AREA: if (behind) {
+                    // lamps or flowers lighting up one after another across the stage, then pulsing softly
+                    int col = f.color == 0 ? 0xFFFFF176 : f.color;
+                    for (int i = 0; i < 7; i++) {
+                        float on = Rig.smooth(i * 0.12f, i * 0.12f + 0.3f, u);
+                        if (on <= 0) continue;
+                        float pulse = 0.75f + 0.25f * (float) Math.sin(t * 2.5 + i), x = 100 + i * 180, y = s.ground - 40 - (i % 2) * 30;
+                        g.radial(x, y, 95, Puppet.alpha(col, 0.55f * on * pulse), Puppet.alpha(col, 0f));
+                        g.oval(x, y, 95, 95);
+                        g.color(Puppet.alpha(0xFFFFFFFF, 0.8f * on)); g.oval(x, y, 7, 7);
+                    }
+                } break;
+                case Film.FX_TWINKLE: if (!behind) sparkles(g, t * 1.5f, f.x - 260, f.y - 140, 520, 220, 18, f.color == 0 ? 0xFF80DEEA : f.color); break;
+                case Film.FX_DRONE: if (!behind) drone(g, s, f, t); break;
+                case Film.FX_HEARTS: if (!behind && f.a != null) {
+                    float ha = actorHeight(f.a.look, f.a.c, art, s), x0 = actorScreenX(f.a, t), y0 = s.ground - ha * 1.02f;
+                    for (int i = 0; i < 5; i++) {
+                        float k = (u * 0.6f + i * 0.2f) % 1f;
+                        float x = x0 + (i - 2) * 22 + (float) Math.sin(t * 3 + i) * 8, y = y0 - k * 120, r = 7 + 4 * (float) Math.sin(t * 6 + i);
+                        g.color(Puppet.alpha(0xFFFF4081, 1 - k));
+                        g.oval(x - r * 0.5f, y - r * 0.3f, r * 0.6f, r * 0.6f); g.oval(x + r * 0.5f, y - r * 0.3f, r * 0.6f, r * 0.6f);
+                        g.begin(); g.moveTo(x - r, y - r * 0.2f); g.lineTo(x + r, y - r * 0.2f); g.lineTo(x, y + r); g.close(); g.fillPath();
+                    }
+                } break;
+                case Film.FX_NOTIFY: if (!behind && f.a != null) {
+                    // a glowing card pops up above the head with a little "!" and bounces once
+                    float ha = actorHeight(f.a.look, f.a.c, art, s), x = actorScreenX(f.a, t) + f.a.stateAt(t).facing * 40;
+                    float k = Rig.smooth(0, 0.25f, u) * Rig.smooth(0, 0.3f, f.t1 - t), bounce = (float) Math.sin(Math.min(1, u / 0.5f) * Math.PI) * 14;
+                    float y = s.ground - ha * 1.15f - bounce, w = 150 * k, h = 56 * k;
+                    g.radial(x, y, 110, Puppet.alpha(0xFF40C4FF, 0.3f * k), 0x0040C4FF); g.oval(x, y, 110, 110);
+                    g.color(Puppet.alpha(0xFFF5FBFF, k)); g.roundRect(x - w / 2, y - h / 2, w, h, 10);
+                    g.color(Puppet.alpha(0xFF2979FF, k)); g.roundRect(x - w / 2 + 8, y - h / 2 + 10, h - 20, h - 20, 6);
+                    g.color(Puppet.alpha(0xFFFFFFFF, k)); g.rect(x - w / 2 + 8 + (h - 20) / 2 - 2, y - h / 2 + 15, 4, 16); g.oval(x - w / 2 + 8 + (h - 20) / 2, y + h / 2 - 16, 4, 4);
+                    g.color(Puppet.alpha(0xFF90A4AE, k)); g.rect(x - w / 2 + h, y - 8, w * 0.45f, 5); g.rect(x - w / 2 + h, y + 4, w * 0.3f, 5);
+                } break;
+                case Film.FX_DATA: if (!behind) {
+                    // bits of light leave the place in a stream (the data stolen), bending away and upwards
+                    for (int i = 0; i < 26; i++) {
+                        float k = (u * 0.45f + i * 0.0385f) % 1f;
+                        float x = f.x + k * 900 * (f.kind == 0 ? 1 : -1), y = f.y - k * 260 + (float) Math.sin(k * 9 + i) * 18 - i * 3;
+                        g.color(Puppet.alpha(i % 3 == 0 ? 0xFF00E5FF : 0xFF76FF03, (1 - k) * 0.9f));
+                        g.rect(x, y, 7, 7);
+                    }
+                } break;
+                case Film.FX_SPARKS: if (!behind) {
+                    float x = f.a != null ? actorScreenX(f.a, t) + f.a.stateAt(t).facing * 60 : f.x, y = f.y;
+                    long sd = (long) (t * 60);
+                    for (int i = 0; i < 10; i++) {
+                        sd = sd * 6364136223846793005L + 1442695040888963407L;
+                        float ang = ((sd >>> 33) % 360) * 0.01745f, len = 14 + ((sd >>> 13) % 30);
+                        g.color(Puppet.alpha(i % 2 == 0 ? 0xFFFFF59D : 0xFF80D8FF, 0.9f * (1 - u / (f.t1 - f.t0))));
+                        g.line(x, y, x + (float) Math.cos(ang) * len, y + (float) Math.sin(ang) * len, 2);
+                    }
+                    g.radial(x, y, 60, Puppet.alpha(0xFFB3E5FC, 0.5f * (1 - u / (f.t1 - f.t0))), 0x00B3E5FC); g.oval(x, y, 60, 60);
+                } break;
+                case Film.FX_STEAM: if (!behind) {
+                    for (int i = 0; i < 6; i++) {
+                        float k = (u * 0.5f + i * 0.17f) % 1f;
+                        g.color(Puppet.alpha(0xFFECEFF1, 0.35f * (1 - k)));
+                        g.oval(f.x + (float) Math.sin(k * 5 + i) * 25, f.y - k * 160, 18 + k * 40, 14 + k * 30);
+                    }
+                } break;
                 case Film.FX_SHADOW_PASS: if (behind) {
                     // Gunn: the shadow of something unseen sweeps over the ground of a funny scene, slow in, slow out
                     float k = Math.min(1, u / (f.t1 - f.t0)), e = k * k * (3 - 2 * k);
@@ -1971,6 +2067,28 @@ public final class Renderer {
             } else if (f.type == Film.FX_FLASH) {
                 float k = 1 - u / d;
                 g.color(Puppet.alpha(f.color == 0 ? 0xFFFFFFFF : f.color, 0.55f * k * k));
+                g.rect(0, 0, vw, vh);
+            } else if (f.type == Film.FX_FLICKER) {
+                float fl = Sets.flicker(t * 1.3f + 7);
+                g.color(Puppet.alpha(0xFF000000, 0.35f * (1 - fl)));
+                g.rect(0, 0, vw, vh);
+            } else if (f.type == Film.FX_LIGHTS_OFF) {
+                // the lights go out: darkness comes down in half a second and stays (a little blue remains to see by)
+                float k = Rig.smooth(0, 0.5f, u) * Rig.smooth(0, 0.6f, f.t1 - t);
+                g.color(Puppet.alpha(0xFF040810, 0.62f * k));
+                g.rect(0, 0, vw, vh);
+            } else if (f.type == Film.FX_GLITCH) {
+                // bands of the picture slip sideways and blocks of static appear for a moment
+                long sd = (long) (t * 30) * 977;
+                for (int i = 0; i < 6; i++) {
+                    sd = sd * 6364136223846793005L + 1442695040888963407L;
+                    float y = ((sd >>> 33) % 100) / 100f * vh, h = 6 + ((sd >>> 13) % 24), x = ((sd >>> 40) % 100) / 100f * vw * 0.6f;
+                    g.color(Puppet.alpha(i % 2 == 0 ? 0xFF00E5FF : 0xFFFF4081, 0.35f));
+                    g.rect(x, y, vw * 0.3f + ((sd >>> 20) % 300), h);
+                    g.color(Puppet.alpha(0xFFFFFFFF, 0.2f));
+                    g.rect(x + 20, y + h * 0.3f, vw * 0.15f, h * 0.3f);
+                }
+                g.color(Puppet.alpha(0xFF000000, 0.12f));
                 g.rect(0, 0, vw, vh);
             } else if (f.type == Film.FX_SHOT && f.pic != null) {
                 float a = Math.min(1, Math.min(u / 0.4f, (f.t1 - t) / 0.4f));
@@ -2111,6 +2229,24 @@ public final class Renderer {
             g.color(Puppet.alpha(Puppet.mix(c, 0xFFFFFFFF, (i % 3) * 0.15f), 0.75f * (1 - u)));
             g.oval(px, py, r, r * 0.8f);
         }
+    }
+
+    /** A small drone: a body with four rotors, a blinking light, flying in a lazy figure near its actor. */
+    private void drone(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        float u = t - f.t0;
+        float cx = f.a != null ? actorScreenX(f.a, t) : f.x, cy = s.ground - (f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * 1.25f : 300);
+        float x = cx + (float) Math.sin(u * 0.9) * 170 + (float) Math.sin(u * 2.3) * 30, y = cy - 40 + (float) Math.cos(u * 1.3) * 45;
+        float k = Rig.smooth(0, 0.4f, u) * Rig.smooth(0, 0.5f, f.t1 - t);
+        g.save();
+        g.setAlpha(k);
+        g.color(0xFF263238); g.roundRect(x - 16, y - 6, 32, 12, 5);
+        g.color(0xFF455A64); g.line(x - 26, y - 8, x + 26, y - 8, 3);
+        g.color(Puppet.alpha(0xFF90A4AE, 0.55f));
+        float spin = (t * 40) % 1f;
+        g.oval(x - 26, y - 10, 16, 3 + 2 * spin); g.oval(x + 26, y - 10, 16, 3 + 2 * (1 - spin));
+        g.color(((int) (t * 5)) % 2 == 0 ? 0xFFFF1744 : 0xFF00E676); g.oval(x, y + 2, 3, 3);
+        g.color(0xFF80DEEA); g.oval(x + 10, y, 4, 3);
+        g.restore();
     }
 
     private void beam(Gfx g, Film.Seg s, Film.Fx f, float t) {

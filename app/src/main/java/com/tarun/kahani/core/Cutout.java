@@ -34,8 +34,13 @@ public final class Cutout {
     }
 
     public static Result process(int[] src, int w, int h) {
+        return process(src, w, h, false);
+    }
+
+    /** holes: also clear background seen through closed gaps (between an animal's legs, under its belly). */
+    public static Result process(int[] src, int w, int h, boolean holes) {
         int[] px = src.clone();
-        if (!hasAlpha(px)) removeBackground(px, w, h);
+        if (!hasAlpha(px)) removeBackground(px, w, h, holes);
         // crop to opaque bounds
         int minX = w, minY = h, maxX = -1, maxY = -1;
         for (int y = 0; y < h; y++) {
@@ -61,6 +66,10 @@ public final class Cutout {
 
     /** Flood-fills the background colour from the borders and makes it transparent with soft edges. */
     public static void removeBackground(int[] px, int w, int h) {
+        removeBackground(px, w, h, false);
+    }
+
+    public static void removeBackground(int[] px, int w, int h, boolean holes) {
         // background colour = median-ish of border samples
         long sr = 0, sg = 0, sb = 0; int n = 0;
         for (int x = 0; x < w; x += Math.max(1, w / 64)) {
@@ -90,6 +99,25 @@ public final class Cutout {
             if (y > 0 && state[i - w] == 0) { state[i - w] = 2; queue[qt++] = i - w; }
             if (y < h - 1 && state[i + w] == 0) { state[i + w] = 2; queue[qt++] = i + w; }
             if (qt >= queue.length - 4) qt = queue.length - 4; // safety (cannot overflow in practice)
+        }
+        // closed gaps of plain background colour (the page seen between legs that stand on their shadow)
+        if (holes) {
+            int min = Math.max(30, w * h / 900);
+            int[] comp = new int[w * h];
+            for (int s0 = 0; s0 < px.length; s0++) {
+                if (state[s0] != 0 || dist(px[s0], bg) > TOL * 0.6f) continue;
+                int n0 = 0;
+                comp[n0++] = s0;
+                state[s0] = 3;
+                for (int k = 0; k < n0; k++) {
+                    int i = comp[k], x = i % w, y = i / w;
+                    int[] nb = {x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1};
+                    for (int j : nb) if (j >= 0 && state[j] == 0 && dist(px[j], bg) <= TOL * 0.6f) { state[j] = 3; comp[n0++] = j; }
+                }
+                byte to = n0 >= min ? (byte) 1 : (byte) 4;
+                for (int k = 0; k < n0; k++) state[comp[k]] = to;
+            }
+            for (int i = 0; i < state.length; i++) if (state[i] == 4) state[i] = 0;
         }
         // soft shadows near the floor and anti-aliased edges
         for (int i = 0; i < px.length; i++) {

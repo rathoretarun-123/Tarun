@@ -78,12 +78,17 @@ public final class Art {
 
     /** Cuts out a character picture and prepares it for animation. Landmarks may be overridden afterwards. */
     public static Sprite makeSprite(Loader L, String file, int maxSide) {
+        return makeSprite(L, file, maxSide, false);
+    }
+
+    /** animal: the background showing between the legs is cut out too. */
+    public static Sprite makeSprite(Loader L, String file, int maxSide, boolean animal) {
         int[] d = L.decode(file, maxSide);
         if (d == null) return null;
         int w = d[0], h = d[1];
         int[] px = new int[w * h];
         System.arraycopy(d, 2, px, 0, w * h);
-        Cutout.Result r = Cutout.process(px, w, h);
+        Cutout.Result r = Cutout.process(px, w, h, animal);
         Sprite s = new Sprite();
         s.w = r.w; s.h = r.h;
         s.img = L.create(r.px, r.w, r.h);
@@ -176,7 +181,8 @@ public final class Art {
                 if (f[0].equals("char") && f.length >= 3) {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
                     if (c == null) continue;
-                    Sprite s = makeSprite(L, f[2], 1100);
+                    boolean beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
+                    Sprite s = makeSprite(L, f[2], 1100, beast);
                     if (s == null) continue;
                     if (f.length >= 11) {
                         float[] v = new float[8];

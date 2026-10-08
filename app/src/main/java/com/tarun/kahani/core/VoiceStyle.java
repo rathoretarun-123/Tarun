@@ -82,9 +82,41 @@ public final class VoiceStyle {
             if (l.kind == Look.MONSTER) { s.boom = Math.max(s.boom, 0.5f); s.growl = Math.max(s.growl, 0.3f); }
             if (l.kind == Look.WITCH) { s.raspy = Math.max(s.raspy, 0.35f); s.tremble = Math.max(s.tremble, 0.15f); }
             if (l.kind == Look.OLD_MAN || c.age >= 65) { s.tremble = Math.max(s.tremble, 0.25f); s.raspy = Math.max(s.raspy, 0.15f); }
+            if (l.kind == Look.MONKEY) s.squeak = Math.max(s.squeak, 0.2f);
+            if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) animal(s, l.species);
         }
+        // animals without a drawn kind, found by name
+        if (hasWord(all, "मेंढक", "मेढक", "frog", "toad")) { s.raspy = Math.max(s.raspy, 0.35f); s.growl = Math.max(s.growl, 0.15f); }
+        if (hasWord(all, "साँप", "सांप", "नाग", "snake", "cobra", "serpent")) s.breathy = Math.max(s.breathy, 0.4f);
         s.describe();
         return s;
+    }
+
+    /**
+     * A talking animal keeps a clear voice for its words, with a touch of its kind: a lion or tiger rumbles,
+     * a mouse or sparrow squeaks, a crow is hoarse, an elephant booms, a goat or cow bleats.
+     */
+    static void animal(VoiceStyle s, int sp) {
+        switch (sp) {
+            case Look.SP_LION: case Look.SP_TIGER: s.growl = Math.max(s.growl, 0.35f); s.boom = Math.max(s.boom, 0.35f); break;
+            case Look.SP_BEAR: s.growl = Math.max(s.growl, 0.3f); s.boom = Math.max(s.boom, 0.4f); break;
+            case Look.SP_WOLF: s.growl = Math.max(s.growl, 0.3f); s.raspy = Math.max(s.raspy, 0.15f); break;
+            case Look.SP_FOX: s.nasal = Math.max(s.nasal, 0.25f); break;
+            case Look.SP_DOG: s.raspy = Math.max(s.raspy, 0.25f); s.growl = Math.max(s.growl, 0.1f); break;
+            case Look.SP_CAT: s.nasal = Math.max(s.nasal, 0.3f); s.squeak = Math.max(s.squeak, 0.15f); break;
+            case Look.SP_MOUSE: case Look.SP_RABBIT: case Look.SP_SPARROW: s.squeak = Math.max(s.squeak, 0.45f); break;
+            case Look.SP_PARROT: s.nasal = Math.max(s.nasal, 0.4f); s.squeak = Math.max(s.squeak, 0.25f); break;
+            case Look.SP_CROW: s.raspy = Math.max(s.raspy, 0.5f); s.nasal = Math.max(s.nasal, 0.2f); break;
+            case Look.SP_ELEPHANT: s.boom = Math.max(s.boom, 0.55f); break;
+            case Look.SP_COW: case Look.SP_GOAT: s.tremble = Math.max(s.tremble, 0.25f); s.nasal = Math.max(s.nasal, 0.2f); break;
+            case Look.SP_HORSE: s.breathy = Math.max(s.breathy, 0.2f); s.boom = Math.max(s.boom, 0.2f); break;
+            case Look.SP_TORTOISE: s.tremble = Math.max(s.tremble, 0.2f); s.raspy = Math.max(s.raspy, 0.2f); break;
+            case Look.SP_OWL: s.boom = Math.max(s.boom, 0.3f); s.breathy = Math.max(s.breathy, 0.15f); break;
+            case Look.SP_HEN: case Look.SP_DUCK: s.nasal = Math.max(s.nasal, 0.45f); break;
+            case Look.SP_EAGLE: case Look.SP_PEACOCK: s.raspy = Math.max(s.raspy, 0.2f); break;
+            case Look.SP_DEER: s.breathy = Math.max(s.breathy, 0.2f); break;
+            default:
+        }
     }
 
     /** Adds or removes qualities asked for in the edit box ("raspy,booming,-trembling"). */

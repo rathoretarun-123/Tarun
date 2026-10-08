@@ -1234,14 +1234,53 @@ public final class Renderer {
         return st;
     }
 
+    /**
+     * An animal's tail, jaw, ears and legs from its feeling and voice: a happy dog wags fast, a sad one lets
+     * its tail hang, an angry or frightened one lays its ears back; the jaw opens with the words.
+     */
+    static void animalState(Rig.State st, Pose p) {
+        float t = p.time, seed = p.seed;
+        float amp = 7, freq = 2.2f, droop = 0, ears = 0;
+        switch (p.emotion) {
+            case Pose.HAPPY: case Pose.LAUGH: amp = 24; freq = 11; break;
+            case Pose.PROUD: amp = 10; freq = 3; droop = -12; break;
+            case Pose.CURIOUS: amp = 12; freq = 4; droop = -8; break;
+            case Pose.SURPRISED: amp = 4; freq = 6; droop = -14; break;
+            case Pose.SAD: amp = 2; freq = 1.2f; droop = 26; ears = 0.5f; break;
+            case Pose.SCARED: amp = 2; freq = 16; droop = 36; ears = 1; break;
+            case Pose.ANGRY: case Pose.EVIL: amp = 4; freq = 14; droop = -16; ears = 1; break;
+            case Pose.PAIN: amp = 2; freq = 1; droop = 20; ears = 0.7f; break;
+            case Pose.DETERMINED: amp = 4; freq = 3; droop = -6; ears = 0.3f; break;
+            default:
+        }
+        if (p.walkAmt > 0) amp = Math.max(amp, 9);
+        st.tail = droop + amp * (float) Math.sin(t * freq + seed);     // + hangs down, - held up
+        st.jaw = Math.min(1, p.mouth * 1.3f + (p.emotion == Pose.ANGRY && p.mouth > 0.05f ? 0.25f : 0));
+        if (p.emotion == Pose.LAUGH) st.jaw = Math.max(st.jaw, 0.35f + 0.2f * (float) Math.sin(t * 9));
+        // an ear flick now and then, more when listening
+        float flick = (float) Math.sin(t * 0.83f + seed * 3.1f);
+        st.ear = flick > 0.9f ? (float) Math.sin(t * 34) : 0;
+        if (p.emotion == Pose.CURIOUS || p.emotion == Pose.SURPRISED) st.ear = -0.8f + 0.2f * (float) Math.sin(t * 9);
+        st.earBack = ears;
+        st.walkPhase = p.walk;
+        st.walkAmt = p.walkAmt;
+        // an animal lies or sits by folding its legs under it
+        st.sit = p.body == Pose.LIE ? 1 : p.body == Pose.SIT || p.body == Pose.KNEEL ? 0.6f : Math.min(1, p.sit);
+        if (p.body == Pose.LIE) { st.walkAmt = 0; st.nod += 0.4f; }
+        // breathing shows more on a resting animal; panting when happy
+        if (p.emotion == Pose.HAPPY && p.mouth < 0.05f) st.breathe = (float) Math.sin(t * 9 + seed);
+    }
+
     private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot, Film.Actor actor) {
         float scale = h / sp.h;
         float w = sp.w * scale;
         Rig rig = sp.rig;
-        boolean rigged = rig != null && p.body != Pose.LIE && p.body != Pose.HANG && !(p.noHeadwear && sp.turbanY > 0);
+        boolean beast = rig != null && rig.animal;
+        boolean rigged = rig != null && (beast ? p.body != Pose.HANG : p.body != Pose.LIE && p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0);
         Rig.State st = rigged ? rigState(p, actor) : null;
+        if (rigged && beast) animalState(st, p);
         g.save();
-        if (p.body == Pose.LIE) {
+        if (p.body == Pose.LIE && !beast) {
             g.translate(0, -w * 0.32f);
             g.rotate(p.facing > 0 ? -86 : 86);
             g.translate(0, h * 0.5f);
@@ -1276,8 +1315,8 @@ public final class Renderer {
             float rise = rig.feetRise(st, h);
             if (rise > 0) g.translate(0, rise);
             rig.bodyMesh(rf, st, left, top, w, h);
-            g.imageMesh(sp.img, Rig.BW, Rig.BH, rf.body);
-            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, Rig.BW, Rig.BH, rf.body); g.restore(); }
+            g.imageMesh(sp.img, rig.mw, rig.mh, rf.body);
+            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rig.mw, rig.mh, rf.body); g.restore(); }
             if (rig.face && rig.faceImg != null) {
                 rig.faceMesh(rf, st);
                 g.imageMesh(rig.faceImg, Rig.FW, Rig.FH, rf.face);
@@ -1289,7 +1328,21 @@ public final class Renderer {
             g.image(sp.img, left, top, w, h);
             if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.image(sp.wetImg, left, top, w, h); g.restore(); }
         }
-        if (sp.faceKnown) {
+        if (rigged && rig.animal && st.jaw > 0.12f) {
+            // the open jaw: a dark mouth between the upper and the lowered jaw, a tongue inside
+            float hx = left + rig.jawX * w, hy = top + rig.jawY * h, tx = left + rig.jawTipX * w;
+            double ja = Math.toRadians(rig.headSide * 16 * st.jaw);
+            float lx = hx + (float) Math.cos(ja) * (tx - hx), ly = hy + (float) Math.sin(ja) * (tx - hx);
+            g.color(0xF0300C0C);
+            g.begin(); g.moveTo(hx, hy); g.lineTo(tx, hy); g.lineTo(lx, ly); g.close(); g.fillPath();
+            if (st.jaw > 0.3f) {
+                g.color(0xE0D9636B);
+                g.oval(hx + (lx - hx) * 0.62f, hy + (ly - hy) * 0.55f, Math.abs(tx - hx) * 0.2f, Math.abs(ly - hy) * 0.16f);
+            }
+            g.color(0xF0F5F2EA);    // a tooth or two at the front
+            g.oval(tx - rig.headSide * Math.abs(tx - hx) * 0.1f, hy + Math.abs(ly - hy) * 0.08f, Math.abs(tx - hx) * 0.05f, Math.abs(ly - hy) * 0.09f);
+        }
+        if (sp.faceKnown && !(rigged && rig.animal && !rig.eyesOnHead)) {
             float ex1 = left + sp.eyeLX * w, ey1 = top + sp.eyeLY * h;
             float ex2 = left + sp.eyeRX * w, ey2 = top + sp.eyeRY * h;
             float er = sp.eyeR * w;
@@ -1324,7 +1377,7 @@ public final class Renderer {
             float m = p.mouth;
             if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
             if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.3f + 0.2f * Math.abs((float) Math.sin(p.time * 9));
-            if (m > 0.06f) {
+            if (m > 0.06f && !(rigged && rig.animal)) {
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;
                 float hw = sp.mouthHW * w;
                 float oh = hw * (0.18f + 0.62f * m);

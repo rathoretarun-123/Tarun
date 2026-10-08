@@ -30,6 +30,8 @@ public final class Rig {
     public float[] hairW;
 
     public static final int BW = 22, BH = 44, FW = 26, FH = 26;
+    /** Mesh columns and rows of the body: tall for people, wide (the same number of points) for animals. */
+    public int mw = BW, mh = BH;
     public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows
 
     /** What the rig does in one frame. Angles in degrees (positive = clockwise on screen). */
@@ -46,8 +48,11 @@ public final class Rig {
         public float smile, frown, innerUp, browUp, browUpR, anger, wide, squint;
         public float wind;                   // + blows towards the picture's right
         public float time;
+        // animals: tail swing (degrees), jaw open 0..1, ear twitch -1..1, ears folded back 0..1, walking
+        public float tail, jaw, ear, earBack, walkPhase, walkAmt;
         public void reset() {
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
+            tail = jaw = ear = earBack = walkPhase = walkAmt = 0;
             legScale = 1; sit = 0; twirl = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
@@ -62,15 +67,30 @@ public final class Rig {
     // ------------------------------------------------------------------ building
 
     /**
-     * Finds the bones from the cut-out picture's outline. kind = Look kind; animals on four legs get no rig.
-     * Returns null when the picture is not a standing figure.
+     * Finds the bones from the cut-out picture's outline. Standing people get head, arms, legs and a face;
+     * animals (and any long, lying shape) get a head with a jaw and ears, a tail and legs.
      */
     public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) {
-        if (r == null || r.px == null || r.w < 40 || r.h < 80) return null;
-        if (look != null && (look.kind == Look.ANIMAL || look.kind == Look.BIRD)) return null;
+        if (r == null || r.px == null || r.w < 40 || r.h < 40) return null;
         int w = r.w, h = r.h;
         float aspect = h / (float) w;
-        if (aspect < 1.25f) return null;               // not an upright figure
+        boolean beast = look != null && (look.kind == Look.ANIMAL || look.kind == Look.BIRD);
+        if (beast || aspect < 1.25f) {
+            // an upright animal picture (a monkey, a bear standing) moves like a person
+            if (beast && aspect >= 1.5f && r.h >= 80) beast = false;
+            else {
+                int[] ct = new int[w], cb = new int[w];
+                int x0 = -1, x1 = -1, y0 = h, y1 = -1;
+                for (int x = 0; x < w; x++) {
+                    ct[x] = -1; cb[x] = -1;
+                    for (int y = 0; y < h; y++) if ((r.px[y * w + x] >>> 24) > 128) { if (ct[x] < 0) ct[x] = y; cb[x] = y; }
+                    if (ct[x] >= 0) { if (x0 < 0) x0 = x; x1 = x; y0 = Math.min(y0, ct[x]); y1 = Math.max(y1, cb[x]); }
+                }
+                if (x0 < 0 || x1 - x0 < w / 3 || y1 - y0 < 20) return null;
+                return buildAnimal(r, s, ct, cb, x0, x1, y0, y1);
+            }
+        }
+        if (r.h < 80) return null;
         int[] left = new int[h], right = new int[h];
         int topRow = -1, botRow = -1;
         for (int y = 0; y < h; y++) {
@@ -339,6 +359,18 @@ public final class Rig {
         float headH = (neckY - this.top) * h;
         f.nodS = 1 - 0.035f * Math.abs(s.nod);
         f.nodDy = s.nod * headH * 0.04f;
+        if (animal) {
+            // the eyes and mouth drawn on an animal follow its head about the neck
+            f.nX = left + neckX * w; f.nY = top + neckY2 * h;
+            double a = Math.toRadians(animalHeadAngle(s));
+            f.hCos = (float) Math.cos(a); f.hSin = (float) Math.sin(a);
+            f.lCos = 1; f.lSin = 0; f.nodS = 1; f.nodDy = 0;
+        }
+    }
+
+    /** The head angle of an animal: positive nod looks down (towards the ground in front of it). */
+    float animalHeadAngle(State s) {
+        return s.headRot + s.nod * 10 * headSide;
     }
 
     /** Head bone then upper-body lean: the exact transform applyHead() gives the canvas. */
@@ -362,6 +394,7 @@ public final class Rig {
 
     /** Where one point of the picture (local coordinates) goes in this frame. */
     private void move(Frame f, State s, float x, float y, float[] o) {
+        if (animal) { moveAnimal(f, s, x, y, o); return; }
         moveBody(f, s, x, y, o);
         if (s.wind == 0) return;
         // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
@@ -467,10 +500,10 @@ public final class Rig {
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h) {
         frame(f, s, left, top, w, h);
         int k = 0;
-        for (int j = 0; j <= BH; j++) {
-            float y = top + h * j / BH;
-            for (int i = 0; i <= BW; i++) {
-                float x = left + w * i / BW;
+        for (int j = 0; j <= mh; j++) {
+            float y = top + h * j / mh;
+            for (int i = 0; i <= mw; i++) {
+                float x = left + w * i / mw;
                 move(f, s, x, y, f.o);
                 f.body[k++] = f.o[0];
                 f.body[k++] = f.o[1];
@@ -566,6 +599,11 @@ public final class Rig {
 
     /** Where the hand of one arm is in this frame (side 0 = the picture's left, 1 = right). Call after bodyMesh. */
     public void handAt(Frame f, State s, int side, float[] o) {
+        if (animal) {   // an animal carries things in its mouth
+            float ax = f.L0 + (headSide < 0 ? headX0 + 0.05f : headX1 - 0.05f) * f.W0;
+            move(f, s, ax, f.T0 + jawY * f.H0, o);
+            return;
+        }
         float hx = f.L0 + (cx + (side == 0 ? -1 : 1) * shoulderHalf * 0.85f) * f.W0;
         float hy = f.T0 + (hipY + 0.02f) * f.H0;
         move(f, s, hx, hy, o);
@@ -573,8 +611,197 @@ public final class Rig {
 
     /** How far the feet come up (sitting, kneeling), so the picture can be lowered to keep them on the ground. */
     public float feetRise(State s, float h) {
+        if (animal) return 0.8f * s.sit * (bottom - legTop) * h;
         float rise = (1 - s.legScale) * (bottom - hipY) * h;
         if (s.sit > 0) rise += (legs ? 0.8f * 0.5f : 0.38f) * s.sit * (bottom - hipY) * h;
         return rise;
+    }
+
+
+    // ================================================================== animals
+
+    /** Four-legged animals and birds (and any lying-down shape): head, jaw, tail, ears, legs. */
+    public boolean animal;
+    public int headSide;                      // -1 head on the picture's left, +1 on the right
+    public float bodyTop, belly, headX0, headX1, headTop, headBottom, tailX, tailY, neckX, neckY2;
+    public float frontLegX, backLegX, legTop, jawX, jawY, jawTipX;
+    public float frontLegHalf = 0.08f, backLegHalf = 0.08f;   // half the width of each pair of legs
+    public boolean hasTail;
+    /** The face finder's eyes / mouth really lie on the animal's head (otherwise they are not drawn over). */
+    public boolean eyesOnHead, mouthOnHead;
+
+    static Rig buildAnimal(Cutout.Result r, Art.Sprite s, int[] top, int[] bot, int x0, int x1, int y0, int y1) {
+        int w = r.w, h = r.h;
+        Rig g = new Rig();
+        g.animal = true;
+        g.top = y0 / (float) h;
+        g.bottom = y1 / (float) h;
+        int width = x1 - x0 + 1;
+        // the head: where the face was found, or the end of the body whose outline rises higher
+        if (s.faceKnown) g.headSide = (s.eyeLX + s.eyeRX) / 2 < (x0 + x1) / 2f / w ? -1 : 1;
+        else {
+            float l = 0, rr = 0;
+            int band = Math.max(1, width * 30 / 100);
+            for (int x = x0; x < x0 + band; x++) l += top[x] < 0 ? h : top[x];
+            for (int x = x1 - band + 1; x <= x1; x++) rr += top[x] < 0 ? h : top[x];
+            g.headSide = l < rr ? -1 : 1;
+        }
+        // body thickness along the length; the tail is a thin part at the far end
+        float maxThick = 0;
+        for (int x = x0; x <= x1; x++) if (top[x] >= 0) maxThick = Math.max(maxThick, bot[x] - top[x]);
+        int tailEnd = g.headSide < 0 ? x1 : x0, step = g.headSide < 0 ? -1 : 1;
+        int tailBase = tailEnd;
+        for (int x = tailEnd, n = 0; n < width * 0.35f; x += step, n++) {
+            if (x < x0 || x > x1 || top[x] < 0) continue;
+            if (bot[x] - top[x] > maxThick * 0.45f) { tailBase = x; break; }
+        }
+        g.tailX = tailBase / (float) w;
+        int tb = Math.max(x0, Math.min(x1, tailBase));
+        g.tailY = (top[tb] >= 0 ? top[tb] + (bot[tb] - top[tb]) * 0.25f : (y0 + y1) / 2f) / h;
+        // where the tail joins: the tail's own pixels just outside the body
+        int out = tb - step * 3;
+        if (out >= x0 && out <= x1 && top[out] >= 0) {
+            int sum = 0, n = 0;
+            for (int y = top[out]; y <= bot[out]; y++) if ((r.px[y * w + out] >>> 24) > 128) { sum += y; n++; if (n > Math.max(4, h / 25)) break; }
+            if (n > 0) g.tailY = sum / (float) n / h;
+        }
+        // the head block: the outer 30 % of the length on the head side
+        float hx0 = g.headSide < 0 ? x0 : x1 - width * 0.32f, hx1 = g.headSide < 0 ? x0 + width * 0.32f : x1;
+        g.headX0 = hx0 / w; g.headX1 = hx1 / w;
+        float ht = h, hb = 0;
+        for (int x = (int) hx0; x <= (int) hx1 && x <= x1; x++) if (x >= x0 && top[x] >= 0) { ht = Math.min(ht, top[x]); hb = Math.max(hb, bot[x]); }
+        g.headTop = ht / h;
+        // the legs start where the outline splits into separate legs (rows with gaps near the bottom)
+        // (the tail is left out, it hangs beside the legs; a few joined rows at the feet or shadow do not count)
+        int lx0 = g.headSide < 0 ? x0 : Math.min(x1, tailBase + 3), lx1 = g.headSide < 0 ? Math.max(x0, tailBase - 3) : x1;
+        int legRow = -1, split = 0, solid = 0, need = Math.max(3, (int) ((y1 - y0) * 0.04f));
+        for (int y = y1; y > y0 + (y1 - y0) * 0.3f; y--) {
+            int runs = 0;
+            boolean in = false;
+            for (int x = lx0; x <= lx1; x++) {
+                boolean o = (r.px[y * w + x] >>> 24) > 128;
+                if (o && !in) runs++;
+                in = o;
+            }
+            if (runs >= 2) { split++; solid = 0; if (split >= need) legRow = y; }
+            else if (split >= need && ++solid >= need) break;
+        }
+        g.legTop = (legRow > 0 ? legRow : y0 + (y1 - y0) * 0.62f) / (float) h;
+        // a real tail: a thin part joined to the body, attached above the legs
+        int filled = 0, cols = Math.abs(tailBase - tailEnd);
+        for (int x = Math.min(tailBase, tailEnd); x <= Math.max(tailBase, tailEnd); x++) if (x >= x0 && x <= x1 && top[x] >= 0) filled++;
+        g.hasTail = cols >= width * 0.03f && filled >= cols * 0.6f && g.tailY < g.legTop;
+        // the legs themselves: opaque runs a little below where they part, grouped into front and back pairs
+        int ly = Math.min(y1, (int) ((g.legTop * h + y1) / 2));
+        float mid = (x0 + x1) / 2f;
+        int fa = -1, fb = -1, ba = -1, bb = -1;
+        for (int x = lx0, a0 = -1; x <= lx1 + 1; x++) {
+            boolean o = x <= lx1 && (r.px[ly * w + x] >>> 24) > 128;
+            if (o && a0 < 0) a0 = x;
+            if (!o && a0 >= 0) {
+                int b0 = x - 1;
+                boolean front = g.headSide < 0 ? (a0 + b0) / 2f < mid : (a0 + b0) / 2f > mid;
+                if (front) { if (fa < 0) fa = a0; fb = b0; } else { if (ba < 0) ba = a0; bb = b0; }
+                a0 = -1;
+            }
+        }
+        g.belly = g.legTop;
+        // the head ends a little below the middle between its top and the legs (the chest and front legs are not head)
+        g.headBottom = Math.min(Math.min(g.legTop, hb / h), g.headTop + (g.legTop - g.headTop) * 0.72f);
+        float bodyMid = (x0 + x1) / 2f / w;
+        g.neckX = g.headSide < 0 ? g.headX1 : g.headX0;
+        g.neckY2 = g.headTop + (g.headBottom - g.headTop) * 0.65f;
+        g.frontLegX = g.headSide < 0 ? bodyMid - (bodyMid - x0 / (float) w) * 0.55f : bodyMid + (x1 / (float) w - bodyMid) * 0.55f;
+        g.backLegX = g.headSide < 0 ? bodyMid + (x1 / (float) w - bodyMid) * 0.5f : bodyMid - (bodyMid - x0 / (float) w) * 0.5f;
+        if (fa >= 0) { g.frontLegX = (fa + fb) / 2f / w; g.frontLegHalf = Math.max(0.03f, (fb - fa) / 2f / w); }
+        if (ba >= 0) { g.backLegX = (ba + bb) / 2f / w; g.backLegHalf = Math.max(0.03f, (bb - ba) / 2f / w); }
+        g.cx = bodyMid;
+        g.face = false;      // animals: no separate face crop; the head, jaw and ears carry the feeling
+        g.mX = s.mouthX; g.mY = s.mouthY; g.mHW = s.mouthHW;
+        float headH = g.headBottom - g.headTop;
+        boolean mouthOnHead = s.faceKnown && s.mouthY > g.headTop && s.mouthY < g.headBottom + 0.05f
+                && (g.headSide < 0 ? s.mouthX < g.neckX : s.mouthX > g.neckX);
+        g.mouthOnHead = mouthOnHead;
+        float eyeX = (s.eyeLX + s.eyeRX) / 2, eyeY = (s.eyeLY + s.eyeRY) / 2;
+        g.eyesOnHead = s.faceKnown && eyeY > g.headTop - 0.02f && eyeY < g.headBottom
+                && eyeX > Math.min(g.headX0, g.headX1) - 0.02f && eyeX < Math.max(g.headX0, g.headX1) + 0.02f;
+        // the jaw opens below the mouth line, from a hinge just behind the mouth
+        g.jawY = mouthOnHead ? s.mouthY : g.headTop + headH * 0.62f;
+        int jr = Math.max(0, Math.min(h - 1, (int) (g.jawY * h)));
+        g.jawTipX = g.headSide < 0 ? g.headX0 : g.headX1;
+        if (g.headSide < 0) { for (int x = x0; x <= x1; x++) if ((r.px[jr * w + x] >>> 24) > 128) { g.jawTipX = x / (float) w; break; } }
+        else for (int x = x1; x >= x0; x--) if ((r.px[jr * w + x] >>> 24) > 128) { g.jawTipX = x / (float) w; break; }
+        float headLen = Math.abs(g.headX1 - g.headX0);
+        float hinge = g.jawTipX - g.headSide * headLen * 0.4f;     // the jaw is the front of the snout
+        g.jawX = Math.max(Math.min(g.headX0, g.headX1), Math.min(Math.max(g.headX0, g.headX1), hinge));
+        g.mw = BH; g.mh = BW;
+        if (DEBUG) System.out.printf("animal head=%d tail=%.2f,%.2f legTop=%.2f headTop=%.2f neck=%.2f%n", g.headSide, g.tailX, g.tailY, g.legTop, g.headTop, g.neckX);
+        return g;
+    }
+
+    /** Where one point of an animal picture goes in this frame. */
+    private void moveAnimal(Frame f, State s, float x, float y, float[] o) {
+        float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        float px = x, py = y;
+        // breathing: the body swells a little
+        float bodyW = (1 - smooth(legTop - 0.05f, legTop, v));
+        py = f.T0 + (legTop + (v - legTop) * (1 + 0.015f * s.breathe * bodyW)) * f.H0;
+        // head (with jaw and ears): rotates about the neck
+        float hd = headSide < 0 ? smooth(neckX + 0.03f, neckX - 0.06f, u) : smooth(neckX - 0.03f, neckX + 0.06f, u);
+        hd *= 1 - smooth(headBottom - 0.04f, headBottom + 0.06f, v);
+        float qx = px, qy = py;
+        if (hd > 0) {
+            float nx = f.L0 + neckX * f.W0, ny = f.T0 + neckY2 * f.H0;
+            // jaw: the lower front of the head drops open with the voice
+            float jx = x, jy = py;
+            float headH = (headBottom - headTop);
+            float jawZone = smooth(jawY - headH * 0.05f, jawY + headH * 0.08f, v) * (headSide < 0 ? smooth(jawX + 0.02f, jawX - 0.04f, u) : smooth(jawX - 0.02f, jawX + 0.04f, u));
+            if (jawZone > 0 && s.jaw > 0) {
+                float hingeX = f.L0 + jawX * f.W0, hingeY = f.T0 + jawY * f.H0;
+                double a = Math.toRadians(headSide * 16 * s.jaw * jawZone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - hingeX, dy = jy - hingeY;
+                jx = hingeX + c * dx - sn * dy; jy = hingeY + sn * dx + c * dy;
+            }
+            // ears: the top of the head twitches (and folds back when angry or afraid)
+            float earZone = 1 - smooth(headTop + headH * 0.12f, headTop + headH * 0.3f, v);
+            if (earZone > 0) {
+                float ex = f.L0 + (headSide < 0 ? (headX0 + headX1) / 2 : (headX0 + headX1) / 2) * f.W0, ey = f.T0 + (headTop + headH * 0.3f) * f.H0;
+                double a = Math.toRadians((s.ear * 9 + s.earBack * 20 * -headSide) * earZone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - ex, dy = jy - ey;
+                jx = ex + c * dx - sn * dy; jy = ey + sn * dx + c * dy;
+            }
+            double a = Math.toRadians(animalHeadAngle(s));
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - nx, dy = jy - ny;
+            float hx = nx + c * dx - sn * dy, hy = ny + sn * dx + c * dy;
+            qx += hd * (hx - qx); qy += hd * (hy - qy);
+        }
+        // tail: wags about its base
+        float tl = headSide < 0 ? smooth(tailX - 0.02f, tailX + 0.03f, u) : smooth(tailX + 0.02f, tailX - 0.03f, u);
+        if (tl > 0 && hasTail) {
+            float tx = f.L0 + tailX * f.W0, ty = f.T0 + tailY * f.H0;
+            float reach = Math.min(1, (float) Math.hypot((u - tailX) * f.W0, (v - tailY) * f.H0) / (0.12f * f.W0));
+            double a = Math.toRadians(-headSide * s.tail * reach);   // + tail = down
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = qx - tx, dy = qy - ty;
+            qx += tl * (tx + c * dx - sn * dy - qx); qy += tl * (ty + sn * dx + c * dy - qy);
+        }
+        // lying down or sitting: the legs fold under the body
+        if (s.sit > 0 && v > legTop) {
+            float ly = f.T0 + legTop * f.H0;
+            qy = ly + (qy - ly) * (1 - 0.8f * s.sit);
+        }
+        // legs: front and back pairs swing in turn when walking
+        float lg = smooth(legTop - 0.02f, legTop + 0.04f, v);
+        if (lg > 0 && s.walkAmt > 0) {
+            boolean front = Math.abs(u - frontLegX) < Math.abs(u - backLegX);
+            float lh = front ? frontLegHalf : backLegHalf;
+            lg *= 1 - smooth(lh + 0.01f, lh + 0.05f, Math.abs(u - (front ? frontLegX : backLegX)));
+            float lx = f.L0 + (front ? frontLegX : backLegX) * f.W0, ly = f.T0 + legTop * f.H0;
+            float ang = (float) Math.sin(s.walkPhase + (front ? 0 : Math.PI)) * 14 * s.walkAmt;
+            double a = Math.toRadians(ang);
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = qx - lx, dy = qy - ly;
+            qx += lg * (lx + c * dx - sn * dy - qx); qy += lg * (ly + sn * dx + c * dy - qy);
+        }
+        o[0] = qx;
+        o[1] = qy;
     }
 }

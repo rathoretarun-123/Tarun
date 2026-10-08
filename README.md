@@ -1,4 +1,4 @@
-# Kahani Film — v11
+# Kahani Film — v12
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,17 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v12
+
+* **The Technical Director protocol is hardcoded** (`core/TechnicalDirector.java`, full text in `docs/technical-director.md`) and enforced by the director, not only written down:
+  * every spoken line is shown in **front-facing close-ups framed on the face**, with **at most six words per shot** (a long line becomes e.g. 4 + 5 words with the listener's silent reaction between); the speaker stops walking to speak and the head stays still;
+  * **no character moves 15 % of the frame in one shot** (runs are slowed to walking pace where the story's timing allows; otherwise the action is cut into several still shots);
+  * **one action per shot**, shots of about **3 seconds and never over 4**, a locked camera in every shot (also in vertical films, where the camera used to pan after the speaker);
+  * the **validation layer** checks every shot of the film and every prompt in the descriptions file, and the **error correction** fixes what fails; the shot list's quality check reports the result.
+* **Meshes down to pixel level:** each picture gets about one mesh cell per 2 screen pixels (up to 256 × 512 over a person and 256 × 256 over the face in a close-up). The face layer is cut from your **full-resolution** picture, so close-ups are sharp.
+* **Smoother, more realistic movement:** gestures ease in and out, a change of feeling settles over half a second, characters bend a little before setting off and settle after stopping, hair and hems follow through after the head turns, walking no longer hops, and a new instruction never makes anyone jump.
+* **Resizing as the protocol says:** FINAL_AR (16:9, 9:16 or 1:1) is decided once. Places, title and end pictures made by AI are made in that shape (never cropped from another); every shot is framed for that shape with whole characters, 15 % empty at the sides, headroom, faces in the centre 60 %, and no neighbour cut in half at the edge of a close-up.
 
 ## New in v11
 
@@ -113,7 +124,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
-* **The finest meshes, always:** every picture is bent through a very fine grid at all times — 80 × 160 points over a person, 160 × 80 over an animal, 96 × 96 over the face and 192 × 108 over every place, title page and close-up shot.
+* **Pixel-level meshes:** every picture is bent through a grid of about one cell per 2 screen pixels — at least 80 × 160 over a person (160 × 80 over an animal) and up to 256 × 512 in a close-up, 96 × 96 to 256 × 256 over the face, and 192 × 108 over every place.
 * **Finer physics:** denser, thinner rain with more splashes, six ripple rings after a stone, more spray drops that slow in the air, more snow, leaves, petals, dust and fireflies.
 * **Lip-sync with the real lips:** the face mesh opens the jaw — the lower lip and chin come down and the lips part, showing teeth and tongue inside. The mouth shape follows the sound of each moment: wide for "ee" and "s", round for "oo" and "o", closed between words.
 * **Follow-through:** loose hair and the hem of a skirt keep swaying a little after every move (more while walking), and breathing gently lifts the shoulders.
@@ -196,6 +207,11 @@ For better story reading, picture recognition and expressive AI voices, add a **
 * **Close-ups** come in at most about 2.9× so pictures stay sharp; a close-up of a small child character shows the face and upper body rather than the face alone.
 * **Voices:** the free natural voices (Microsoft neural) already sound like real people. ElevenLabs sounds closest to real actors but needs your key and has a monthly limit. The test films made on the build computer use a robotic computer voice (espeak) because it has no internet; the phone never uses it.
 * **ElevenLabs was tested only against a mock server** built from its published API (voices list, text-to-speech, key header, quota error), not the live service.
+* **Pixar level:** the film now follows the Technical Director protocol shot by shot, but it is still made from your flat pictures bent on a phone. It is not, and cannot be, Pixar quality (3D models, hand animation, render farms).
+* **Face filling 65–75 % of the frame** is used only where the picture is sharp enough and the whole head (hair, turban) fits; otherwise the face is as large as allowed (on the sample pictures most close-ups show the head and shoulders with the face filling about 40–60 %).
+* **Very fast moves:** where the story's timing leaves no room to slow a run, a few shots still move more than 15 % of the frame (11 of 277 shots in the sample story); the quality check lists them.
+* **Vertical (9:16) films from landscape backgrounds:** your own landscape picture is shown with "cover" (filled, never stretched), so its left and right sides are outside a vertical frame; each shot is centred on the action. For a native vertical background, add a portrait picture of the place (or let the AI make missing places, which are now made in 9:16 directly).
+* **Speed:** pixel-level meshes cost more drawing. On the build computer a close-up frame (960 × 540) took about 0.17 s; how long a whole film takes on a phone has not been measured.
 * **Taking off a cap or turban** works when it differs in colour from the skin and hair (most turbans, caps and crowns). The bare scalp is painted in the forehead's skin colour; hair hidden under the cap can't be known, so the head is shown bald. A black cap on black hair may not be found, and then the character keeps it on.
 * **Floor detection** compares the colours at the bottom of the place picture with the rest. On the 6 sample places it put the feet within 3 % of the hand-set positions; a picture whose floor looks like its walls may put the feet a little high or low.
 * **Eye and mouth finding** was measured on the 10 sample characters only; on one (an open laughing mouth under a curled moustache) the mouth point is still half an eye-distance off. Check the points with 👄 when lips look wrong.

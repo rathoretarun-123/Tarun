@@ -29,9 +29,16 @@ public final class Rig {
     /** How much each body mesh point is loose hair (0..1), from the picture's dark hair colours. */
     public float[] hairW;
 
-    public static final int BW = 22, BH = 44, FW = 26, FH = 26;
-    /** Mesh columns and rows of the body: tall for people, wide (the same number of points) for animals. */
+    /**
+     * The finest meshes: up to 48 x 96 cells over a person (96 x 48 over an animal) and 48 x 48 over the face.
+     * Each frame uses as many as the picture's size on screen needs (about one cell per 6 pixels), so a
+     * character in a close-up bends as smoothly as a drawing, and small far-away figures cost little.
+     */
+    public static final int BW = 48, BH = 96, FW = 48, FH = 48;
+    /** The most mesh columns and rows for this picture: tall for people, wide (the same number of points) for animals. */
     public int mw = BW, mh = BH;
+    /** Screen pixels per mesh cell the fine mesh aims for. */
+    public static float CELL_PX = 6f;
     public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows
 
     /** What the rig does in one frame. Angles in degrees (positive = clockwise on screen). */
@@ -50,9 +57,12 @@ public final class Rig {
         public float time;
         // animals: tail swing (degrees), jaw open 0..1, ear twitch -1..1, ears folded back 0..1, walking
         public float tail, jaw, ear, earBack, walkPhase, walkAmt;
+        // lips (people): how wide (ee, s) or round (oo, o) the mouth is while it opens with the voice (jaw)
+        public float lipWide, lipRound;
         public void reset() {
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = 0;
+            lipWide = lipRound = 0;
             legScale = 1; sit = 0; twirl = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
@@ -332,8 +342,10 @@ public final class Rig {
         float nX, nY, hipCX, hipCY;          // neck pivot, hip centre
         float hCos = 1, hSin, lCos = 1, lSin, nodS = 1, nodDy;
         final float[] armC = new float[2], armS = new float[2], legC = new float[3], legS = new float[3];
-        final float[] tmp = new float[2], legTmp = new float[2], o = new float[2], bumps = new float[5 * 24];
+        final float[] tmp = new float[2], legTmp = new float[2], o = new float[2], bumps = new float[5 * 40];
         public final float[] body = new float[(BW + 1) * (BH + 1) * 2];
+        /** The mesh size used in this frame (pass these to Gfx.imageMesh). */
+        public int cols = BW, rows = BH;
         public final float[] face = new float[(FW + 1) * (FH + 1) * 2];
     }
 
@@ -396,8 +408,6 @@ public final class Rig {
     private void move(Frame f, State s, float x, float y, float[] o) {
         if (animal) { moveAnimal(f, s, x, y, o); return; }
         moveBody(f, s, x, y, o);
-        if (s.wind == 0) return;
-        // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
         float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
         float hair = 0;
         if (hairW != null) {
@@ -406,6 +416,14 @@ public final class Rig {
         }
         float cloth = smooth(hipY, bottom, v) * (legs ? 0.3f : 1f);
         float t = s.time;
+        // always alive (follow-through): loose hair and a skirt's hem keep swaying a little after every move,
+        // more while walking; breathing lifts the shoulders and head
+        float alive = 1f + 2.2f * s.walkAmt;
+        o[0] += f.W0 * alive * (0.0045f * hair * (float) Math.sin(t * 1.7 + v * 5 + u * 2)
+                + 0.0035f * cloth * cloth * (float) Math.sin(t * 2.3 + v * 9 - u * 3));
+        o[1] -= f.H0 * 0.0022f * s.breathe * (1 - smooth(hipY - 0.12f, hipY, v)) * smooth(top, shoulderY, v + 0.05f);
+        if (s.wind == 0) return;
+        // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
         float flap = 0.75f + 0.35f * (float) Math.sin(t * 6.3 + v * 9 + u * 3);
         float dx = s.wind * f.W0 * (0.07f * hair * flap + 0.05f * cloth * cloth * (0.8f + 0.4f * (float) Math.sin(t * 7.1 + v * 12)));
         float dy = -Math.abs(s.wind) * f.H0 * 0.01f * hair * (float) Math.sin(t * 5 + u * 6);
@@ -496,14 +514,25 @@ public final class Rig {
         f.legTmp[1] = jy + s * dx + c * dy;
     }
 
-    /** Mesh points of the whole picture for this frame into f.body: (BW+1)*(BH+1) pairs. */
+    /** Mesh points of the whole picture for this frame into f.body, at the finest detail. */
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h) {
+        bodyMesh(f, s, left, top, w, h, 1e9f);
+    }
+
+    /**
+     * Mesh points of the whole picture for this frame into f.body: (f.cols+1)*(f.rows+1) pairs. screenPx is the
+     * picture's height on screen in pixels: the mesh gets about one cell per CELL_PX pixels, up to the finest.
+     */
+    public void bodyMesh(Frame f, State s, float left, float top, float w, float h, float screenPx) {
         frame(f, s, left, top, w, h);
+        int rows = Math.max(Math.min(mh, 12), Math.min(mh, Math.round(screenPx / CELL_PX)));
+        int cols = Math.max(4, Math.min(mw, Math.round(rows * mw / (float) mh)));
+        f.rows = rows; f.cols = cols;
         int k = 0;
-        for (int j = 0; j <= mh; j++) {
-            float y = top + h * j / mh;
-            for (int i = 0; i <= mw; i++) {
-                float x = left + w * i / mw;
+        for (int j = 0; j <= rows; j++) {
+            float y = top + h * j / rows;
+            for (int i = 0; i <= cols; i++) {
+                float x = left + w * i / cols;
                 move(f, s, x, y, f.o);
                 f.body[k++] = f.o[0];
                 f.body[k++] = f.o[1];
@@ -547,6 +576,13 @@ public final class Rig {
             n = add(d, n, ex1 - 1.0f * er, by1, 0.9f * er, 0, 0.25f * er * s.innerUp);
             n = add(d, n, ex2 + 1.0f * er, by2, 0.9f * er, 0, 0.25f * er * s.innerUp);
         }
+        // lips: the corners go out for "ee" / "s", in and forward for "oo" / "o"; the upper lip lifts a little
+        if (s.jaw > 0.02f) {
+            float cxm = (0.17f * s.lipWide - 0.24f * s.lipRound) * mh;
+            n = add(d, n, mx - mh, my + 0.08f * mh, 0.5f * mh, -cxm, 0.04f * mh * s.jaw);
+            n = add(d, n, mx + mh, my + 0.08f * mh, 0.5f * mh, cxm, 0.04f * mh * s.jaw);
+            n = add(d, n, mx, my - 0.42f * mh, 0.5f * mh, 0, -0.06f * mh * s.jaw);
+        }
         if (s.anger > 0) {
             n = add(d, n, ex1 + 0.6f * er, by1 + 0.2f * er, 0.95f * er, 0.3f * er * s.anger, 0.65f * er * s.anger);
             n = add(d, n, ex2 - 0.6f * er, by2 + 0.2f * er, 0.95f * er, -0.3f * er * s.anger, 0.65f * er * s.anger);
@@ -564,6 +600,11 @@ public final class Rig {
                     dx += g * d[b + 3];
                     dy += g * d[b + 4];
                 }
+                // the jaw: everything below the lips (lower lip, chin) drops together; the lips part at the mouth line
+                if (s.jaw > 0.02f) {
+                    float hx = (x - mx) / (1.7f * mh);
+                    dy += jawDrop(mh) * s.jaw * smooth(my - 0.05f * mh, my + 0.3f * mh, y) * (float) Math.exp(-hx * hx);
+                }
                 // nothing moves at the edges of the crop, so it melts into the picture below
                 float edge = Math.min(Math.min(i, FW - i) / (float) FW, Math.min(j, FH - j) / (float) FH);
                 float keep = smooth(0, 0.18f, edge);
@@ -573,6 +614,9 @@ public final class Rig {
             }
         }
     }
+
+    /** How far the lower lip comes down when the mouth is fully open (pixels, from the mouth's half width). */
+    public static float jawDrop(float mouthHalfW) { return 0.62f * mouthHalfW; }
 
     private static int add(float[] d, int n, float x, float y, float sigma, float dx, float dy) {
         if (n + 5 > d.length) return n;

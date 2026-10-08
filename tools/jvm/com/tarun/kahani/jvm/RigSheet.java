@@ -17,7 +17,7 @@ public class RigSheet {
         Story story = ScriptParser.parse(new String(Files.readAllBytes(Paths.get(assets, "..", "sample_story.txt")), "UTF-8"));
         Art art = Art.fromManifest(new String(Files.readAllBytes(Paths.get(assets, "cast.txt")), "UTF-8"), story, new MakeFilm.AwtLoader(assets));
         Renderer r = new Renderer(null, art);
-        String[] cols = {"neutral", "happy", "laugh", "sad", "angry", "scared", "surprised", "talk", "point", "walk A", "walk B", "sit", "bow", "wave", "twirl"};
+        String[] cols = {"neutral", "happy", "laugh", "sad", "angry", "scared", "surprised", "talk", "talk ee", "talk oo", "point", "walk A", "walk B", "sit", "bow", "wave", "twirl"};
         int cw = 230, ch = 520;
         java.util.List<Story.CharacterDef> who = new java.util.ArrayList<Story.CharacterDef>();
         for (int i = 2; i < a.length; i++) {
@@ -48,13 +48,15 @@ public class RigSheet {
                     case 5: p.emotion = Pose.SCARED; break;
                     case 6: p.emotion = Pose.SURPRISED; break;
                     case 7: p.mouth = 0.6f; p.armR = 45; p.time = 2.3f; break;
-                    case 8: p.armR = 95; p.emotion = Pose.DETERMINED; break;
-                    case 9: p.walk = (float) (Math.PI / 2); p.walkAmt = 1; p.armL = 50; p.armR = 0; break;
-                    case 10: p.walk = (float) (-Math.PI / 2); p.walkAmt = 1; p.armL = 0; p.armR = 50; break;
-                    case 11: p.body = Pose.SIT; p.sit = 1; break;
-                    case 12: p.tilt = 18; p.nod = 0.8f; p.armL = 55; p.armR = 55; break;
-                    case 13: p.wave = 1; p.armR = 150; p.emotion = Pose.HAPPY; break;
-                    case 14: p.twirl = true; p.time = 2.45f; p.emotion = Pose.PROUD; break;
+                    case 8: p.mouth = 0.45f; p.mouthWide = 1f; break;
+                    case 9: p.mouth = 0.6f; p.mouthWide = 0f; break;
+                    case 10: p.armR = 95; p.emotion = Pose.DETERMINED; break;
+                    case 11: p.walk = (float) (Math.PI / 2); p.walkAmt = 1; p.armL = 50; p.armR = 0; break;
+                    case 12: p.walk = (float) (-Math.PI / 2); p.walkAmt = 1; p.armL = 0; p.armR = 50; break;
+                    case 13: p.body = Pose.SIT; p.sit = 1; break;
+                    case 14: p.tilt = 18; p.nod = 0.8f; p.armL = 55; p.armR = 55; break;
+                    case 15: p.wave = 1; p.armR = 150; p.emotion = Pose.HAPPY; break;
+                    case 16: p.twirl = true; p.time = 2.45f; p.emotion = Pose.PROUD; break;
                     default:
                 }
                 g.save();

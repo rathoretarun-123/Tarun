@@ -32,6 +32,7 @@ public final class Renderer {
     // ================================================================== frame
 
     public void render(Gfx g, float t) {
+        curT = t;
         vh = H;
         vw = H * g.width() / (float) g.height();
         g.save();
@@ -78,9 +79,22 @@ public final class Renderer {
         g.save();
         g.translate(vw / 2 + panX, vh / 2 + panY);
         g.scale(zoom, zoom);
-        g.imageRect(b.img, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
+        Nature.Scan sc = b.scan;
+        if (sc != null && (sc.anyPlants || sc.anyWater || sc.anyFall)) {
+            // title pages and close-up shots live too: leaves sway, water flows, falls stream (fine mesh)
+            g.translate(-vw / 2, -vh / 2);
+            float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
+            Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, vw, vh, curT, wind, sea, bdMesh);
+            g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
+            Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, vw, vh, curT);
+        } else {
+            g.imageRect(b.img, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
+        }
         g.restore();
     }
+
+    /** The time of the frame being drawn (for living pictures drawn by helpers). */
+    private float curT;
 
     /** Portrait pictures: blurred-looking dark fill behind, full picture in the middle. */
     private void contain(Gfx g, Art.Backdrop b, float zoom) {
@@ -680,6 +694,19 @@ public final class Renderer {
         return 0;
     }
 
+    /** How wide (ee) or round (oo) the speaker's mouth is now (0.5 when unknown). */
+    float mouthShapeAt(Film.Actor a, float t) {
+        for (Film.Speak sp : a.speaks) {
+            if (t >= sp.t0 && t < sp.t1) {
+                Film.Line l = film.lines.get(sp.line);
+                if (l.shape == null || l.shape.length == 0) return 0.5f + 0.3f * (float) Math.sin((t - sp.t0) * 7);
+                int i = (int) ((t - l.start) * 100);
+                return i < 0 || i >= l.shape.length ? 0.5f : l.shape[i];
+            }
+        }
+        return 0.5f;
+    }
+
     private Film.Speak speakingAt(Film.Actor a, float t) {
         for (Film.Speak sp : a.speaks) if (t >= sp.t0 && t < sp.t1) return sp;
         return null;
@@ -698,6 +725,7 @@ public final class Renderer {
         float y = s.ground;
         float scale = 1f;
         if (k.depth > 0) { y -= 26; scale = 0.88f; }
+        pxPerUnit = g.height() / (float) H * camZ * scale;      // how big the picture is on screen: how fine its mesh
 
         // ---- pose
         Pose p = pose;
@@ -728,6 +756,7 @@ public final class Renderer {
         Film.Speak spk = speakingAt(a, t);
         if (spk != null) {
             p.mouth = mouthAt(a, t);
+            p.mouthWide = mouthShapeAt(a, t);
             if (spk.emotion != Pose.NEUTRAL) p.emotion = spk.emotion;
             if (p.emotion == Pose.SAD) p.tears = true;
         }
@@ -1042,6 +1071,8 @@ public final class Renderer {
     // ================================================================== picture sprites
 
     private final Rig.Frame rf = new Rig.Frame();
+    /** Screen pixels per stage unit for the character being drawn (previews: 1). */
+    private float pxPerUnit = 1f;
     private final Rig.State rs = new Rig.State(), rsTmp = new Rig.State();
     private final Pose pose2 = new Pose();
     private final float[] hand = new float[2];
@@ -1130,6 +1161,7 @@ public final class Renderer {
     public void drawPosed(Gfx g, Story.CharacterDef c, Pose p, float h) {
         Art.Sprite sp = art == null ? null : art.sprites.get(c.id);
         mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
+        pxPerUnit = 1f;
         if (sp != null) drawSprite(g, sp, c.look, p, h, 0, null);
         else Puppet.draw(g, c.look, p, h);
     }
@@ -1197,6 +1229,14 @@ public final class Renderer {
             st.headRot += sw * 1.2f;
         }
         st.nod += p.nod;
+        st.walkAmt = p.walkAmt;
+        // the lips: the jaw opens with the voice, the corners follow the sound (wide "ee", round "oo")
+        float open = p.mouth;
+        if (open < 0.06f && p.emotion == Pose.SURPRISED) open = 0.3f;
+        if (open < 0.06f && p.emotion == Pose.LAUGH) open = 0.3f + 0.2f * Math.abs((float) Math.sin(t * 9));
+        st.jaw = open > 0.04f ? open : 0;
+        st.lipWide = Math.max(0, Math.min(1, (p.mouthWide - 0.5f) * 2.2f));
+        st.lipRound = Math.max(0, Math.min(1, (0.5f - p.mouthWide) * 2.2f));
         if (p.wave > 0) st.armR = 20 + 7 * (float) Math.sin(t * 12);
         st.twirl = p.twirl;
         st.sit = p.sit;
@@ -1314,9 +1354,9 @@ public final class Renderer {
             // sitting / kneeling: the legs fold, so the picture comes down to keep the feet on the ground
             float rise = rig.feetRise(st, h);
             if (rise > 0) g.translate(0, rise);
-            rig.bodyMesh(rf, st, left, top, w, h);
-            g.imageMesh(sp.img, rig.mw, rig.mh, rf.body);
-            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rig.mw, rig.mh, rf.body); g.restore(); }
+            rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
+            g.imageMesh(sp.img, rf.cols, rf.rows, rf.body);
+            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
             if (rig.face && rig.faceImg != null) {
                 rig.faceMesh(rf, st);
                 g.imageMesh(rig.faceImg, Rig.FW, Rig.FH, rf.face);
@@ -1377,7 +1417,22 @@ public final class Renderer {
             float m = p.mouth;
             if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
             if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.3f + 0.2f * Math.abs((float) Math.sin(p.time * 9));
-            if (m > 0.06f && !(rigged && rig.animal)) {
+            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f) {
+                // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
+                float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
+                float gap = Rig.jawDrop(hw) * st.jaw;
+                float ow = hw * (0.78f + 0.22f * st.lipWide - 0.32f * st.lipRound), cy = my + gap * 0.5f + hw * 0.02f;
+                float oh = gap * 0.5f + hw * 0.03f;
+                g.color(0xC8401016);
+                g.oval(mx, cy, ow * 1.04f, oh * 1.1f);
+                g.color(0xF0200608);
+                g.oval(mx, cy, ow * 0.9f, oh * 0.92f);
+                if (gap > hw * 0.12f) {
+                    g.color(0xE8F2EEE6);   // upper teeth, a soft strip under the upper lip
+                    g.roundRect(mx - ow * 0.62f, cy - oh * 0.9f, ow * 1.24f, Math.min(oh * 0.55f, hw * 0.16f), hw * 0.06f);
+                }
+                if (st.jaw > 0.38f) { g.color(0xD8C8545E); g.oval(mx, cy + oh * 0.5f, ow * 0.55f, oh * 0.35f); }
+            } else if (m > 0.06f && !(rigged && rig.animal)) {
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;
                 float hw = sp.mouthHW * w;
                 float oh = hw * (0.18f + 0.62f * m);

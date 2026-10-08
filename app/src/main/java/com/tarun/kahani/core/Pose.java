@@ -15,6 +15,7 @@ public final class Pose {
     public int emotion = NEUTRAL;
     public float facing = 1f;          // +1 right, -1 left
     public float mouth;                // 0..1 open
+    public float mouthWide = 0.5f;     // 0 round ("oo") .. 1 wide ("ee", "s"), from the sound of the voice
     public float blink;                // 0..1 closed
     public float armL = 8, armR = 8;   // degrees, 0 = down, 90 = sideways out, 170 = up
     public float elbowL = 10, elbowR = 10;
@@ -39,7 +40,7 @@ public final class Pose {
     public long seed;
 
     public void reset() {
-        body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
+        body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;

@@ -31,6 +31,31 @@ public final class Mixer {
         return e;
     }
 
+    /**
+     * The mouth's shape along a voice, 100 values a second: how bright the sound is. Round vowels (o, u) are
+     * dark, spread vowels (e, i) and s-sounds are bright. 0 = round .. 1 = wide.
+     */
+    public static float[] shape(float[] pcm, int sr) {
+        int win = sr / 100;
+        int n = pcm.length / win + 1;
+        float[] out = new float[n];
+        float y = 0.5f;
+        for (int i = 0; i < n; i++) {
+            double e = 0, d = 0;
+            int a = i * win, b = Math.min(pcm.length, a + win);
+            for (int j = Math.max(1, a); j < b; j++) { e += pcm[j] * pcm[j]; float df = pcm[j] - pcm[j - 1]; d += df * df; }
+            float v = 0.5f;
+            if (e > 1e-7 * Math.max(1, b - a)) {
+                // the "centre" frequency of the sound from how fast it changes
+                double fc = sr / (2 * Math.PI) * Math.sqrt(d / e);
+                v = (float) Math.max(0, Math.min(1, (fc - 650) / 1500));
+            }
+            y += 0.45f * (v - y);
+            out[i] = y;
+        }
+        return out;
+    }
+
     /** Linear resample to Synth.SR. */
     public static float[] resample(float[] in, int sr) {
         if (sr == Synth.SR || in.length == 0) return in;

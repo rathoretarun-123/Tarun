@@ -160,6 +160,7 @@ public final class Film {
         public boolean whisper, echo;
         public float dur;                // seconds, filled after synthesis
         public float[] env;              // mouth openness envelope, 100 Hz
+        public float[] shape;            // mouth shape, 100 Hz: 0 round ("oo") .. 1 wide ("ee", "s")
         public float start;              // placed on timeline
         public float gain = 1f;
     }

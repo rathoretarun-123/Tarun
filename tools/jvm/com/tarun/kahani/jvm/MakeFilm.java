@@ -59,6 +59,7 @@ public class MakeFilm {
             if (voices[i] != null) {
                 l.dur = voices[i].length / (float) Synth.SR;
                 l.env = Mixer.envelope(voices[i], Synth.SR);
+                l.shape = Mixer.shape(voices[i], Synth.SR);
             }
         }
         film = dir.direct(art);

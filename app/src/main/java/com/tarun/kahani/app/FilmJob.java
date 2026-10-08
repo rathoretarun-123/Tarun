@@ -247,6 +247,7 @@ public final class FilmJob implements Runnable {
                     voicedLines++;
                     l.dur = v.length / (float) Synth.SR;
                     l.env = Mixer.envelope(v, Synth.SR);
+                    l.shape = Mixer.shape(v, Synth.SR);
                 } else {
                     failedLines++;
                     l.dur = Director.estimate(l.text);

@@ -1,4 +1,4 @@
-# Kahani Film — v10
+# Kahani Film — v11
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,22 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v11
+
+* **Steady lip sync, no second lips:** the face is drawn as a finer layer that now moves exactly with the body under it, so a second pair of lips or eyes can no longer show through. The body no longer bobs with every syllable (that was the shaking), the head stays almost still while speaking, and the mouth glides from syllable to syllable, opening a moment before the sound as real speakers do. No painted lips are drawn over the real ones.
+* **Finer meshes:** 80 × 160 points over a person, 160 × 80 over an animal, 96 × 96 over the face and 192 × 108 over every place.
+* **Eyes and mouth found much better on clear pictures:** on the 10 sample characters the automatic eye points are now about 0.10 eye-distances from the hand-placed ones (was 0.58) and the mouth 0.15 (was 0.66). It handles dark skin, eyebrows (no longer taken for eyes), turbans and jewellery, and mouths under a moustache.
+* **Backgrounds removed from busy photos:** a character photo with a garden, room or crowd behind it is cut out by learning the character's and the background's colours (on test pictures 88 % match, was 51 %).
+* **Resizing for Instagram / Facebook / WhatsApp without distortion:** pictures are always cropped or fitted in proportion, never stretched; a picture of a very different shape is shown whole over a soft enlarged copy of itself.
+* **Caps and turbans come off for real:** when a monkey snatches a guard's cap or turban, the guard is shown bare-headed (from his own picture) and the monkey wears that very cap. "Give my cap back!" in the dialogue is enough for the director to show it that way.
+* **Characters stand on each background's own floor**, found in the picture, with soft contact shadows. Out-of-focus backgrounds in close-ups are now smoothly blurred, not blocky.
+* **Library:** the backup copy is now private (it no longer appears in the phone's gallery or music player; old copies are moved once). Every sound has ▶/⏸ and ■. When online, the director asks the AI about library pictures it is unsure of (once per picture) and uses library pictures of objects in the story (a mirror, a bell, a letter) as close-up inserts.
+* **Pause** while a film is being made (⏸ Pause / ▶ Resume).
+* **Story reading with AI** no longer says "AI answer is not usable": a story already written as a screenplay is read directly, long stories are read in parts, and the AI's formatting is cleaned.
+* **Swords** rest at the side and swing only in a fight.
+
+**Background pictures** work best when they show only the place, with no people or animals in them: the director then places the characters on the floor of the picture at the right size.
 
 ## Quick guide
 
@@ -77,7 +93,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
 ## Your library is permanent
 
 * Every picture, voice and sound you add (or record, or that the studio makes with AI) is saved on the phone straight away and stays when the app is closed or the phone restarts.
-* **Where it is:** in the app's own storage on the phone (`/data/data/com.tarun.kahani/files/library`, folders `pic`, `voice`, `sound`), plus a backup copy in **Downloads/KahaniFilm/Library**. The library is not inside the app, so the app stays small however much you add. Nothing is ever deleted unless you delete it.
+* **Where it is:** in the app's own storage on the phone (`/data/data/com.tarun.kahani/files/library`, folders `pic`, `voice`, `sound`), plus a private backup copy in **Downloads/KahaniFilm/Library** (saved as `.kfbak` files, so galleries and music players don't show them). The library is not inside the app, so the app stays small however much you add. Nothing is ever deleted unless you delete it.
 * **Add many at once:** 📚 Library → **➕ Add many (photos, sounds, voices)** opens the phone's picker with your whole gallery and files. Long-press to select as many photos, sounds and voice samples as you like, at any time. Pictures, voices and sounds are sorted by themselves (an audio file whose name says "voice", "आवाज़", "dialogue" or "sample" becomes a voice; other audio becomes a sound). The 📂 buttons in each tab also take many at once.
 * **Pictures from your older stories** (also from versions before the library existed) are copied into the library once, named after their character or place and described with that story's words. A picture that is already in the library is recognised and not added twice.
 * Each file is saved with its own description next to it, so even after a crash nothing is lost: files the list does not know are taken back in on the next start.
@@ -97,7 +113,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
-* **The finest meshes, always:** every picture is bent through a very fine grid at all times — 64 × 128 points over a person, 128 × 64 over an animal, 64 × 64 over the face and 160 × 90 over every place, title page and close-up shot.
+* **The finest meshes, always:** every picture is bent through a very fine grid at all times — 80 × 160 points over a person, 160 × 80 over an animal, 96 × 96 over the face and 192 × 108 over every place, title page and close-up shot.
 * **Finer physics:** denser, thinner rain with more splashes, six ripple rings after a stone, more spray drops that slow in the air, more snow, leaves, petals, dust and fireflies.
 * **Lip-sync with the real lips:** the face mesh opens the jaw — the lower lip and chin come down and the lips part, showing teeth and tongue inside. The mouth shape follows the sound of each moment: wide for "ee" and "s", round for "oo" and "o", closed between words.
 * **Follow-through:** loose hair and the hem of a skirt keep swaying a little after every move (more while walking), and breathing gently lifts the shoulders.
@@ -176,10 +192,13 @@ For better story reading, picture recognition and expressive AI voices, add a **
 ## Honest limits
 
 * **"Pixar level":** Pixar films are made from full 3D models with thousands of animation controls, hand-animated by teams and rendered on large computer farms. This app bends your pictures on a phone. The fine meshes, real-lip lip-sync, follow-through, light, depth, stereo sound and room echo bring it much closer to a cinematic film, but it is **not** Pixar quality and cannot be. The picture quality depends mostly on your pictures: 3D-style pictures give a 3D-looking film.
-* **Speed with the finest meshes:** drawing always at the finest mesh takes longer. On the build computer a test film drew about 35 % slower than v9. On a phone, a 10-minute 720p film may take roughly 25–50 minutes. This is an estimate; it has not been measured on a phone.
+* **Speed with the finest meshes:** drawing always at the finest mesh takes longer. On the build computer a test film drew about 35 % slower than v9. v11's finer meshes add more work; how much slower v11 is was not measured. On a phone, a 10-minute 720p film may take roughly 25–50 minutes. This is an estimate; it has not been measured on a phone.
 * **Close-ups** come in at most about 2.9× so pictures stay sharp; a close-up of a small child character shows the face and upper body rather than the face alone.
 * **Voices:** the free natural voices (Microsoft neural) already sound like real people. ElevenLabs sounds closest to real actors but needs your key and has a monthly limit. The test films made on the build computer use a robotic computer voice (espeak) because it has no internet; the phone never uses it.
 * **ElevenLabs was tested only against a mock server** built from its published API (voices list, text-to-speech, key header, quota error), not the live service.
+* **Taking off a cap or turban** works when it differs in colour from the skin and hair (most turbans, caps and crowns). The bare scalp is painted in the forehead's skin colour; hair hidden under the cap can't be known, so the head is shown bald. A black cap on black hair may not be found, and then the character keeps it on.
+* **Floor detection** compares the colours at the bottom of the place picture with the rest. On the 6 sample places it put the feet within 3 % of the hand-set positions; a picture whose floor looks like its walls may put the feet a little high or low.
+* **Eye and mouth finding** was measured on the 10 sample characters only; on one (an open laughing mouth under a curled moustache) the mouth point is still half an eye-distance off. Check the points with 👄 when lips look wrong.
 * **Mouth shapes** come from how bright the sound is, so they follow vowels roughly (wide / round / closed). They do not come from a phoneme-by-phoneme analysis.
 
 * **3D:** the film looks 3D when its pictures are 3D-style: your uploads, or the studio's AI pictures, which are always requested in 3D animated style. The camera, depth, light and parallax add a 2.5D cinematic feel.

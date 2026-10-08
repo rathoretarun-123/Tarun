@@ -818,7 +818,7 @@ public final class Renderer {
         int seat = seatOf(a, t);
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
-        for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; }
+        for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; p.turbanOwner = o.c.id; }
         Film.Speak spk = speakingAt(a, t);
         if (spk != null) {
             p.mouth = mouthAt(a, t);
@@ -1408,7 +1408,8 @@ public final class Renderer {
         float w = sp.w * scale;
         Rig rig = sp.rig;
         boolean beast = rig != null && rig.animal;
-        boolean rigged = rig != null && (beast ? p.body != Pose.HANG : p.body != Pose.LIE && p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0);
+        boolean bare = p.noHeadwear && sp.bareImg != null;          // the turban / cap has been taken off
+        boolean rigged = rig != null && (beast ? p.body != Pose.HANG : p.body != Pose.LIE && p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
         Rig.State st = rigged ? rigState(p, actor) : null;
         if (rigged && beast) animalState(st, p);
         g.save();
@@ -1429,7 +1430,7 @@ public final class Renderer {
         // shadow
         if (p.body != Pose.LIE && p.body != Pose.HANG) { g.color(0x40000000); g.oval(0, 0, w * 0.42f, h * 0.025f); }
         float left = -w / 2, top = -h;
-        if (p.noHeadwear && sp.turbanY > 0) {
+        if (p.noHeadwear && sp.turbanY > 0 && !bare) {
             float cut = sp.turbanY;
             float fx = left + sp.mouthX * w;
             float fw = Math.max(sp.eyeRX - sp.eyeLX, 0.1f) * w * 1.3f;
@@ -1447,12 +1448,13 @@ public final class Renderer {
             float rise = rig.feetRise(st, h);
             if (rise > 0) g.translate(0, rise);
             rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
-            g.imageMesh(sp.img, rf.cols, rf.rows, rf.body);
-            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
-            if (rig.face && rig.faceImg != null) {
+            g.imageMesh(bare ? sp.bareImg : sp.img, rf.cols, rf.rows, rf.body);
+            if (p.wet > 0.02f && sp.wetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
+            Object faceLayer = bare ? rig.faceBareImg : rig.faceImg;
+            if (rig.face && faceLayer != null) {
                 rig.faceMesh(rf, st);
-                g.imageMesh(rig.faceImg, Rig.FW, Rig.FH, rf.face);
-                if (p.wet > 0.02f && rig.faceWetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, Rig.FW, Rig.FH, rf.face); g.restore(); }
+                g.imageMesh(faceLayer, Rig.FW, Rig.FH, rf.face);
+                if (p.wet > 0.02f && rig.faceWetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, Rig.FW, Rig.FH, rf.face); g.restore(); }
             }
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);
@@ -1537,7 +1539,7 @@ public final class Renderer {
                 g.color(0xB01C0507);
                 g.oval(mx, my + oh * 0.5f, ow * 0.8f, oh * 0.8f + hw * 0.02f);
             }
-            if (p.wearsTurban) {
+            if (p.wearsTurban && !drawRealHat(g, sp, p, left, top, w, h)) {
                 float tx = left + sp.mouthX * w;
                 drawTurbanAt(g, tx, top + h * 0.035f, w * 0.3f, p);
             }
@@ -1567,6 +1569,24 @@ public final class Renderer {
                 drawItem(g, p.holdR, hx, hy, h, p);
             }
         }
+    }
+
+    /**
+     * The real turban / cap of its owner (cut from the owner's own picture) on this character's head, sized by
+     * the two faces' eye distances and set just as high above the eyes as it sat on its owner.
+     */
+    private boolean drawRealHat(Gfx g, Art.Sprite sp, Pose p, float left, float top, float w, float h) {
+        if (p.turbanOwner == null || art == null || !sp.faceKnown) return false;
+        Art.Sprite o = art.sprites.get(p.turbanOwner);
+        if (o == null || o.hatImg == null || o.hatW < 2) return false;
+        float d = Math.abs(sp.eyeRX - sp.eyeLX) * w;
+        if (d < 2) return false;
+        // a head a little wider than its eye distance suggests (animals' eyes sit close) gets a bigger hat
+        float k = d * 1.08f;
+        float ex = left + (sp.eyeLX + sp.eyeRX) / 2 * w, ey = top + (sp.eyeLY + sp.eyeRY) / 2 * h;
+        float x0 = ex + o.hatX0 * k, x1 = ex + o.hatX1 * k, y0 = ey + o.hatY0 * k, y1 = ey + o.hatY1 * k;
+        g.imageRect(o.hatImg, 0, 0, o.hatW, o.hatH, x0, y0, x1 - x0, y1 - y0);
+        return true;
     }
 
     private void drawTurbanAt(Gfx g, float x, float y, float r, Pose p) {

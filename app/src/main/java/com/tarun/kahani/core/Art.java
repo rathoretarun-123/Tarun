@@ -36,6 +36,11 @@ public final class Art {
         public Rig rig;
         /** The same picture soaked by rain: darker, deeper colours (made only for rainy stories). */
         public Object wetImg;
+        /** The picture with its turban / cap taken off, and that headwear on its own (null = none found). */
+        public Object bareImg, hatImg;
+        /** Where the headwear sits, in eye-distances from the point between the eyes (left, top, right, bottom). */
+        public float hatX0, hatY0, hatX1, hatY1;
+        public int hatW, hatH;
     }
 
     public static final class Backdrop {
@@ -99,6 +104,26 @@ public final class Art {
         s.lid = r.skin;
         s.pixelsForSampling = r;
         return s;
+    }
+
+    /**
+     * Prepares the bare-headed version of a character who wears a turban or cap (for when it is snatched or
+     * taken off) and the headwear itself (for whoever puts it on).
+     */
+    public static void takeOffHeadwear(Sprite s, Loader L) {
+        Cutout.Result r = s.pixelsForSampling;
+        if (r == null || !s.faceKnown) return;
+        try {
+            Headwear hw = Headwear.strip(r.px, r.w, r.h, s.eyeLX * r.w, s.eyeLY * r.h, s.eyeRX * r.w, s.eyeRY * r.h, s.skin);
+            if (hw == null) return;
+            s.bareImg = L.create(hw.bare, r.w, r.h);
+            s.hatImg = L.create(hw.hat, hw.hx1 - hw.hx0 + 1, hw.hy1 - hw.hy0 + 1);
+            s.hatW = hw.hx1 - hw.hx0 + 1; s.hatH = hw.hy1 - hw.hy0 + 1;
+            s.hatX0 = hw.relX0; s.hatY0 = hw.relY0; s.hatX1 = hw.relX1; s.hatY1 = hw.relY1;
+            if (s.rig != null) s.rig.faceBareImg = s.rig.faceFrom(hw.bare, r.w, r.h, L);
+        } catch (RuntimeException e) {
+            s.bareImg = null; s.hatImg = null;
+        }
     }
 
     /** Re-samples skin and lip colours after landmarks are changed. */
@@ -197,6 +222,7 @@ public final class Art {
                     }
                     // head, arms, legs and face for animating the picture (needs the final face points)
                     try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
+                    if (c.look != null && c.look.headwear == Look.HW_TURBAN && !beast) takeOffHeadwear(s, L);
                     if (rainy && s.pixelsForSampling != null) {
                         Cutout.Result cr = s.pixelsForSampling;
                         s.wetImg = L.create(wetPixels(cr.px), cr.w, cr.h);

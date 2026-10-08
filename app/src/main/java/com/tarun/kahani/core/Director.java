@@ -941,6 +941,7 @@ public final class Director {
         sp.acts.add(new Film.Act(start, end, Film.G_TALK));
         // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
         mannerActions(sp, to, b.manner, start, end, line.emotion);
+        headwearFromWords(sp, to, b.text, start);
         if (line.emotion == Pose.SAD) { Film.Key k = sp.at(start); k.tears = true; }
         if (line.emotion == Pose.LAUGH && sp.look.hero && Txt.has(b.text, "हा हा", "हँस")) {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
@@ -1070,6 +1071,24 @@ public final class Director {
         sh.light = plan.light;
         lastDlgShot = null;
         return true;
+    }
+
+    /**
+     * "Give my cap back!": whoever asks for their cap or turban back is not wearing it, and the one they ask
+     * (or the monkey in the scene) is - even when the script never showed it being taken.
+     */
+    private void headwearFromWords(Film.Actor sp, Film.Actor to, String text, float t) {
+        if (text == null || sp.look.headwear != Look.HW_TURBAN || sp.stateAt(t).noHeadwear) return;
+        if (!Txt.has(text, "टोपी", "पगड़ी", "साफ़ा", "cap", "turban", "topi", "pagdi")) return;
+        if (!Txt.has(text, "वापस", "लौटा", "दे दे", "दे दो", "लाओ", "return", "give it back", "wapas", "lauta")) return;
+        if (!Txt.has(text, "मेरी", "मेरा", "my", "meri")) return;
+        Film.Actor taker = to != null && to != sp ? to : null;
+        if (taker == null) for (Film.Actor a : seg.actors) if (a != sp && a.look.kind == Look.MONKEY) { taker = a; break; }
+        Film.Key k = sp.at(t); k.noHeadwear = true;
+        if (taker != null && !taker.stateAt(t).wearsTurban) {
+            Film.Key k2 = taker.at(t); k2.wearsTurban = true;
+            pTurbanColor.put(taker.c, sp.look.headColor);
+        }
     }
 
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
@@ -1279,9 +1298,10 @@ public final class Director {
         if (Txt.has(s, "उल्टा लटक") && subj != null) {
             Film.Key k = subj.at(t); k.visible = true; k.anchor = Film.A_BRANCH; k.body = Pose.HANG; k.x = 260;
         }
-        if (Txt.has(s, "पगड़ी") && Txt.has(s, "छीन", "उड़ा", "झपट") && subj != null) {
+        if (Txt.has(s, "पगड़ी", "टोपी", "साफ़ा", "turban", "cap", "pagdi", "topi") && Txt.has(s, "छीन", "उड़ा", "झपट", "ले भाग", "उतार", "snatch", "grab", "took", "chheen") && subj != null) {
             Film.Actor victim = target;
             if (victim == null) for (Film.Actor a : seg.actors) if (a.look.headwear == Look.HW_TURBAN && a != subj) { victim = a; break; }
+            if (victim != null && victim.stateAt(t).noHeadwear) victim = null;      // already taken
             if (victim != null) {
                 float vx = xAt(victim, t);
                 Film.Key k1 = subj.at(t + 0.4f); k1.anchor = Film.A_GROUND; k1.body = Pose.STAND; k1.x = vx - 60; k1.moveDur = 0.5f; k1.run = true;
@@ -1296,7 +1316,7 @@ public final class Director {
                 d = Math.max(d, 2.6f);
             }
         }
-        if (Txt.has(s, "पगड़ी पहन") && subj != null) { Film.Key k = subj.at(t); k.wearsTurban = true; }
+        if (Txt.has(s, "पगड़ी पहन", "टोपी पहन", "पगड़ी अपने सिर", "टोपी अपने सिर") && subj != null) { Film.Key k = subj.at(t); k.wearsTurban = true; }
         if (Txt.has(s, "डाल पर चढ़", "ऊँची डाल") && subj != null) {
             Film.Key k = subj.at(t + 0.2f); k.anchor = Film.A_BRANCH; k.body = Pose.STAND; k.x = 230; k.moveDur = 0.6f;
             subj.acts.add(new Film.Act(t, t + 0.7f, Film.G_JUMP));

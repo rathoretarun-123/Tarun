@@ -25,6 +25,8 @@ public final class Rig {
     public float eLX, eLY, eRX, eRY, eR, mX, mY, mHW;
     // the face drawn a second time: a crop of the picture with soft edges
     public Object faceImg, faceWetImg;
+    /** The face crop with the headwear taken off (null when the character has none). */
+    public Object faceBareImg;
     public float fu0, fv0, fu1, fv1;
     /** How much each body mesh point is loose hair (0..1), from the picture's dark hair colours. */
     public float[] hairW;
@@ -335,6 +337,22 @@ public final class Rig {
         fv0 = y0 / (float) r.h; fv1 = (y0 + ch) / (float) r.h;
         faceImg = L.create(px, cw, ch);
         faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+    }
+
+    /** The same face crop (same place, same soft edges) from another version of the picture, e.g. bare-headed. */
+    public Object faceFrom(int[] src, int w, int h, Art.Loader L) {
+        if (!face || faceImg == null) return null;
+        int x0 = Math.round(fu0 * w), y0 = Math.round(fv0 * h), cw = Math.round(fu1 * w) - x0, ch = Math.round(fv1 * h) - y0;
+        if (cw < 12 || ch < 12 || x0 < 0 || y0 < 0 || x0 + cw > w || y0 + ch > h) return null;
+        int[] px = new int[cw * ch];
+        float feather = Math.min(cw, ch) * 0.16f;
+        for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
+            int c = src[(y + y0) * w + x + x0];
+            float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
+            float k = Math.min(1, e / feather);
+            px[y * cw + x] = ((int) ((c >>> 24) * k * k * (3 - 2 * k)) << 24) | (c & 0xFFFFFF);
+        }
+        return L.create(px, cw, ch);
     }
 
     // ------------------------------------------------------------------ moving

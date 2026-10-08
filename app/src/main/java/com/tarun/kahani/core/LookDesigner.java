@@ -398,12 +398,14 @@ public final class LookDesigner {
         if (!sc.isEmpty()) l.shoeColor = sc.get(0);
 
         // ---- headwear
-        String headS = sentenceWith(all, "पगड़ी", "साफ़ा", "साफा", "turban", "टोपी", "hat", "मुकुट", "crown", "पल्लू", "घूँघट", "सींग", "horns");
-        if (Txt.has(headS, "पगड़ी", "साफ़ा", "साफा", "turban")) {
+        String headS = sentenceWith(all, "पगड़ी", "साफ़ा", "साफा", "turban", "टोपी", "hat", "cap", "मुकुट", "crown", "पल्लू", "घूँघट", "सींग", "horns");
+        // a cap (a guard's or a soldier's) comes off and goes on like a turban; a witch's hat stays her own
+        boolean cap = Txt.has(headS, "टोपी", "cap", "topi") && l.kind != Look.WITCH;
+        if (Txt.has(headS, "पगड़ी", "साफ़ा", "साफा", "turban", "pagdi", "pagri") || cap) {
             l.headwear = Look.HW_TURBAN;
-            String ts = headS.substring(Math.max(0, Txt.firstIndex(headS, "पगड़ी", "turban", "साफ") - 30));
+            String ts = headS.substring(Math.max(0, Txt.firstIndex(headS, "पगड़ी", "turban", "साफ", "टोपी", "cap") - 30));
             List<Integer> tc = colorsIn(ts);
-            int pg = Txt.firstIndex(ts, "पगड़ी", "turban", "साफ");
+            int pg = Txt.firstIndex(ts, "पगड़ी", "turban", "साफ", "टोपी", "cap");
             List<Integer> tcBefore = colorsIn(ts.substring(0, Math.max(0, pg)));
             l.headColor = !tcBefore.isEmpty() ? tcBefore.get(tcBefore.size() - 1) : (!tc.isEmpty() ? tc.get(0) : 0xFFC62828);
             List<Integer> after = colorsIn(ts.substring(Math.max(0, pg)));

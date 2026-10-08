@@ -448,9 +448,23 @@ public class AppTest {
         h.setAccessible(true);
         com.tarun.kahani.app.AudioIO.writeWav(new File(lines, h.invoke(null, "मीना|" + line) + ".wav"), tone, 32000);
         RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").commit();
-        com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(RuntimeEnvironment.getApplication(), p);
+        final com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(RuntimeEnvironment.getApplication(), p);
         long t0 = System.currentTimeMillis();
-        job.run();
+        // Human QC: the job stops at the first frames of every shot and waits; the user fixes two shots and approves
+        Thread runner = new Thread(new Runnable() { public void run() { job.run(); } });
+        runner.start();
+        long wait = System.currentTimeMillis();
+        while (!job.qcWaiting && runner.isAlive() && System.currentTimeMillis() - wait < 600000) Thread.sleep(50);
+        assertTrue("the job did not stop for the shot check: " + job.error, job.qcWaiting);
+        int shots = 0;
+        for (Integer i : job.qcShotIndex) if (i >= 0) shots++;
+        System.out.println("QC: " + job.qcItems.size() + " stills (" + shots + " shots)");
+        assertTrue("no first frames to check", shots >= 2);
+        for (String[] it : job.qcItems) assertTrue("missing still " + it[0], new File(it[0]).length() > 500);
+        job.qcFixes.put(0, Director.FIX_CALM);
+        job.qcFixes.put(1, Director.FIX_WIDER);
+        job.approve();
+        runner.join(600000);
         System.out.println("JOB: done=" + job.done + " failed=" + job.failed + " err=" + job.error + " warn=" + job.warning
                 + " stage=" + job.stage + " secs=" + job.filmSeconds + " took=" + (System.currentTimeMillis() - t0) + "ms");
         assertTrue("job failed: " + job.error, job.done);

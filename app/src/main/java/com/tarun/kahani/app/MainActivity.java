@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     static final int REQ_LOGIN = 11, REQ_SCRIPT = 12, REQ_IMAGE = 13, REQ_CAMERA = 14, REQ_AUDIO = 15, REQ_BULK = 16,
             REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22, REQ_LIB_MANY = 23;
     static final int S_HOME = 0, S_STORY = 1, S_STUDIO = 2, S_FACE = 3, S_PROGRESS = 4, S_PLAYER = 5, S_LIBRARY = 6,
-            S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9;
+            S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9, S_QC = 10;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private FrameLayout root;
@@ -179,7 +179,7 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         switch (screen) {
             case S_STORY: saveScript(); showHome(); break;
-            case S_STUDIO: case S_PROGRESS: case S_PLAYER: showStory(); break;
+            case S_STUDIO: case S_PROGRESS: case S_PLAYER: case S_QC: showStory(); break;
             case S_FACE: case S_LINES: showStudio(); break;
             case S_LIBRARY: case S_SETTINGS: if (project != null) showStory(); else showHome(); break;
             default: super.onBackPressed();
@@ -2533,6 +2533,73 @@ public class MainActivity extends Activity {
     private void makeFilm() {
         saveScript();
         if (FilmJob.scriptOf(project).trim().length() < 10) { toast("Write or paste a story first"); return; }
+        // the director asks before generating anything (FINAL_AR, which pictures AI may make, the shot check)
+        askBeforeMaking(new Runnable() { public void run() { startFilm(); } });
+    }
+
+    /**
+     * Before anything is generated, the director asks: where the film will be shown (its shape, decided once —
+     * FINAL_AR), whether the missing pictures may be made with AI, and whether to check every shot's first frame
+     * before the film is made (Human QC).
+     */
+    private void askBeforeMaking(final Runnable go) {
+        final Edits ed = edits();
+        LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 18), Ui.dp(this, 6), Ui.dp(this, 18), Ui.dp(this, 6));
+        body.addView(Ui.text(this, "Where will this film be shown? (decided once for the whole film)", 15, Ui.TEXT, true));
+        final android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
+        final String[] ars = {"16:9", "9:16", "1:1"};
+        String[] labels = {"▭  YouTube / TV — landscape 16:9", "▯  Reels / Shorts / WhatsApp status — vertical 9:16", "▢  Instagram post — square 1:1"};
+        for (int i = 0; i < ars.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(this);
+            rb.setText(labels[i]);
+            rb.setId(1000 + i);
+            rg.addView(rb);
+            if (ars[i].equals(ed.aspect)) rb.setChecked(true);
+        }
+        if (rg.getCheckedRadioButtonId() == -1) rg.check(1000);
+        body.addView(rg);
+        // pictures still missing (the library is searched first; the rest can be made with AI)
+        final CheckBox ai = new CheckBox(this);
+        try {
+            Story st = ScriptParser.parse(FilmJob.scriptOf(project));
+            List<String[]> miss = AutoLibrary.missingTargets(project, st);
+            StringBuilder m = new StringBuilder();
+            int shown = 0;
+            for (String[] t : miss) {
+                if (t[0].startsWith("shot:")) continue;
+                if (shown++ < 10) m.append(m.length() > 0 ? ", " : "").append(t[1]);
+            }
+            if (shown > 10) m.append(" and ").append(shown - 10).append(" more");
+            if (shown > 0) {
+                body.addView(Ui.text(this, "\nNo picture yet: " + m + ". The director looks in your library first.", 14, Ui.SUB, false));
+                ai.setText("Make the rest with free AI in 3D animated style (made natively in the film's shape)");
+                ai.setChecked(Prefs.autoArt(this) && Prefs.online(this));
+                ai.setEnabled(Prefs.online(this));
+                body.addView(ai);
+            }
+        } catch (Exception ignored) {}
+        final CheckBox qc = new CheckBox(this);
+        qc.setText("Show me the first frame of every shot before the film is made, so I can fix any (Human QC)");
+        qc.setChecked(Prefs.humanQc(this));
+        body.addView(qc);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body);
+        new AlertDialog.Builder(this).setTitle("🎬 Before the director makes your film").setView(sv)
+                .setPositiveButton("🎬 Make the film", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        int k = rg.getCheckedRadioButtonId() - 1000;
+                        Edits e = edits();
+                        e.aspect = ars[Math.max(0, Math.min(2, k))];
+                        saveEdits(e);
+                        if (ai.getParent() != null) Prefs.put(MainActivity.this, "autoArt", ai.isChecked() ? "1" : "0");
+                        Prefs.put(MainActivity.this, "humanQc", qc.isChecked() ? "1" : "0");
+                        go.run();
+                    }
+                }).setNegativeButton("Cancel", null).show();
+    }
+
+    private void startFilm() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED && !askedPerms) {
             askPermissions();
         }
@@ -2551,6 +2618,116 @@ public class MainActivity extends Activity {
             return;
         }
         showProgress();
+    }
+
+    /**
+     * Human QC: the director made the first frame of every shot; the user looks through them, fixes any shot with
+     * the protocol's corrections, and approves. Only then is the film made.
+     */
+    private void showQc(final FilmJob j) {
+        LinearLayout body = page(S_QC, "🎬 Check every shot", false);
+        LinearLayout head = Ui.card(this);
+        head.addView(Ui.text(this, "The director planned " + countShots(j) + " shots of about 3 seconds each and made the first frame of each one. "
+                + "Look through them. Tap a shot to fix it (calmer, closer, wider, show the listener, or no cut there). Then tap Approve: "
+                + "the film is made exactly from this plan.", 14, Ui.SUB, false));
+        body.addView(head);
+        final LinearLayout grid = Ui.column(this);
+        body.addView(grid);
+        final int per = 12;
+        final int[] page = {0};
+        final TextView info = Ui.text(this, "", 13, Ui.SUB, false);
+        final Runnable[] fill = new Runnable[1];
+        fill[0] = new Runnable() {
+            public void run() {
+                grid.removeAllViews();
+                int from = page[0] * per, to = Math.min(j.qcItems.size(), from + per);
+                LinearLayout row = null;
+                for (int i = from; i < to; i++) {
+                    final int item = i;
+                    final String[] it = j.qcItems.get(i);
+                    if ((i - from) % 2 == 0) { row = Ui.row(MainActivity.this); grid.addView(row); }
+                    LinearLayout cell = Ui.column(MainActivity.this);
+                    cell.setPadding(Ui.dp(MainActivity.this, 4), Ui.dp(MainActivity.this, 4), Ui.dp(MainActivity.this, 4), Ui.dp(MainActivity.this, 8));
+                    ImageView iv = new ImageView(MainActivity.this);
+                    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    iv.setBackgroundColor(0xFF000000);
+                    Bitmap b = android.graphics.BitmapFactory.decodeFile(it[0]);
+                    if (b != null) iv.setImageBitmap(b);
+                    cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(MainActivity.this, it[2].equals("char") ? 150 : 100)));
+                    final int shotIdx = j.qcShotIndex.get(i);
+                    Integer fx = shotIdx >= 0 ? j.qcFixes.get(shotIdx) : null;
+                    TextView t = Ui.text(MainActivity.this, (fx != null && fx != Director.FIX_NONE ? "✎ " + Director.FIX_NAMES[fx].split(" —")[0] + "\n" : "") + it[1], 11,
+                            fx != null && fx != Director.FIX_NONE ? Ui.BLUE : Ui.TEXT, false);
+                    t.setMaxLines(4);
+                    cell.addView(t);
+                    if (shotIdx >= 0) cell.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) {
+                            Integer cur = j.qcFixes.get(shotIdx);
+                            new AlertDialog.Builder(MainActivity.this).setTitle(it[1].split("\n")[0])
+                                    .setSingleChoiceItems(Director.FIX_NAMES, cur == null ? 0 : cur, new DialogInterface.OnClickListener() {
+                                        public void onClick(DialogInterface d, int w) {
+                                            if (w == Director.FIX_NONE) j.qcFixes.remove(shotIdx); else j.qcFixes.put(shotIdx, w);
+                                            d.dismiss();
+                                            fill[0].run();
+                                        }
+                                    }).setNegativeButton("Close", null).show();
+                        }
+                    });
+                    row.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                }
+                int pages = Math.max(1, (j.qcItems.size() + per - 1) / per);
+                info.setText("Page " + (page[0] + 1) + " of " + pages + "  •  " + j.qcFixes.size() + " shot(s) to fix");
+            }
+        };
+        fill[0].run();
+        LinearLayout nav = Ui.row(this);
+        nav.addView(Ui.small(this, "◀ Previous", Ui.SUB, new View.OnClickListener() {
+            public void onClick(View v) { if (page[0] > 0) { page[0]--; fill[0].run(); } }
+        }));
+        nav.addView(Ui.small(this, "Next ▶", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { if ((page[0] + 1) * per < j.qcItems.size()) { page[0]++; fill[0].run(); } }
+        }));
+        body.addView(nav);
+        body.addView(info);
+        LinearLayout c = Ui.card(this);
+        c.addView(Ui.button(this, "✔  Approve and make the film", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { j.approve(); showProgress(); }
+        }));
+        c.addView(Ui.button(this, "■  Stop (change pictures or the story first)", Ui.RED, new View.OnClickListener() {
+            public void onClick(View v) { j.cancel(); j.approve(); showStory(); }
+        }));
+        body.addView(c);
+    }
+
+    /** The Technical Director protocol exactly as given, and how the app applies each part of it. */
+    private void showProtocol() {
+        String given;
+        try { given = new String(Project.readAll(getAssets().open("technical_director_protocol.md")), "UTF-8"); }
+        catch (Exception e) { given = com.tarun.kahani.core.TechnicalDirector.PROTOCOL; }
+        String how = "HOW THE APP APPLIES IT\n"
+                + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
+                + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
+                + "the speaker stops walking to speak, the head stays still, only the mouth and jaw move.\n"
+                + "• No character moves 15% of the frame in one shot: runs are slowed to walking pace, or the action is cut into still shots.\n"
+                + "• Feet on the floor found in each place picture, with a soft contact shadow; heights in feet in every description.\n"
+                + "• FINAL_AR is asked once before making; AI pictures are made in that shape; every shot is framed for it (faces in the centre 60%, "
+                + "headroom, 15% empty at the sides, nobody cut in half).\n"
+                + "• Pictures are bent through meshes fine to the pixel; gestures ease in and out, anticipation before moves, follow-through of hair and cloth.\n"
+                + "• Human QC: the first frame of every shot is shown to you before the film is made; your fixes use the protocol's error correction.\n"
+                + "• The validation layer checks every shot and every prompt; the descriptions file (📄) has the lock sheets, plates, shot table, "
+                + "the image and video templates filled in for every shot, and the validation result.\n\n";
+        TextView tv = Ui.text(this, how + given, 13, Ui.TEXT, false);
+        tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
+        tv.setTextIsSelectable(true);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this).setTitle("📜 Technical Director protocol").setView(sv).setPositiveButton("Close", null).show();
+    }
+
+    private static int countShots(FilmJob j) {
+        int n = 0;
+        for (Integer i : j.qcShotIndex) if (i >= 0) n++;
+        return n;
     }
 
     private void showProgress() {
@@ -2601,6 +2778,7 @@ public class MainActivity extends Activity {
                 if (screen != S_PROGRESS) return;
                 FilmJob j = FilmJob.current;
                 if (j == null) { showStory(); return; }
+                if (j.qcWaiting) { showQc(j); return; }
                 stage.setText(j.paused ? "⏸ Paused — tap Resume to carry on" : j.stage);
                 eta.setText(j.paused ? "" : j.eta());
                 bar.setProgress((int) (j.progress * 1000));
@@ -2973,6 +3151,16 @@ public class MainActivity extends Activity {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "autoArt", on ? "1" : "0"); }
         });
         ai.addView(aa);
+        CheckBox hq = new CheckBox(this);
+        hq.setText("Human QC: before a film is made, show me the first frame of every shot to check and fix — recommended");
+        hq.setChecked(Prefs.humanQc(this));
+        hq.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "humanQc", on ? "1" : "0"); }
+        });
+        ai.addView(hq);
+        ai.addView(Ui.small(this, "📜 The director's protocol (hardcoded)", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { showProtocol(); }
+        }));
         CheckBox nv = new CheckBox(this);
         nv.setText("Natural voices (Microsoft's free neural voices, needs internet, no key) — recommended");
         nv.setChecked(Prefs.naturalVoices(this));

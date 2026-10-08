@@ -36,6 +36,8 @@ public final class Art {
         public Rig rig;
         /** The same picture soaked by rain: darker, deeper colours (made only for rainy stories). */
         public Object wetImg;
+        /** Rim light along the outline, lit from the left / from the right (null = none). */
+        public Object rimL, rimR;
         /** The picture with its turban / cap taken off, and that headwear on its own (null = none found). */
         public Object bareImg, hatImg;
         /** Where the headwear sits, in eye-distances from the point between the eyes (left, top, right, bottom). */
@@ -279,6 +281,17 @@ public final class Art {
                             }
                         } catch (Throwable ignored) {
                             // out of memory or an unusual file: the face layer stays at the picture's size
+                        }
+                    }
+                    if (s.rig != null && s.pixelsForSampling != null) {
+                        // the rim light of the outline (soft, half size), for the key light from either side
+                        try {
+                            Cutout.Result cr = s.pixelsForSampling;
+                            int[][] rl = RimLight.make(cr.px, cr.w, cr.h);
+                            s.rimL = L.create(rl[0], rl[2][0], rl[2][1]);
+                            s.rimR = L.create(rl[1], rl[2][0], rl[2][1]);
+                        } catch (Throwable ignored) {
+                            s.rimL = s.rimR = null;
                         }
                     }
                     if (rainy && s.pixelsForSampling != null) {

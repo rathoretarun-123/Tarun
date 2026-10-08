@@ -359,6 +359,9 @@ public final class FilmJob implements Runnable {
             film.subtitles = ed.subtitles;
             filmSeconds = film.duration;
             check();
+            // Human QC (protocol pipeline step 4): the first frame of every shot, checked by the user before the film
+            // is made; their fixes are applied, then the film is made
+            if (Prefs.humanQc(ctx)) humanQc(film, art, dir, ed, tmp);
             step("Mixing music and sounds…", 0.30f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
@@ -424,6 +427,94 @@ public final class FilmJob implements Runnable {
             if (voices != null) voices.shutdown();
             MainActivity.deleteDir(tmp);
         }
+    }
+
+    // ---------------------------------------------------------------- Human QC
+
+    /** One still to check: {file, caption, kind ("char" or "shot")}. */
+    public final java.util.List<String[]> qcItems = new java.util.ArrayList<String[]>();
+    /** True while the job waits for the user to check the shots. */
+    public volatile boolean qcWaiting;
+    /** The user's fix per shot (index into film.shots → Director.FIX_*), set by the screen before approving. */
+    public final java.util.Map<Integer, Integer> qcFixes = new java.util.concurrent.ConcurrentHashMap<Integer, Integer>();
+    /** Shot index of each "shot" item in qcItems. */
+    public final java.util.List<Integer> qcShotIndex = new java.util.ArrayList<Integer>();
+
+    /** The user has checked the shots: the fixes are applied and the film is made. */
+    public void approve() { qcWaiting = false; }
+
+    private void humanQc(Film film, Art art, Director dir, Edits ed, File tmp) throws IOException {
+        File qd = new File(tmp, "qc");
+        qd.mkdirs();
+        qcItems.clear();
+        qcShotIndex.clear();
+        qcFixes.clear();
+        // 1. the character lock sheets: every character's picture as the film will use it
+        for (Story.CharacterDef c : film.story == null ? java.util.Collections.<Story.CharacterDef>emptyList() : film.story.characters) {
+            Art.Sprite sp = art.sprites.get(c.id);
+            if (sp == null || !(sp.img instanceof Bitmap)) continue;
+            Bitmap src = (Bitmap) sp.img;
+            int th = 240, tw = Math.max(40, Math.round(th * src.getWidth() / (float) src.getHeight()));
+            Bitmap b = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(b);
+            cv.drawColor(0xFFE8EEF4);
+            cv.drawBitmap(src, null, new android.graphics.Rect(0, 0, tw, th), new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+            File f = new File(qd, "c" + qcItems.size() + ".jpg");
+            java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+            b.compress(Bitmap.CompressFormat.JPEG, 85, o);
+            o.close();
+            b.recycle();
+            qcItems.add(new String[]{f.getAbsolutePath(), "LOCK SHEET: " + c.shown(), "char"});
+            qcShotIndex.add(-1);
+        }
+        // 2. the first frame of every shot
+        int[] size = ed.size();
+        int w = 320, h = Math.max(120, Math.round(320f * size[1] / size[0]));
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer r = new Renderer(film, art);
+        com.tarun.kahani.core.FilmLook qlook = new com.tarun.kahani.core.FilmLook(w, h);
+        com.tarun.kahani.core.FilmLook.Params qlp = new com.tarun.kahani.core.FilmLook.Params();
+        int[] qpx = new int[w * h];
+        try {
+            int n = film.shots.size();
+            for (int i = 0; i < n; i++) {
+                check();
+                Film.Shot sh = film.shots.get(i);
+                step("Making the first frame of every shot for you to check (" + (i + 1) + "/" + n + ")…", 0.296f + 0.003f * i / Math.max(1, n));
+                r.render(g, sh.t + 0.05f);
+                bmp.getPixels(qpx, 0, w, 0, 0, w, h);
+                qlook.apply(qpx, com.tarun.kahani.core.FilmLook.at(film, sh.t + 0.05f, qlp));
+                bmp.setPixels(qpx, 0, w, 0, 0, w, h);
+                File f = new File(qd, "s" + i + ".jpg");
+                java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+                bmp.compress(Bitmap.CompressFormat.JPEG, 82, o);
+                o.close();
+                String what = sh.speech && sh.spoken.length() > 0 ? sh.subject + ": \"" + sh.spoken + "\"" : sh.action;
+                qcItems.add(new String[]{f.getAbsolutePath(), String.format(java.util.Locale.US, "SHOT %03d · %.1f s · %s\n%s",
+                        i + 1, sh.dur, com.tarun.kahani.core.ShotPlanner.SIZE_NAME[Math.max(0, Math.min(com.tarun.kahani.core.ShotPlanner.SIZE_NAME.length - 1, sh.size))],
+                        what.length() > 90 ? what.substring(0, 90) + "…" : what), "shot"});
+                qcShotIndex.add(i);
+            }
+        } finally {
+            g.release();
+            bmp.recycle();
+        }
+        // 3. wait for the user (the notification says so); then their fixes
+        stage = "Waiting for you: check the first frame of every shot";
+        qcWaiting = true;
+        while (qcWaiting && !cancelled) {
+            try { Thread.sleep(300); } catch (InterruptedException e) { break; }
+        }
+        check();
+        int fixed = 0;
+        StringBuilder note = new StringBuilder();
+        for (java.util.Map.Entry<Integer, Integer> e : qcFixes.entrySet()) {
+            String done = dir.fixShot(e.getKey(), e.getValue());
+            if (done.length() > 0) { fixed++; note.append(String.format(java.util.Locale.US, "\n• Shot %03d: %s", e.getKey() + 1, done)); }
+        }
+        if (fixed > 0) film.shotList += "\nHUMAN QC (your check of every first frame)\n" + fixed + " shot(s) fixed:" + note + "\n";
+        else film.shotList += "\nHUMAN QC: every first frame approved as it was.\n";
     }
 
     /**
@@ -529,6 +620,9 @@ public final class FilmJob implements Runnable {
                         bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
                         g = new AndroidGfx(bmp, 4);
                         Renderer r = new Renderer(film, art);
+                        // the cinematic finish: filmic curve, bloom, colour script by mood
+                        com.tarun.kahani.core.FilmLook look = new com.tarun.kahani.core.FilmLook(w, h);
+                        com.tarun.kahani.core.FilmLook.Params lp = new com.tarun.kahani.core.FilmLook.Params();
                         int[] px = new int[w * h];
                         for (int f = id; f < frames; f += workers) {
                             synchronized (lock) {
@@ -539,6 +633,7 @@ public final class FilmJob implements Runnable {
                             r.render(g, f / fpsF);
                             int[] buf = px;
                             bmp.getPixels(buf, 0, w, 0, 0, w, h);
+                            look.apply(buf, com.tarun.kahani.core.FilmLook.at(film, f / fpsF, lp));
                             grade.apply(buf, w * h);
                             int slot = f % slots.length;
                             synchronized (lock) {

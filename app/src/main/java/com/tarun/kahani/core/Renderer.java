@@ -600,7 +600,11 @@ public final class Renderer {
         }
     }
 
+    /** The part being drawn (for its light). */
+    private Film.Seg curSeg;
+
     private void drawScene(Gfx g, final Film.Seg s, float t) {
+        curSeg = s;
         camera(s, t);
         // a narrow frame follows the speaker only when the camera is free; a locked shot (Technical Director)
         // was framed for this shape by the director and never moves
@@ -876,6 +880,14 @@ public final class Renderer {
             p.bob = br * 1.2f;
         }
         applyActs(a, p, t);
+        // a shot the user asked to be calmer (Human QC): every movement there is cut by 80%
+        float calm = film == null ? 1f : film.calmAt(t);
+        if (calm < 1f) {
+            mo.dx *= calm; mo.dy *= calm; mo.rot *= calm;
+            mo.sx = 1 + (mo.sx - 1) * calm; mo.sy = 1 + (mo.sy - 1) * calm;
+            p.armL = 8 + (p.armL - 8) * calm; p.armR = 8 + (p.armR - 8) * calm;
+            p.walkAmt *= calm;
+        }
         if (p.holdR == Pose.I_WOOD_SWORD || p.holdR == Pose.I_SWORD) {
             // a sword is carried for its fight only: swung while fighting, resting at the side just before and
             // after, and put away once the fight is a few seconds over
@@ -1540,6 +1552,19 @@ public final class Renderer {
                 rig.faceMesh(rf, st);
                 g.imageMesh(faceLayer, rf.fcols, rf.frows, rf.face);
                 if (p.wet > 0.02f && rig.faceWetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, rf.fcols, rf.frows, rf.face); g.restore(); }
+            }
+            // rim light: the outline catches the place's key light (warm, from the sun's side; softer indoors and
+            // at night), so the character belongs to the picture instead of floating on it
+            Film.Seg ls = curSeg;
+            if (sp.rimL != null && sp.rimR != null && !bare && ls != null) {
+                boolean fromLeft = !(ls.tod == Sets.EVENING || ls.tod == Sets.NIGHT);
+                float k = outdoor(ls.set) ? (ls.tod == Sets.NIGHT ? 0.22f : ls.tod == Sets.EVENING || ls.tod == Sets.MORNING ? 0.45f : 0.32f) : 0.24f;
+                k /= 1 + 0.3f * Math.max(0, camZ - 1);     // closer in, the edge is larger on screen: keep it subtle
+                Object rim = fromLeft == (p.facing >= 0) ? sp.rimL : sp.rimR;
+                g.save();
+                g.setAlpha(k);
+                g.imageMesh(rim, rf.cols, rf.rows, rf.body);
+                g.restore();
             }
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);

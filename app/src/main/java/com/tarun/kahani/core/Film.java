@@ -18,6 +18,14 @@ public final class Film {
     public final List<Shot> shots = new ArrayList<Shot>();
     /** The director's shot list and quality check, in the training guide's format. */
     public String shotList = "";
+    /** Shots the user asked to calm down after checking them (Human QC): {t0, t1}; motion there is cut by 80%. */
+    public final List<float[]> calm = new ArrayList<float[]>();
+
+    /** 1 normally; 0.2 inside a shot the user asked to be calmer (protocol: reduce motion by 80%). */
+    public float calmAt(float t) {
+        for (float[] c : calm) if (t >= c[0] && t < c[1]) return TechnicalDirector.MOTION_FIX;
+        return 1f;
+    }
 
     /** One planned shot. */
     public static final class Shot {
@@ -35,6 +43,8 @@ public final class Film {
         public boolean speech;
         /** The words spoken in this shot (lip-sync shots). */
         public String spoken = "";
+        /** What the user changed after checking the shot (Human QC), or "". */
+        public String fixed = "";
     }
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;

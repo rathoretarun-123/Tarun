@@ -111,11 +111,16 @@ public class MakeFilm {
         long tr = System.currentTimeMillis();
         int stillEvery = Math.max(1, (int) (fps * Float.parseFloat(System.getenv().getOrDefault("STILL_EVERY", "3"))));
         float only = Float.parseFloat(System.getenv().getOrDefault("ONLY", "-1"));
+        // the cinematic finish (filmic curve, bloom, colour script), exactly as on the phone
+        final com.tarun.kahani.core.FilmLook look = System.getenv("NO_LOOK") != null ? null : new com.tarun.kahani.core.FilmLook(width, height);
+        final com.tarun.kahani.core.FilmLook.Params lp = new com.tarun.kahani.core.FilmLook.Params();
+        final int[] lookPx = new int[width * height];
         if (only >= 0) {
             // just write single frames at the given comma separated times
             for (String ts : System.getenv("TIMES").split(",")) {
                 float t = Float.parseFloat(ts);
                 r.render(g, t);
+                if (look != null) finish(img, look, com.tarun.kahani.core.FilmLook.at(film, t, lp), lookPx);
                 ImageIO.write(img, "jpg", new File(stills, String.format("t_%08.3f.jpg", t)));
             }
             System.out.println("frames written");
@@ -124,6 +129,7 @@ public class MakeFilm {
         for (int f = 0; f < frames; f++) {
             float t = f / (float) fps;
             r.render(g, t);
+            if (look != null) finish(img, look, com.tarun.kahani.core.FilmLook.at(film, t, lp), lookPx);
             byte[] px = ((java.awt.image.DataBufferByte) img.getRaster().getDataBuffer()).getData();
             os.write(px);
             if (stills != null && f % stillEvery == 0) ImageIO.write(img, "jpg", new File(stills, String.format("f%05d_%.1fs.jpg", f, t)));
@@ -132,6 +138,15 @@ public class MakeFilm {
         ff.waitFor();
         long ms = System.currentTimeMillis() - tr;
         System.out.println("rendered " + frames + " frames in " + ms + "ms (" + (frames * 1000f / Math.max(1, ms)) + " fps) -> " + out);
+    }
+
+    /** The film look on a BGR frame (converted to ARGB and back). */
+    static void finish(BufferedImage img, com.tarun.kahani.core.FilmLook look, com.tarun.kahani.core.FilmLook.Params p, int[] px) {
+        byte[] b = ((java.awt.image.DataBufferByte) img.getRaster().getDataBuffer()).getData();
+        int n = px.length;
+        for (int i = 0, o = 0; i < n; i++, o += 3) px[i] = 0xFF000000 | ((b[o + 2] & 255) << 16) | ((b[o + 1] & 255) << 8) | (b[o] & 255);
+        look.apply(px, p);
+        for (int i = 0, o = 0; i < n; i++, o += 3) { int c = px[i]; b[o] = (byte) c; b[o + 1] = (byte) (c >> 8); b[o + 2] = (byte) (c >> 16); }
     }
 
     static float[] espeak(Film.Line l, File dir, int i) {

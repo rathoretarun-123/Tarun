@@ -24,6 +24,8 @@ public final class Prefs {
     public static boolean naturalVoices(Context c) { return !"0".equals(get(c, "naturalVoices", "1")); }
     /** The studio creates missing character/background pictures with free AI (3D animated style) when online. */
     public static boolean autoArt(Context c) { return !"0".equals(get(c, "autoArt", "1")); }
+    /** Human QC (protocol step 4): the director shows the first frame of every shot and waits for the user's check. */
+    public static boolean humanQc(Context c) { return !"0".equals(get(c, "humanQc", "1")); }
     public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }
 
     /** A Cloud client configured from the settings. */

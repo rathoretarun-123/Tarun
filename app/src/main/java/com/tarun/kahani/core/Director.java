@@ -1017,6 +1017,85 @@ public final class Director {
         return end + after;
     }
 
+    // ================================================================== Human QC (pipeline step 4)
+
+    public static final int FIX_NONE = 0, FIX_CALM = 1, FIX_CLOSER = 2, FIX_WIDER = 3, FIX_LISTENER = 4, FIX_REMOVE = 5;
+    public static final String[] FIX_NAMES = {"Looks good", "Calmer — less movement (motion cut by 80%, subtle breathing only)",
+            "Closer", "Wider", "Show the listener instead (the speaker heard off-screen)", "No cut here — the shot before simply goes on"};
+
+    /**
+     * The user checked the first frame of a shot and asked for a fix (the protocol's error correction applied to
+     * this film). Returns what was done.
+     */
+    public String fixShot(int index, int fix) {
+        if (film == null || index < 0 || index >= film.shots.size() || fix == FIX_NONE) return "";
+        Film.Shot sh = film.shots.get(index);
+        Film.Seg sg = film.segAt(sh.t + 0.01f);
+        if (sg == null || sg.type != Film.S_SCENE) return "";
+        Film.Cam cam = null;
+        for (Film.Cam c : sg.cams) if (c.t <= sh.t + 0.01f && c.ease == 0) cam = c;
+        if (cam == null) return "";
+        seg = sg;
+        ground = sg.ground;
+        float t = sh.t + 0.05f;
+        // who the shot is about: the character nearest the middle of the frame
+        Film.Actor main = null;
+        float bd = 1e9f;
+        for (Film.Actor a : sg.actors) {
+            if (!a.stateAt(t).visible) continue;
+            float d = Math.abs(xAt(a, t) - cam.cx);
+            if (d < bd) { bd = d; main = a; }
+        }
+        String done;
+        switch (fix) {
+            case FIX_CALM:
+                film.calm.add(new float[]{sh.t, sh.t + sh.dur});
+                done = "calmer (motion cut by 80%)";
+                break;
+            case FIX_CLOSER: case FIX_WIDER: {
+                float z = fix == FIX_CLOSER ? Math.min(8f, cam.zoom * 1.25f) : Math.max(1f, cam.zoom / 1.25f);
+                cam.zoom = z;
+                if (main != null) {
+                    // keep the whole head in the frame with headroom
+                    float[] fb = faceBox(main, t);
+                    float fh = 720f / z;
+                    cam.cx = fix == FIX_CLOSER ? fb[0] : cam.cx;
+                    if (fb[4] < cam.cy - fh / 2 + 0.06f * fh) cam.cy = fb[4] - 0.06f * fh + fh / 2;
+                }
+                done = fix == FIX_CLOSER ? "closer" : "wider";
+                break;
+            }
+            case FIX_LISTENER: {
+                Film.Actor other = null;
+                float od = 1e9f;
+                for (Film.Actor a : sg.actors) {
+                    if (a == main || !a.stateAt(t).visible || a.stateAt(t).anchor != Film.A_GROUND) continue;
+                    float d = main == null ? 0 : Math.abs(xAt(a, t) - xAt(main, t));
+                    if (d < od) { od = d; other = a; }
+                }
+                if (other == null) {
+                    cam.zoom = Math.max(1f, cam.zoom / 1.6f);
+                    done = "wider (no listener in the scene)";
+                } else {
+                    Film.Cam c = faceCam(other, t, cam.light, 0.75f);
+                    cam.cx = c.cx; cam.cy = c.cy; cam.zoom = c.zoom;
+                    sh.speech = false; sh.reaction = true; sh.subject = other.c.shown();
+                    done = "shows " + other.c.shown() + " listening";
+                }
+                break;
+            }
+            case FIX_REMOVE: {
+                int i = sg.cams.indexOf(cam);
+                if (i > 0) { sg.cams.remove(i); done = "no cut (the shot before goes on)"; }
+                else done = "kept (the first shot of a part)";
+                break;
+            }
+            default: return "";
+        }
+        sh.fixed = done;
+        return done;
+    }
+
     // ================================================================== Technical Director protocol (enforced)
 
     /**
@@ -1383,6 +1462,14 @@ public final class Director {
                     }
                 }
                 c.cx = (minL + maxR) / 2;
+                if (subj.size() == 1) {
+                    // one character: on a third of the frame, with room in front of their gaze (still whole and
+                    // inside the 15% side margins)
+                    Film.Actor one = subj.get(0);
+                    float fw = frameW(c), half = (maxR - minL) / 2;
+                    float off = Math.min(fw / 6, fw * (0.5f - TechnicalDirector.SIDE_MARGIN) - half);
+                    if (off > 0) c.cx += one.stateAt(t).facing * off;
+                }
                 // headroom above the highest head; a full shot keeps the feet in the frame too
                 float fh = 720f / c.zoom;
                 float topEdge = c.cy - fh / 2;

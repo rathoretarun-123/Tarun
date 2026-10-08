@@ -299,10 +299,12 @@ public final class Director {
                 float step = (next - c.t) / n;
                 for (int k = 1; k < n; k++) {
                     boolean tight = k % 2 == 1;
-                    float z2 = c.zoom * 1.2f;
-                    if (z2 > Math.max(ShotPlanner.MAX_ZOOM, c.zoom * 1.0f) && c.zoom >= ShotPlanner.MAX_ZOOM) z2 = c.zoom / 1.15f;     // already very close: a touch wider
-                    else z2 = Math.min(Math.max(ShotPlanner.MAX_ZOOM, c.zoom), z2);
-                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? c.cy - 14 / c.zoom : c.cy, tight ? z2 : c.zoom, 0);
+                    // the second framing of a long hold: closer for a wider shot; for a close-up a touch wider (a
+                    // close-up never gets tighter here, so a head, hair or a turban is never cut)
+                    boolean close = c.zoom >= ShotPlanner.ZOOM[ShotPlanner.CU] * 0.95f;
+                    float z2 = close ? Math.max(1f, c.zoom / 1.18f) : Math.min(Math.max(ShotPlanner.MAX_ZOOM, c.zoom), c.zoom * 1.2f);
+                    float y2 = close ? c.cy : c.cy - 14 / c.zoom;
+                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? y2 : c.cy, tight ? z2 : c.zoom, 0);
                     d.still = true; d.roll = c.roll; d.angle = c.angle; d.light = c.light;
                     add.add(d);
                 }
@@ -1228,7 +1230,8 @@ public final class Director {
         float zoom = fill * 720f / fb[2];
         // the whole head stays in the frame: hair, a turban or a cap (from its top to the chin) fills at most
         // 85% of the frame height, with headroom above it
-        float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4];
+        // (with room for the small moves of the shot: a bounce, a nod, a gesture lifts the head a little)
+        float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 18;
         zoom = Math.min(zoom, 0.85f * 720f / Math.max(1, chin - headTop));
         zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], zoom));
         if (tight > 1) {
@@ -1270,7 +1273,15 @@ public final class Director {
             float zmax = Math.max(ShotPlanner.MAX_ZOOM, srcPx * 1.25f / fh);
             // the top of the head: the top of the picture (hair, turban), higher when wearing someone's turban
             float headTop = top;
-            if (k.wearsTurban) headTop -= Math.abs(sp.eyeRX - sp.eyeLX) * w * 1.6f;
+            if (k.wearsTurban) {
+                // the turban they wear is someone else's real one: its top, measured from its owner's picture
+                float d2 = Math.abs(sp.eyeRX - sp.eyeLX) * w * 1.08f, above = 1.6f;
+                if (seg != null) for (Film.Actor o : seg.actors) {
+                    Art.Sprite os = art.sprites.get(o.c.id);
+                    if (o != a && os != null && os.hatImg != null && o.stateAt(t).noHeadwear) above = Math.max(above, -os.hatY0);
+                }
+                headTop = Math.min(headTop, fy - 0.3f * d * h - above * d2);
+            }
             return new float[]{fx, fy, fh, Math.min(8f, zmax), headTop};
         }
         return new float[]{x, top + 0.11f * h, 0.17f * h, ShotPlanner.MAX_ZOOM, top - (k.wearsTurban ? 0.12f * h : 0)};

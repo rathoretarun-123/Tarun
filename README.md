@@ -1,4 +1,4 @@
-# Kahani Film — v12
+# Kahani Film — v13
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,17 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v13
+
+* **The director asks before generating anything:**
+  * when you tap 🎬 Make film it asks **where the film will be shown** (YouTube 16:9, Reels/Shorts 9:16 or square 1:1 — decided once, as the protocol says), lists the **pictures still missing** and asks whether AI may make them;
+  * after planning, it makes the **first frame of every shot** (and shows each character's picture) and **waits for your check (Human QC)**. Tap any shot to fix it: *calmer* (motion cut by 80%), *closer*, *wider*, *show the listener instead* (when lip-sync looks wrong), or *no cut here*. Tap **Approve** and the film is made exactly from that plan. (⚙ Settings → Human QC, on by default.)
+* **Pixel-level meshes for everything:** characters, faces, animals, places, title and end pages and insert shots are bent through about one mesh cell per 2 screen pixels. Characters lying down or hanging upside down now breathe and speak through their meshes too.
+* **A more cinematic, classier finish on every frame:** a filmic tone curve (soft highlights, gently lifted shadows), a soft glow around bright light, richer colour where it was dull, warm highlights and cool shadows, and a **colour script** — warmer for happy parts, cooler and quieter for sad or tense ones, blended across cuts.
+* **Rim light:** every character catches the place's key light along the edge of their outline (warm sunlight, softer indoors and at night), so they sit in the picture instead of looking pasted on.
+* **Framing:** a single character in a wider shot stands on a third of the frame with room in front of their gaze; close-ups always keep the whole head, hair or turban in the frame with room for small moves.
+* **The protocol exactly as you gave it** is stored in the app and can be read in ⚙ Settings → 📜 The director's protocol.
 
 ## New in v12
 
@@ -124,7 +135,7 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
-* **Pixel-level meshes:** every picture is bent through a grid of about one cell per 2 screen pixels — at least 80 × 160 over a person (160 × 80 over an animal) and up to 256 × 512 in a close-up, 96 × 96 to 256 × 256 over the face, and 192 × 108 over every place.
+* **Pixel-level meshes:** every picture is bent through a grid of about one cell per 2 screen pixels — at least 80 × 160 over a person (160 × 80 over an animal) and up to 256 × 512 in a close-up, 96 × 96 to 256 × 256 over the face, and up to 960 × 960 over a place (a place where nothing moves is mapped exactly to the pixel).
 * **Finer physics:** denser, thinner rain with more splashes, six ripple rings after a stone, more spray drops that slow in the air, more snow, leaves, petals, dust and fireflies.
 * **Lip-sync with the real lips:** the face mesh opens the jaw — the lower lip and chin come down and the lips part, showing teeth and tongue inside. The mouth shape follows the sound of each moment: wide for "ee" and "s", round for "oo" and "o", closed between words.
 * **Follow-through:** loose hair and the hem of a skirt keep swaying a little after every move (more while walking), and breathing gently lifts the shoulders.
@@ -211,7 +222,8 @@ For better story reading, picture recognition and expressive AI voices, add a **
 * **Face filling 65–75 % of the frame** is used only where the picture is sharp enough and the whole head (hair, turban) fits; otherwise the face is as large as allowed (on the sample pictures most close-ups show the head and shoulders with the face filling about 40–60 %).
 * **Very fast moves:** where the story's timing leaves no room to slow a run, a few shots still move more than 15 % of the frame (11 of 277 shots in the sample story); the quality check lists them.
 * **Vertical (9:16) films from landscape backgrounds:** your own landscape picture is shown with "cover" (filled, never stretched), so its left and right sides are outside a vertical frame; each shot is centred on the action. For a native vertical background, add a portrait picture of the place (or let the AI make missing places, which are now made in 9:16 directly).
-* **Speed:** pixel-level meshes cost more drawing. On the build computer a close-up frame (960 × 540) took about 0.17 s; how long a whole film takes on a phone has not been measured.
+* **Speed:** pixel-level meshes, the glow and the colour finish cost drawing time. On the build computer (one core, desktop Java) 40 s of film at 1280 × 720 took 254 s to draw (3.8 frames per second). How long a whole film takes on a phone has not been measured; expect it to take longer than v12.
+* **Human QC waits for you:** with it on, the film is not made until you approve the shots (the notification says so). Turn it off in ⚙ Settings if you want the film made in one go.
 * **Taking off a cap or turban** works when it differs in colour from the skin and hair (most turbans, caps and crowns). The bare scalp is painted in the forehead's skin colour; hair hidden under the cap can't be known, so the head is shown bald. A black cap on black hair may not be found, and then the character keeps it on.
 * **Floor detection** compares the colours at the bottom of the place picture with the rest. On the 6 sample places it put the feet within 3 % of the hand-set positions; a picture whose floor looks like its walls may put the feet a little high or low.
 * **Eye and mouth finding** was measured on the 10 sample characters only; on one (an open laughing mouth under a curled moustache) the mouth point is still half an eye-distance off. Check the points with 👄 when lips look wrong.

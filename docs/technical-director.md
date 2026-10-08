@@ -1,4 +1,4 @@
-# Technical Director protocol — hardcoded in v12
+# Technical Director protocol — hardcoded (v12, extended in v13)
 
 The protocol below is hardcoded in `app/src/main/java/com/tarun/kahani/core/TechnicalDirector.java` (its text,
 numbers, templates, forbidden words, validation layer and error correction) and enforced by the director,
@@ -26,6 +26,11 @@ the renderer and the descriptions file. The director works this way by default (
 | §7 Resizing | `safeFrames`: everyone a shot is about stays whole inside the frame with 15% side margins and headroom; faces in the centre 60%; a neighbour half in a close-up is moved out of the frame; AI pictures are made natively in FINAL_AR. |
 | §10 Validation | `validateShots`: every shot of the film is checked; failures go through `TechnicalDirector.correct` (§12) and the result is in the shot list's quality check. Each shot in the descriptions file shows "VALIDATION: passed" or what was corrected. |
 | §11 / §12 | Pipeline order and error correction are written in the descriptions file and applied by `TechnicalDirector.correct`. |
+| §11 step 4 Human QC | Before anything is generated the app asks the film's shape (FINAL_AR) and whether AI may make the missing pictures. After the director has planned the film it makes the **first frame of every shot** (and shows each character's lock picture); the user checks them and can fix any shot with the protocol's corrections (calmer = motion cut by 80% / closer / wider / show the listener instead of a bad lip-sync / no cut). Only after approval is the film made. (Settings → Human QC; on by default.) |
+| Pixar Test: no morphing | Every picture — characters, faces, animals, places, title and end pages, insert shots — is bent through a mesh of about one cell per 2 screen pixels (`Rig.CELL_PX`, `Nature.CELL_PX`); a picture where nothing moves is mapped exactly to the pixel. |
+| Classy finish | `FilmLook`: filmic tone curve, soft bloom, vibrance, split toning and a colour script that follows each part's mood; `RimLight`: a warm edge light on every character from the key light's side. |
+
+The protocol exactly as given is also stored in the app (`app/src/main/assets/technical_director_protocol.md`) and can be read in the app: ⚙ Settings → 📜 The director's protocol.
 
 ## The protocol (as hardcoded)
 

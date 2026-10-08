@@ -20,6 +20,12 @@ public final class Director {
         public boolean subtitles = false;    // can be switched on later from the command box
         public boolean sceneCards = false;   // "दृश्य N" cards between scenes (off: scenes flow like a film)
         public float pace = 1f;              // >1 = tighter pauses
+        /**
+         * The Technical Director protocol (docs/technical-director.md): locked static cameras, every change of view
+         * a clean cut, shots of about 3 seconds, long lines in front-facing close-ups split into short shots, no
+         * camera shake unless the story asks for one (an earthquake, thunder).
+         */
+        public boolean technical = true;
         /** The user's own sounds: effects are played where an action or direction mentions them. */
         public SoundLib sounds;
     }
@@ -232,7 +238,219 @@ public final class Director {
         film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
         scoreMusic();
+        if (opt.technical) { lockCameras(); limitShotLength(4.2f); }
+        film.shotList = qualityCheck();
         return film;
+    }
+
+    /**
+     * Technical Director protocol: the camera is a locked tripod. A move planned right after a cut becomes that
+     * shot's framing; any later move becomes a clean cut; every shot holds perfectly still.
+     */
+    private void lockCameras() {
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
+                public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
+            });
+            List<Film.Cam> out = new ArrayList<Film.Cam>();
+            for (Film.Cam c : sg.cams) {
+                Film.Cam last = out.isEmpty() ? null : out.get(out.size() - 1);
+                if (c.ease > 0 && last != null && c.t - last.t < 0.7f) {
+                    // the move's goal is the shot: frame it so from the cut on
+                    last.cx = c.cx; last.cy = c.cy; last.zoom = c.zoom; last.roll = c.roll; last.angle = c.angle;
+                    if (c.light >= 0) last.light = c.light;
+                    continue;
+                }
+                c.ease = 0;
+                c.still = true;
+                out.add(c);
+            }
+            for (Film.Cam c : out) c.still = true;
+            sg.cams.clear();
+            sg.cams.addAll(out);
+        }
+        for (Film.Shot sh : film.shots) sh.move = ShotPlanner.STATIC;
+    }
+
+    /**
+     * No shot runs longer than about four seconds: a long hold is cut in two or three, alternating the framing
+     * with a tighter one on the same subject (a cut-in) and back, each still.
+     */
+    private void limitShotLength(float max) {
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            List<Film.Cam> add = new ArrayList<Film.Cam>();
+            for (int i = 0; i < sg.cams.size(); i++) {
+                Film.Cam c = sg.cams.get(i);
+                float next = i + 1 < sg.cams.size() ? sg.cams.get(i + 1).t : sg.t1;
+                if (next - c.t <= max) continue;
+                int n = (int) Math.ceil((next - c.t) / 3.2f);
+                float step = (next - c.t) / n;
+                for (int k = 1; k < n; k++) {
+                    boolean tight = k % 2 == 1;
+                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? c.cy - 14 / c.zoom : c.cy, tight ? Math.min(ShotPlanner.MAX_ZOOM, c.zoom * 1.22f) : c.zoom, 0);
+                    d.still = true; d.roll = c.roll; d.angle = c.angle; d.light = c.light;
+                    add.add(d);
+                }
+            }
+            sg.cams.addAll(add);
+            java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
+                public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
+            });
+        }
+    }
+
+    /** Who is in the middle of a framing at time t (for shots the director did not plan line by line). */
+    private static Film.Actor nearestTo(Film.Seg sg, float cx, float t) {
+        Film.Actor best = null;
+        float bd = 1e9f;
+        for (Film.Actor a : sg.actors) {
+            if (!a.stateAt(t).visible) continue;
+            float d = Math.abs(xAt(a, t) - cx);
+            if (d < bd) { bd = d; best = a; }
+        }
+        return best;
+    }
+
+    /**
+     * The shot list follows the film exactly: every cut is a shot. Shots the planner decided keep their reasons;
+     * the others (staging of the action, cut-ins that keep shots short) are described from what is on screen.
+     */
+    private void shotsFromCuts() {
+        List<Film.Shot> planned = new ArrayList<Film.Shot>(film.shots);
+        film.shots.clear();
+        int part = -1;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            part++;
+            for (int i = 0; i < sg.cams.size(); i++) {
+                Film.Cam c = sg.cams.get(i);
+                if (c.ease > 0) continue;
+                float next = sg.t1;
+                for (int j = i + 1; j < sg.cams.size(); j++) if (sg.cams.get(j).ease == 0) { next = sg.cams.get(j).t; break; }
+                Film.Shot match = null;
+                for (Film.Shot p : planned) if (Math.abs(p.t - c.t) < 0.25f) { match = p; break; }
+                Film.Shot sh = match;
+                if (sh == null) {
+                    sh = new Film.Shot();
+                    sh.t = c.t;
+                    sh.size = ShotPlanner.sizeOf(c.zoom);
+                    sh.height = c.angle;
+                    Film.Actor who = nearestTo(sg, c.cx, c.t + 0.1f);
+                    sh.subject = who == null ? Sets.label(sg.set) : who.c.shown();
+                    Film.Sub talk = null;
+                    for (Film.Sub sb : sg.subs) if (c.t + 0.1f >= sb.t0 && c.t + 0.1f < sb.t1) talk = sb;
+                    sh.type = sh.size <= ShotPlanner.MWIDE ? ShotPlanner.TWO_SHOT : ShotPlanner.SINGLE;
+                    if (talk != null) for (Film.Line fl : film.lines) if (fl.start <= c.t + 0.1f && fl.start + fl.dur > c.t + 0.1f) { sh.line = fl.index; break; }
+                    sh.purpose = talk != null ? "A cut-in / cut-out on the speaker so no shot is longer than about 3 seconds"
+                            : sh.size <= ShotPlanner.MWIDE ? "Follow the action: everyone who moves stays in the frame" : "Show what " + sh.subject + " does";
+                    sh.action = talk != null ? (talk.who.length() > 0 ? talk.who + ": \"" + clip(talk.text, 40) + "\"" : clip(talk.text, 50))
+                            : (who == null ? "the place" : who.c.shown() + (who.stateAt(c.t + 0.1f).moveDur > 0 ? " moves" : " in the scene"));
+                    sh.face = who == null ? "—" : faceOf(who.stateAt(c.t + 0.1f).emotion);
+                    sh.cutWhen = "the action moves on";
+                    sh.emotionalPurpose = "Keep the story readable";
+                    sh.sound = "Ambience of " + Sets.label(sg.set);
+                    sh.light = c.light < 0 ? 0.4f : c.light;
+                }
+                sh.part = part;
+                sh.t = c.t;
+                sh.dur = Math.max(0.3f, next - c.t);
+                sh.move = c.ease > 0 ? ShotPlanner.DRIFT : ShotPlanner.STATIC;
+                film.shots.add(sh);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ the director checks the film (§48)
+
+    /**
+     * Looks over every planned shot like the guide's quality-control loop, fixes what it can and writes the
+     * shot list: jump cuts become smooth reframes, every part opens on a wide shot, close-ups stay rare, strong
+     * performances keep a still camera, reactions get time, and the pacing of each part is measured.
+     */
+    private String qualityCheck() {
+        int jump = 0, estab = 0, still = 0;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
+                public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
+            });
+            // every part starts readable and wide (§2)
+            if (sg.cams.isEmpty() || sg.cams.get(0).t > sg.t0 + 1.0f || sg.cams.get(0).zoom > 1.3f) {
+                Film.Cam w = new Film.Cam(sg.t0, 640, 372, 1.08f, 0);
+                sg.cams.add(0, w);
+                estab++;
+            }
+            Film.Cam prevCut = null;
+            List<Film.Cam> drop = new ArrayList<Film.Cam>();
+            for (Film.Cam c : sg.cams) {
+                if (c.ease > 0) continue;
+                // a cut to almost the same framing jars (a jump cut): keep the shot running instead
+                // (with a locked camera), or glide there
+                if (prevCut != null && Math.abs(c.zoom - prevCut.zoom) < 0.1f && Math.abs(c.cx - prevCut.cx) < 55 && Math.abs(c.cy - prevCut.cy) < 40
+                        && c.t - prevCut.t > 0.3f) { if (opt.technical) drop.add(c); else c.ease = 0.8f; jump++; }
+                else prevCut = c;
+            }
+            sg.cams.removeAll(drop);
+        }
+        if (opt.technical) limitShotLength(4.2f);
+        shotsFromCuts();
+        int longest = 0;
+        for (Film.Shot sh : film.shots) {
+            if (!opt.technical && !sh.reaction && sh.stage == ShotPlanner.PEAK && sh.move != ShotPlanner.STATIC && sh.move != ShotPlanner.PUSH_IN) { sh.move = ShotPlanner.STATIC; still++; }
+            if (sh.dur > 4.5f) longest++;
+        }
+        StringBuilder b = new StringBuilder();
+        b.append("DIRECTOR'S SHOT LIST — ").append(story.title).append('\n');
+        b.append("Planned with the Pixar-style directing guide: emotion → performance → composition → camera → light → sound → cut.\n\n");
+        int n = 0, cus = 0, reactions = 0, statics = 0, twos = 0;
+        int part = -2;
+        for (Film.Shot sh : film.shots) {
+            if (sh.part != part) {
+                part = sh.part;
+                Film.Seg sg = film.segAt(sh.t + 0.01f);
+                if (sg != null && sg.scene >= 0) b.append("────────── ").append(story.scenes.get(sg.scene).heading).append(": ").append(Sets.label(sg.set))
+                        .append(sg.transition == 1 ? "  (opens with a dip to black: time has passed)" : sg.transition == 2 ? "  (opens with a dip to white)" : "").append('\n');
+            }
+            n++;
+            if (sh.size >= ShotPlanner.CU) cus++;
+            if (sh.reaction) reactions++;
+            if (sh.move == ShotPlanner.STATIC) statics++;
+            if (sh.type == ShotPlanner.TWO_SHOT) twos++;
+            b.append(String.format(java.util.Locale.US, "SHOT %03d   at %d:%04.1f\n", n, (int) (sh.t / 60), sh.t % 60));
+            b.append("PURPOSE: ").append(sh.purpose).append('\n');
+            b.append("SHOT SIZE: ").append(ShotPlanner.SIZE_NAME[sh.size]).append(" (").append(ShotPlanner.TYPE_NAME[sh.type]).append(")\n");
+            b.append("CAMERA HEIGHT: ").append(sh.height > 0 ? "Low angle (power)" : sh.height < 0 ? "High angle (vulnerable)" : "Eye level").append('\n');
+            b.append("CAMERA MOVEMENT: ").append(ShotPlanner.MOVE_NAME[sh.move]).append('\n');
+            if (sh.other.length() > 0) b.append("COMPOSITION: ").append(sh.other).append('\n');
+            b.append("CHARACTER ACTION: ").append(sh.action).append('\n');
+            b.append("FACIAL PERFORMANCE: ").append(sh.face).append('\n');
+            if (sh.body.length() > 0) b.append("BODY LANGUAGE: ").append(sh.body).append('\n');
+            b.append("LIGHTING: ").append(sh.light >= 0.7f ? "Harder, directional light (conflict, fear)" : sh.light <= 0.25f ? "Soft, warm light (warmth, safety)" : "Natural light of the place").append('\n');
+            b.append("FOCUS: ").append(sh.subject.length() > 0 ? sh.subject : "the place").append('\n');
+            b.append("SOUND: ").append(sh.sound.length() > 0 ? sh.sound : "music and ambience").append('\n');
+            b.append(String.format(java.util.Locale.US, "DURATION: %.1f s%n", sh.dur));
+            b.append("CUT WHEN: ").append(sh.cutWhen).append('\n');
+            b.append("EMOTIONAL PURPOSE: ").append(sh.emotionalPurpose).append("\n\n");
+        }
+        b.append("QUALITY CHECK\n");
+        b.append("• Every part opens on a readable wide shot: ").append(estab == 0 ? "yes" : "fixed " + estab).append('\n');
+        b.append("• Jump cuts (a cut to almost the same framing): ").append(jump == 0 ? "none" : jump + (opt.technical ? " removed (the shot simply continues)" : " turned into smooth reframes")).append('\n');
+        if (opt.technical) {
+            b.append("• Technical Director protocol: locked tripod, every shot static, no camera shake unless the story asks for it\n");
+            b.append(String.format(java.util.Locale.US, "• Shots longer than 4.5 s: %d%n", longest));
+            b.append(String.format(java.util.Locale.US, "• Close-ups (all dialogue of more than six words, front-facing for lip-sync): %d of %d shots%n", cus, n));
+        } else {
+            b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
+        }
+        b.append("• Static shots: ").append(statics).append(" of ").append(n).append(still > 0 ? " (" + still + " made still)" : "").append('\n');
+        b.append("• Reactions shown and allowed to breathe: ").append(reactions).append('\n');
+        b.append("• Relationships shown with both characters in the frame: ").append(twos).append(" two-shots\n");
+        float spoken = 0;
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) spoken += sg.t1 - sg.t0;
+        b.append(String.format(java.util.Locale.US, "• Pacing: %d shots in %.0f s of scenes, an average shot of %.1f s%n", n, spoken, n == 0 ? 0 : spoken / n));
+        return b.toString();
     }
 
     // ------------------------------------------------------------------ the film score
@@ -365,6 +583,13 @@ public final class Director {
     private float ts(float t) { return estab ? seg.t0 : t; }
     private Story.CharacterDef lastSubject;
     private List<Story.CharacterDef> lastGroup = new ArrayList<Story.CharacterDef>();
+    /** The shot planner's plan for each dialogue beat of the part being staged. */
+    private final Map<Integer, ShotPlanner.Plan> partPlan = new HashMap<Integer, ShotPlanner.Plan>();
+    private int partNo = -1;
+    private boolean partFast;
+    /** The last dialogue shot (to hold a framing over several calm lines instead of cutting). */
+    private Film.Shot lastDlgShot;
+    private Film.Actor lastDlgA, lastDlgB;
     private int dlgCount;
     private Film.Actor lastSpeaker;
 
@@ -392,6 +617,7 @@ public final class Director {
         lastGroup.clear();
         dlgCount = 0;
         lastSpeaker = null;
+        lastDlgShot = null;
 
         // ---------- who is in this part, and who arrives later
         List<Story.CharacterDef> order = new ArrayList<Story.CharacterDef>();
@@ -464,6 +690,31 @@ public final class Director {
         }
         int mood = moodOf(sc, b0, b1, where, villains.size() > 0);
         seg.mood = mood;
+
+        // ---------- the director's plan for this part (the emotional arc decides the shots)
+        partNo++;
+        partPlan.clear();
+        List<Integer> pe = new ArrayList<Integer>(), pb = new ArrayList<Integer>();
+        List<String> pm = new ArrayList<String>(), ptx = new ArrayList<String>();
+        StringBuilder partText = new StringBuilder(where);
+        for (int bi = b0; bi < b1; bi++) {
+            Story.Beat b = sc.beats.get(bi);
+            partText.append(" । ").append(b.text).append(' ').append(b.manner == null ? "" : b.manner);
+            if (b.type == Story.Beat.DIALOGUE && beatLine[si][bi] >= 0) {
+                pe.add(film.lines.get(beatLine[si][bi]).emotion);
+                pm.add(b.manner == null ? "" : b.manner);
+                ptx.add(b.text);
+                pb.add(bi);
+            }
+        }
+        partFast = ShotPlanner.action(partText.toString());
+        ShotPlanner.Plan[] plans = ShotPlanner.plan(pe, pm, ptx, partFast);
+        for (int i = 0; i < plans.length; i++) partPlan.put(pb.get(i), plans[i]);
+        // how this part begins: time passes (dip to black), magic or memory (dip to white), else a dissolve
+        String head = where + " " + (pi == 0 ? sc.title : "");
+        if (Txt.has(head, "अगले दिन", "अगली सुबह", "कुछ दिन", "कुछ दिनों", "कई दिन", "साल बाद", "महीने बाद", "बाद में", "next day", "next morning",
+                "days later", "weeks later", "years later", "later that", "some time later", "the following")) seg.transition = 1;
+        else if (Txt.has(head, "सपना", "सपने", "याद", "बीते", "जादू", "dream", "flashback", "memory", "remember", "magic")) seg.transition = 2;
 
         // ---------- beats
         int noteIdx = film.notes.size();
@@ -604,6 +855,28 @@ public final class Director {
         k.moveDur = run ? 0.9f : 1.3f;
         k.run = run;
         k.facing = dest > startX ? 1 : -1;
+        if (a.look.kind == Look.MONSTER || a.look.height > 1.25f) {
+            // reveal (§15): first only the ground shaking under the steps, then the camera pulls back and up
+            float h = heightOf(a);
+            Film.Cam c1 = new Film.Cam(tc + 0.3f, dest, ground - h * 0.12f, 2.1f, 0);
+            c1.still = true;
+            seg.cams.add(c1);
+            Film.Cam c2 = new Film.Cam(tc + 1.3f, dest, ground - h * 0.55f, 1.12f, 2.2f);
+            c2.angle = 1; c2.light = 0.85f;
+            seg.cams.add(c2);
+            Film.Shot sh = shot(tc + 0.3f, ShotPlanner.CU, ShotPlanner.SINGLE, 1, ShotPlanner.PULL_BACK, a, null, ShotPlanner.INTRODUCE);
+            sh.purpose = "Reveal: the audience first wonders, then sees how big " + a.c.shown() + " is";
+            sh.action = a.c.shown() + " arrives";
+            sh.other = "Starts on the feet, pulls back and tilts up to the whole figure";
+            sh.face = faceOf(Pose.EVIL);
+            sh.body = "Heavy steps";
+            sh.cutWhen = "the whole figure is seen";
+            sh.emotionalPurpose = "Surprise and awe";
+            sh.light = 0.85f;
+            k.moveDur = Math.max(k.moveDur, 1.8f);
+            lastDlgShot = null;
+            tc += 1.6f;
+        }
         if (a.look.kind == Look.MONSTER) film.sfx.add(new Film.Sfx(Film.SFX_THUD, tc, 1.4f, 0.8f));
         else film.sfx.add(new Film.Sfx(Film.SFX_STEPS, tc, k.moveDur, 0.35f));
         if (a.look.anklets) film.sfx.add(new Film.Sfx(Film.SFX_ANKLET, tc, k.moveDur, 0.4f));
@@ -667,32 +940,130 @@ public final class Director {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
         }
         sub(start, end, b.speaker.shown(), line.shown);
-        camDialogue(sp, to, start, line.emotion);
-        boolean villain = !sp.look.hero;
-        // long line: the camera slowly pushes in (keeps the audience close to the feeling)
-        if (line.dur > 3.2f) {
-            Film.Cam last = seg.cams.get(seg.cams.size() - 1);
-            Film.Cam push = new Film.Cam(start + 0.2f, last.cx, last.cy - 6, Math.min(2.3f, last.zoom * 1.09f), Math.max(1f, line.dur - 0.4f));
-            push.roll = last.roll;
-            seg.cams.add(push);
+        ShotPlanner.Plan plan = partPlan.get(bi);
+        if (opt.technical && plan != null) {
+            // no long dialogue in a far shot: more than six words go to a front-facing close-up (lip-sync protocol)
+            int words = line.text.trim().split("\\s+").length;
+            if (words > 6 && plan.size < ShotPlanner.CU) { plan.size = ShotPlanner.CU; plan.type = ShotPlanner.SINGLE; plan.hold = false; }
+            else if (plan.size < ShotPlanner.MCU && !(plan.type == ShotPlanner.TWO_SHOT && words <= 6)) plan.size = ShotPlanner.MCU;
         }
-        // reaction shot: after a shocking, angry or frightening line we see the listener's face
-        boolean shock = line.emotion == Pose.SURPRISED || line.emotion == Pose.ANGRY || line.emotion == Pose.EVIL || line.emotion == Pose.SCARED;
-        if (to != null && shock && line.dur > 1.6f && to.stateAt(end).visible && dlgCount % 2 == 0) {
-            float th = heightOf(to), tx = finalX(to, end);
-            Film.Key tk = to.stateAt(end);
-            if (tk.anchor == Film.A_GROUND && tk.body == Pose.STAND) {
-                cam(end - 0.85f, tx, ground - th * 0.78f, 2.0f, 0);
-                Film.Key r = to.at(end - 0.85f);
-                if (r.emotion == Pose.NEUTRAL) r.emotion = villain ? Pose.SCARED : line.emotion == Pose.ANGRY ? Pose.SAD : Pose.SURPRISED;
-                Film.Key back = to.at(end + 0.6f);
-                back.emotion = Pose.NEUTRAL;
-            }
+        camDialogue(sp, to, start, line.emotion, plan, line);
+        if (opt.technical && to != null && line.dur > 4.2f && to.stateAt(start).visible) splitLongLine(sp, to, start, end, line);
+        float after = 0.35f;
+        if (to != null && plan != null && to.stateAt(start).visible) {
+            listenerPerformance(sp, to, start, end, line, plan);
+            // the reaction is often more important than the line: show it and let it breathe (§9, §31)
+            if (plan.reaction && to.stateAt(end).visible && reactionShot(to, sp, end, line, plan)) after += plan.breathe;
         }
         lastSpeaker = sp;
         lastSubject = b.speaker;
         dlgCount++;
-        return end + 0.35f;
+        return end + after;
+    }
+
+    /**
+     * A long line is never one long shot: every ~3 seconds the film cuts to the listener's face for a moment and
+     * back to the speaker's close-up (the protocol's "100 perfect 3-second shots").
+     */
+    private void splitLongLine(Film.Actor sp, Film.Actor to, float start, float end, Film.Line line) {
+        Film.Cam first = null;
+        for (int i = seg.cams.size() - 1; i >= 0; i--) if (seg.cams.get(i).t <= start + 0.01f && seg.cams.get(i).ease == 0) { first = seg.cams.get(i); break; }
+        if (first == null) return;
+        float th = heightOf(to), tx = finalX(to, start);
+        Film.Key tk = to.stateAt(start);
+        if (tk.anchor != Film.A_GROUND || tk.body == Pose.LIE) return;
+        int part = 1;
+        for (float t = start + 3.0f; t < end - 1.6f; t += 4.6f) {
+            float zoom = ShotPlanner.zoomFor(ShotPlanner.MCU, th);
+            Film.Cam c = new Film.Cam(t, tx + tk.facing * (1280f / zoom) * 0.12f, ground - th * 0.8f + 0.1f * (720f / zoom), zoom, 0);
+            c.still = true; c.light = first.light;
+            seg.cams.add(c);
+            Film.Shot sh = shot(t, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, to, sp, ShotPlanner.DEVELOP);
+            sh.reaction = true;
+            sh.purpose = "Cutaway to the listener, so no shot runs longer than about 3 seconds";
+            sh.action = to.c.shown() + " listens (" + sp.c.shown() + " goes on speaking off-screen)";
+            sh.face = faceOf(tk.emotion);
+            sh.cutWhen = "1.6 s later, back to the speaker";
+            sh.emotionalPurpose = "Keep the listener present in the conversation";
+            Film.Cam back = new Film.Cam(t + 1.6f, first.cx, first.cy, first.zoom, 0);
+            back.still = true; back.roll = first.roll; back.angle = first.angle; back.light = first.light;
+            seg.cams.add(back);
+            Film.Shot sb = shot(t + 1.6f, ShotPlanner.sizeOf(first.zoom), ShotPlanner.SINGLE, first.angle, ShotPlanner.STATIC, sp, to, ShotPlanner.DEVELOP);
+            sb.line = line.index;
+            sb.purpose = "The speaker again (part " + (++part) + " of the line)";
+            sb.action = sp.c.shown() + " goes on speaking";
+            sb.face = faceOf(line.emotion);
+            sb.cutWhen = "the next part of the line or its end";
+            sb.emotionalPurpose = "Lip-sync in a locked close-up";
+        }
+    }
+
+    /**
+     * The listener acts too, without words (§10, §11, §28): the face follows what is heard a moment later,
+     * a calm friendly line gets a nod, a sad or scolded listener looks away and back.
+     */
+    private void listenerPerformance(Film.Actor sp, Film.Actor to, float start, float end, Film.Line line, ShotPlanner.Plan plan) {
+        Film.Key cur = to.stateAt(start);
+        if (cur.anchor != Film.A_GROUND || cur.body == Pose.LIE) return;
+        int e = empathy(line.emotion, sp, to);
+        if (plan.intensity >= 0.5f && cur.emotion == Pose.NEUTRAL && e != Pose.NEUTRAL && end - start > 1.2f) {
+            Film.Key k = to.at(start + 0.6f);        // a beat later: they take it in, then react
+            k.emotion = e;
+            if (!plan.reaction) to.at(end + 0.5f).emotion = Pose.NEUTRAL;
+        }
+        if (plan.intensity < 0.45f && (plan.relation || line.emotion == Pose.HAPPY || line.emotion == Pose.NEUTRAL) && end - start > 1.8f && dlgCount % 2 == 1) {
+            float m = (start + end) / 2;
+            to.acts.add(new Film.Act(m, m + 0.8f, Film.G_NOD));
+        }
+        if ((line.emotion == Pose.ANGRY && to.look.hero && sp.look.hero) || cur.emotion == Pose.SAD) {
+            if (end - start > 1.6f) to.acts.add(new Film.Act(start + 0.7f, Math.max(start + 1.4f, end - 0.3f), Film.G_LOOK_AWAY));
+        }
+    }
+
+    /** What the listener feels on hearing a line. */
+    private static int empathy(int emo, Film.Actor sp, Film.Actor to) {
+        switch (emo) {
+            case Pose.SAD: case Pose.PAIN: return Pose.SAD;
+            case Pose.SCARED: return Pose.SCARED;
+            case Pose.SURPRISED: return Pose.SURPRISED;
+            case Pose.HAPPY: case Pose.LAUGH: return Pose.HAPPY;
+            case Pose.EVIL: return to.look.hero ? Pose.SCARED : Pose.EVIL;
+            case Pose.ANGRY: return !sp.look.hero && to.look.hero ? Pose.SCARED : to.look.hero ? Pose.SAD : Pose.ANGRY;
+            case Pose.DETERMINED: return to.look.hero ? Pose.DETERMINED : Pose.NEUTRAL;
+            default: return Pose.NEUTRAL;
+        }
+    }
+
+    /** After the line: the listener's face, a beat for the feeling to land, then the scene goes on. */
+    private boolean reactionShot(Film.Actor to, Film.Actor sp, float end, Film.Line line, ShotPlanner.Plan plan) {
+        Film.Key tk = to.stateAt(end);
+        if (tk.anchor != Film.A_GROUND || tk.body == Pose.LIE) return false;
+        float th = heightOf(to), tx = finalX(to, end);
+        int size = Math.max(ShotPlanner.MCU, Math.min(ShotPlanner.CU, plan.size));
+        float zoom = ShotPlanner.zoomFor(size, th);
+        float cy = (tk.body == Pose.SIT ? ground - th * 0.4f : ground - th * 0.8f) + 0.1f * (720f / zoom);
+        Film.Cam c = new Film.Cam(end + 0.05f, tx + tk.facing * (1280f / zoom) * 0.12f, cy, zoom, 0);
+        c.still = true;
+        c.light = plan.light;
+        seg.cams.add(c);
+        boolean changed = false;
+        Film.Key r = to.at(end + 0.3f);     // anticipation: a tiny pause, then the face changes (§23)
+        if (r.emotion == Pose.NEUTRAL) {
+            int e = empathy(line.emotion, sp, to);
+            r.emotion = e == Pose.NEUTRAL ? Pose.SURPRISED : e;
+            changed = true;
+        }
+        if (changed) to.at(end + 0.35f + plan.breathe + 0.5f).emotion = Pose.NEUTRAL;
+        Film.Shot sh = shot(end + 0.05f, size, ShotPlanner.SINGLE, plan.height, ShotPlanner.STATIC, to, sp, plan.stage);
+        sh.reaction = true;
+        sh.purpose = "Reaction: the audience feels the line through " + to.c.shown() + "'s face, and it is allowed to breathe";
+        sh.action = to.c.shown() + " listens and takes it in, without words";
+        sh.face = faceOf(r.emotion);
+        sh.cutWhen = "the feeling has landed (" + Math.round(plan.breathe * 10) / 10f + " s of silence)";
+        sh.emotionalPurpose = "Let the reaction breathe before the scene goes on";
+        sh.light = plan.light;
+        lastDlgShot = null;
+        return true;
     }
 
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
@@ -768,9 +1139,22 @@ public final class Director {
         String text = b.text.replaceFirst("^(स्थान|Location|Place|Setting)\\s*[:：]\\s*", "");
         List<String> sents = sentences(text);
         if (establishing && sents.size() > 0) {
-            // establishing shot: the camera cranes down from the sky onto the location, then settles wide
-            cam(t0, 640, 300, 1.18f, 0);
-            cam(t0 + 0.1f, 640, 372, 1.06f, 5.0f);
+            // establishing shot (§2, §16): the camera cranes down from the sky onto the location and settles wide,
+            // so where we are, the time of day and who is here read clearly before anything comes close
+            boolean grand = Txt.has(where + " " + text, "विशाल", "बड़ा", "विस्तृत", "महल", "जंगल", "पहाड़", "समुद्र", "सागर", "नगर", "huge", "vast", "giant",
+                    "palace", "forest", "mountain", "sea", "ocean", "city", "kingdom");
+            cam(t0, 640, grand ? 270 : 300, grand ? 1.26f : 1.18f, 0);
+            cam(t0 + 0.1f, 640, 372, grand ? 1.0f : 1.06f, grand ? 6.0f : 5.0f);
+            Film.Shot sh = shot(t0, grand ? ShotPlanner.XWIDE : ShotPlanner.WIDE, ShotPlanner.TWO_SHOT, 0, ShotPlanner.PULL_BACK, null, null, ShotPlanner.ESTABLISH);
+            sh.subject = Sets.label(seg.set);
+            sh.purpose = "Establish the place, its scale and the time of day before going closer";
+            sh.action = clip(Txt.withoutParens(text), 60);
+            sh.other = grand ? "A huge place and small figures (scale contrast)" : "The whole place, the characters where they stand";
+            sh.face = "—";
+            sh.body = "Everyone in their places";
+            sh.cutWhen = "the place is clear and the first action begins";
+            sh.emotionalPurpose = "Orientation: the audience knows where it is";
+            sh.light = 0.3f;
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
         estab = establishing || leading;      // descriptions before anyone speaks set how things are from the start
@@ -1622,8 +2006,12 @@ public final class Director {
         cam(t, (minX + maxX) / 2, y, zoom, 0.5f);
     }
 
-    private void camDialogue(Film.Actor sp, Film.Actor to, float t, int emo) {
-        boolean strong = emo == Pose.ANGRY || emo == Pose.SAD || emo == Pose.SCARED || emo == Pose.PAIN || emo == Pose.EVIL;
+    /**
+     * The dialogue shot, as the shot planner decided: size from the feeling, two-shot / over-the-shoulder /
+     * single, camera height, composition with look room, isolation, and movement (static for strong performances).
+     */
+    private void camDialogue(Film.Actor sp, Film.Actor to, float t, int emo, ShotPlanner.Plan plan, Film.Line line) {
+        if (plan == null) { plan = new ShotPlanner.Plan(); plan.intensity = ShotPlanner.intensity(emo, "", line.text); }
         float h = heightOf(sp);
         float sx = finalX(sp, t);
         Film.Key st = sp.stateAt(t);
@@ -1631,47 +2019,131 @@ public final class Director {
         if (st.anchor == Film.A_SHOULDER || st.anchor == Film.A_BRANCH || st.anchor == Film.A_ON_FACE) faceY = ground - (st.anchor == Film.A_BRANCH ? 450 : 320);
         if (st.body == Pose.LIE || st.body == Pose.SIT) faceY = ground - h * 0.35f;
         int visible = 0;
-        for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) visible++;
-        if (to == null || visible <= 1) {
-            cam(t, sx, ground - h * 0.6f, strong ? 1.75f : 1.45f, 0);
-            cam(t + 0.05f, sx, ground - h * 0.64f, strong ? 1.85f : 1.52f, 3f);
-            return;
+        float nearest = 1e9f;
+        for (Film.Actor a : seg.actors) {
+            if (!a.stateAt(t).visible) continue;
+            visible++;
+            if (a != sp) nearest = Math.min(nearest, Math.abs(xAt(a, t) - sx));
         }
-        float tx = finalX(to, t);
-        int kind = strong ? 2 : dlgCount % 3;
-        if (dlgCount == 0) kind = 0;
         boolean menace = !sp.look.hero && (emo == Pose.EVIL || emo == Pose.ANGRY);
-        if (menace) {
-            // villain: low angle (the camera looks up at them) and a tilted frame
-            float roll = (dlgCount % 2 == 0 ? 1 : -1) * 2.6f;
-            cam(t, sx, ground - h * 0.52f, 1.65f, 0, roll);
-            cam(t + 0.05f, sx, ground - h * 0.55f, 1.75f, 3f, roll);
+        int size = plan.size, type = plan.type, height = menace ? 1 : plan.height, move = plan.move;
+        if (to == null || visible <= 1) { if (type != ShotPlanner.SINGLE) type = ShotPlanner.SINGLE; }
+        // a heavy feeling, alone: off-centre in a wider frame with empty space around (§6)
+        boolean isolated = (emo == Pose.SAD || emo == Pose.SCARED) && (visible <= 1 || nearest > 520) && plan.stage != ShotPlanner.PEAK;
+        if (isolated) { size = ShotPlanner.MWIDE; type = ShotPlanner.SINGLE; move = ShotPlanner.PULL_BACK; }
+        // calm talk between the same two: keep the framing, no cut (use the simplest shot, §46)
+        if (plan.hold && lastDlgShot != null && to != null && ((lastDlgA == sp && lastDlgB == to) || (lastDlgA == to && lastDlgB == sp))) {
+            lastDlgShot.action += " • " + sp.c.shown() + ": \"" + clip(line.shown, 36) + "\"";
             return;
         }
-        if (emo == Pose.SCARED && sp.look.isChild()) {
-            // a frightened child: slightly high angle, a little tilt, makes them look small
-            cam(t, sx, ground - h * 0.95f, 1.8f, 0, -1.5f);
-            cam(t + 0.05f, sx, ground - h * 0.92f, 1.9f, 3f, -1.5f);
-            return;
+        float zoom = ShotPlanner.zoomFor(size, h);
+        float roll = menace ? (dlgCount % 2 == 0 ? 1 : -1) * 2.4f : 0;
+        float cx, cy;
+        String comp;
+        float view = 1280f / zoom;
+        if (type == ShotPlanner.TWO_SHOT && to != null) {
+            float tx = finalX(to, t);
+            float span = Math.abs(sx - tx) + 460;
+            zoom = Math.max(1.0f, Math.min(zoom, 1280f / span));
+            cx = (sx + tx) / 2; cy = ground - h * 0.55f;
+            comp = "Both characters in the frame" + (Math.abs(sx - tx) < 260 ? ", close together (connection)" : Math.abs(sx - tx) > 600 ? ", far apart (distance between them)" : "");
+        } else if (type == ShotPlanner.OTS && to != null) {
+            float tx = finalX(to, t);
+            cx = sx * 0.72f + tx * 0.28f; cy = ground - h * 0.62f;
+            comp = "Over " + to.c.shown() + "'s shoulder onto " + sp.c.shown();
+        } else if (isolated) {
+            float away = 0;
+            for (Film.Actor a : seg.actors) if (a != sp && a.stateAt(t).visible) away += Math.signum(sx - xAt(a, t));
+            float side = away == 0 ? -st.facing : Math.signum(away);
+            cx = sx - side * view * 0.27f; cy = ground - h * 0.55f;
+            comp = sp.c.shown() + " small at the edge of the frame, empty space around (isolation)";
+        } else {
+            // a single: the speaker on a third, with room to look into (§17, §18)
+            cx = sx + st.facing * view * (size >= ShotPlanner.CU ? 0.12f : 0.16f);
+            // the face in the safe zone: about 40% from the top (20% headroom)
+            cy = size >= ShotPlanner.MCU ? faceY + 0.1f * (720f / zoom) : ground - h * 0.6f;
+            comp = sp.c.shown() + " on the " + (st.facing > 0 ? "left" : "right") + " third, looking " + (st.facing > 0 ? "right" : "left") + " with room in front";
         }
-        switch (kind) {
-            case 0: { // two-shot
-                float span = Math.abs(sx - tx) + 460;
-                float zoom = Math.max(1.05f, Math.min(1.45f, 1280f / span));
-                cam(t, (sx + tx) / 2, ground - h * 0.55f, zoom, 0);
-                cam(t + 0.05f, (sx + tx) / 2, ground - h * 0.57f, zoom * 1.04f, 3f);
+        // camera height: a low camera makes them strong, a high one makes them small (§5)
+        if (height > 0) cy += h * 0.1f;
+        else if (height < 0) cy -= h * 0.12f;
+        if (emo == Pose.SCARED && sp.look.isChild() && height == 0) { height = -1; cy -= h * 0.1f; roll = -1.5f; }
+        Film.Cam c = new Film.Cam(t, cx, cy, zoom, 0);
+        c.roll = roll; c.angle = height; c.light = plan.light; c.still = move == ShotPlanner.STATIC;
+        if (move == ShotPlanner.PULL_BACK) { c.zoom = Math.min(2.4f, zoom * 1.18f); c.still = false; }
+        seg.cams.add(c);
+        switch (move) {
+            case ShotPlanner.PUSH_IN: {   // a realisation: the camera moves in with the thought
+                Film.Cam pc = new Film.Cam(t + 0.15f, cx, cy - h * 0.03f, Math.min(2.45f, zoom * 1.14f), Math.max(1.5f, line.dur - 0.2f));
+                pc.roll = roll; pc.angle = height; pc.light = plan.light;
+                seg.cams.add(pc);
                 break;
             }
-            case 1: { // over the shoulder: favour the speaker
-                float cx = sx * 0.72f + tx * 0.28f;
-                cam(t, cx, ground - h * 0.62f, 1.5f, 0);
-                cam(t + 0.05f, cx, ground - h * 0.63f, 1.56f, 3f);
+            case ShotPlanner.PULL_BACK: { // release / isolation: back out to the larger situation
+                Film.Cam pc = new Film.Cam(t + 0.1f, cx, cy, zoom, Math.max(2.5f, line.dur));
+                pc.roll = roll; pc.angle = height; pc.light = plan.light;
+                seg.cams.add(pc);
                 break;
             }
-            default: { // close-up
-                cam(t, sx, faceY + h * 0.12f, 1.95f, 0);
-                cam(t + 0.05f, sx, faceY + h * 0.1f, 2.05f, 3f);
+            case ShotPlanner.DRIFT: {     // calm talk: the frame breathes a little
+                Film.Cam pc = new Film.Cam(t + 0.05f, cx, cy - 2, zoom * 1.03f, 3f);
+                pc.roll = roll; pc.angle = height; pc.light = plan.light;
+                seg.cams.add(pc);
+                break;
             }
+            default:
+        }
+        Film.Shot sh = shot(t, size, type, height, move, sp, to, plan.stage);
+        sh.line = line.index;
+        sh.purpose = isolated ? "Show isolation: the character alone with the feeling" : plan.purpose;
+        sh.action = sp.c.shown() + ": \"" + clip(line.shown, 48) + "\"";
+        sh.face = faceOf(emo);
+        sh.body = bodyOf(emo, sp.look);
+        sh.light = plan.light;
+        sh.cutWhen = plan.reaction ? "the line lands — cut to the listener's reaction" : "the next line begins";
+        sh.emotionalPurpose = ShotPlanner.STAGE_NAME[plan.stage] + ": " + (plan.intensity >= 0.6f ? "a strong moment — the camera stays simple" : plan.intensity >= 0.4f ? "the feeling grows" : "keep the conversation easy to follow");
+        sh.other = comp;
+        lastDlgShot = sh; lastDlgA = sp; lastDlgB = to;
+    }
+
+    static String clip(String s, int n) { s = s == null ? "" : s.replace('\n', ' '); return s.length() > n ? s.substring(0, n) + "…" : s; }
+
+    /** Records a planned shot for the shot list. */
+    private Film.Shot shot(float t, int size, int type, int height, int move, Film.Actor subject, Film.Actor other, int stage) {
+        Film.Shot sh = new Film.Shot();
+        sh.t = t; sh.size = size; sh.type = type; sh.height = height; sh.move = move; sh.stage = stage; sh.part = partNo;
+        sh.subject = subject == null ? "" : subject.c.shown();
+        sh.sound = "Dialogue in the room of " + Sets.label(seg.set) + ", " + Sets.name(seg.set) + " ambience";
+        film.shots.add(sh);
+        return sh;
+    }
+
+    static String faceOf(int emo) {
+        switch (emo) {
+            case Pose.HAPPY: return "A warm smile, cheeks lifted";
+            case Pose.LAUGH: return "Laughing, eyes squeezed";
+            case Pose.SAD: return "Eyes lowered, inner brows up, mouth corners down";
+            case Pose.ANGRY: return "Brows down and together, narrowed eyes";
+            case Pose.SCARED: return "Wide eyes, raised inner brows";
+            case Pose.SURPRISED: return "Brows up, eyes wide, mouth open";
+            case Pose.EVIL: return "A crooked smile under lowered brows";
+            case Pose.DETERMINED: return "Set jaw, steady eyes";
+            case Pose.PROUD: return "Chin up, a small smile";
+            case Pose.CURIOUS: return "One brow raised";
+            case Pose.PAIN: return "Squeezed eyes, a frown";
+            default: return "Calm, listening";
+        }
+    }
+
+    static String bodyOf(int emo, Look l) {
+        String e = l.energy > 1.1f ? "quick, big gestures" : l.energy < 0.9f ? "small, slow movements" : "natural gestures";
+        String p = l.poise > 0.5f ? ", upright and proud" : l.poise < -0.5f ? ", shoulders in, head a little down" : "";
+        switch (emo) {
+            case Pose.SAD: return "Shoulders drop, head down" + p;
+            case Pose.SCARED: return "Leans back, arms in" + p;
+            case Pose.ANGRY: return "Leans in, arms out, " + e + p;
+            case Pose.HAPPY: case Pose.LAUGH: return "Open posture, " + e + p;
+            default: return e.substring(0, 1).toUpperCase() + e.substring(1) + p;
         }
     }
 

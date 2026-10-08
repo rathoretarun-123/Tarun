@@ -43,6 +43,10 @@ public final class Look {
     public int shoeColor = 0xFF5A3A22;
     public int variant;              // small per-character variation (guards)
     public int species = -1;
+    /** Body language (§26): 1 normal, more for lively characters (big, quick gestures), less for calm or shy ones. */
+    public float energy = 1f;
+    /** 1 = upright and proud (chin up, chest out), 0 normal, -1 = closed and shy (shoulders in, head down). */
+    public float poise = 0f;
     public boolean hero = true;      // villains placed right side
 
     public Look copy() {
@@ -56,6 +60,7 @@ public final class Look {
         l.katar = katar; l.spear = spear; l.shield = shield; l.wand = wand; l.axe = axe; l.mace = mace;
         l.satchel = satchel; l.chains = chains; l.necklace = necklace; l.bangles = bangles; l.earrings = earrings;
         l.anklets = anklets; l.shoeColor = shoeColor; l.variant = variant; l.hero = hero; l.species = species;
+        l.energy = energy; l.poise = poise;
         return l;
     }
 

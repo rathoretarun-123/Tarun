@@ -1,4 +1,4 @@
-# Kahani Film — v9
+# Kahani Film — v10
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -84,12 +84,21 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * A backup copy goes to **Downloads/KahaniFilm/Library**. It stays even if the app is uninstalled. After reinstalling, open 📚 Library → **♻ Restore from backup** and choose that folder.
 * Everything in the library can be used in any later story: the director matches it to the new story's descriptions.
 
+## The director
+
+* **Trained on two guides** (see `docs/director-training.md` and `docs/technical-director.md`):
+  * a Pixar-style directing guide: emotion decides the shot, scenes build to a peak and release, reactions are shown and allowed to breathe, close-ups are kept for turning points, light follows mood, each character has its own body language, giants are revealed, time jumps dip to black
+  * the Technical Director protocol (on by default): a locked tripod for every shot, shots of about 3 seconds, lines of more than six words in front-facing close-ups, long lines split into short shots with the listener in between, faces in the safe zone with headroom, feet on the ground with contact shadows, no camera shake unless the story asks
+* **Descriptions for other apps** (📄 under the story, and in the studio): Character Lock Sheets (costume copied word for word, height in feet, voice), Location Lock Plates (foreground, midground, background, ground, light), every object in the story, every background sound, effect and voice, and a table of **every shot** with the six fields (CHARACTERS, PLACEMENT, ACTION, GROUNDING, LIGHTING, CAMERA), lip-sync split into close-ups of at most six words, a ready first-frame image prompt and a video prompt from that frame, and the validation checklist. Make anything you like in another app and upload it: the studio places it by name.
+* After each film, the director's **shot list and quality check** (in the guide's shot format) is part of the descriptions file.
+
 ## What the film contains
 
 * A **title page** with a picture and music. Then the story plays like a film, with no "Scene 1" cards, and finishes with **समाप्त** (Hindi/Hinglish) or **The End** (English).
 * Character and place descriptions are **never read aloud**. A narrator voice is used only when the story has a narrator.
 * Subtitles are off by default. Type "add subtitles" to turn them on.
-* **Very fine meshes:** every picture is bent through a very fine grid — up to 48 × 96 points over a person, 96 × 48 over an animal, 48 × 48 over the face and 128 × 72 over a place, title page or close-up shot. The grid gets as fine as the picture's size on screen needs (about one cell every 6 pixels), so bends are smooth in close-ups and small far-away figures stay quick to draw.
+* **The finest meshes, always:** every picture is bent through a very fine grid at all times — 64 × 128 points over a person, 128 × 64 over an animal, 64 × 64 over the face and 160 × 90 over every place, title page and close-up shot.
+* **Finer physics:** denser, thinner rain with more splashes, six ripple rings after a stone, more spray drops that slow in the air, more snow, leaves, petals, dust and fireflies.
 * **Lip-sync with the real lips:** the face mesh opens the jaw — the lower lip and chin come down and the lips part, showing teeth and tongue inside. The mouth shape follows the sound of each moment: wide for "ee" and "s", round for "oo" and "o", closed between words.
 * **Follow-through:** loose hair and the hem of a skirt keep swaying a little after every move (more while walking), and breathing gently lifts the shoulders.
 * **Your pictures move like characters**, not like flat cut-outs:
@@ -145,6 +154,11 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * **ElevenLabs (optional, your own key): the most lifelike voices**, in Hindi and English (multilingual model). Add the key in ⚙ Settings → Free pictures & sounds. Each character gets the voice from your account that fits it best — gender, age and the voice the script describes ("deep", "sweet", "raspy"…) — and keeps it in every later film. Feelings make the voice steadier or more expressive. The free plan gives about 10,000 characters a month; when they run out, or without a key, the free natural voices are used. A character with your own voice sample keeps your sample.
 * The first test video I made earlier used **espeak**, a robotic computer voice, because the build machine has no good voice. The phone never uses espeak.
 
+## Keys in Settings
+
+Each tool that can take a key has its **own card in ⚙ Settings**, with what it does, where to get the key, a field, **Save**, **Test** and **Clear**: Google Gemini, ElevenLabs, Freesound, Pixabay and Pexels. A card at the top lists what is **built in and needs no key**: Microsoft Edge natural voices, Pollinations (AI pictures and story reading), Openverse and Wikimedia Commons (free pictures and real sounds) and the phone's own voice.
+No keys come inside the app: a key is a personal password tied to one account, and one built into an app (whose code is public) can be read by anyone, gets misused, and is switched off by the service. Each key is free to make and stays only on your phone.
+
 ## Free pictures and sounds (optional keys)
 
 * Without any key, the director searches **Openverse** and **Wikimedia Commons** for free-licence pictures and real sound recordings. Each saved item keeps its source, licence and creator.
@@ -162,7 +176,8 @@ For better story reading, picture recognition and expressive AI voices, add a **
 ## Honest limits
 
 * **"Pixar level":** Pixar films are made from full 3D models with thousands of animation controls, hand-animated by teams and rendered on large computer farms. This app bends your pictures on a phone. The fine meshes, real-lip lip-sync, follow-through, light, depth, stereo sound and room echo bring it much closer to a cinematic film, but it is **not** Pixar quality and cannot be. The picture quality depends mostly on your pictures: 3D-style pictures give a 3D-looking film.
-* **Speed with the finer meshes:** drawing the finer meshes takes longer. On the build computer, a 640-wide test film drew about 20 % slower than before. On a phone, a 10-minute 720p film may now take roughly 20–40 minutes. This is an estimate; it has not been measured on a phone.
+* **Speed with the finest meshes:** drawing always at the finest mesh takes longer. On the build computer a test film drew about 35 % slower than v9. On a phone, a 10-minute 720p film may take roughly 25–50 minutes. This is an estimate; it has not been measured on a phone.
+* **Close-ups** come in at most about 2.9× so pictures stay sharp; a close-up of a small child character shows the face and upper body rather than the face alone.
 * **Voices:** the free natural voices (Microsoft neural) already sound like real people. ElevenLabs sounds closest to real actors but needs your key and has a monthly limit. The test films made on the build computer use a robotic computer voice (espeak) because it has no internet; the phone never uses it.
 * **ElevenLabs was tested only against a mock server** built from its published API (voices list, text-to-speech, key header, quota error), not the live service.
 * **Mouth shapes** come from how bright the sound is, so they follow vowels roughly (wide / round / closed). They do not come from a phoneme-by-phoneme analysis.

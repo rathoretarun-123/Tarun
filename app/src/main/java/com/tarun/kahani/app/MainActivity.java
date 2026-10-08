@@ -520,6 +520,15 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { showText("AI script", project.read("script_ai.txt")); }
             }));
         }
+        // right after the story is read: everything described, to make it in other apps if wanted
+        c1.addView(Ui.button(this, "📄  Descriptions of every character, place, object, shot, sound and voice", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                saveScript();
+                Story st = loadStory();
+                if (st == null || st.scenes.isEmpty()) { toast("Write or paste a story first"); return; }
+                productionFile(st);
+            }
+        }));
         body.addView(c1);
 
         LinearLayout c2 = Ui.card(this);
@@ -661,7 +670,7 @@ public class MainActivity extends Activity {
         sum.addView(Ui.text(this, miss, 14, noPic + noVoice + noBg == 0 ? Ui.GREEN : Ui.PRIMARY_DARK, false));
         for (String w : st.warnings) sum.addView(Ui.text(this, "⚠ " + w, 13, Ui.RED, false));
         if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ No dialogue found. Tap \"Read with AI\" or write lines like — Name: \"dialogue\"", 14, Ui.RED, true));
-        sum.addView(Ui.button(this, "📄  Production file (characters, shots, voices, sounds)", Ui.BLUE, new View.OnClickListener() {
+        sum.addView(Ui.button(this, "📄  Descriptions for other apps: characters, places, objects, every shot, sounds, voices", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { productionFile(st); }
         }));
         sum.addView(Ui.button(this, "✨  Find pictures in my library for this story", Ui.GREEN, new View.OnClickListener() {
@@ -936,6 +945,31 @@ public class MainActivity extends Activity {
 
     // ================================================================== production file
 
+    /** Tries a key with one small request; returns a short note, or throws with what went wrong. */
+    private String testKey(String which) throws Exception {
+        com.tarun.kahani.core.Cloud c = Prefs.cloud(this);
+        String key = Prefs.get(this, which, "").trim();
+        if (key.length() < 10) throw new Exception("Paste the key first");
+        if (which.equals("elevenKey")) {
+            java.util.List<com.tarun.kahani.core.Eleven.Voice> v = new com.tarun.kahani.core.Eleven(c, key).voices();
+            return v.size() + " voices on your account";
+        }
+        if (which.equals("freesoundKey")) {
+            c.pixabayKey = ""; c.pexelsKey = "";
+            java.util.List<com.tarun.kahani.core.Cloud.Found> f = c.searchSounds("rain", 3);
+            for (com.tarun.kahani.core.Cloud.Found x : f) if ("Freesound".equals(x.source)) return "found \"" + x.title + "\"";
+            throw new Exception(c.lastError.length() > 0 ? c.lastError : "Freesound gave no result");
+        }
+        if (which.equals("pixabayKey") || which.equals("pexelsKey")) {
+            if (which.equals("pixabayKey")) c.pexelsKey = ""; else c.pixabayKey = "";
+            java.util.List<com.tarun.kahani.core.Cloud.Found> f = c.searchPictures("garden", 3);
+            String want = which.equals("pixabayKey") ? "Pixabay" : "Pexels";
+            for (com.tarun.kahani.core.Cloud.Found x : f) if (want.equals(x.source)) return "found a picture";
+            throw new Exception(c.lastError.length() > 0 ? c.lastError : want + " gave no result");
+        }
+        return null;
+    }
+
     private void productionFile(final Story st) {
         final Set<String> pics = new HashSet<String>(), voices = new HashSet<String>();
         for (Story.CharacterDef c : st.characters) {
@@ -944,14 +978,18 @@ public class MainActivity extends Activity {
         }
         final SoundLib sl = library.soundLib();
         background("Making the production file…", new Work() {
-            public Object run() { return Bible.write(st, sl, pics, voices); }
+            public Object run() {
+                // the production file, then the full Technical Director package (lock sheets, plates, objects,
+                // sounds, voices and every shot with ready prompts)
+                return Bible.write(st, sl, pics, voices) + "\n\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect);
+            }
         }, new Done() {
             public void done(Object r, Exception e) {
                 if (e != null) { toast("Could not make it: " + e.getMessage()); return; }
                 final String text = (String) r;
                 final String name = safeName(st.title) + "_production.txt";
                 new AlertDialog.Builder(MainActivity.this).setTitle("📄 Production file ready")
-                        .setMessage("It describes every character, place, shot, voice and sound, with ready-made prompts for making pictures.")
+                        .setMessage("Every character (costume locked word for word), place, object, shot, sound and voice — with ready first-frame and video prompts for other apps, and the director's shot list. Make the pictures, clips, voices or sounds elsewhere and upload them here: the studio places them by name.")
                         .setPositiveButton("💾 Download", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int w) { saveTextFile(name, text); }
                         })
@@ -2887,7 +2925,7 @@ public class MainActivity extends Activity {
         body.addView(acc);
 
         LinearLayout ai = Ui.card(this);
-        ai.addView(Ui.title(this, "Free AI (optional)"));
+        ai.addView(Ui.title(this, "🔑 Google Gemini — smarter story reading, picture recognition, AI voices"));
         ai.addView(Ui.text(this, "The app works without any key (free AI pictures and story reading). For better story reading, picture recognition and expressive AI voices, add a free Google Gemini key:\n1. Open aistudio.google.com/apikey (same Gmail)\n2. Tap \"Create API key\" and copy it\n3. Paste it here. The key stays only on this phone.", 13, Ui.SUB, false));
         final EditText key = new EditText(this);
         key.setHint("Gemini API key (AIza…)");
@@ -2940,33 +2978,73 @@ public class MainActivity extends Activity {
         ai.addView(av);
         body.addView(ai);
 
-        // free picture and sound collections: Openverse and Wikimedia need nothing; these three give more with a free key
-        LinearLayout media = Ui.card(this);
-        media.addView(Ui.title(this, "Free pictures & sounds (optional keys)"));
-        media.addView(Ui.text(this, "Without any key the director already finds free-licence pictures and real sound recordings "
-                + "(Openverse, Wikimedia Commons) and saves them in your library. With these free keys it finds more and better ones. "
-                + "Each key stays only on this phone.\n• Freesound: freesound.org/apiv2/apply (sign in, \"Create new API credentials\", copy the API key)\n"
-                + "• Pixabay: pixabay.com/api/docs (sign in, your key is shown on that page)\n• Pexels: pexels.com/api (sign in, \"Your API key\")\n"
-                + "• ElevenLabs (the most lifelike voices, Hindi and English): elevenlabs.io → sign in → your profile → API keys. "
-                + "The free plan gives about 10,000 characters a month (roughly two or three short films); when they run out, the free natural voices take over.", 13, Ui.SUB, false));
-        final String[][] mk = {{"freesoundKey", "Freesound API key (sounds)"}, {"pixabayKey", "Pixabay API key (pictures)"}, {"pexelsKey", "Pexels API key (photos)"},
-                {"elevenKey", "ElevenLabs API key (most lifelike voices)"}};
-        final EditText[] mf = new EditText[mk.length];
-        for (int i = 0; i < mk.length; i++) {
-            mf[i] = new EditText(this);
-            mf[i].setHint(mk[i][1]);
-            mf[i].setSingleLine(true);
-            mf[i].setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            mf[i].setText(Prefs.get(this, mk[i][0], ""));
-            media.addView(mf[i]);
+        // every tool that takes a key gets its own card, clearly labelled, with where to get the key
+        LinearLayout built = Ui.card(this);
+        built.addView(Ui.title(this, "✅ Built in — no key needed"));
+        built.addView(Ui.text(this, "These work straight away (with internet):\n"
+                + "• Natural voices — Microsoft Edge neural voices (Hindi and English)\n"
+                + "• AI pictures and story reading — Pollinations\n"
+                + "• Free pictures and real sound recordings — Openverse and Wikimedia Commons\n"
+                + "• The phone's own voice, offline\n\n"
+                + "Why no keys come inside the app: a key is a personal password tied to one account. A key built into an app "
+                + "can be read by anyone who has the app (and this app's code is public), so it is misused and switched off "
+                + "within days. Each key below is free; make your own in a minute and it stays only on this phone.", 13, Ui.SUB, false));
+        body.addView(built);
+        final String[][] tools = {
+                {"elevenKey", "🔑 ElevenLabs — the most lifelike voices",
+                        "Lifelike Hindi and English voices; each character gets its own voice and keeps it.\nGet the key: elevenlabs.io → sign in → your profile (bottom left) → API keys → Create. Free plan: about 10,000 characters a month.",
+                        "ElevenLabs API key (sk_…)"},
+                {"freesoundKey", "🔑 Freesound — real sound recordings",
+                        "Thousands of real recordings (rain, rivers, crowds, animals) for the backgrounds and effects.\nGet the key: freesound.org/apiv2/apply → sign in → Create new API credentials → copy \"Client secret/Api key\".",
+                        "Freesound API key"},
+                {"pixabayKey", "🔑 Pixabay — pictures and illustrations",
+                        "Free photos and illustrations for places, objects and title pages.\nGet the key: pixabay.com/api/docs → sign in → your key is shown on that page under \"Parameters\".",
+                        "Pixabay API key"},
+                {"pexelsKey", "🔑 Pexels — photos",
+                        "Free high-quality photos for places and objects.\nGet the key: pexels.com/api → sign in → Your API key.",
+                        "Pexels API key"},
+        };
+        for (final String[] tl : tools) {
+            LinearLayout card = Ui.card(this);
+            card.addView(Ui.title(this, tl[1]));
+            card.addView(Ui.text(this, tl[2], 13, Ui.SUB, false));
+            final EditText f = new EditText(this);
+            f.setHint(tl[3]);
+            f.setSingleLine(true);
+            f.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            f.setText(Prefs.get(this, tl[0], ""));
+            card.addView(f);
+            final TextView state = Ui.text(this, Prefs.get(this, tl[0], "").length() > 10 ? "Key saved on this phone" : "No key yet — the built-in free tools are used", 12,
+                    Prefs.get(this, tl[0], "").length() > 10 ? Ui.GREEN : Ui.SUB, false);
+            card.addView(state);
+            LinearLayout r = Ui.row(this);
+            r.addView(Ui.small(this, "💾 Save", Ui.GREEN, new View.OnClickListener() {
+                public void onClick(View v) {
+                    Prefs.put(MainActivity.this, tl[0], f.getText().toString().trim());
+                    state.setText(f.getText().toString().trim().length() > 10 ? "Key saved on this phone" : "Key removed");
+                    toast("Saved on this phone");
+                }
+            }));
+            r.addView(Ui.small(this, "🧪 Test", Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) {
+                    Prefs.put(MainActivity.this, tl[0], f.getText().toString().trim());
+                    background("Testing…", new Work() {
+                        public Object run() throws Exception { return testKey(tl[0]); }
+                    }, new Done() {
+                        public void done(Object res, Exception e) {
+                            String m = e == null ? "✅ The key works" + (res == null ? "" : " — " + res) : "❌ " + e.getMessage();
+                            state.setText(m);
+                            toast(m);
+                        }
+                    });
+                }
+            }));
+            r.addView(Ui.small(this, "🗑 Clear", Ui.RED, new View.OnClickListener() {
+                public void onClick(View v) { f.setText(""); Prefs.put(MainActivity.this, tl[0], ""); state.setText("Key removed"); }
+            }));
+            card.addView(r);
+            body.addView(card);
         }
-        media.addView(Ui.small(this, "💾 Save keys", Ui.GREEN, new View.OnClickListener() {
-            public void onClick(View v) {
-                for (int i = 0; i < mk.length; i++) Prefs.put(MainActivity.this, mk[i][0], mf[i].getText().toString().trim());
-                toast("Saved on this phone");
-            }
-        }));
-        body.addView(media);
 
         LinearLayout ph = Ui.card(this);
         ph.addView(Ui.title(this, "Phone"));

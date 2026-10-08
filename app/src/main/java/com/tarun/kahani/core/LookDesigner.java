@@ -266,6 +266,13 @@ public final class LookDesigner {
             if (species == Look.SP_FOX || species == Look.SP_WOLF) l.hero = !Txt.has(all, "चालाक", "धूर्त", "दुष्ट", "cunning", "wicked", "sly") && l.hero;
         }
 
+        // ---- body language (§26): every character moves in its own way
+        if (Txt.has(all, "चंचल", "शरारती", "फुर्तीला", "फुर्तीली", "फुर्तीले", "नटखट", "उत्साही", "चुलबुल", "playful", "naughty", "energetic", "excited",
+                "lively", "mischievous", "bubbly", "cheerful", "restless", "hyper")) l.energy = 1.35f;
+        else if (Txt.has(all, "शांत", "गंभीर", "शर्मीला", "शर्मीली", "सौम्य", "धीर", "बूढ़", "बुज़ुर्ग", "थका", "calm", "shy", "serious", "gentle", "quiet",
+                "wise", "elderly", "tired", "timid")) l.energy = 0.7f;
+        if (Txt.has(all, "रोबदार", "शाही", "घमंडी", "गर्व", "आत्मविश्वासी", "proud", "royal", "majestic", "confident", "arrogant", "राजा", "रानी", "king", "queen")) l.poise = 1f;
+        else if (Txt.has(all, "शर्मीला", "शर्मीली", "डरपोक", "सहमा", "shy", "timid", "nervous", "frightened")) l.poise = -1f;
         if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) { animal(l, all); return l; }
         // ---- size
         switch (l.kind) {

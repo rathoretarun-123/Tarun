@@ -1,0 +1,336 @@
+package com.tarun.kahani.core;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * The Technical Director package (docs/technical-director.md): everything needed to make the film's pictures,
+ * clips, sounds and voices in any other app, written after the director has read and planned the story.
+ *
+ *  1. Character Lock Sheets — costume text copied verbatim from the script, height in feet, voice lock
+ *  2. Location Lock Plates — foreground / midground / background with depth, ground and light, no characters
+ *  3. Objects — every object the story names, where it appears, a prompt for each
+ *  4. Sounds and voices — the background of every part, the effects, the music moods, every voice
+ *  5. Shot table — every shot of the film with the six mandatory fields (CHARACTERS, PLACEMENT, ACTION,
+ *     GROUNDING, LIGHTING, CAMERA), lip-sync split into close-ups of at most six words, a first-frame image
+ *     prompt and a video prompt from that frame, and the validation checklist
+ *  6. Pipeline order, error correction and the final law
+ */
+public final class ShotBook {
+    private ShotBook() {}
+
+    static final String STABLE = "static background, no background movement, background locked, smooth motion, no morphing, "
+            + "consistent character, temporal coherence";
+    static final String CAMERA = "locked tripod, static shot, static background, no camera movement, smooth 24fps, no morphing, no wobble";
+    /** Words the protocol never allows in a generation prompt (P4, C3). */
+    static final String[][] FORBIDDEN = {{"running fast", "walking"}, {"running", "walking"}, {"runs", "walks"}, {"ran ", "walked "},
+            {"flying", "standing"}, {"spinning", "turning slowly"}, {"fast movement", "small movement"}, {"camera follows", ""},
+            {"zooms", ""}, {"zoomed", ""}, {"pans", ""}, {"shaky", ""}, {"handheld", ""}, {"cropped", ""}, {"16:9", ""}, {"9:16", ""},
+            {" wide ", " full "}, {"jumps", "steps"}, {"jumping", "standing"}};
+
+    static final String[] OBJECTS = {"तलवार", "sword", "भाला", "spear", "ढाल", "shield", "छड़ी", "wand", "stick", "शीशा", "दर्पण", "mirror",
+            "पोटली", "potli", "satchel", "bag", "थैला", "घंटा", "घंटी", "bell", "दीया", "दीपक", "diya", "lamp", "लालटेन", "lantern", "मशाल", "torch",
+            "रस्सी", "rope", "जाल", "net", "पत्थर", "stone", "rock", "चाबी", "key", "किताब", "book", "पत्र", "चिट्ठी", "letter", "नक्शा", "map", "ताज", "मुकुट",
+            "crown", "हार", "necklace", "अंगूठी", "ring", "गेंद", "ball", "फल", "आम", "mango", "fruit", "फूल", "flower", "कली", "bud", "टोकरी", "basket",
+            "घड़ा", "pot", "नाव", "boat", "पतंग", "kite", "ढोल", "drum", "बांसुरी", "बाँसुरी", "flute", "सिंहासन", "throne", "संदूक", "बक्सा", "chest", "box",
+            "जड़ी-बूटी", "herbs", "बोतल", "bottle", "कटार", "dagger", "गदा", "mace", "कुल्हाड़ी", "axe", "परशु", "तितली", "butterfly"};
+
+    /** Height in feet from the studio's relative height (a grown man = 1). */
+    static String feet(Look l) {
+        float ft = (l == null ? 1 : l.height) * 5.8f;
+        return String.format(Locale.US, "%.1f ft", ft);
+    }
+
+    static String costume(Story.CharacterDef c) {
+        String s = LookDesigner.section(c.description, "पहनावा", "पोशाक", "कपड़े", "outfit", "dress", "clothes", "costume", "wears");
+        if (s.trim().length() == 0) s = c.description;
+        return Bible.oneLine(s).replaceFirst("^[*•\\s]+", "");
+    }
+
+    static String face(Story.CharacterDef c) {
+        String s = LookDesigner.section(c.description, "चेहरा", "face", "शरीर", "body", "रूप", "looks");
+        return Bible.oneLine(s).replaceFirst("^[*•\\s]+", "");
+    }
+
+    static String clean(String s) {
+        String o = " " + (s == null ? "" : s) + " ";
+        for (String[] f : FORBIDDEN) {
+            int i;
+            while ((i = o.toLowerCase(Locale.ROOT).indexOf(f[0])) >= 0) o = o.substring(0, i) + f[1] + o.substring(i + f[0].length());
+        }
+        return o.trim().replaceAll("\\s+", " ");
+    }
+
+    static String ground(int set) {
+        switch (set) {
+            case Sets.GARDEN: return "soft grass and a stone path";
+            case Sets.FOREST: return "muddy forest floor with fallen leaves";
+            case Sets.COURTYARD: return "sun-warmed marble floor";
+            case Sets.GATE: return "stone paving before the gate";
+            case Sets.CAVE_IN: case Sets.CAVE_MOUTH: return "rocky, damp cave ground";
+            case Sets.HALL: return "polished marble floor";
+            case Sets.VILLAGE: return "dusty packed earth";
+            case Sets.CELEBRATION: return "stone floor strewn with marigold petals";
+            default: return "firm natural ground";
+        }
+    }
+
+    static String foreground(int set) {
+        switch (set) {
+            case Sets.GARDEN: return "out-of-focus flowers and leaves at the bottom corners";
+            case Sets.FOREST: return "mossy rock edge and out-of-focus ferns";
+            case Sets.COURTYARD: return "edge of a carved pillar, out of focus";
+            case Sets.GATE: return "edge of a potted plant, out of focus";
+            case Sets.CAVE_IN: case Sets.CAVE_MOUTH: return "dark wet rock edge, out of focus";
+            case Sets.HALL: return "edge of a silk curtain, out of focus";
+            case Sets.VILLAGE: return "a wooden cart wheel, out of focus";
+            case Sets.CELEBRATION: return "an out-of-focus marigold garland";
+            default: return "out-of-focus leaves";
+        }
+    }
+
+    static String light(int set, int tod, float hard) {
+        String k;
+        if (set == Sets.CAVE_IN) k = "Key: green-tinted shaft of light from the cave mouth, top left 40 deg, Fill: very low cave bounce, Rim: cold edge light on hair";
+        else if (tod == Sets.MORNING) k = "Key: warm low sun from the left at 30 deg, Fill: soft sky bounce from the right, Rim: golden backlight on hair";
+        else if (tod == Sets.EVENING) k = "Key: orange sunset from the right at 15 deg, Fill: purple sky bounce, Rim: strong orange backlight";
+        else if (tod == Sets.NIGHT) k = "Key: cool moonlight top right 40 deg, Fill: dim blue ambient, Rim: warm lamp glow on the edge of the face";
+        else if (set == Sets.HALL) k = "Key: warm window light top left 45 deg, Fill: soft bounce from marble, Rim: lamp light on hair";
+        else k = "Key: warm sun top left 45 deg, Fill: soft bounce, Rim: backlight on hair";
+        return k + (hard >= 0.7f ? " (harder key, fill ratio 4:1, deeper shadows)" : hard <= 0.25f ? " (soft key, fill ratio 1.5:1)" : " (fill ratio 2:1)");
+    }
+
+    static String framing(int size) {
+        switch (size) {
+            case ShotPlanner.XWIDE: return "the whole place with small full figures";
+            case ShotPlanner.WIDE: return "full-body framing with the place around";
+            case ShotPlanner.MWIDE: return "knees-up framing";
+            case ShotPlanner.MEDIUM: return "waist-up framing";
+            case ShotPlanner.MCU: return "chest-up framing";
+            case ShotPlanner.CU: return "face and shoulders, face 65-75% of the frame";
+            default: return "the face fills the frame";
+        }
+    }
+
+    static Story.CharacterDef byShown(Story st, String shown) {
+        for (Story.CharacterDef c : st.characters) if (c.shown().equals(shown)) return c;
+        return null;
+    }
+
+    static List<String> chunks(String text, int max) {
+        List<String> out = new ArrayList<String>();
+        String[] w = text.trim().split("\\s+");
+        for (int i = 0; i < w.length; i += max) {
+            StringBuilder b = new StringBuilder();
+            for (int j = i; j < Math.min(w.length, i + max); j++) b.append(j > i ? " " : "").append(w[j]);
+            out.add(b.toString());
+        }
+        return out;
+    }
+
+    /** The whole package. aspect = the one final aspect ratio ("16:9", "9:16", "1:1"). lib may be null. */
+    public static String write(Story st, SoundLib lib, String aspect) {
+        Director.Options opt = new Director.Options();
+        opt.technical = true;
+        opt.sounds = lib;
+        Director d = new Director(st, opt);
+        d.prepare();
+        Film film = d.direct(null);
+        StringBuilder b = new StringBuilder();
+        String ar = aspect == null ? "16:9" : aspect;
+        b.append("TECHNICAL DIRECTOR PACKAGE — ").append(st.title).append("\n");
+        b.append("============================================================\n");
+        b.append("FINAL_AR = ").append(ar).append("   (decided once; set it as the generator's shape.aspect_ratio parameter, never write it in a prompt)\n");
+        b.append("Safe zone: face in the centre 60% of the frame, 20% headroom, 15% empty at left and right.\n");
+        b.append("Every shot: about 3 seconds, one action, locked tripod. Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot.\n\n");
+        b.append("PIPELINE ORDER\n");
+        b.append("1. Make the Character Lock Sheets (images) below.\n2. Make the Location Lock Plates (images, no characters).\n3. Use the Shot table below.\n"
+                + "4. For each shot: make the first-frame image -> check it yourself -> fix and make again if needed.\n"
+                + "5. For each approved first frame: make a 3-second video with that image as input.\n"
+                + "6. If a clip shakes or morphs: reduce the motion by 80% and make it again from the same first frame.\n"
+                + "7. Join the clips in an editor; add sound effects, film grain, and camera shake only there if needed.\n"
+                + "8. Final check at 0.25x speed: morphing, floating feet, finger count.\n"
+                + "Or upload your finished pictures, clips' stills, voices and sounds into this app: the studio places them by their names.\n\n");
+
+        // ---- 1. characters
+        b.append("1. CHARACTER LOCK SHEETS (").append(st.characters.size()).append(")\n------------------------------------------------------------\n");
+        for (Story.CharacterDef c : st.characters) {
+            b.append("LOCK NAME: ").append(c.shown()).append("\n");
+            if (c.fullName != null && !c.fullName.equals(c.shown())) b.append("Full name: ").append(c.fullName).append("\n");
+            b.append("Kind: ").append(Bible.kindWord(c.look, false)).append(c.age > 0 ? ", " + c.age + " years" : "").append(", height ").append(feet(c.look)).append("\n");
+            String f = face(c);
+            if (f.length() > 0) b.append("FACE (verbatim): ").append(f).append("\n");
+            b.append("COSTUME LOCK (verbatim — copy-paste this text into every prompt, never paraphrase): ").append(costume(c)).append("\n");
+            List<String> vw = new ArrayList<String>(VoiceMatch.want(c).words);
+            vw.addAll(VoiceStyle.forCharacter(c).words);
+            b.append("VOICE LOCK: ").append(Bible.voiceHint(c, false));
+            if (!vw.isEmpty()) { b.append(" — "); for (int i = 0; i < vw.size(); i++) b.append(i > 0 ? ", " : "").append(vw.get(i)); }
+            b.append(". Keep the same voice in every line; record or generate 10-20 s as a sample.\n");
+            b.append("LOCK SHEET IMAGE PROMPT: Character reference sheet of ").append(c.shown()).append(", premium 3D animated feature style, ")
+                    .append("front view, side view and back view standing on a plain pure-white background, plus four head expressions (neutral, happy, sad, angry). ")
+                    .append("Height ").append(feet(c.look)).append(". ").append(f.length() > 0 ? "Face: " + f + " " : "")
+                    .append("Costume: ").append(costume(c)).append(" Feet firmly on the ground with a soft contact shadow. Hands with 5 fingers, anatomically correct. No text.\n\n");
+        }
+
+        // ---- 2. places
+        List<String[]> places = Bible.places(st);
+        b.append("2. LOCATION LOCK PLATES (").append(places.size()).append(")\n------------------------------------------------------------\n");
+        for (String[] p : places) {
+            int set = Sets.detect(p[0] + " " + p[1]);
+            int tod = Sets.detectTime(p[1], Sets.DAY);
+            b.append("PLATE: ").append(p[0]).append("\n");
+            if (p[1].length() > 0) b.append("Description (verbatim): ").append(Bible.oneLine(p[1])).append("\n");
+            b.append("Foreground (0-1 m from the camera, blurry): ").append(foreground(set)).append("\n");
+            b.append("Midground (2-4 m): empty stage for the characters, left third and right third clear\n");
+            b.append("Background (10-100 m): ").append(Bible.oneLine(Bible.firstClauseOf(p[1].length() > 0 ? p[1] : p[0]))).append("\n");
+            b.append("Ground rule: ").append(ground(set)).append(", flat where the characters stand\n");
+            b.append("Lighting: ").append(light(set, tod, 0.4f)).append("\n");
+            b.append("PLATE IMAGE PROMPT: ").append(clean(Bible.placePrompt(p[0], p[1], null).replace("wide establishing shot", "establishing plate")
+                    .replace(" 16:9", ""))).append(" No characters, no people. Foreground: ").append(foreground(set)).append(". Ground: ").append(ground(set))
+                    .append(". ").append(STABLE).append(".\n\n");
+        }
+
+        // ---- 3. objects
+        Map<String, List<Integer>> objects = new LinkedHashMap<String, List<Integer>>();
+        for (Story.Scene sc : st.scenes) {
+            StringBuilder all = new StringBuilder(sc.setting).append(' ');
+            for (Story.Beat bt : sc.beats) all.append(bt.text).append(' ').append(bt.manner == null ? "" : bt.manner).append(' ');
+            for (String o : OBJECTS) {
+                if (!Txt.has(all.toString(), o)) continue;
+                List<Integer> l = objects.get(o);
+                if (l == null) { l = new ArrayList<Integer>(); objects.put(o, l); }
+                if (!l.contains(sc.number)) l.add(sc.number);
+            }
+        }
+        b.append("3. OBJECTS (").append(objects.size()).append(")\n------------------------------------------------------------\n");
+        for (Map.Entry<String, List<Integer>> e : objects.entrySet()) {
+            b.append("OBJECT: ").append(e.getKey()).append("   (scenes ").append(e.getValue()).append(")\n");
+            b.append("OBJECT IMAGE PROMPT: a single ").append(e.getKey()).append(" for a premium 3D animated Indian children's film, consistent design in every shot, ")
+                    .append("plain pure-white background, soft studio light, a soft contact shadow under it, no hands, no text.\n");
+        }
+        b.append("\n");
+
+        // ---- 4. sounds and voices
+        b.append("4. SOUNDS AND VOICES\n------------------------------------------------------------\n");
+        for (Film.Amb a : film.ambience) {
+            Film.Seg sg = film.segAt(a.t0 + 0.05f);
+            String where = sg != null && sg.scene >= 0 ? st.scenes.get(sg.scene).heading + " (" + Sets.label(sg.set) + ")" : "";
+            b.append("Background sound ").append(where).append(": ").append(Bible.oneLine(Director.ambWords(sg))).append(", loops under the whole part\n");
+        }
+        Map<String, Integer> fx = new LinkedHashMap<String, Integer>();
+        for (Film.Sfx s : film.sfx) {
+            String n = Mixer.sfxFile(s.type);
+            n = n == null ? (s.file != null ? new java.io.File(s.file).getName() : "effect") : n.replace(".ogg", "").replace('_', ' ');
+            Integer k = fx.get(n);
+            fx.put(n, k == null ? 1 : k + 1);
+        }
+        b.append("Sound effects (name × times used): ");
+        int q = 0;
+        for (Map.Entry<String, Integer> e : fx.entrySet()) b.append(q++ > 0 ? ", " : "").append(e.getKey()).append(" ×").append(e.getValue());
+        b.append("\nMusic: follows each scene's mood (title fanfare, calm, playful, tense, sad, celebration, end chord).\n");
+        for (Story.CharacterDef c : st.characters) {
+            int n = 0;
+            for (Film.Line l : film.lines) if (l.who == c) n++;
+            if (n > 0) b.append("Voice of ").append(c.shown()).append(": ").append(n).append(" lines — ").append(Bible.voiceHint(c, false)).append("\n");
+        }
+        b.append("\n");
+
+        // ---- 5. shots
+        b.append("5. SHOT TABLE (").append(film.shots.size()).append(" shots)\n------------------------------------------------------------\n");
+        Map<Integer, List<Film.Shot>> byLine = new LinkedHashMap<Integer, List<Film.Shot>>();
+        for (Film.Shot sh : film.shots) if (sh.line >= 0 && !sh.reaction) {
+            List<Film.Shot> l = byLine.get(sh.line);
+            if (l == null) { l = new ArrayList<Film.Shot>(); byLine.put(sh.line, l); }
+            l.add(sh);
+        }
+        int n = 0;
+        for (Film.Shot sh : film.shots) {
+            n++;
+            Film.Seg sg = film.segAt(sh.t + 0.01f);
+            if (sg == null) continue;
+            String id = String.format(Locale.US, "%03d", n);
+            // who is in the frame, left to right
+            Film.Cam cam = null;
+            for (Film.Cam c : sg.cams) if (c.t <= sh.t + 0.01f) cam = c;
+            float cx = cam == null ? 640 : cam.cx, view = 1280f / (cam == null ? 1 : cam.zoom);
+            List<Film.Actor> inFrame = new ArrayList<Film.Actor>();
+            for (Film.Actor a : sg.actors) {
+                if (!a.stateAt(sh.t + 0.05f).visible) continue;
+                float u = (Director.xAt(a, sh.t + 0.05f) - cx) / view + 0.5f;
+                if (u > -0.05f && u < 1.05f) inFrame.add(a);
+            }
+            java.util.Collections.sort(inFrame, new java.util.Comparator<Film.Actor>() {
+                public int compare(Film.Actor x, Film.Actor y) { return Float.compare(x.keys.get(0).x, y.keys.get(0).x); }
+            });
+            StringBuilder chars = new StringBuilder(), place = new StringBuilder(), grounding = new StringBuilder();
+            for (Film.Actor a : inFrame) {
+                chars.append(chars.length() > 0 ? " | " : "").append(a.c.shown()).append(" — costume: ").append(costume(a.c));
+                float u = (Director.xAt(a, sh.t + 0.05f) - cx) / view + 0.5f;
+                String third = u < 0.4f ? "Midground Left Third" : u > 0.6f ? "Midground Right Third" : "Midground Center";
+                place.append(third).append(": ").append(a.c.shown()).append(" | ");
+                grounding.append(a.c.shown()).append(" is ").append(feet(a.look)).append(", ");
+            }
+            String bgText = sg.scene >= 0 ? Bible.oneLine(Bible.firstClauseOf(st.scenes.get(sg.scene).setting.length() > 0 ? st.scenes.get(sg.scene).setting : st.scenes.get(sg.scene).title)) : Sets.label(sg.set);
+            String placement = "Foreground (0-1 m): " + foreground(sg.set) + " | " + place + "Background (10-100 m): " + bgText
+                    + " | Depth: characters at 3 m, background 30 m | Occlusion: characters in front of the background | Ground: " + ground(sg.set);
+            Film.Line line = sh.line >= 0 && sh.line < film.lines.size() ? film.lines.get(sh.line) : null;
+            String action = sh.reaction ? sh.action + ", subtle breathing, one small change of expression"
+                    : line != null ? sh.subject + " speaks, head almost still, only mouth and jaw move" : clean(sh.action);
+            String groundingTxt = "feet firmly on the ground, shadow under feet touching the ground, scale reference: " + grounding + "gravity and weight";
+            String lighting = light(sg.set, sg.tod, sh.light);
+            b.append("SHOT ").append(id).append(String.format(Locale.US, "   [%s, at %d:%04.1f, %.1f s → make as %d clip(s) of 3 s]%n",
+                    sg.scene >= 0 ? st.scenes.get(sg.scene).heading : "", (int) (sh.t / 60), sh.t % 60, sh.dur, Math.max(1, Math.round(sh.dur / 3f))));
+            b.append("PURPOSE: ").append(sh.purpose).append("   FRAMING: ").append(framing(sh.size)).append("\n");
+            b.append("1. CHARACTERS: ").append(chars.length() > 0 ? chars : "none (location plate only)").append("\n");
+            b.append("2. PLACEMENT: ").append(placement).append("\n");
+            b.append("3. ACTION: ").append(action).append(" (one action only, less than 10% of the frame)\n");
+            b.append("4. GROUNDING: ").append(groundingTxt).append("\n");
+            b.append("5. LIGHTING: ").append(lighting).append("\n");
+            b.append("6. CAMERA: ").append(CAMERA).append("\n");
+            // lip-sync: only in a front-facing close-up, at most six words per shot
+            if (line != null && !sh.reaction) {
+                List<Film.Shot> parts = byLine.get(sh.line);
+                int idx = parts == null ? 0 : parts.indexOf(sh), total = parts == null ? 1 : parts.size();
+                List<String> words = chunks(line.shown, 6);
+                int per = (int) Math.ceil(words.size() / (float) total);
+                List<String> mine = words.subList(Math.min(words.size(), idx * per), Math.min(words.size(), (idx + 1) * per));
+                char sub = 'a';
+                for (String w : mine) {
+                    b.append("   LIP-SYNC ").append(id).append(sub++).append(": \"").append(w).append("\" — close-up, front-facing 0 deg, face 65-75% of the frame, ")
+                            .append("mouth clearly visible, soft frontal light with a catch-light in the eyes, head almost still, contains_speech = true")
+                            .append(line.manner.length() > 0 ? ", said: " + Bible.oneLine(line.manner) : "").append("\n");
+                }
+                if (sh.size < ShotPlanner.CU) b.append("   (This framing is not a close-up: make it silent and add the lip-sync in post, e.g. Wav2Lip.)\n");
+            }
+            String cloth = inFrame.isEmpty() ? "" : " Clothes have weight: fabric with gravity folds, not weightless.";
+            String hands = sh.size >= ShotPlanner.CU ? " Hands out of the frame." : " Hands with 5 fingers, anatomically correct, or holding a prop.";
+            b.append("IMAGE PROMPT (first frame): Parameters: shape.aspect_ratio = FINAL_AR; reference_image = the Lock Sheet of each character named. ")
+                    .append("Premium 3D animated feature still, ").append(framing(sh.size)).append(". CHARACTERS: ").append(chars.length() > 0 ? chars : "none")
+                    .append(". PLACEMENT: ").append(placement).append(". ACTION (the moment it begins): ").append(action).append(". GROUNDING: ").append(groundingTxt)
+                    .append(". LIGHTING: ").append(lighting).append(". CAMERA: ").append(CAMERA).append(".").append(cloth).append(hands).append(" No text.\n");
+            b.append("VIDEO PROMPT (from the approved first frame, 3 s): image input = first frame of shot ").append(id).append(". Motion: ").append(action)
+                    .append("; anticipation before any move (weight shifts first), slow in and slow out, follow-through: hair and dupatta settle 0.5 s after the head stops.")
+                    .append(cloth).append(" ").append(STABLE).append(", feet firmly planted, shadow under feet touching the ground. CAMERA: ").append(CAMERA)
+                    .append(line != null && !sh.reaction && sh.size >= ShotPlanner.CU ? ". contains_speech = true" : ". contains_speech = false").append("\n");
+            b.append("VALIDATION: [✔] reference image per character  [✔] costume verbatim  [✔] foreground/midground/background + thirds + depth  ")
+                    .append("[✔] ground contact + shadow  [✔] motion under 15% of the frame  [✔] static camera  [✔] aspect ratio as a parameter  ")
+                    .append(line != null && !sh.reaction ? (sh.size >= ShotPlanner.CU ? "[✔] lip-sync in a front close-up, at most 6 words per shot  " : "[✔] silent (lip-sync in post)  ") : "")
+                    .append("[✔] no morphing, static background, smooth motion\n\n");
+        }
+
+        // ---- 6. error correction
+        b.append("6. ERROR CORRECTION\n------------------------------------------------------------\n");
+        b.append("Face morphs → the motion is too big: reduce it to \"subtle breathing only\".\n");
+        b.append("Background moves → add \"static background, background locked, no parallax\".\n");
+        b.append("Character floats → add \"feet firmly planted, gravity, weight, shadow under feet touching ground\".\n");
+        b.append("Costume changes → the costume was paraphrased: paste the exact COSTUME LOCK text.\n");
+        b.append("Hands deformed → hide them: \"hands behind the back, not visible\" or a face-only close-up.\n");
+        b.append("Lip-sync bad → make a silent close-up and add the lip-sync in post (Wav2Lip).\n\n");
+        b.append("FINAL LAW: Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot. Always think in 3-second static shots.\n\n");
+        b.append(film.shotList);
+        return b.toString();
+    }
+}

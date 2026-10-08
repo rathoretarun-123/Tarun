@@ -160,7 +160,7 @@ public class AppTest {
         List<String> st = texts(root, new ArrayList<String>());
         System.out.println("STUDIO: " + st);
         assertTrue(st.toString().contains("वानुषा"));
-        assertTrue(st.toString().contains("Production file"));
+        assertTrue(st.toString().contains("Descriptions for other apps"));
         assertTrue(st.toString().contains("Find pictures in my library"));
         assertTrue(st.toString().contains("Still missing"));
         assertTrue(st.toString().contains("Director's plan"));

@@ -34,7 +34,7 @@ public final class Rig {
      * Each frame uses as many as the picture's size on screen needs (about one cell per 6 pixels), so a
      * character in a close-up bends as smoothly as a drawing, and small far-away figures cost little.
      */
-    public static final int BW = 48, BH = 96, FW = 48, FH = 48;
+    public static final int BW = 64, BH = 128, FW = 64, FH = 64;
     /** The most mesh columns and rows for this picture: tall for people, wide (the same number of points) for animals. */
     public int mw = BW, mh = BH;
     /** Screen pixels per mesh cell the fine mesh aims for. */
@@ -525,8 +525,8 @@ public final class Rig {
      */
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h, float screenPx) {
         frame(f, s, left, top, w, h);
-        int rows = Math.max(Math.min(mh, 12), Math.min(mh, Math.round(screenPx / CELL_PX)));
-        int cols = Math.max(4, Math.min(mw, Math.round(rows * mw / (float) mh)));
+        // always the finest mesh: every picture is bent through the full grid, whatever its size on screen
+        int rows = mh, cols = mw;
         f.rows = rows; f.cols = cols;
         int k = 0;
         for (int j = 0; j <= rows; j++) {

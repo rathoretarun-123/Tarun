@@ -65,6 +65,7 @@ public class MakeFilm {
         film = dir.direct(art);
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
+        if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));
         if (System.getenv("LINES") != null) {
             for (Film.Weather w : film.weather) System.out.printf("  weather %d %.1f-%.1f x%.2f%n", w.type, w.t0, w.t1, w.strength);
             for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx) if (f.type >= Film.FX_LIGHTNING) System.out.printf("  fx %d @%.1f-%.1f (%.0f,%.0f)%n", f.type, f.t0, f.t1, f.x, f.y);

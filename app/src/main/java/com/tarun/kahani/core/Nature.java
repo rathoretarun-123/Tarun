@@ -156,7 +156,7 @@ public final class Nature {
 
     // ================================================================== the living background
 
-    public static final int MW = 128, MH = 72;     // a very fine mesh: plants, water and falls bend smoothly
+    public static final int MW = 160, MH = 90;     // a very fine mesh: plants, water and falls bend smoothly
 
     /**
      * Mesh points for drawing a background picture with its plants swaying in the wind (a gentle breeze always)
@@ -262,7 +262,7 @@ public final class Nature {
 
     /** Rain streaks falling with the wind; far drops are thinner and fainter. */
     public static void rain(Gfx g, float w, float h, float t, float amount, float wind) {
-        int n = (int) (520 * Math.min(1.6f, amount));
+        int n = (int) (900 * Math.min(1.6f, amount));     // dense, fine rain
         float slant = wind * 0.35f;
         float sc = h / 720f;
         // a cool, grey light and veils of rain in the distance
@@ -282,13 +282,13 @@ public final class Nature {
             float y = -len + age * speed;
             float x = rnd(i, 3) * (w + h * Math.abs(slant)) - (slant > 0 ? h * slant : 0) + y * slant;
             g.color(alpha(0xFFE4ECF4, 0.28f + depth * 0.37f));
-            g.line(x, y, x - len * slant, y - len, (1.0f + depth * 1.8f) * sc);
+            g.line(x, y, x - len * slant, y - len, (0.7f + depth * 1.4f) * sc);
         }
     }
 
     /** Drops hitting the ground: little crowns and rings (stage coordinates, along the floor). */
     public static void rainSplashes(Gfx g, float ground, float t, float amount) {
-        int n = (int) (60 * Math.min(1.6f, amount));
+        int n = (int) (130 * Math.min(1.6f, amount));
         for (int i = 0; i < n; i++) {
             float life = 0.32f;
             float slot = (t + rnd(i, 7) * life) / life;
@@ -311,7 +311,7 @@ public final class Nature {
 
     /** Snow flakes drifting down and swaying. */
     public static void snow(Gfx g, float w, float h, float t, float amount, float wind) {
-        int n = (int) (220 * Math.min(1.5f, amount));
+        int n = (int) (380 * Math.min(1.5f, amount));
         for (int i = 0; i < n; i++) {
             float depth = rnd(i, 1);
             float speed = 35 + depth * 70;
@@ -329,7 +329,7 @@ public final class Nature {
 
     /** Leaves (or petals) blown by the wind: they tumble, fall slowly and travel with the gusts. */
     public static void leaves(Gfx g, float w, float h, float t, float amount, float wind, boolean petals) {
-        int n = (int) ((petals ? 70 : 40) * Math.min(1.5f, amount));
+        int n = (int) ((petals ? 120 : 75) * Math.min(1.5f, amount));
         int[] cols = petals ? new int[]{0xFFF48FB1, 0xFFE91E63, 0xFFFFD54F, 0xFFFFFFFF, 0xFFFF7043}
                 : new int[]{0xFF7CB342, 0xFF558B2F, 0xFFC0A030, 0xFFA0522D, 0xFF9CCC65};
         float drift = petals ? 30 + wind * 140 : 60 + wind * 380;
@@ -450,7 +450,7 @@ public final class Nature {
 
     /** Fireflies drifting and blinking near the ground. */
     public static void fireflies(Gfx g, float ground, float t, float amount) {
-        int n = (int) (26 * amount);
+        int n = (int) (42 * amount);
         for (int i = 0; i < n; i++) {
             float x = 640 + 600 * (float) Math.sin(t * (0.11 + rnd(i, 1) * 0.12) + i * 2.1);
             float y = ground - 60 - 260 * rnd(i, 2) + 40 * (float) Math.sin(t * (0.3 + rnd(i, 3) * 0.4) + i);
@@ -538,14 +538,17 @@ public final class Nature {
         if (age < 0 || age > 4f) return;
         // drops
         if (age < 0.9f) {
-            for (int i = 0; i < 12 + (int) (size * 6); i++) {
+            for (int i = 0; i < 26 + (int) (size * 10); i++) {
                 float ang = (float) (Math.PI * (0.15 + 0.7 * rnd(i, 1)));
                 float sp = (180 + rnd(i, 2) * 220) * (float) Math.sqrt(size);
                 float vx = (float) Math.cos(ang) * sp * (rnd(i, 3) > 0.5f ? 1 : -1), vy = -(float) Math.sin(ang) * sp;
-                float dx = vx * age, dy = vy * age + 0.5f * 1400 * age * age;
+                // gravity with a little air drag: x slows, the drop falls faster than it rose
+                float drag = (float) Math.exp(-1.2f * age);
+                float dx = vx * age * drag, dy = vy * age + 0.5f * 1400 * age * age;
                 if (dy > 4) continue;
+                float big = rnd(i, 4) < 0.3f ? 1.6f : 1f;
                 g.color(alpha(0xFFE3F2FD, 0.85f * (1 - age / 0.9f)));
-                g.oval(x + dx, y + dy, 2 + size, 2.6f + size);
+                g.oval(x + dx, y + dy, (1.4f + size) * big, (2.0f + size) * big);
             }
             // the column of water
             float col = (float) Math.max(0, Math.sin(Math.PI * Math.min(1, age / 0.5f))) * 26 * size;
@@ -553,8 +556,8 @@ public final class Nature {
             g.oval(x, y - col * 0.5f, 4 * size, col * 0.5f + 1);
         }
         // waves: three rings, each spreading at the same speed and dying away
-        for (int k = 0; k < 3; k++) {
-            float a = age - k * 0.28f;
+        for (int k = 0; k < 6; k++) {
+            float a = age - k * 0.16f;
             if (a <= 0) continue;
             float r = (10 + a * 70) * (0.7f + 0.3f * size);
             float alpha = (float) Math.exp(-a / 1.1f) * 0.7f;
@@ -773,7 +776,7 @@ public final class Nature {
 
     /** Dust and bits falling while the ground shakes. */
     public static void quakeDust(Gfx g, float w, float h, float t, float amount) {
-        int n = (int) (140 * amount);
+        int n = (int) (240 * amount);
         float sc = h / 720f;
         for (int i = 0; i < n; i++) {
             float period = 1.2f + rnd(i, 1);

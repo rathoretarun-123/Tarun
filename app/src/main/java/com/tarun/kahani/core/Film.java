@@ -14,6 +14,21 @@ public final class Film {
     public final List<Amb> ambience = new ArrayList<Amb>();
     public final List<Weather> weather = new ArrayList<Weather>();
     public final List<String> notes = new ArrayList<String>();   // director's notes for the analysis screen
+    /** Every shot as the director planned it (for the shot list and its quality check). */
+    public final List<Shot> shots = new ArrayList<Shot>();
+    /** The director's shot list and quality check, in the training guide's format. */
+    public String shotList = "";
+
+    /** One planned shot. */
+    public static final class Shot {
+        public float t, dur;
+        public int part = -1;
+        public int size, type, height, move, stage = -1;
+        public String subject = "", other = "", purpose = "", action = "", face = "", body = "", sound = "", cutWhen = "", emotionalPurpose = "";
+        public float light = 0.4f;
+        public boolean reaction;
+        public int line = -1;            // the dialogue line spoken in this shot (index into lines), or -1
+    }
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;
 
@@ -35,6 +50,8 @@ public final class Film {
         public float ground = Sets.GROUND; // y of the floor line in stage coordinates
         public boolean festive;           // celebration lights
         public int mood = -1;
+        /** How this part begins: 0 a soft dissolve, 1 a dip to black (time passes), 2 a dip to white (magic, dreams, memories). */
+        public int transition;
         public Actor find(Story.CharacterDef c) {
             for (Actor a : actors) if (a.c == c) return a;
             return null;
@@ -72,7 +89,7 @@ public final class Film {
             G_JUMP = 23, G_SHAKE_HEAD = 24, G_CLUTCH = 25, G_WALK_PLACE = 26, G_BOUNCE = 27, G_MIRROR = 28, G_THROW = 29,
             G_SPLASH = 30, G_WIGGLE = 31, G_COUGH = 32, G_PLAY = 33, G_LOOK_UP = 34, G_WHISPER = 35, G_PROUD = 36,
             G_ROAR = 37, G_BLOCK = 38, G_STEP_BACK = 39, G_OFFER = 40, G_HOLD_HAND = 41, G_BOW = 42, G_WAVE = 43, G_NOD = 44,
-            G_TURN = 45;
+            G_TURN = 45, G_LOOK_AWAY = 46;
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;
@@ -140,6 +157,9 @@ public final class Film {
     public static final class Cam {
         public float t, cx, cy, zoom, ease;   // ease 0 = cut
         public float roll;                    // degrees: a tilted "Dutch angle" for menace or unease
+        public boolean still;                 // a strong performance: the camera holds perfectly still
+        public int angle;                     // -1 high angle (vulnerable), 0 eye level, +1 low angle (power)
+        public float light = -1;              // 0 soft and warm .. 1 hard and directional (-1 = from the scene's mood)
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

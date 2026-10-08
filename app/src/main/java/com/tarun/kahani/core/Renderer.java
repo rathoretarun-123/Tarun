@@ -46,7 +46,15 @@ public final class Renderer {
             // one scene melts into the next (a dissolve), like a film, instead of going through black
             boolean dissolveIn = prev != null && prev.type == Film.S_SCENE && s.type == Film.S_SCENE && t - s.t0 < DISSOLVE;
             boolean dissolveOut = next != null && next.type == Film.S_SCENE && s.type == Film.S_SCENE;
-            if (dissolveIn) {
+            if (dissolveIn && s.transition != 0) {
+                // a dip: the last scene goes to black (time passes) or to white (magic, a dream, a memory) and the
+                // new one comes up out of it
+                float u = (t - s.t0) / DISSOLVE;
+                int col = s.transition == 1 ? 0xFF000000 : 0xFFFFF8F0;
+                if (u < 0.5f) { drawScene(g, prev, t); g.color(Puppet.alpha(col, Math.min(1, u * 2))); }
+                else { drawScene(g, s, t); g.color(Puppet.alpha(col, Math.min(1, (1 - u) * 2))); }
+                g.rect(0, 0, vw, vh);
+            } else if (dissolveIn) {
                 float keepFollow = followX;
                 drawScene(g, prev, t);
                 followX = keepFollow;
@@ -80,7 +88,7 @@ public final class Renderer {
         g.translate(vw / 2 + panX, vh / 2 + panY);
         g.scale(zoom, zoom);
         Nature.Scan sc = b.scan;
-        if (sc != null && (sc.anyPlants || sc.anyWater || sc.anyFall)) {
+        if (sc != null) {   // every place picture is drawn through the fine mesh
             // title pages and close-up shots live too: leaves sway, water flows, falls stream (fine mesh)
             g.translate(-vw / 2, -vh / 2);
             float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
@@ -266,11 +274,16 @@ public final class Renderer {
     // ================================================================== scene
 
     private float camX, camY, camZ, camRoll;
+    /** -1 high angle .. +1 low angle, and how hard the light is (0 soft .. 1 hard), for the shot on screen now. */
+    private float camAngle, camLight = 0.4f;
+    private boolean camStill;
 
     private void camera(Film.Seg s, float t) {
         Film.Cam cur = null, prev = null;
         for (Film.Cam c : s.cams) { if (c.t <= t) { prev = cur; cur = c; } else break; }
-        if (cur == null) { camX = 640; camY = 360; camZ = 1; camRoll = 0; }
+        float moodLight = s.mood == Film.M_TENSE || s.mood == Film.M_VILLAIN || s.mood == Film.M_ACTION ? 0.75f
+                : s.mood == Film.M_HAPPY || s.mood == Film.M_CELEBRATE || s.mood == Film.M_PLAYFUL ? 0.2f : 0.4f;
+        if (cur == null) { camX = 640; camY = 360; camZ = 1; camRoll = 0; camAngle = 0; camLight = moodLight; camStill = false; }
         else if (cur.ease > 0 && prev != null && t < cur.t + cur.ease) {
             float u = (t - cur.t) / cur.ease;
             u = u * u * (3 - 2 * u);
@@ -278,11 +291,21 @@ public final class Renderer {
             camY = prev.cy + (cur.cy - prev.cy) * u;
             camZ = prev.zoom + (cur.zoom - prev.zoom) * u;
             camRoll = prev.roll + (cur.roll - prev.roll) * u;
-        } else { camX = cur.cx; camY = cur.cy; camZ = cur.zoom; camRoll = cur.roll; }
-        // a living camera: very slow drift and breathing, like a camera operator holding the shot
-        camX += (float) (Math.sin(t * 0.31) * 5 + Math.sin(t * 0.73) * 2) / camZ;
-        camY += (float) (Math.cos(t * 0.27) * 3) / camZ;
-        camZ *= 1f + 0.008f * (float) Math.sin(t * 0.21);
+            camAngle = prev.angle + (cur.angle - prev.angle) * u;
+            float pl = prev.light < 0 ? moodLight : prev.light, cl = cur.light < 0 ? moodLight : cur.light;
+            camLight = pl + (cl - pl) * u;
+            camStill = false;
+        } else {
+            camX = cur.cx; camY = cur.cy; camZ = cur.zoom; camRoll = cur.roll; camAngle = cur.angle;
+            camLight = cur.light < 0 ? moodLight : cur.light;
+            camStill = cur.still;
+        }
+        // a living camera: very slow drift and breathing, like a camera operator holding the shot — but a strong
+        // performance gets a camera that holds perfectly still (the performance comes first)
+        float live = camStill ? 0f : 1f;     // a locked tripod: no drift at all
+        camX += live * (float) (Math.sin(t * 0.31) * 5 + Math.sin(t * 0.73) * 2) / camZ;
+        camY += live * (float) (Math.cos(t * 0.27) * 3) / camZ;
+        camZ *= 1f + live * 0.008f * (float) Math.sin(t * 0.21);
         if (camZ < 1) camZ = 1;
         float hw = vw / 2 / camZ, hh = vh / 2 / camZ;
         camX = Math.max(hw, Math.min(W - hw, camX));
@@ -511,8 +534,20 @@ public final class Renderer {
             default: tint = 0;
         }
         if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
-        float r = Math.max(vw, vh) * 0.78f;
-        g.radial(vw / 2, vh / 2, r, 0x00000000, 0x70000000);
+        // light follows the moment (§19): hard, directional light and deeper shadows for conflict and fear,
+        // soft warm light for warmth and safety
+        float hard = Math.max(0, Math.min(1, camLight));
+        if (hard > 0.55f) {
+            float k = (hard - 0.55f) / 0.45f;
+            g.linear(0, 0, vw, 0, Puppet.alpha(0xFF000000, 0.0f), Puppet.alpha(0xFF000000, 0.28f * k));
+            g.rect(0, 0, vw, vh);
+        } else if (hard < 0.3f) {
+            float k = (0.3f - hard) / 0.3f;
+            g.radial(vw * 0.45f, vh * 0.35f, Math.max(vw, vh) * 0.7f, Puppet.alpha(0xFFFFE6C0, 0.12f * k), 0x00FFE6C0);
+            g.rect(0, 0, vw, vh);
+        }
+        float r = Math.max(vw, vh) * (0.78f - 0.12f * Math.max(0, hard - 0.5f));
+        g.radial(vw / 2, vh / 2, r, 0x00000000, Puppet.alpha(0xFF000000, 0.44f + 0.2f * Math.max(0, hard - 0.5f)));
         g.rect(0, 0, vw, vh);
     }
 
@@ -528,6 +563,8 @@ public final class Renderer {
         if (depth < 1) {
             float k = (1 + (camZ - 1) * depth) / camZ * 1.1f;       // 1.1: a little larger so edges never show
             float lag = (camX - 640) * (1 - depth) * 0.8f;          // background follows the camera a bit
+            // camera height: from low down the far world sinks behind the characters, from high up it rises
+            g.translate(0, camAngle * 34 * (1 - depth) / camZ);
             g.translate(camX + lag, ground);
             g.scale(k, k);
             g.translate(-camX, -ground);
@@ -549,7 +586,7 @@ public final class Renderer {
                 }
             };
             Nature.Scan sc = b.scan;
-            if (sc != null && (sc.anyPlants || sc.anyWater || sc.anyFall)) {
+            if (sc != null) {   // every place picture is drawn through the fine mesh
                 // a living picture: plants sway (more in the wind), water ripples along, a waterfall streams down
                 Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), bdMesh);
                 g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
@@ -1000,6 +1037,13 @@ public final class Renderer {
                 case Film.G_NOD:
                     p.nod += (float) Math.sin(u * 10) * 0.9f;
                     break;
+                case Film.G_LOOK_AWAY: {
+                    // looks away (uncomfortable, hurt), then back (§11)
+                    float k2 = (float) Math.sin(Math.PI * Math.min(1, u / Math.max(0.3f, act.t1 - act.t0)));
+                    p.headTilt -= 9 * k2 * (p.facing < 0 ? -1 : 1);
+                    p.nod += 0.45f * k2;
+                    break;
+                }
                 case Film.G_TURN: {
                     float k2 = Math.min(1, u / (act.t1 - act.t0));
                     mo.sx *= Math.max(0.15f, Math.abs((float) Math.cos(Math.PI * k2)));
@@ -1211,13 +1255,15 @@ public final class Renderer {
         float t = p.time;
         st.time = t;
         st.wind = p.wind * (p.facing < 0 ? -1 : 1);     // the picture is mirrored when facing left
-        st.armL = armSwing(p.armL);
-        st.armR = armSwing(p.armR);
-        st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f + p.seed) * 1.2f;
+        // every character moves in its own way (§26): lively ones bigger and quicker, calm ones smaller
+        float en = a != null ? a.look.energy : 1f, poise = a != null ? a.look.poise : 0f;
+        st.armL = armSwing(8 + (p.armL - 8) * en);
+        st.armR = armSwing(8 + (p.armR - 8) * en);
+        st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f * en + p.seed) * 1.2f * en;
         st.lean = p.tilt;
         st.breathe = (float) Math.sin(t * 2.1f + p.seed);
         if (p.mouth > 0.02f) {
-            st.headRot += (float) Math.sin(t * 5.3f + p.seed) * 2.6f * (0.3f + p.mouth);
+            st.headRot += (float) Math.sin(t * 5.3f + p.seed) * 2.6f * (0.3f + p.mouth) * en;
             st.nod += (float) Math.sin(t * 4.1f + p.seed) * 0.5f * (0.2f + p.mouth);
         }
         if (p.walkAmt > 0) {
@@ -1228,7 +1274,8 @@ public final class Renderer {
             st.legRAng = sw * 4 * p.walkAmt;
             st.headRot += sw * 1.2f;
         }
-        st.nod += p.nod;
+        st.nod += p.nod - 0.25f * poise;
+        st.lean -= 1.2f * poise;
         st.walkAmt = p.walkAmt;
         // the lips: the jaw opens with the voice, the corners follow the sound (wide "ee", round "oo")
         float open = p.mouth;

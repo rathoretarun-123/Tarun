@@ -453,7 +453,7 @@ public final class Director {
 
         // ---------- ambience & music
         ambience(where, t);
-        weatherFrom(where + " । " + sc.title, seg.t0, true);
+        weatherFrom(where + " । " + sc.title + (pi == 0 && sc.cues.length() > 0 ? " । " + sc.cues : ""), seg.t0, true);
         if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
             // natural night: stars in the sky, fireflies in the woods
             if (wOpen[Film.W_STARS] < 0) open(Film.W_STARS, seg.t0, 0.9f);
@@ -618,6 +618,10 @@ public final class Director {
             sub(tc, tc + line.dur, b.speaker == null ? "" : b.speaker.shown(), line.shown);
             return tc + line.dur + 0.35f;
         }
+        // things the speaker points at ("देखो वह नाव!", "look, a rainbow") appear; AI cues for this line too
+        sceneryFrom(b.text, tc);
+        String cue = newCues(b.cue, b.text + " " + b.manner);
+        if (cue.length() > 0) natureFrom(cue, tc, sp);
         // speaker must be visible
         Film.Key cur = sp.stateAt(tc);
         if (!cur.visible) { Film.Key k = sp.at(tc); k.visible = true; }
@@ -764,6 +768,12 @@ public final class Director {
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
         estab = establishing;
+        String cue = newCues(b.cue, text);
+        if (cue.length() > 0) {
+            Film.Actor who = null;
+            for (Story.CharacterDef c : ScriptParser.mentions(story, text)) { who = actor(c); if (who != null) break; }
+            natureFrom(cue, tc, who);
+        }
         for (String s : sents) {
             float d = sentence(s, tc, establishing);
             tc += d;
@@ -1222,6 +1232,19 @@ public final class Director {
     private final float[] wOpen = new float[Film.W_KINDS];   // start of weather in progress (-1 = none)
     private final float[] wStr = new float[Film.W_KINDS];
     private float fireX = 640;
+    private int candleKind;
+    private boolean cloudsDark;
+
+    /** A spot on the floor where no character stands at time t (for a campfire). */
+    private float freeSpot(float t) {
+        float best = 640, bestD = -1;
+        for (float x = 200; x <= 1080; x += 40) {
+            float d = 1e9f;
+            if (seg != null) for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) d = Math.min(d, Math.abs(xAt(a, t) - x));
+            if (d > bestD) { bestD = d; best = x; }
+        }
+        return best;
+    }
 
     static final String[] RAIN = {"बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "बूंदाबांदी", "बरसने", "बरस रह", "rain", "drizzl", "monsoon", "baarish", "barish"};
     static final String[] RAIN_STOP = {"बारिश रुक", "बारिश थम", "बारिश बंद", "वर्षा रुक", "वर्षा थम", "rain stopped", "rain stops", "stopped raining",
@@ -1244,6 +1267,21 @@ public final class Director {
     static final String[] LEAVES = {"पत्ते उड़", "पत्ते गिर", "पतझड़", "सूखे पत्ते", "falling leaves", "leaves fly", "leaves flew", "autumn"};
     static final String[] STARS = {"तारे", "सितारे", "तारों", "stars", "starry"};
     static final String[] RAINBOW = {"इंद्रधनुष", "इन्द्रधनुष", "rainbow"};
+    static final String[] SEA = {"समुद्र", "सागर", "समंदर", "ocean", "sea ", "seashore", "beach", "लहरें", "लहरों", "waves", "shore", "तट पर"};
+    static final String[] BOAT = {"नाव", "नौका", "किश्ती", "कश्ती", "boat", "ship", "जहाज़", "जहाज", "बेड़ा", "raft"};
+    static final String[] CANDLE = {"मोमबत्ती", "मोमबत्तियाँ", "candle"};
+    static final String[] DIYA = {"दीया", "दीये", "दीयों", "दीपक", "दीप जल", "दीपावली", "दिवाली", "diya", "diwali", "oil lamp", "lamps"};
+    static final String[] TORCH = {"मशाल", "मशालें", "लालटेन", "torch", "lantern"};
+    static final String[] CLOUDS = {"बादल", "घटा", "घटाएँ", "clouds", "cloudy", "overcast"};
+    static final String[] DARK_CLOUDS = {"काले बादल", "घने बादल", "dark clouds", "black clouds", "storm clouds"};
+    static final String[] BIRDS_FLY = {"पक्षी उड़", "चिड़िया उड़", "चिड़ियाँ उड़", "पंछी उड़", "पक्षियों का झुंड", "birds fly", "birds flew", "flock of birds", "birds flying"};
+    static final String[] QUAKE = {"भूकंप", "भूचाल", "धरती काँप", "धरती कांप", "धरती हिल", "ज़मीन हिल", "जमीन हिल", "ज़मीन काँप", "जमीन कांप", "earthquake",
+            "ground shook", "ground shakes", "ground trembl", "earth shook"};
+    static final String[] FELL = {"गिरा", "गिरे", "गिरी", "टपका", "टपके", "fell", "falls", "dropped", "drops from"};
+    static final String[] FALLERS = {"आम", "सेब", "फल", "नारियल", "अमरूद", "गेंद", "फूल", "apple", "mango", "fruit", "coconut", "ball", "flower"};
+    static final String[] BALL = {"गेंद", "ball"};
+    static final String[] FRUIT = {"आम", "सेब", "फल", "नारियल", "अमरूद", "apple", "mango", "fruit", "coconut", "guava"};
+    static final String[] FLOWER = {"फूल", "flower"};
     static final String[] STONE = {"पत्थर", "कंकड़", "कंकड", "ढेला", "stone", "pebble", "rock"};
     static final String[] THROW = {"फेंक", "उछाल", "throw", "threw", "toss", "hurl", "flung"};
     static final String[] WATERWORDS = {"तालाब", "नदी", "पानी", "झील", "सरोवर", "कुआँ", "कुएँ", "pond", "river", "lake", "water", "well", "stream"};
@@ -1264,6 +1302,8 @@ public final class Director {
         if (t - t0 < 0.5f) return;
         Film.Weather w = new Film.Weather(type, t0, t, wStr[type]);
         if (type == Film.W_FIRE) w.x = fireX;
+        if (type == Film.W_CANDLES) w.kind = candleKind;
+        if (type == Film.W_CLOUDS) { w.kind = cloudsDark ? 1 : 0; cloudsDark = false; }
         film.weather.add(w);
         // the sound of it
         String amb = type == Film.W_RAIN ? (wStr[type] > 1.1f ? "heavy rain" : "rain") : type == Film.W_STORM ? "heavy rain storm"
@@ -1293,6 +1333,31 @@ public final class Director {
         shake(t + 0.35f, t + 1.1f);
     }
 
+    /** The AI's cues for a line, without the events the text itself already sets off (no double lightning or stones). */
+    private static String newCues(String cue, String text) {
+        if (cue == null || cue.length() == 0) return "";
+        StringBuilder b = new StringBuilder();
+        for (String c : cue.split(" । ")) {
+            boolean dup = (Txt.has(c, THUNDER) && Txt.has(text, THUNDER)) || (Txt.has(c, QUAKE) && Txt.has(text, QUAKE))
+                    || (Txt.has(c, STONE) && Txt.has(text, STONE) && Txt.has(text, THROW))
+                    || (Txt.has(c, FELL) && Txt.has(text, FELL) && Txt.has(text, FALLERS))
+                    || (Txt.has(c, THROW) && Txt.has(text, THROW)) || (Txt.has(c, INTO_WATER) && Txt.has(text, INTO_WATER));
+            if (!dup) b.append(c).append(" । ");
+        }
+        return b.toString();
+    }
+
+    /** Scenery named in a line of dialogue: it is there to be seen (no weather starts from talk). */
+    private void sceneryFrom(String s, float t) {
+        if (s == null) return;
+        if (Txt.has(s, BOAT)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
+        if (Txt.has(s, SEA) && !Txt.has(s, "जाएँगे", "जाएंगे", "चलेंगे", "will go", "let's go")) open(Film.W_SEA, t, 0.8f);
+        if (Txt.has(s, RAINBOW)) open(Film.W_RAINBOW, t, 1f);
+        if (Txt.has(s, BIRDS_FLY)) open(Film.W_BIRDS, t, 1f);
+        if (Txt.has(s, FIREFLY)) open(Film.W_FIREFLIES, t, 1f);
+        if (Txt.has(s, STARS) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) open(Film.W_STARS, t, 1f);
+    }
+
     private static boolean negated(String s) {
         return Txt.has(s, "नहीं", "बिना", "बंद हो", "not ", "no rain", "without");
     }
@@ -1318,7 +1383,7 @@ public final class Director {
         if (Txt.has(s, FOG_STOP)) closeWeather(Film.W_FOG, t);
         else if (Txt.has(s, FOG) && !negated(s)) open(Film.W_FOG, t, Txt.has(s, "घना", "घने", "thick", "dense") ? 1f : 0.7f);
         if (Txt.has(s, FIRE) && !Txt.has(s, "आग बबूला", "आग-बबूला")) {
-            if (wOpen[Film.W_FIRE] < 0) fireX = 640;
+            if (wOpen[Film.W_FIRE] < 0) fireX = freeSpot(t + 0.5f);
             open(Film.W_FIRE, t, 1f);
         }
         if (Txt.has(s, FIREFLY)) open(Film.W_FIREFLIES, t, 1f);
@@ -1331,6 +1396,21 @@ public final class Director {
             d = Math.max(d, 2.5f);
         }
         if (!place && Txt.has(s, THUNDER) && !negated(s)) { lightning(t + 0.2f, film.weather.size() + (int) t); d = Math.max(d, 1.8f); }
+        if (Txt.has(s, SEA)) open(Film.W_SEA, t, Txt.has(s, "ऊँची लहर", "ऊंची लहर", "big waves", "high waves", "rough sea") ? 1.3f : 0.8f);
+        if (Txt.has(s, BOAT)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
+        if (Txt.has(s, CANDLE) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 0; }
+        else if (Txt.has(s, DIYA) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 1; }
+        else if (Txt.has(s, TORCH) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 2; }
+        if (Txt.has(s, DARK_CLOUDS)) { open(Film.W_CLOUDS, t, 1f); cloudsDark = true; }
+        else if (Txt.has(s, CLOUDS) && !Txt.has(s, "बादल गरज", "बादल छँट", "बादल छंट")) open(Film.W_CLOUDS, t, 0.8f);
+        if (Txt.has(s, BIRDS_FLY)) open(Film.W_BIRDS, t, 1f);
+        if (Txt.has(s, QUAKE) && !negated(s)) {
+            float q = place ? t + 0.5f : t;
+            film.weather.add(new Film.Weather(Film.W_QUAKE, q, q + 3.5f, 1f));
+            shake(q, q + 3.5f);
+            film.sfx.add(new Film.Sfx(Film.SFX_THUNDER, q, 4f, 0.7f));
+            d = Math.max(d, 3.5f);
+        }
         return d;
     }
 
@@ -1354,6 +1434,27 @@ public final class Director {
             film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, throwAt, 0.6f, 0.35f));
             film.sfx.add(new Film.Sfx(water ? Film.SFX_SPLASH : Film.SFX_THUD, throwAt + flight, 1.2f, 0.6f));
             d = Math.max(d, 3f);
+        }
+        // things falling (fruit from a tree, a ball) and things thrown (a ball, a fruit, a flower)
+        if (Txt.has(s, FALLERS) && Txt.has(s, FELL) && !Txt.has(s, INTO_WATER)) {
+            int kind = Txt.has(s, BALL) ? 1 : Txt.has(s, FRUIT) ? 2 : Txt.has(s, FLOWER) ? 3 : 0;
+            float x = subj != null ? xAt(subj, t) + subj.stateAt(t).facing * 70 : freeSpot(t);
+            Film.Fx f = fx(Film.FX_FALL, t + 0.3f, t + 3.3f, x, ground, subj, null);
+            f.kind = kind;
+            film.sfx.add(new Film.Sfx(Film.SFX_THUD, t + 0.3f + 0.53f, 0.6f, 0.45f));
+            d = Math.max(d, 2.2f);
+        } else if ((Txt.has(s, BALL) || Txt.has(s, "फल फेंक", "आम फेंक", "फूल फेंक", "fruit", "flower")) && Txt.has(s, THROW) && !Txt.has(s, STONE)) {
+            int kind = Txt.has(s, BALL) ? 1 : Txt.has(s, FLOWER) ? 3 : 2;
+            Film.Actor to = null;
+            for (Story.CharacterDef c : mentionsWithGroups(s, null)) { Film.Actor a = actor(c); if (a != null && a != subj) { to = a; break; } }
+            float sx = subj != null ? xAt(subj, t) : 400, face = subj != null ? subj.stateAt(t).facing : 1;
+            float tx = to != null ? xAt(to, t) : Math.max(80, Math.min(1200, sx + face * 320));
+            if (subj != null) subj.acts.add(new Film.Act(t, t + 1.0f, Film.G_THROW));
+            Film.Fx f = fx(Film.FX_THROW, t + 0.5f, t + 3.5f, tx, ground - (to != null ? 230 : 0), subj, to);
+            f.kind = kind;
+            if (to != null) to.acts.add(new Film.Act(t + 1.2f, t + 2.2f, Film.G_REACH));
+            film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, t + 0.5f, 0.6f, 0.35f));
+            d = Math.max(d, 2.6f);
         }
         if (Txt.has(s, INTO_WATER) && subj != null) {
             float x = xAt(subj, t) + subj.stateAt(t).facing * 120;

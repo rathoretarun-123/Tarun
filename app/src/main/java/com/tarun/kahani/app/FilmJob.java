@@ -13,6 +13,7 @@ import com.tarun.kahani.core.Director;
 import com.tarun.kahani.core.Film;
 import com.tarun.kahani.core.Mixer;
 import com.tarun.kahani.core.Renderer;
+import com.tarun.kahani.core.ScriptAI;
 import com.tarun.kahani.core.ScriptParser;
 import com.tarun.kahani.core.Story;
 import com.tarun.kahani.core.Synth;
@@ -124,6 +125,19 @@ public final class FilmJob implements Runnable {
             if (story.dialogueCount() == 0 && story.scenes.size() <= 1)
                 throw new IllegalStateException("No dialogue found in the story. Write lines like  Name: \"dialogue\"  — or tap \"Read with AI\".");
             Edits ed = Edits.fromJson(project.read("edits.json"));
+            // the AI reads the story once more for nature and physics, also what is only implied (kept per script)
+            String cueFile = "cues_" + hash(script) + ".json";
+            if (project.has(cueFile)) ScriptAI.applyCues(story, project.read(cueFile));
+            else if (Prefs.online(ctx)) {
+                step("Director is reading the story for weather and nature…", 0.02f);
+                try {
+                    String cues = ScriptAI.natureCues(Prefs.cloud(ctx), story);
+                    project.write(cueFile, cues);
+                    ScriptAI.applyCues(story, cues);
+                } catch (Exception e) {
+                    // the director's own reading of the words still works
+                }
+            }
 
             if (Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
             step("Preparing pictures (removing backgrounds)…", 0.03f);

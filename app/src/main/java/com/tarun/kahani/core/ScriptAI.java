@@ -236,6 +236,91 @@ public final class ScriptAI {
         return h;
     }
 
+    /** The nature and physics effects the film engine can show, in the words the director understands. */
+    public static final String[] CUES = {"rain", "heavy rain", "light rain", "rain stopped", "storm", "dust storm", "strong wind", "breeze",
+            "wind stopped", "thunder and lightning", "snow", "fog", "fog cleared", "campfire", "candles", "diyas", "torches", "fireflies",
+            "stars", "rainbow", "falling leaves", "flower petals falling", "clouds", "dark clouds", "birds flying", "sea waves", "high waves",
+            "boat", "earthquake", "fruit fell from the tree", "ball fell", "throws a ball", "threw a stone into the water",
+            "jumped into the water"};
+
+    /**
+     * Lets the AI read the story for nature and physics — also when it is only implied ("the sky opened up",
+     * "monsoon evening", "the old boat creaked on the waves") — and mark each scene and line with effects from
+     * CUES. Returns JSON {"scenes":[{"scene":i,"place":[..],"lines":[{"line":j,"cues":[..]}]}]} (i, j from 0).
+     */
+    public static String natureCues(Cloud cloud, Story st) throws IOException {
+        StringBuilder all = new StringBuilder("{\"scenes\":[");
+        boolean first = true;
+        int si = 0;
+        while (si < st.scenes.size()) {
+            // a few scenes per request, so long stories fit
+            StringBuilder b = new StringBuilder();
+            int from = si;
+            while (si < st.scenes.size() && (b.length() < 4500 || si == from)) {
+                Story.Scene sc = st.scenes.get(si);
+                b.append("SCENE ").append(si).append(" — place: ").append(Bible.oneLine(sc.setting + " " + sc.title)).append('\n');
+                for (int bi = 0; bi < sc.beats.size(); bi++) {
+                    Story.Beat bt = sc.beats.get(bi);
+                    String t = Bible.oneLine((bt.manner.length() > 0 ? "(" + bt.manner + ") " : "") + bt.text);
+                    if (t.length() > 180) t = t.substring(0, 180);
+                    b.append("  line ").append(bi).append(bt.type == Story.Beat.DIALOGUE ? " [speech]: " : " [action]: ").append(t).append('\n');
+                }
+                si++;
+            }
+            StringBuilder vocab = new StringBuilder();
+            for (String c : CUES) { if (vocab.length() > 0) vocab.append(", "); vocab.append('"').append(c).append('"'); }
+            String system = "You are the director of a children's animated film. You read a script (Hindi, English or Hinglish) and decide "
+                    + "which weather, nature and physics effects each scene and moment needs, also when they are only implied "
+                    + "(e.g. 'the sky opened up' = rain, 'monsoon evening' = clouds and light rain, 'the sea was angry' = high waves and strong wind, "
+                    + "'they sat around the fire telling stories' = campfire). Use ONLY these effect names: " + vocab
+                    + ". Place effects last the whole scene; line effects start at that line. Speech only shows effects that are really happening. "
+                    + "Reply ONLY with JSON: {\"scenes\":[{\"scene\":<number>,\"place\":[...],\"lines\":[{\"line\":<number>,\"cues\":[...]}]}]}";
+            String ans = cloud.ask(system, b.toString(), true);
+            Object o = Cloud.jsonIn(ans);
+            List<Object> scenes = o == null ? null : Json.arr(o, "scenes");
+            if (scenes != null) for (Object sc : scenes) {
+                int n = (int) Json.num(sc, "scene", -1);
+                if (n < from || n >= si) continue;
+                if (!first) all.append(',');
+                first = false;
+                all.append(Json.write(sc));
+            }
+        }
+        return all.append("]}").toString();
+    }
+
+    /** Puts the cues of natureCues() onto the story's scenes and lines (unknown effect names are ignored). */
+    public static void applyCues(Story st, String json) {
+        Object o = Json.parseLoose(json);
+        List<Object> scenes = o == null ? null : Json.arr(o, "scenes");
+        if (scenes == null) return;
+        java.util.Set<String> ok = new java.util.HashSet<String>(java.util.Arrays.asList(CUES));
+        for (Object sc : scenes) {
+            int n = (int) Json.num(sc, "scene", -1);
+            if (n < 0 || n >= st.scenes.size()) continue;
+            Story.Scene scene = st.scenes.get(n);
+            scene.cues = joinCues(Json.arr(sc, "place"), ok);
+            List<Object> lines = Json.arr(sc, "lines");
+            if (lines != null) for (Object l : lines) {
+                int bi = (int) Json.num(l, "line", -1);
+                if (bi < 0 || bi >= scene.beats.size()) continue;
+                scene.beats.get(bi).cue = joinCues(Json.arr(l, "cues"), ok);
+            }
+        }
+    }
+
+    static String joinCues(List<Object> l, java.util.Set<String> ok) {
+        StringBuilder b = new StringBuilder();
+        if (l != null) for (Object x : l) {
+            if (!(x instanceof String)) continue;
+            String c = ((String) x).trim().toLowerCase(java.util.Locale.ROOT);
+            if (!ok.contains(c)) continue;
+            if (b.length() > 0) b.append(" । ");
+            b.append(c).append(' ');
+        }
+        return b.toString();
+    }
+
     /** Finds a candidate whose name appears in s (Devanagari or Latin spelling). */
     public static String matchName(String s, List<String> candidates) {
         if (s == null) return null;

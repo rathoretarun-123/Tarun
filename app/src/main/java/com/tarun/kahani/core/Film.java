@@ -115,7 +115,9 @@ public final class Film {
             FX_MAGIC_FLOWER = 14, FX_HIDE_ROCK = 15, FX_LADDOO_GLOW = 16, FX_FIREWORKS = 17, FX_DUST = 18, FX_BOULDER = 19, FX_SHOT = 20, FX_TITLE_SPARKS = 21,
             FX_LIGHTNING = 22,    // a flash and a bolt (x = where in the sky)
             FX_STONE = 23,        // a: the thrower; x, y: where it lands; t2: when it lands
-            FX_WATER_HIT = 24;    // something falls into water at x, y (color = size 1..3)
+            FX_WATER_HIT = 24,    // something falls into water at x, y (color = size 1..3)
+            FX_THROW = 25,        // a: thrower, b: target (or x, y); kind: what flies
+            FX_FALL = 26;         // something falls from above at x (kind) and bounces
 
     public static final class Fx {
         public float t0, t1;
@@ -125,6 +127,7 @@ public final class Film {
         public int color;
         public float t2;                  // secondary moment (e.g. bud turns into flower)
         public Art.Backdrop pic;          // full-screen cinematic picture (FX_SHOT)
+        public int kind;                  // FX_THROW / FX_FALL: 0 stone, 1 ball, 2 fruit, 3 flower
         public Fx(int type, float t0, float t1) { this.type = type; this.t0 = t0; this.t1 = t1; }
     }
 
@@ -163,13 +166,15 @@ public final class Film {
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,
-            W_PETALS = 8, W_DUST = 9, W_STARS = 10, W_RAINBOW = 11, W_KINDS = 12;
+            W_PETALS = 8, W_DUST = 9, W_STARS = 10, W_RAINBOW = 11, W_SEA = 12, W_BOAT = 13, W_CANDLES = 14, W_CLOUDS = 15,
+            W_BIRDS = 16, W_QUAKE = 17, W_KINDS = 18;
 
     /** Weather from t0 to t1 (it builds up and dies away over a couple of seconds). */
     public static final class Weather {
         public float t0, t1, strength;
         public int type;
         public float x;          // fire: where it burns (stage x)
+        public int kind;         // candles: 0 candles, 1 diyas, 2 torches; clouds: 1 = dark
         public Weather(int type, float t0, float t1, float strength) { this.type = type; this.t0 = t0; this.t1 = t1; this.strength = strength; }
     }
 

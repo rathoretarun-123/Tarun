@@ -54,6 +54,7 @@ public final class Story {
         public String heading = "";      // "दृश्य 1"
         public String title = "";        // "रत्नगढ़ की जादुई सुबह"
         public String setting = "";      // text of (स्थान: ...)
+        public String cues = "";         // nature cues of the whole scene read by the AI, not shown
         public final List<Beat> beats = new ArrayList<Beat>();
     }
 
@@ -65,6 +66,7 @@ public final class Story {
         public String manner = "";       // text inside parentheses after speaker
         public String text = "";
         public boolean narrator;         // voice-over line (no character on screen)
+        public String cue = "";          // nature cues read by the AI ("rain", "boat"…), not shown
         public static Beat direction(String t) { Beat b = new Beat(); b.type = DIRECTION; b.text = t; return b; }
     }
 

@@ -337,8 +337,50 @@ public final class Renderer {
         if (stars > 0 && (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) && skyBottom > 0.12f) Nature.stars(g, W, skyY * 0.95f, t, stars);
         float bow = film.weather(Film.W_RAINBOW, t);
         if (bow > 0) Nature.rainbow(g, W * 0.62f, skyY + 60, W * 0.42f, bow);
+        float storm = film.weather(Film.W_STORM, t), rain = film.weather(Film.W_RAIN, t);
+        float cl = Math.max(film.weather(Film.W_CLOUDS, t), Math.max(storm, rain * 0.8f));
+        boolean dark = storm > 0 || rain > 0.9f;
+        for (Film.Weather w : film.weather) if (w.type == Film.W_CLOUDS && w.kind == 1 && t >= w.t0 && t <= w.t1) dark = true;
+        if (cl > 0 && Sets.outdoorSet(s.set)) Nature.clouds(g, W, skyY, t, cl, dark);
+        float birds = film.weather(Film.W_BIRDS, t);
+        if (birds <= 0 && s.tod == Sets.MORNING && Sets.outdoorSet(s.set) && rain <= 0 && storm <= 0) birds = 0.45f;   // birds are about in the morning
+        if (birds > 0 && Sets.outdoorSet(s.set)) Nature.birds(g, W, skyY, t, birds);
         for (Film.Fx f : s.fx) {
             if (f.type == Film.FX_LIGHTNING && t >= f.t0 && t < f.t1) Nature.lightningBolt(g, f.x, -20, skyY + 40, t - f.t0, f.color + 7);
+        }
+    }
+
+    /** Water life: sea waves rolling to the shore and a floating boat (on the picture's water, or a painted sea). */
+    private void waterNature(Gfx g, Film.Seg s, float t, Nature.Scan sc, Art.Backdrop b) {
+        if (film == null) return;
+        float sea = film.weather(Film.W_SEA, t), boat = film.weather(Film.W_BOAT, t);
+        if (sea <= 0 && boat <= 0) return;
+        float rough = Math.min(1.5f, Math.abs(film.wind(t)) + film.weather(Film.W_STORM, t));
+        float top, bottom;
+        if (sc != null && sc.anyWater && sc.waterTop >= 0) {
+            top = (sc.waterTop - b.y0) / (b.y1 - b.y0) * H;
+            bottom = (sc.waterBottom - b.y0) / (b.y1 - b.y0) * H;
+            if (sea > 0) Nature.shoreWaves(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, top, bottom, t, sea + rough * 0.5f);
+        } else if (b == null) {
+            top = s.ground - 200;
+            bottom = s.ground - 35;
+            Nature.paintedSea(g, W, top, bottom, t, sea + rough * 0.5f);
+            Nature.shoreWaves(g, null, 0, 0, 1, 1, W, H, top + 20, bottom, t, sea + rough * 0.5f);
+        } else return;     // the picture shows no water: no boat on dry land
+        if (boat > 0) Nature.boat(g, W * 0.72f, top + (bottom - top) * 0.45f, t, 0.9f + 0.4f * (bottom - top) / H, rough);
+    }
+
+    /** Candles, diyas or torches, flickering and lighting the place. */
+    private void candles(Gfx g, Film.Seg s, float t, int kind, float amount) {
+        float wind = film.wind(t);
+        if (kind == 1) {
+            for (int i = 0; i < 7; i++) Nature.flame(g, 140 + i * 166, s.ground + 18, t, 1.7f * amount, wind, 1, i);
+        } else if (kind == 2) {
+            Nature.flame(g, 90, s.ground - 260, t, 1.1f * amount, wind, 2, 1);
+            Nature.flame(g, 1190, s.ground - 260, t, 1.1f * amount, wind, 2, 2);
+        } else {
+            Nature.flame(g, 150, s.ground - 30, t, 1.3f * amount, wind, 0, 3);
+            Nature.flame(g, 1130, s.ground - 30, t, 1.3f * amount, wind, 0, 4);
         }
     }
 
@@ -365,6 +407,8 @@ public final class Renderer {
         if (dust > 0 && out) Nature.dust(g, vw, vh, t, dust, wind);
         float fog = film.weather(Film.W_FOG, t);
         if (fog > 0) Nature.fog(g, vw, vh, t, fog);
+        float quake = film.weather(Film.W_QUAKE, t);
+        if (quake > 0) Nature.quakeDust(g, vw, vh, t, quake);
         float fire = film.weather(Film.W_FIRE, t);
         if (fire > 0) Nature.fireLight(g, vw, vh, t, fire);
     }
@@ -476,7 +520,7 @@ public final class Renderer {
             Nature.Scan sc = b.scan;
             if (sc != null && (sc.anyPlants || sc.anyWater || sc.anyFall)) {
                 // a living picture: plants sway (more in the wind), water ripples along, a waterfall streams down
-                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, bdMesh);
+                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), bdMesh);
                 g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
                 Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
             } else {
@@ -493,11 +537,13 @@ public final class Renderer {
             if (s.tod == Sets.NIGHT && s.set != Sets.FOREST) { g.color(0x50101C3A); g.rect(0, 0, W, H); }
             if (s.festive) Sets.celebrationLights(g, t);
             skyNature(g, s, t, sc == null ? 0.35f : sc.skyBottom);
+            waterNature(g, s, t, sc, b);
         } else {
             final int set = s.set, tod = s.tod;
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
             Sets.paintLive(g, set, tod, t);
             skyNature(g, s, t, 0.38f);
+            waterNature(g, s, t, null, null);
         }
         g.restore();
         // ---- near layer: characters and effects
@@ -509,12 +555,6 @@ public final class Renderer {
             if (k.visible && k.anchor == Film.A_BRANCH) { branch(g, s, k.x); break; }
         }
         drawFxLayer(g, s, t, true);
-        if (film != null) {
-            float fire = film.weather(Film.W_FIRE, t);
-            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f) Nature.fire(g, w.x, s.ground + 6, t, fire);
-            float ff = film.weather(Film.W_FIREFLIES, t);
-            if (ff > 0) Nature.fireflies(g, s.ground, t, ff);
-        }
         List<Film.Actor> list = new ArrayList<Film.Actor>(s.actors);
         final float tt = t;
         Collections.sort(list, new Comparator<Film.Actor>() {
@@ -530,6 +570,18 @@ public final class Renderer {
         if (film != null) {
             float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t));
             if (rain > 0 && Sets.outdoorSet(s.set)) Nature.rainSplashes(g, s.ground, t, rain);
+            // night: the whole stage darkens; flames, fire and fireflies then shine on top of it
+            if (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) {
+                boolean photo = s.backdrop != null;
+                g.color(s.tod == Sets.NIGHT ? (photo ? 0x8C081026 : 0x46081026) : (photo ? 0x30301030 : 0x18301030));
+                g.rect(-W, -H, W * 3, H * 3);
+            }
+            float fire = film.weather(Film.W_FIRE, t);
+            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire);
+            float cand = film.weather(Film.W_CANDLES, t);
+            if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f) candles(g, s, t, w.kind, cand);
+            float ff = film.weather(Film.W_FIREFLIES, t);
+            if (ff > 0) Nature.fireflies(g, s.ground, t, ff);
             float wet = film.wetness(t);
             if (wet > 0.05f) for (Film.Actor a : s.actors) {
                 Film.Key k = a.stateAt(t);
@@ -649,6 +701,7 @@ public final class Renderer {
         p.eyesClosed = k.eyesShut;
         p.blink = blink(t, a.order);
         if (film != null && Sets.outdoorSet(s.set)) { p.wind = film.wind(t); p.wet = film.wetness(t); }
+        float quakeNow = film == null ? 0 : film.weather(Film.W_QUAKE, t);
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
         for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; }
@@ -676,6 +729,12 @@ public final class Renderer {
             p.bob = br * 1.2f;
         }
         applyActs(a, p, t);
+        if (quakeNow > 0) {
+            // the ground shakes: everyone staggers and is frightened
+            mo.dx += (float) Math.sin(t * 47 + a.order) * 5 * quakeNow;
+            mo.rot += (float) Math.sin(t * 31 + a.order * 2) * 2.5f * quakeNow;
+            if (p.emotion == Pose.NEUTRAL || p.emotion == Pose.HAPPY) p.emotion = Pose.SCARED;
+        }
         if (spk != null) {
             // talking: small nods with the voice (a rigged picture nods its head instead of its whole body)
             float m = p.mouth;
@@ -1249,6 +1308,15 @@ public final class Renderer {
                     else if (u - flight < 0.8f) { g.color(Puppet.alpha(0xFFBCAAA4, 0.6f * (1 - (u - flight) / 0.8f))); g.oval(f.x, f.y - 6, 18 + (u - flight) * 30, 8); }
                 } break;
                 case Film.FX_WATER_HIT: if (!behind) Nature.splashRipples(g, f.x, f.y, u, Math.max(1, f.color)); break;
+                case Film.FX_FALL: if (!behind) Nature.flyingObject(g, f.x, s.ground - 430, f.a != null ? 25 : -15, 0, s.ground + 8, u, f.kind, 1.4f); break;
+                case Film.FX_THROW: if (!behind) {
+                    float hx = f.a != null ? Director.xAt(f.a, f.t0) + f.a.stateAt(f.t0).facing * 40 : 300;
+                    float hy = s.ground - (f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * 0.6f : 200);
+                    float tx = f.b != null ? Director.xAt(f.b, f.t0 + 0.9f) : f.x, ty = f.b != null ? s.ground - actorHeight(f.b.look, f.b.c, art, s) * 0.55f : f.y;
+                    float T = 0.9f, vx = (tx - hx) / T, vy = (ty - hy - 0.5f * 1500 * T * T) / T;
+                    if (f.b != null && u > T) break;          // caught
+                    Nature.flyingObject(g, hx, hy, vx, vy, s.ground + 8, u, f.kind, 1.3f);
+                } break;
                 case Film.FX_LEAVES: if (!behind) leaves(g, f, u); break;
                 case Film.FX_GREEN_GLOW: if (!behind) {
                     float k = (float) Math.sin(Math.min(1, u / (f.t1 - f.t0)) * Math.PI);

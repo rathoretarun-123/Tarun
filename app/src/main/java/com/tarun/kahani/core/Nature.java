@@ -18,6 +18,7 @@ public final class Nature {
         public static final int GW = 64, GH = 36;
         public final float[] water = new float[GW * GH], fall = new float[GW * GH], plants = new float[GW * GH];
         public float skyBottom;              // fraction of the picture height
+        public float waterTop = -1, waterBottom = -1;   // fractions of the height where the water lies
         public boolean anyWater, anyFall, anyPlants;
         public float at(float[] m, float u, float v) {
             float x = u * GW - 0.5f, y = v * GH - 0.5f;
@@ -90,6 +91,12 @@ public final class Nature {
         float sw = 0, sf = 0, sp = 0;
         for (int i = 0; i < N; i++) { sw += s.water[i]; sf += s.fall[i]; sp += s.plants[i]; }
         s.anyWater = sw > 6; s.anyFall = sf > 2.5f; s.anyPlants = sp > 12;
+        for (int i = 0; i < N; i++) {
+            if (s.water[i] < 0.5f) continue;
+            float v = (i / GW + 0.5f) / GH;
+            if (s.waterTop < 0 || v < s.waterTop) s.waterTop = v;
+            if (v > s.waterBottom) s.waterBottom = v;
+        }
         return s;
     }
 
@@ -156,7 +163,7 @@ public final class Nature {
      * and its water rippling along the flow (a waterfall streams down). The picture's crop window (x0..x1,
      * y0..y1 of the picture) fills the stage (0..W, 0..H).
      */
-    public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float[] out) {
+    public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out) {
         int k = 0;
         float sway = 0.25f + Math.abs(wind);
         float dir = wind >= 0 ? 1 : -1;
@@ -181,8 +188,9 @@ public final class Nature {
                     float wv = s.at(s.water, u, v);
                     if (wv > 0.02f) {
                         // waves travelling along the river
-                        dx += wv * 2.0f * (float) Math.sin(u * 70 - t * 2.4 + v * 20);
-                        dy += wv * 1.4f * (float) Math.sin(u * 45 + v * 60 - t * 3.3);
+                        float big = 1 + 2.2f * sea + Math.abs(wind);
+                        dx += wv * 2.0f * big * (float) Math.sin(u * 70 - t * 2.4 + v * 20);
+                        dy += wv * 1.4f * big * (float) Math.sin(u * 45 + v * 60 - t * 3.3) + wv * sea * 4 * (float) Math.sin(v * 25 - t * 1.6);
                     }
                 }
                 if (s.anyFall) {
@@ -254,22 +262,28 @@ public final class Nature {
 
     /** Rain streaks falling with the wind; far drops are thinner and fainter. */
     public static void rain(Gfx g, float w, float h, float t, float amount, float wind) {
-        int n = (int) (380 * Math.min(1.6f, amount));
+        int n = (int) (520 * Math.min(1.6f, amount));
         float slant = wind * 0.35f;
+        float sc = h / 720f;
+        // a cool, grey light and veils of rain in the distance
+        g.color(alpha(0xFF3A4860, 0.22f * Math.min(1, amount)));
+        g.rect(0, 0, w, h);
+        for (int k = 0; k < 3; k++) {
+            float x = ((t * (90 + k * 40) * (wind >= 0 ? 1 : -1) + k * w / 3) % (w * 1.4f) + w * 1.4f) % (w * 1.4f) - w * 0.2f;
+            g.radial(x, h * 0.45f, w * 0.35f, alpha(0xFFC8D2DC, 0.12f * Math.min(1, amount)), 0x00C8D2DC);
+            g.rect(0, 0, w, h);
+        }
         for (int i = 0; i < n; i++) {
             float depth = rnd(i, 1);                       // 0 far .. 1 near
-            float speed = h * (1.4f + depth * 1.1f);
-            float len = 14 + depth * 30;
+            float speed = h * (1.5f + depth * 1.2f);
+            float len = (20 + depth * 42) * sc;
             float period = (h + len) / speed;
             float age = (t + rnd(i, 2) * period) % period;
             float y = -len + age * speed;
             float x = rnd(i, 3) * (w + h * Math.abs(slant)) - (slant > 0 ? h * slant : 0) + y * slant;
-            g.color(alpha(0xFFDDE6F0, 0.18f + depth * 0.3f));
-            g.line(x, y, x - len * slant, y - len, 0.8f + depth * 1.4f);
+            g.color(alpha(0xFFE4ECF4, 0.28f + depth * 0.37f));
+            g.line(x, y, x - len * slant, y - len, (1.0f + depth * 1.8f) * sc);
         }
-        // a cool, grey light
-        g.color(alpha(0xFF40506A, 0.16f * Math.min(1, amount)));
-        g.rect(0, 0, w, h);
     }
 
     /** Drops hitting the ground: little crowns and rings (stage coordinates, along the floor). */
@@ -307,7 +321,7 @@ public final class Nature {
             float x = (rnd(i, 3) * (w + 200) - 100 + wind * 60 * age + (float) Math.sin(t * (0.8 + rnd(i, 4)) + i) * 14 * (1 + depth)) % (w + 200);
             if (x < -100) x += w + 200;
             g.color(alpha(0xFFFFFFFF, 0.55f + depth * 0.4f));
-            g.oval(x, y, 1.4f + depth * 2.8f, 1.4f + depth * 2.8f);
+            g.oval(x, y, (1.6f + depth * 3.2f) * h / 720f, (1.6f + depth * 3.2f) * h / 720f);
         }
         g.color(alpha(0xFFE8F0FF, 0.1f * amount));
         g.rect(0, 0, w, h);
@@ -326,7 +340,7 @@ public final class Nature {
             float y = -20 + age * fall + (float) Math.sin(age * 3 + i) * 10;
             float x = rnd(i, 3) * (w + 400) - 200 + drift * age;
             x = ((x + 200) % (w + 400) + (w + 400)) % (w + 400) - 200;
-            float s = (petals ? 4 : 6) + rnd(i, 4) * 5;
+            float s = ((petals ? 6 : 9) + rnd(i, 4) * 7) * h / 720f;
             g.save();
             g.translate(x, y);
             g.rotate((t * (90 + rnd(i, 5) * 200) + i * 37) % 360);
@@ -565,5 +579,211 @@ public final class Nature {
             g.color(alpha(0xFFBBDEFB, 0.8f));
             g.oval(sx, y, 1.6f, 2.4f);
         }
+    }
+    // ================================================================== sea, boats, flames, sky life, objects
+
+    /**
+     * Waves of the sea rolling onto the shore: crests travel towards the viewer across the water area and break
+     * into white foam that spreads and fades (stage coordinates of the water band top..bottom).
+     */
+    public static void shoreWaves(Gfx g, Scan s, float x0, float y0, float x1, float y1, float W, float H,
+                                  float top, float bottom, float t, float strength) {
+        int waves = 4;
+        for (int k = 0; k < waves; k++) {
+            float period = 6.5f - Math.min(2.5f, strength * 1.5f);
+            float p = ((t / period + k / (float) waves) % 1f);
+            float y = top + (bottom - top) * p * p;            // waves speed up as they reach the shore
+            float a = (float) Math.sin(Math.PI * p) * (0.35f + 0.3f * strength);
+            g.begin();
+            boolean started = false;
+            for (int i = 0; i <= 64; i++) {
+                float X = W * i / 64f;
+                float u = x0 + (x1 - x0) * X / W, v = y0 + (y1 - y0) * y / H;
+                boolean water = s == null || s.at(s.water, u, v) > 0.35f;
+                float yy = y + (float) Math.sin(X * 0.02f + t * 1.3f + k) * 6 * (0.5f + p);
+                if (!water) { started = false; continue; }
+                if (!started) { g.moveTo(X, yy); started = true; } else g.lineTo(X, yy);
+            }
+            g.color(alpha(0xFFFFFFFF, a));
+            g.strokePath(2.5f + 5 * p);
+            // foam left behind as the wave breaks
+            if (p > 0.75f) {
+                for (int i = 0; i < 40; i++) {
+                    float X = W * rnd(i + k * 50, 1);
+                    float u = x0 + (x1 - x0) * X / W, v = y0 + (y1 - y0) * y / H;
+                    if (s != null && s.at(s.water, u, v) <= 0.35f) continue;
+                    g.color(alpha(0xFFF4FAFF, a * 0.8f));
+                    g.oval(X, y + rnd(i, 2) * 14, 6 + rnd(i, 3) * 14, 2 + rnd(i, 4) * 2);
+                }
+            }
+        }
+    }
+
+    /** A painted sea for painted sets: deep water with rolling waves between the horizon and the shore. */
+    public static void paintedSea(Gfx g, float W, float horizon, float shore, float t, float strength) {
+        g.linear(0, horizon, 0, shore, 0xFF1E5F8C, 0xFF3FA6C9);
+        g.rect(0, horizon, W, shore - horizon);
+        for (int r = 0; r < 7; r++) {
+            float y = horizon + (shore - horizon) * (r + 1) / 8f;
+            g.begin();
+            for (int i = 0; i <= 40; i++) {
+                float x = W * i / 40f;
+                float yy = y + (float) Math.sin(x * 0.015f + t * (0.8 + r * 0.15) + r) * (3 + r * 1.5f) * (0.6f + strength);
+                if (i == 0) g.moveTo(x, yy); else g.lineTo(x, yy);
+            }
+            g.color(alpha(0xFFE8F6FF, 0.25f + r * 0.05f));
+            g.strokePath(1.5f + r * 0.4f);
+        }
+        g.color(0xFFE8D4A8);
+        g.rect(0, shore, W, 6);
+    }
+
+    /**
+     * A wooden boat floating: it rides up and down on the waves and rocks from side to side; in strong wind or
+     * a storm it pitches harder and shudders.
+     */
+    public static void boat(Gfx g, float x, float waterY, float t, float size, float rough) {
+        float bob = (float) Math.sin(t * 1.4) * 5 * size * (1 + 2 * rough);
+        float roll = (float) (Math.sin(t * 1.1 + 0.7) * (3 + 10 * rough) + (rough > 0.5f ? Math.sin(t * 23) * 1.5 * rough : 0));
+        float drift = (float) Math.sin(t * 0.2) * 20 * size;
+        g.save();
+        g.translate(x + drift, waterY + bob);
+        g.rotate(roll);
+        float L = 170 * size, D = 36 * size;
+        g.begin();
+        g.moveTo(-L * 0.55f, -D * 0.5f);
+        g.quadTo(-L * 0.45f, D * 0.7f, 0, D * 0.75f);
+        g.quadTo(L * 0.45f, D * 0.7f, L * 0.58f, -D * 0.6f);
+        g.close();
+        g.color(0xFF6D4325);
+        g.fillPath();
+        g.color(0xFF8B5A33);
+        g.line(-L * 0.52f, -D * 0.35f, L * 0.55f, -D * 0.42f, 4 * size);
+        g.color(0xFF4E2E18);
+        for (int i = -2; i <= 2; i++) g.line(i * L * 0.18f, -D * 0.35f, i * L * 0.16f, D * 0.6f, 1.5f * size);
+        // mast and sail (the sail fills with the wind)
+        g.color(0xFF5D3A1F);
+        g.line(0, -D * 0.4f, 0, -D * 3.2f, 4 * size);
+        float fill = 0.3f + 0.7f * Math.min(1, rough + 0.3f);
+        g.begin();
+        g.moveTo(2, -D * 3.1f);
+        g.quadTo(L * 0.25f * fill + 10, -D * 2.0f, 2, -D * 0.6f);
+        g.close();
+        g.color(0xFFF2E8D5);
+        g.fillPath();
+        g.restore();
+        g.color(alpha(0xFFFFFFFF, 0.5f));
+        g.strokeOval(x + drift, waterY + bob + D * 0.5f, L * 0.62f, 6 * size, 2);
+    }
+
+    /**
+     * A small flame (candle, oil lamp, torch): it flickers, leans away from the wind and lights the air around
+     * it. kind 0 candle, 1 diya, 2 torch.
+     */
+    public static void flame(Gfx g, float x, float y, float t, float size, float wind, int kind, int seed) {
+        float fl = (float) (Math.sin(t * (11 + seed % 5) + seed) * 0.12 + Math.sin(t * 23 + seed * 3) * 0.06);
+        float lean = Math.max(-0.6f, Math.min(0.6f, wind * 0.5f)) + (float) Math.sin(t * 2.7 + seed) * 0.05f;
+        float h = (kind == 2 ? 46 : 22) * size * (1 + fl);
+        float w = (kind == 2 ? 16 : 7) * size;
+        g.radial(x, y - h * 0.5f, h * (kind == 2 ? 4f : 3.2f), alpha(0xFFFFB347, 0.35f + fl), 0x00FFB347);
+        g.rect(x - h * 4, y - h * 4.5f, h * 8, h * 8);
+        if (kind == 0) { g.color(0xFFF5EEDC); g.roundRect(x - 5 * size, y, 10 * size, 34 * size, 2 * size); }
+        else if (kind == 1) { g.color(0xFFB5652B); g.oval(x, y + 5 * size, 13 * size, 5 * size); g.color(0xFF8C4A1E); g.oval(x, y + 7 * size, 11 * size, 3 * size); }
+        else { g.color(0xFF5D3A1F); g.line(x, y, x - lean * 4, y + 70 * size, 6 * size); }
+        for (int layer = 0; layer < 3; layer++) {
+            float k = 1 - layer * 0.3f;
+            g.begin();
+            g.moveTo(x - w * k, y);
+            g.quadTo(x - w * 1.1f * k, y - h * 0.45f * k, x + lean * h * k, y - h * k);
+            g.quadTo(x + w * 1.1f * k, y - h * 0.45f * k, x + w * k, y);
+            g.close();
+            g.color(layer == 0 ? 0xE6FF7A1A : layer == 1 ? 0xF0FFC93C : 0xFFFFF7D0);
+            g.fillPath();
+        }
+        g.color(0x993070FF);
+        g.oval(x, y - 1, w * 0.4f, w * 0.35f);
+    }
+
+    /** Soft clouds drifting across the sky (dark and low in a storm). */
+    public static void clouds(Gfx g, float W, float skyBottom, float t, float amount, boolean dark) {
+        for (int i = 0; i < 7; i++) {
+            float speed = 6 + rnd(i, 1) * 10;
+            float x = ((rnd(i, 2) * (W + 600) + t * speed) % (W + 600)) - 300;
+            float y = skyBottom * (0.15f + rnd(i, 3) * 0.6f);
+            float r = 70 + rnd(i, 4) * 90;
+            int c = dark ? 0xFF4A5060 : 0xFFF4F6FA;
+            for (int k = 0; k < 4; k++) {
+                g.color(alpha(c, (dark ? 0.55f : 0.35f) * amount));
+                g.oval(x + (k - 1.5f) * r * 0.55f, y + (k % 2) * r * 0.12f, r * (0.55f + 0.2f * (k % 3)), r * 0.38f);
+            }
+        }
+    }
+
+    /** A few birds flying across the sky, flapping. */
+    public static void birds(Gfx g, float W, float skyBottom, float t, float amount) {
+        int n = (int) (7 * amount);
+        for (int i = 0; i < n; i++) {
+            float speed = 60 + rnd(i, 1) * 50;
+            float period = (W + 300) / speed;
+            float age = (t + rnd(i, 2) * period) % period;
+            float x = -150 + age * speed, y = skyBottom * (0.2f + rnd(i, 3) * 0.6f) + (float) Math.sin(age * 1.3 + i) * 12;
+            float flap = (float) Math.sin(t * 9 + i * 2) * 7;
+            float s = 7 + rnd(i, 4) * 5;
+            g.color(0xCC2A2A2A);
+            g.begin();
+            g.moveTo(x - s, y - flap);
+            g.quadTo(x - s * 0.4f, y - 2, x, y);
+            g.quadTo(x + s * 0.4f, y - 2, x + s, y - flap);
+            g.strokePath(2);
+        }
+    }
+
+    /**
+     * Something in flight or falling, under gravity, bouncing where it lands (fruit from a tree, a thrown ball).
+     * kind: 0 stone, 1 ball, 2 fruit, 3 flower. age 0 = when it is let go.
+     */
+    public static void flyingObject(Gfx g, float x0, float y0, float vx, float vy, float groundY, float age, int kind, float size) {
+        float gr = 1500, x = x0, y = y0, vX = vx, vY = vy, a = age;
+        for (int b = 0; b < 4 && a > 0; b++) {
+            float tHit = solveHit(y, vY, gr, groundY);
+            if (a < tHit) { x += vX * a; y += vY * a + 0.5f * gr * a * a; a = 0; break; }
+            x += vX * tHit; y = groundY;
+            a -= tHit;
+            vY = -(vY + gr * tHit) * 0.4f; vX *= 0.6f;          // each bounce keeps 40 % of the speed
+            if (Math.abs(vY) < 60) { x += vX * Math.min(a, 0.3f); a = 0; break; }
+        }
+        float r = (kind == 0 ? 6 : kind == 1 ? 10 : kind == 2 ? 11 : 8) * size;
+        g.color(0x40000000);
+        g.oval(x, groundY + 3, r * 1.1f, r * 0.3f);
+        int c = kind == 0 ? 0xFF757575 : kind == 1 ? 0xFFE53935 : kind == 2 ? 0xFFFFA726 : 0xFFF06292;
+        g.color(c);
+        g.oval(x, y - r, r, r);
+        if (kind == 2) { g.color(0xFF43A047); g.oval(x + r * 0.4f, y - r * 1.9f, r * 0.45f, r * 0.22f); }
+        if (kind == 1) { g.color(0x66FFFFFF); g.oval(x - r * 0.3f, y - r * 1.3f, r * 0.3f, r * 0.25f); }
+    }
+
+    static float solveHit(float y, float vy, float gr, float ground) {
+        float a = 0.5f * gr, b = vy, c = y - ground;
+        float d = b * b - 4 * a * c;
+        if (d < 0) return 1e9f;
+        float s = (float) Math.sqrt(d);
+        float t1 = (-b - s) / (2 * a), t2 = (-b + s) / (2 * a);
+        return t1 > 1e-4f ? t1 : t2 > 1e-4f ? t2 : 1e9f;
+    }
+
+    /** Dust and bits falling while the ground shakes. */
+    public static void quakeDust(Gfx g, float w, float h, float t, float amount) {
+        int n = (int) (140 * amount);
+        float sc = h / 720f;
+        for (int i = 0; i < n; i++) {
+            float period = 1.2f + rnd(i, 1);
+            float age = (t + rnd(i, 2) * period) % period;
+            float x = rnd(i, 3) * w + (float) Math.sin(t * 40 + i) * 3, y = 0.5f * 900 * age * age * sc;
+            g.color(alpha(i % 3 == 0 ? 0xFF6D5A48 : 0xFFA89276, 0.75f));
+            float r = (1.5f + rnd(i, 4) * 3) * sc;
+            g.oval(x, y, r, r);
+        }
+        g.color(alpha(0xFFB09A80, 0.2f * amount));
+        g.rect(0, 0, w, h);
     }
 }

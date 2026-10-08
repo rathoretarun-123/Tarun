@@ -1186,6 +1186,14 @@ public final class Director {
         if (cur.moveDur <= 0 || start >= cur.t + cur.moveDur - 0.15f || cur.anchor != Film.A_GROUND) return;
         float x = xAt(sp, start), dest = cur.x, remaining = cur.t + cur.moveDur - start;
         boolean run = cur.run;
+        if (x < 60 || x > 1220) {
+            // still outside the stage (an entrance from afar): they are there when the line begins, nobody
+            // speaks from beyond the edge of the picture
+            Film.Key here = sp.at(start);
+            here.x = dest; here.moveDur = 0; here.run = false;
+            stillToSpeak++;
+            return;
+        }
         Film.Key stop = sp.at(start);
         stop.x = x; stop.moveDur = 0; stop.run = false;
         Film.Key go = sp.at(end + 0.15f);
@@ -1243,7 +1251,8 @@ public final class Director {
         float fh = 720f / zoom;
         float cy = fb[1] + 0.04f * fh;
         if (headTop < cy - fh / 2 + 0.06f * fh) cy = headTop - 0.06f * fh + fh / 2;
-        Film.Cam c = new Film.Cam(t, fb[0], cy, zoom, 0);
+        float hw = 360f / zoom * TechnicalDirector.ratio(opt.aspect);
+        Film.Cam c = new Film.Cam(t, Math.max(hw, Math.min(1280 - hw, fb[0])), cy, zoom, 0);
         c.still = true;
         c.light = light;
         return c;
@@ -1441,7 +1450,11 @@ public final class Director {
                         float[] ob = faceBox(o, t);
                         float half = ob[2] * 0.95f, left = c.cx - fw / 2, right = c.cx + fw / 2;     // the whole head with its hair
                         boolean cut = (ob[0] - half < left && ob[0] + half > left) || (ob[0] - half < right && ob[0] + half > right);
-                        if (!cut) continue;
+                        // a neighbour standing almost on the subject (occlusion rule): the frame moves to the
+                        // subject's free side as far as the safe zone allows; the renderer draws the subject in front
+                        float oh = Renderer.actorHeight(o.look, o.c, art, sg) * bodyAspect(o) / 2;
+                        boolean onTop = Math.abs(ob[0] - fb[0]) < oh + fb[2] * 0.6f;
+                        if (!cut && !onTop) continue;
                         // push the frame away from them, as far as the main face can stay in the safe zone
                         float away = ob[0] > c.cx ? -1 : 1;
                         float need = away < 0 ? (c.cx + fw / 2) - (ob[0] - half) : (ob[0] + half) - (c.cx - fw / 2);

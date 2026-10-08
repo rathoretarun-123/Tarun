@@ -206,9 +206,9 @@ public class MakeFilm {
     }
 
     /** Loads pictures from a folder with ImageIO. */
-    static class AwtLoader implements Art.Loader {
+    public static class AwtLoader implements Art.Loader {
         final String dir;
-        AwtLoader(String dir) { this.dir = dir; }
+        public AwtLoader(String dir) { this.dir = dir; }
         BufferedImage read(String name, int maxSide) {
             try {
                 BufferedImage im = ImageIO.read(new File(dir, name));

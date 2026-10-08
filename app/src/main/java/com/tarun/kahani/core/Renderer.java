@@ -661,11 +661,20 @@ public final class Renderer {
         drawFxLayer(g, s, t, true);
         List<Film.Actor> list = new ArrayList<Film.Actor>(s.actors);
         final float tt = t;
+        // the occlusion rule of a close-up: the face the shot is about is never hidden by a neighbour who
+        // happens to stand in front; that character is drawn last
+        String focus = null;
+        for (Film.Shot sh : film.shots) if (t >= sh.t && t < sh.t + sh.dur && (sh.speech || sh.reaction)) { focus = sh.subject; break; }
+        final String front = focus;
         Collections.sort(list, new Comparator<Film.Actor>() {
             public int compare(Film.Actor a, Film.Actor b) {
                 Film.Key ka = a.stateAt(tt), kb = b.stateAt(tt);
                 int la = layerOf(ka), lb = layerOf(kb);
                 if (la != lb) return la - lb;
+                if (front != null) {
+                    boolean fa = a.c.shown().equals(front), fb = b.c.shown().equals(front);
+                    if (fa != fb) return fa ? 1 : -1;
+                }
                 return a.order - b.order;
             }
         });

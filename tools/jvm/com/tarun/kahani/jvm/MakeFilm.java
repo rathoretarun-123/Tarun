@@ -34,6 +34,7 @@ public class MakeFilm {
                 + " title=" + (art.title != null) + " end=" + (art.end != null) + "  (" + (System.currentTimeMillis() - t0) + "ms)");
 
         Director.Options opt = new Director.Options();
+        opt.aspect = aspect;
         Director dir = new Director(story, opt);
         Film film = dir.prepare();
         float[][] voices = new float[film.lines.size()][];

@@ -136,6 +136,7 @@ public final class ShotBook {
         Director.Options opt = new Director.Options();
         opt.technical = true;
         opt.sounds = lib;
+        opt.aspect = aspect == null ? "16:9" : aspect;
         Director d = new Director(st, opt);
         d.prepare();
         Film film = d.direct(null);

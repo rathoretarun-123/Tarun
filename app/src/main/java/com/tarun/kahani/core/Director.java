@@ -26,6 +26,8 @@ public final class Director {
          * camera shake unless the story asks for one (an earthquake, thunder).
          */
         public boolean technical = true;
+        /** The film's shape, decided once: "16:9", "9:16" or "1:1". Narrow frames stage characters closer together. */
+        public String aspect = "16:9";
         /** The user's own sounds: effects are played where an action or direction mentions them. */
         public SoundLib sounds;
     }
@@ -660,6 +662,10 @@ public final class Director {
         lineup.addAll(villains);
         int n = lineup.size();
         float left = n <= 2 ? 0.32f : n <= 4 ? 0.2f : 0.1f, right = n <= 2 ? 0.68f : n <= 4 ? 0.8f : 0.9f;
+        // a narrow frame (Reels, Shorts, square posts): the group stands closer so nobody is cut at the sides
+        float narrow = "9:16".equals(opt.aspect) ? 0.42f : "1:1".equals(opt.aspect) ? 0.7f : 1f;
+        left = 0.5f - (0.5f - left) * narrow;
+        right = 0.5f + (right - 0.5f) * narrow;
         for (int i = 0; i < n; i++) {
             Story.CharacterDef c = lineup.get(i);
             Film.Actor a = new Film.Actor();

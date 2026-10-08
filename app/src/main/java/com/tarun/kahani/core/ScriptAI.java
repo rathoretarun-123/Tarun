@@ -75,38 +75,114 @@ public final class ScriptAI {
         public String note = "";
     }
 
+    /** Something that answers a prompt (the online language model; a stand-in in tests). */
+    public interface Asker { String ask(String system, String prompt) throws IOException; }
+
     /** Reads the story; returns the AI screenplay when it is good, else the original. Never throws. */
-    public static Result read(Cloud cloud, String text) {
+    public static Result read(final Cloud cloud, String text) {
+        return read(new Asker() {
+            public String ask(String system, String prompt) throws IOException { return cloud.ask(system, prompt, false); }
+        }, text);
+    }
+
+    /** Largest piece of a story sent in one go, so the answer is never cut off. */
+    static final int CHUNK = 6500;
+
+    public static Result read(Asker ai, String text) {
         Result r = new Result();
         r.script = text;
+        Story before = ScriptParser.parse(text);
+        // a story already written as a screenplay needs no rewriting: the director reads it as it is
+        if (!needsRewrite(before)) {
+            r.note = "Your story is already written as a screenplay, so the director reads it directly — nothing is lost and no AI "
+                    + "rewrite is needed: " + before.characters.size() + " characters, " + before.scenes.size() + " scenes, "
+                    + before.dialogueCount() + " lines of dialogue.";
+            return r;
+        }
         boolean hinglish = Hinglish.isHinglish(text);
         boolean hindi = Txt.mostlyHindi(text) || hinglish;
-        String clipped = text.length() > 60000 ? text.substring(0, 60000) : text;
         try {
             String sys = system(hindi) + (hinglish ? "\n\nThe story is written in Hinglish (Hindi in English letters). Write the screenplay in "
                     + "Hindi using Devanagari script so the voices pronounce it correctly; keep English words the characters "
                     + "actually say (like 'sorry', 'thank you') in English letters." : "");
-            String answer = cloud.ask(sys, (hindi ? "कहानी:\n\n" : "Story:\n\n") + clipped, false);
-            answer = stripFences(answer);
-            Story before = ScriptParser.parse(text);
+            // long stories go in parts (each part continues the scenes of the one before), so nothing is cut off
+            List<String> parts = pieces(text, CHUNK);
+            StringBuilder all = new StringBuilder();
+            List<String> names = new ArrayList<String>();
+            int scenes = 0;
+            for (int i = 0; i < parts.size(); i++) {
+                String prompt;
+                if (i == 0) prompt = (hindi ? "कहानी:\n\n" : "Story:\n\n") + parts.get(i)
+                        + (parts.size() > 1 ? "\n\n(This is part 1 of " + parts.size() + " of the story. Write the character and place sections for the "
+                        + "WHOLE story you can see, then the scenes of this part only.)" : "");
+                else {
+                    StringBuilder nm = new StringBuilder();
+                    for (String n : names) nm.append(nm.length() > 0 ? ", " : "").append(n);
+                    prompt = "Continue the same screenplay with part " + (i + 1) + " of " + parts.size() + " of the story. Write ONLY scenes, "
+                            + "starting with " + (hindi ? "दृश्य " : "Scene ") + (scenes + 1) + ". Use exactly these character names: " + nm
+                            + ". No character or place sections.\n\n" + (hindi ? "कहानी (आगे):\n\n" : "Story (continued):\n\n") + parts.get(i);
+                }
+                String answer = clean(ai.ask(sys, prompt));
+                if (i == 0) {
+                    Story first = ScriptParser.parse(answer);
+                    for (Story.CharacterDef c : first.characters) names.add(c.displayName);
+                }
+                all.append(answer).append("\n\n");
+                Story sofar = ScriptParser.parse(all.toString());
+                scenes = sofar.scenes.size();
+            }
+            String answer = all.toString().trim();
             Story after = ScriptParser.parse(answer);
-            boolean better = after.dialogueCount() >= Math.max(1, before.dialogueCount() * 8 / 10)
-                    && after.characters.size() >= 1 && after.scenes.size() >= 1;
-            if (better) {
+            int need = Math.max(1, before.dialogueCount() * 6 / 10);
+            if (after.dialogueCount() >= need && after.characters.size() >= 1 && after.scenes.size() >= 1) {
                 r.script = answer;
                 r.rewritten = true;
                 r.note = "AI read the story: " + after.characters.size() + " characters, " + after.scenes.size() + " scenes, "
                         + after.dialogueCount() + " lines.";
             } else {
-                r.note = "The AI answer was not usable — your original story will be used.";
+                r.note = "The AI's screenplay had " + after.dialogueCount() + " lines of dialogue and " + after.scenes.size()
+                        + " scenes, fewer than your story (" + before.dialogueCount() + " lines), so your original story is used — "
+                        + "the director reads it directly. Try again later, or add a Gemini key in Settings for a stronger AI.";
             }
         } catch (IOException e) {
-            r.note = "Could not reach the AI (check internet / key) — the built-in reader will be used. "
-                    + shortErr(e);
+            r.note = "Could not reach the AI (check internet / key) — the built-in reader will be used. " + shortErr(e);
         } catch (RuntimeException e) {
             r.note = "Could not read the AI answer — your original story will be used.";
         }
         return r;
+    }
+
+    /** The story in pieces of at most max characters, cut between paragraphs (or scenes). */
+    static List<String> pieces(String text, int max) {
+        List<String> out = new ArrayList<String>();
+        if (text.length() <= max) { out.add(text); return out; }
+        String[] paras = text.split("\n\\s*\n|(?=\n\\s*(दृश्य|Scene|SCENE|सीन)\\s*[0-9])");
+        StringBuilder cur = new StringBuilder();
+        for (String p : paras) {
+            if (cur.length() > 0 && cur.length() + p.length() > max) { out.add(cur.toString().trim()); cur.setLength(0); }
+            while (p.length() > max) {           // a single huge paragraph: cut at a sentence end
+                int cut = Math.max(p.lastIndexOf('।', max), Math.max(p.lastIndexOf(". ", max), p.lastIndexOf('\n', max)));
+                if (cut < max / 2) cut = max;
+                out.add(p.substring(0, cut + 1).trim());
+                p = p.substring(cut + 1);
+            }
+            cur.append(p).append("\n\n");
+        }
+        if (cur.toString().trim().length() > 0) out.add(cur.toString().trim());
+        return out;
+    }
+
+    /** Removes the decoration language models add: code fences, **bold**, # headings, bullet marks before lines. */
+    static String clean(String s) {
+        String t = stripFences(s);
+        StringBuilder b = new StringBuilder();
+        for (String line : t.split("\n")) {
+            String l = line.replace("**", "").replace("__", "");
+            l = l.replaceFirst("^\\s*#{1,6}\\s*", "");
+            if (l.trim().startsWith("- ") && l.contains(":")) l = l.trim().substring(2);
+            b.append(l).append('\n');
+        }
+        return b.toString().trim();
     }
 
     static String shortErr(Exception e) {

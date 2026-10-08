@@ -82,8 +82,23 @@ public final class Renderer {
 
     // ================================================================== title, cards, end
 
+    /**
+     * The picture fills the frame without ever being stretched ("object-fit: cover"): the part of the picture
+     * with the frame's own shape, centred on the picture's chosen crop, as large as the picture allows.
+     * Returns {x0, y0, x1, y1} as fractions of the picture.
+     */
+    private float[] coverCrop(Art.Backdrop b, float frameAR) {
+        float cx = (b.x0 + b.x1) / 2 * b.w, cy = (b.y0 + b.y1) / 2 * b.h;
+        float w = b.w, h = w / frameAR;
+        if (h > b.h) { h = b.h; w = h * frameAR; }
+        // keep the chosen crop's size if it is smaller and has the right shape already
+        float x0 = Math.max(0, Math.min(b.w - w, cx - w / 2)), y0 = Math.max(0, Math.min(b.h - h, cy - h / 2));
+        return new float[]{x0 / b.w, y0 / b.h, (x0 + w) / b.w, (y0 + h) / b.h};
+    }
+
     private void cover(Gfx g, Art.Backdrop b, float zoom, float panX, float panY) {
-        float sx = b.x0 * b.w, sy = b.y0 * b.h, sw = (b.x1 - b.x0) * b.w, sh = (b.y1 - b.y0) * b.h;
+        float[] cr = coverCrop(b, vw / vh);
+        float sx = cr[0] * b.w, sy = cr[1] * b.h, sw = (cr[2] - cr[0]) * b.w, sh = (cr[3] - cr[1]) * b.h;
         g.save();
         g.translate(vw / 2 + panX, vh / 2 + panY);
         g.scale(zoom, zoom);
@@ -92,9 +107,9 @@ public final class Renderer {
             // title pages and close-up shots live too: leaves sway, water flows, falls stream (fine mesh)
             g.translate(-vw / 2, -vh / 2);
             float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
-            Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, vw, vh, curT, wind, sea, bdMesh);
+            Nature.backdropMesh(sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT, wind, sea, bdMesh);
             g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
-            Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, vw, vh, curT);
+            Nature.waterLife(g, sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT);
         } else {
             g.imageRect(b.img, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
         }
@@ -104,19 +119,27 @@ public final class Renderer {
     /** The time of the frame being drawn (for living pictures drawn by helpers). */
     private float curT;
 
-    /** Portrait pictures: blurred-looking dark fill behind, full picture in the middle. */
+    /**
+     * Title and end pages (pictures often carry their own lettering): when the picture's shape is close to the
+     * frame's it fills the frame; otherwise the whole picture is shown, never stretched, over a soft, dark,
+     * enlarged copy of itself (no black bars).
+     */
     private void contain(Gfx g, Art.Backdrop b, float zoom) {
-        float ar = b.w / (float) b.h;
-        if (ar >= 1.5f) { cover(g, b, zoom, 0, 0); return; }
+        float ar = b.w / (float) b.h, frame = vw / vh;
+        if (Math.abs(Math.log(ar / frame)) < 0.22) { cover(g, b, zoom, 0, 0); return; }
+        // the fill: the same picture, enlarged to cover the frame, darkened
+        float[] cr = coverCrop(b, frame);
         g.save();
-        g.translate(vw / 2, vh / 2);
-        g.scale(1.6f, 1.6f);
-        g.setAlpha(0.55f);
-        g.image(b.img, -vw / 2, -vw / 2 / ar, vw, vw / ar);
+        g.setAlpha(0.6f);
+        g.imageRect(b.img, cr[0] * b.w, cr[1] * b.h, (cr[2] - cr[0]) * b.w, (cr[3] - cr[1]) * b.h, -vw * 0.1f, -vh * 0.1f, vw * 1.2f, vh * 1.2f);
         g.restore();
-        g.color(0x88000000);
+        g.color(0x99000000);
         g.rect(0, 0, vw, vh);
-        float h = vh * zoom, w = h * ar;
+        // the whole picture, fitted inside the frame with its own proportions
+        float w, h;
+        if (ar > frame) { w = vw * 0.98f * zoom; h = w / ar; } else { h = vh * 0.98f * zoom; w = h * ar; }
+        if (w > vw) { w = vw; h = w / ar; }
+        if (h > vh) { h = vh; w = h * ar; }
         g.image(b.img, (vw - w) / 2, (vh - h) / 2, w, h);
     }
 

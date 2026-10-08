@@ -165,6 +165,7 @@ public final class Cloud {
         Map<String, Object> body = map("contents", list(map("role", "user", "parts", parts)));
         if (system != null && system.length() > 0) body.put("systemInstruction", map("parts", list(map("text", system))));
         Map<String, Object> gen = map("temperature", 0.4);
+        gen.put("maxOutputTokens", 60000);       // long screenplays must never be cut off
         if (json) gen.put("responseMimeType", "application/json");
         body.put("generationConfig", gen);
         Object r = postJson(geminiBase + "/models/" + (model == null ? textModel : model) + ":generateContent?key=" + enc(geminiKey.trim()), body);

@@ -12,6 +12,7 @@ public final class Film {
     public final List<Sfx> sfx = new ArrayList<Sfx>();
     public final List<Music> music = new ArrayList<Music>();
     public final List<Amb> ambience = new ArrayList<Amb>();
+    public final List<Weather> weather = new ArrayList<Weather>();
     public final List<String> notes = new ArrayList<String>();   // director's notes for the analysis screen
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;
@@ -111,7 +112,10 @@ public final class Film {
     // -------------------------------------------------------------- effects
     public static final int FX_BLOOM = 0, FX_SMOKE = 1, FX_BEAM = 2, FX_BELL = 3, FX_NET = 4, FX_SPARKLE = 5, FX_BUTTERFLY = 6,
             FX_FLASH = 7, FX_SPLASH = 8, FX_RIBBON = 9, FX_CAGE = 10, FX_LEAVES = 11, FX_GREEN_GLOW = 12, FX_SHAKE = 13,
-            FX_MAGIC_FLOWER = 14, FX_HIDE_ROCK = 15, FX_LADDOO_GLOW = 16, FX_FIREWORKS = 17, FX_DUST = 18, FX_BOULDER = 19, FX_SHOT = 20, FX_TITLE_SPARKS = 21;
+            FX_MAGIC_FLOWER = 14, FX_HIDE_ROCK = 15, FX_LADDOO_GLOW = 16, FX_FIREWORKS = 17, FX_DUST = 18, FX_BOULDER = 19, FX_SHOT = 20, FX_TITLE_SPARKS = 21,
+            FX_LIGHTNING = 22,    // a flash and a bolt (x = where in the sky)
+            FX_STONE = 23,        // a: the thrower; x, y: where it lands; t2: when it lands
+            FX_WATER_HIT = 24;    // something falls into water at x, y (color = size 1..3)
 
     public static final class Fx {
         public float t0, t1;
@@ -155,7 +159,51 @@ public final class Film {
             SFX_RUSTLE = 7, SFX_THUD = 8, SFX_WHOOSH = 9, SFX_BELL = 10, SFX_DRUMS = 11, SFX_NIGHT = 12, SFX_ROAR = 13, SFX_CLAP = 14,
             SFX_ANKLET = 15, SFX_HISS = 16, SFX_DRIP = 17, SFX_SCREAM_FX = 18, SFX_SPLASH = 19, SFX_NET = 20, SFX_WHOOSH_CARD = 21,
             SFX_FANFARE = 22, SFX_END_CHORD = 23, SFX_MAGIC = 24, SFX_STEPS = 25, SFX_CROWD = 26, SFX_GLASS = 27, SFX_SWORD = 28,
-            SFX_USER = 29;
+            SFX_USER = 29, SFX_THUNDER = 30;
+
+    // -------------------------------------------------------------- weather and nature
+    public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,
+            W_PETALS = 8, W_DUST = 9, W_STARS = 10, W_RAINBOW = 11, W_KINDS = 12;
+
+    /** Weather from t0 to t1 (it builds up and dies away over a couple of seconds). */
+    public static final class Weather {
+        public float t0, t1, strength;
+        public int type;
+        public float x;          // fire: where it burns (stage x)
+        public Weather(int type, float t0, float t1, float strength) { this.type = type; this.t0 = t0; this.t1 = t1; this.strength = strength; }
+    }
+
+    /** How strong a kind of weather is at time t (0 = none). */
+    public float weather(int type, float t) {
+        float best = 0;
+        for (Weather w : weather) {
+            if (w.type != type || t < w.t0 - 0.01f || t > w.t1 + 2.5f) continue;
+            float ramp = type == W_RAIN || type == W_STORM || type == W_SNOW ? 2.5f : 1.5f;
+            float k = Math.min(1, (t - w.t0) / ramp) * Math.min(1, Math.max(0, (w.t1 + ramp - t) / ramp));
+            best = Math.max(best, w.strength * Math.max(0, k));
+        }
+        return best;
+    }
+
+    /** Wind at time t: steady part from wind and storms, with gusts (+ blows left to right). */
+    public float wind(float t) {
+        float w = Math.max(weather(W_WIND, t), Math.max(weather(W_STORM, t) * 1.1f, weather(W_DUST, t)));
+        w = Math.max(w, weather(W_RAIN, t) * 0.25f);
+        if (w <= 0) return 0;
+        return w * (0.75f + 0.25f * (float) Math.sin(t * 1.3) + 0.12f * (float) Math.sin(t * 3.7));
+    }
+
+    /** How wet the characters are: soaking up during rain, drying slowly afterwards. */
+    public float wetness(float t) {
+        float wet = 0;
+        for (Weather w : weather) {
+            if ((w.type != W_RAIN && w.type != W_STORM) || t < w.t0) continue;
+            float soak = Math.min(1, (Math.min(t, w.t1) - w.t0) / 6f) * w.strength;
+            float dry = t > w.t1 ? Math.max(0, 1 - (t - w.t1) / 60f) : 1;
+            wet = Math.max(wet, Math.min(1, soak) * dry);
+        }
+        return wet;
+    }
 
     public static final class Sfx {
         public float t, dur, gain;

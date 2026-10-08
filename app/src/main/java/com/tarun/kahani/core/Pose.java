@@ -30,12 +30,14 @@ public final class Pose {
     public int turbanColor = 0xFF2F5DB5, turbanBand = 0;
     public boolean carrying;           // arms up holding something on shoulder
     public float time;                 // seconds, for idle motion (hair, cloak)
+    public float wind;                 // wind on hair and clothes (+ blows to the right)
+    public float wet;                  // 0 dry .. 1 soaked
     public long seed;
 
     public void reset() {
         body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
-        eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0;
+        eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
     }
 }

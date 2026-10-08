@@ -60,6 +60,7 @@ public final class Director {
     public Director(Story story, Options opt) {
         this.story = story;
         this.opt = opt == null ? new Options() : opt;
+        java.util.Arrays.fill(wOpen, -1);
     }
 
     // ================================================================== phase 1: what must be spoken
@@ -452,6 +453,12 @@ public final class Director {
 
         // ---------- ambience & music
         ambience(where, t);
+        weatherFrom(where + " । " + sc.title, seg.t0, true);
+        if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
+            // natural night: stars in the sky, fireflies in the woods
+            if (wOpen[Film.W_STARS] < 0) open(Film.W_STARS, seg.t0, 0.9f);
+            if ((seg.set == Sets.FOREST || seg.set == Sets.GARDEN) && wOpen[Film.W_FIREFLIES] < 0) open(Film.W_FIREFLIES, seg.t0, 0.6f);
+        }
         int mood = moodOf(sc, b0, b1, where, villains.size() > 0);
         seg.mood = mood;
 
@@ -474,6 +481,8 @@ public final class Director {
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
         }
         seg.t1 = tc + 0.8f;
+        if (pi == nParts - 1) closeAllWeather(seg.t1);
+        else { closeWeather(Film.W_STARS, seg.t1); closeWeather(Film.W_FIREFLIES, seg.t1); }
         film.music.add(new Film.Music(mood, seg.t0, seg.t1));
         film.ambience.add(new Film.Amb(seg.t0, seg.t1, where + " " + Sets.name(seg.set) + " " + ambWords(seg)));
         film.notes.set(noteIdx, "Part " + sc.number + (nParts > 1 ? " (" + (char) ('a' + pi) + ")" : "") + ": " + Sets.label(seg.set)
@@ -682,6 +691,7 @@ public final class Director {
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
         if (m == null || m.length() == 0) return;
         userEffect(m, t0);
+        natureFrom(m, t0, a);
         if (Txt.has(m, "तलवार")) {
             Film.Key k = a.at(t0); k.holdR = Pose.I_WOOD_SWORD;
             a.acts.add(new Film.Act(t0, t1, Txt.has(m, "रोक") ? Film.G_BLOCK : Film.G_SWORD));
@@ -800,6 +810,8 @@ public final class Director {
         float d = 1.4f;
         boolean focusSet = false;
 
+        // ---- weather and nature that the action calls for (rain starts, thunder, a stone into the pond…)
+        d = Math.max(d, natureFrom(s, t, subj));
         // ---- sounds named in the text (onomatopoeia), and the user's own effects for what happens
         userEffect(s, t);
         if (Txt.has(s, "कल-कल", "झरन")) film.sfx.add(new Film.Sfx(Film.SFX_STREAM, t, 4, 0.35f));
@@ -1203,6 +1215,154 @@ public final class Director {
         }
         for (Film.Cam c : seg.cams) if (c.t >= t) c.t += dt;
         for (Film.Sfx x : film.sfx) if (x.t >= t && x.t < seg.t0 + 1e5f) x.t += dt;
+    }
+
+    // ================================================================== weather and nature
+
+    private final float[] wOpen = new float[Film.W_KINDS];   // start of weather in progress (-1 = none)
+    private final float[] wStr = new float[Film.W_KINDS];
+    private float fireX = 640;
+
+    static final String[] RAIN = {"बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "बूंदाबांदी", "बरसने", "बरस रह", "rain", "drizzl", "monsoon", "baarish", "barish"};
+    static final String[] RAIN_STOP = {"बारिश रुक", "बारिश थम", "बारिश बंद", "वर्षा रुक", "वर्षा थम", "rain stopped", "rain stops", "stopped raining",
+            "rain ended", "धूप निकल", "sun came out", "बादल छँट", "बादल छंट"};
+    static final String[] STORM = {"तूफ़ान", "तूफान", "storm", "cyclone", "toofan"};
+    static final String[] DUST = {"आँधी", "आंधी", "dust storm", "sandstorm", "aandhi"};
+    static final String[] WIND = {"हवा चल", "हवा बह", "तेज़ हवा", "तेज हवा", "ठंडी हवा", "हवा के झोंक", "हवा का झोंका", "हवा में उड़", "हवा में लहरा",
+            "सरसराती हवा", "wind", "breeze", "gust", "windy", "hawa chal"};
+    static final String[] WIND_STRONG = {"तेज़ हवा", "तेज हवा", "ज़ोर की हवा", "जोर की हवा", "झोंक", "strong wind", "gust", "howling", "fierce wind"};
+    static final String[] WIND_SOFT = {"हल्की हवा", "ठंडी हवा", "मंद हवा", "breeze", "gentle wind", "soft wind"};
+    static final String[] WIND_STOP = {"हवा रुक", "हवा थम", "wind stopped", "wind died", "wind dropped"};
+    static final String[] THUNDER = {"बिजली कड़क", "बिजली चमक", "बिजली गिर", "बादल गरज", "गड़गड़ाहट", "कड़कड़ाहट", "thunder", "lightning", "bijli"};
+    static final String[] SNOW = {"बर्फ़ गिर", "बर्फ गिर", "बर्फबारी", "बर्फ़बारी", "हिमपात", "snow"};
+    static final String[] FOG = {"कोहरा", "कोहरे", "धुंध", "fog", "mist", "kohra"};
+    static final String[] FOG_STOP = {"कोहरा छँट", "कोहरा छंट", "धुंध छँट", "fog lifted", "fog cleared", "mist cleared"};
+    static final String[] FIRE = {"अलाव", "आग जल", "आग के पास", "आग के चारों", "आग जला", "लकड़ियाँ जल", "हवन", "campfire", "bonfire", "fire burning",
+            "around the fire", "by the fire", "lit a fire"};
+    static final String[] FIREFLY = {"जुगनू", "firefl"};
+    static final String[] PETALS = {"फूल बरस", "फूलों की वर्षा", "फूलों की बारिश", "पुष्प वर्षा", "पंखुड़ियाँ", "पंखुड़ियां", "petals", "shower of flowers", "flowers rained"};
+    static final String[] LEAVES = {"पत्ते उड़", "पत्ते गिर", "पतझड़", "सूखे पत्ते", "falling leaves", "leaves fly", "leaves flew", "autumn"};
+    static final String[] STARS = {"तारे", "सितारे", "तारों", "stars", "starry"};
+    static final String[] RAINBOW = {"इंद्रधनुष", "इन्द्रधनुष", "rainbow"};
+    static final String[] STONE = {"पत्थर", "कंकड़", "कंकड", "ढेला", "stone", "pebble", "rock"};
+    static final String[] THROW = {"फेंक", "उछाल", "throw", "threw", "toss", "hurl", "flung"};
+    static final String[] WATERWORDS = {"तालाब", "नदी", "पानी", "झील", "सरोवर", "कुआँ", "कुएँ", "pond", "river", "lake", "water", "well", "stream"};
+    static final String[] INTO_WATER = {"पानी में कूद", "तालाब में कूद", "नदी में कूद", "पानी में गिर", "तालाब में गिर", "नदी में गिर", "पानी में छलांग",
+            "jumped into the water", "jumps into the water", "dived into", "dives into", "fell into the water", "fell into the pond", "fell into the river",
+            "jumped into the pond", "jumped into the river"};
+
+    private void open(int type, float t, float strength) {
+        if (wOpen[type] >= 0) { wStr[type] = Math.max(wStr[type], strength); return; }
+        wOpen[type] = t;
+        wStr[type] = strength;
+    }
+
+    private void closeWeather(int type, float t) {
+        if (wOpen[type] < 0) return;
+        float t0 = wOpen[type];
+        wOpen[type] = -1;
+        if (t - t0 < 0.5f) return;
+        Film.Weather w = new Film.Weather(type, t0, t, wStr[type]);
+        if (type == Film.W_FIRE) w.x = fireX;
+        film.weather.add(w);
+        // the sound of it
+        String amb = type == Film.W_RAIN ? (wStr[type] > 1.1f ? "heavy rain" : "rain") : type == Film.W_STORM ? "heavy rain storm"
+                : type == Film.W_WIND ? "wind" : type == Film.W_DUST ? "storm wind आँधी" : type == Film.W_FIRE ? "fire" : null;
+        if (amb != null) film.ambience.add(new Film.Amb(t0, t, amb));
+        if (type == Film.W_STORM) {
+            // a storm brings lightning every few seconds
+            float lt = t0 + 3f;
+            int i = 0;
+            while (lt < t - 1) {
+                lightning(lt, i++);
+                lt += 6 + Nature.rnd(i, 7) * 7;
+            }
+        }
+    }
+
+    private void closeAllWeather(float t) {
+        for (int k = 0; k < Film.W_KINDS; k++) closeWeather(k, t);
+    }
+
+    private void lightning(float t, int i) {
+        Film.Fx f = new Film.Fx(Film.FX_LIGHTNING, t, t + 0.6f);
+        f.x = 200 + Nature.rnd(i + (int) (t * 10), 3) * 880;
+        f.color = i;
+        seg.fx.add(f);
+        film.sfx.add(new Film.Sfx(Film.SFX_THUNDER, t + 0.3f + Nature.rnd(i, 5) * 0.6f, 5f, 0.85f));
+        shake(t + 0.35f, t + 1.1f);
+    }
+
+    private static boolean negated(String s) {
+        return Txt.has(s, "नहीं", "बिना", "बंद हो", "not ", "no rain", "without");
+    }
+
+    /** Weather named in a place description or an action line. Returns time the action needs. */
+    private float weatherFrom(String s, float t, boolean place) {
+        float d = 0;
+        if (Txt.has(s, RAIN_STOP)) { closeWeather(Film.W_RAIN, t); closeWeather(Film.W_STORM, t); }
+        else if (Txt.has(s, RAIN) && !negated(s)) {
+            float st = Txt.has(s, "तेज़ बारिश", "तेज बारिश", "मूसलाधार", "heavy rain", "pouring", "downpour") ? 1.35f
+                    : Txt.has(s, "हल्की", "बूँदाबाँदी", "बूंदाबांदी", "drizzl", "light rain") ? 0.5f : 1f;
+            open(Film.W_RAIN, t, st);
+            d = 2.2f;
+        }
+        if (Txt.has(s, DUST) && !negated(s)) { open(Film.W_DUST, t, 1f); open(Film.W_WIND, t, 1f); d = 2.2f; }
+        else if (Txt.has(s, STORM) && !negated(s)) { open(Film.W_STORM, t, 1f); open(Film.W_RAIN, t, 1.3f); d = 2.2f; }
+        if (Txt.has(s, WIND_STOP)) closeWeather(Film.W_WIND, t);
+        else if (Txt.has(s, WIND) && !negated(s)) {
+            open(Film.W_WIND, t, Txt.has(s, WIND_STRONG) ? 1f : Txt.has(s, WIND_SOFT) ? 0.35f : 0.6f);
+            d = Math.max(d, 1.6f);
+        }
+        if (Txt.has(s, SNOW) && !negated(s)) { open(Film.W_SNOW, t, 1f); d = Math.max(d, 2f); }
+        if (Txt.has(s, FOG_STOP)) closeWeather(Film.W_FOG, t);
+        else if (Txt.has(s, FOG) && !negated(s)) open(Film.W_FOG, t, Txt.has(s, "घना", "घने", "thick", "dense") ? 1f : 0.7f);
+        if (Txt.has(s, FIRE) && !Txt.has(s, "आग बबूला", "आग-बबूला")) {
+            if (wOpen[Film.W_FIRE] < 0) fireX = 640;
+            open(Film.W_FIRE, t, 1f);
+        }
+        if (Txt.has(s, FIREFLY)) open(Film.W_FIREFLIES, t, 1f);
+        if (Txt.has(s, STARS)) open(Film.W_STARS, t, 1f);
+        if (Txt.has(s, RAINBOW)) open(Film.W_RAINBOW, t, 1f);
+        if (Txt.has(s, LEAVES)) open(Film.W_LEAVES, t, 1f);
+        if (Txt.has(s, PETALS)) {
+            if (place) open(Film.W_PETALS, t, 1f);
+            else film.weather.add(new Film.Weather(Film.W_PETALS, t, t + 7, 1f));
+            d = Math.max(d, 2.5f);
+        }
+        if (!place && Txt.has(s, THUNDER) && !negated(s)) { lightning(t + 0.2f, film.weather.size() + (int) t); d = Math.max(d, 1.8f); }
+        return d;
+    }
+
+    /** Nature in an action line: weather, a stone thrown into water, someone jumping into a pond. */
+    private float natureFrom(String s, float t, Film.Actor subj) {
+        float d = weatherFrom(s, t, false);
+        if (Txt.has(s, STONE) && Txt.has(s, THROW)) {
+            boolean water = Txt.has(s, WATERWORDS) || (seg.backdrop != null && seg.backdrop.scan != null && seg.backdrop.scan.anyWater);
+            float sx = subj != null ? xAt(subj, t) : 640, face = subj != null ? subj.stateAt(t).facing : 1;
+            float[] p = null;
+            if (water && seg.backdrop != null && seg.backdrop.scan != null) {
+                Art.Backdrop b = seg.backdrop;
+                p = Nature.waterPoint(b.scan, b.x0, b.y0, b.x1, b.y1, 1280, 720, sx + face * 300, ground);
+            }
+            if (p == null) p = new float[]{Math.max(80, Math.min(1200, sx + face * 300)), ground + 40};
+            float throwAt = t + 0.5f, flight = 0.9f;
+            if (subj != null) subj.acts.add(new Film.Act(t, t + 1.0f, Film.G_THROW));
+            Film.Fx f = fx(Film.FX_STONE, throwAt, throwAt + flight + 4.2f, p[0], p[1], subj, null);
+            f.t2 = throwAt + flight;
+            f.color = water ? 1 : 0;
+            film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, throwAt, 0.6f, 0.35f));
+            film.sfx.add(new Film.Sfx(water ? Film.SFX_SPLASH : Film.SFX_THUD, throwAt + flight, 1.2f, 0.6f));
+            d = Math.max(d, 3f);
+        }
+        if (Txt.has(s, INTO_WATER) && subj != null) {
+            float x = xAt(subj, t) + subj.stateAt(t).facing * 120;
+            Film.Fx f = fx(Film.FX_WATER_HIT, t + 0.6f, t + 4.8f, x, ground + 20, subj, null);
+            f.color = 3;
+            film.sfx.add(new Film.Sfx(Film.SFX_SPLASH, t + 0.6f, 1.2f, 0.8f));
+            d = Math.max(d, 2.6f);
+        }
+        return d;
     }
 
     private Film.Fx fx(int type, float t0, float t1, float x, float y, Film.Actor a, Film.Actor b) {

@@ -21,8 +21,10 @@ public final class Rig {
     public boolean face;
     public float eLX, eLY, eRX, eRY, eR, mX, mY, mHW;
     // the face drawn a second time: a crop of the picture with soft edges
-    public Object faceImg;
+    public Object faceImg, faceWetImg;
     public float fu0, fv0, fu1, fv1;
+    /** How much each body mesh point is loose hair (0..1), from the picture's dark hair colours. */
+    public float[] hairW;
 
     public static final int BW = 14, BH = 28, FW = 16, FH = 16;
 
@@ -36,8 +38,10 @@ public final class Rig {
         public float breathe;                // -1..1
         // face, 0..1
         public float smile, frown, innerUp, browUp, browUpR, anger, wide, squint;
+        public float wind;                   // + blows towards the picture's right
+        public float time;
         public void reset() {
-            headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = 0;
+            headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             legScale = 1;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
@@ -139,6 +143,24 @@ public final class Rig {
         }
         g.gapX = g.legs ? gapSum / two / w : g.cx;
         g.legHalf = g.legs ? halfSum / two / w : 0.1f;
+        g.hairW = new float[(BW + 1) * (BH + 1)];
+        for (int j = 0; j <= BH; j++) {
+            for (int i = 0; i <= BW; i++) {
+                int cxp = Math.min(w - 1, i * (w - 1) / BW), cyp = Math.min(h - 1, j * (h - 1) / BH);
+                int dark = 0, n = 0;
+                for (int dy = -4; dy <= 4; dy += 2) for (int dx = -4; dx <= 4; dx += 2) {
+                    int xx = cxp + dx * w / 200, yy = cyp + dy * h / 400;
+                    if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                    int c = r.px[yy * w + xx];
+                    if ((c >>> 24) < 128) continue;
+                    n++;
+                    int rr = (c >> 16) & 255, gg = (c >> 8) & 255, bb = c & 255;
+                    if (rr + gg + bb < 200 && !Cutout.isSkin(c)) dark++;
+                }
+                float v = j / (float) BH;
+                g.hairW[j * (BW + 1) + i] = n == 0 || v > g.hipY + 0.25f * (g.bottom - g.hipY) ? 0 : dark / (float) n;
+            }
+        }
         if (g.face && L != null) g.makeFace(r, L);
         return g;
     }
@@ -235,6 +257,7 @@ public final class Rig {
         fu0 = x0 / (float) r.w; fu1 = (x0 + cw) / (float) r.w;
         fv0 = y0 / (float) r.h; fv1 = (y0 + ch) / (float) r.h;
         faceImg = L.create(px, cw, ch);
+        faceWetImg = L.create(Art.wetPixels(px), cw, ch);
     }
 
     // ------------------------------------------------------------------ moving
@@ -297,6 +320,25 @@ public final class Rig {
 
     /** Where one point of the picture (local coordinates) goes in this frame. */
     private void move(Frame f, State s, float x, float y, float[] o) {
+        moveBody(f, s, x, y, o);
+        if (s.wind == 0) return;
+        // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
+        float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        float hair = 0;
+        if (hairW != null) {
+            int i = Math.max(0, Math.min(BW, Math.round(u * BW))), j = Math.max(0, Math.min(BH, Math.round(v * BH)));
+            hair = hairW[j * (BW + 1) + i] * smooth(top + 0.04f, top + 0.3f, v);
+        }
+        float cloth = smooth(hipY, bottom, v) * (legs ? 0.3f : 1f);
+        float t = s.time;
+        float flap = 0.75f + 0.35f * (float) Math.sin(t * 6.3 + v * 9 + u * 3);
+        float dx = s.wind * f.W0 * (0.07f * hair * flap + 0.05f * cloth * cloth * (0.8f + 0.4f * (float) Math.sin(t * 7.1 + v * 12)));
+        float dy = -Math.abs(s.wind) * f.H0 * 0.01f * hair * (float) Math.sin(t * 5 + u * 6);
+        o[0] += dx;
+        o[1] += dy;
+    }
+
+    private void moveBody(Frame f, State s, float x, float y, float[] o) {
         float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
         // ---- upper body: head, arms, breathing, then the lean
         float wHead = 1 - smooth(chinY + 0.005f, chinY + 0.05f, v);

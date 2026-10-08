@@ -64,6 +64,10 @@ public class MakeFilm {
         film = dir.direct(art);
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
+        if (System.getenv("LINES") != null) {
+            for (Film.Weather w : film.weather) System.out.printf("  weather %d %.1f-%.1f x%.2f%n", w.type, w.t0, w.t1, w.strength);
+            for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx) if (f.type >= Film.FX_LIGHTNING) System.out.printf("  fx %d @%.1f-%.1f (%.0f,%.0f)%n", f.type, f.t0, f.t1, f.x, f.y);
+        }
         if (System.getenv("LINES") != null) for (Film.Line l : film.lines)
             System.out.printf("  line %2d @%6.1f +%4.1f %s: %s%n", l.index, l.start, l.dur, l.who == null ? "-" : l.who.displayName, l.text.substring(0, Math.min(30, l.text.length())));
         SoundLib lib = new SoundLib(new SoundLib.Decoder() {

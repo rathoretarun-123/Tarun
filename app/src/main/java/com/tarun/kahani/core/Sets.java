@@ -10,6 +10,11 @@ public final class Sets {
             CELEBRATION = 6, HALL = 7, VILLAGE = 8, GENERIC_OUT = 9;
     public static final int MORNING = 0, DAY = 1, EVENING = 2, NIGHT = 3;
 
+    /** Sets under the open sky (weather, stars and fireflies belong there). */
+    public static boolean outdoorSet(int set) {
+        return set == GARDEN || set == FOREST || set == VILLAGE || set == COURTYARD || set == GATE || set == CELEBRATION || set == CAVE_MOUTH || set == GENERIC_OUT;
+    }
+
     /** English name of a set for the app's screens (name() stays Hindi: it is also used to match sounds). */
     public static String label(int set) {
         switch (set) {

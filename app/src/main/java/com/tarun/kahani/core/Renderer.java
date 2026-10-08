@@ -327,6 +327,48 @@ public final class Renderer {
         }
     }
 
+    private final float[] bdMesh = new float[(Nature.MW + 1) * (Nature.MH + 1) * 2];
+
+    /** In the sky of the far layer: stars, a rainbow, and the bolts of lightning. */
+    private void skyNature(Gfx g, Film.Seg s, float t, float skyBottom) {
+        if (film == null) return;
+        float skyY = Math.max(120, skyBottom * H);
+        float stars = film.weather(Film.W_STARS, t);
+        if (stars > 0 && (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) && skyBottom > 0.12f) Nature.stars(g, W, skyY * 0.95f, t, stars);
+        float bow = film.weather(Film.W_RAINBOW, t);
+        if (bow > 0) Nature.rainbow(g, W * 0.62f, skyY + 60, W * 0.42f, bow);
+        for (Film.Fx f : s.fx) {
+            if (f.type == Film.FX_LIGHTNING && t >= f.t0 && t < f.t1) Nature.lightningBolt(g, f.x, -20, skyY + 40, t - f.t0, f.color + 7);
+        }
+    }
+
+    /** Rain, snow, blowing leaves and petals, dust and fog, in front of everything. */
+    private void weatherScreen(Gfx g, Film.Seg s, float t) {
+        if (film == null) return;
+        boolean out = Sets.outdoorSet(s.set);
+        float wind = film.wind(t);
+        float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t) * 1.3f);
+        if (rain > 0 && out) Nature.rain(g, vw, vh, t, rain, wind);
+        else if (rain > 0) {
+            // indoors: only the grey light and rain beyond the windows
+            g.color(Puppet.alpha(0xFF40506A, 0.1f * Math.min(1, rain)));
+            g.rect(0, 0, vw, vh);
+        }
+        if (film.weather(Film.W_STORM, t) > 0) { g.color(0x2A101828); g.rect(0, 0, vw, vh); }
+        float snow = film.weather(Film.W_SNOW, t);
+        if (snow > 0 && out) Nature.snow(g, vw, vh, t, snow, wind);
+        float leaves = Math.max(film.weather(Film.W_LEAVES, t), out ? (Math.abs(wind) - 0.45f) * 1.4f : 0);
+        if (leaves > 0 && out) Nature.leaves(g, vw, vh, t, leaves, wind, false);
+        float petals = film.weather(Film.W_PETALS, t);
+        if (petals > 0) Nature.leaves(g, vw, vh, t, petals, wind, true);
+        float dust = film.weather(Film.W_DUST, t);
+        if (dust > 0 && out) Nature.dust(g, vw, vh, t, dust, wind);
+        float fog = film.weather(Film.W_FOG, t);
+        if (fog > 0) Nature.fog(g, vw, vh, t, fog);
+        float fire = film.weather(Film.W_FIRE, t);
+        if (fire > 0) Nature.fireLight(g, vw, vh, t, fire);
+    }
+
     /** Out-of-focus leaves and flowers right in front of the lens: they slide faster than the scene (depth). */
     private void foreground(Gfx g, final Film.Seg s, float t) {
         // only on wide films and wide shots: narrow (vertical/square) frames need every pixel for the characters
@@ -423,6 +465,7 @@ public final class Renderer {
         // ---- far layer: the background (parallax)
         g.save();
         applyCam(g, 0.78f, s.ground);
+        float wind = film == null ? 0 : film.wind(t);
         if (s.backdrop != null) {
             final Art.Backdrop b = s.backdrop;
             Gfx.Painter bp = new Gfx.Painter() {
@@ -430,7 +473,15 @@ public final class Renderer {
                     gg.imageRect(b.img, b.x0 * b.w, b.y0 * b.h, (b.x1 - b.x0) * b.w, (b.y1 - b.y0) * b.h, 0, 0, W, H);
                 }
             };
-            g.layer("bd:" + System.identityHashCode(b), W, H, bp);
+            Nature.Scan sc = b.scan;
+            if (sc != null && (sc.anyPlants || sc.anyWater || sc.anyFall)) {
+                // a living picture: plants sway (more in the wind), water ripples along, a waterfall streams down
+                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, bdMesh);
+                g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
+                Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
+            } else {
+                g.layer("bd:" + System.identityHashCode(b), W, H, bp);
+            }
             float dof = Math.max(0, Math.min(1, (camZ - 1.35f) / 0.45f));
             if (dof > 0.02f) {
                 g.save();
@@ -441,10 +492,12 @@ public final class Renderer {
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
             if (s.tod == Sets.NIGHT && s.set != Sets.FOREST) { g.color(0x50101C3A); g.rect(0, 0, W, H); }
             if (s.festive) Sets.celebrationLights(g, t);
+            skyNature(g, s, t, sc == null ? 0.35f : sc.skyBottom);
         } else {
             final int set = s.set, tod = s.tod;
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
             Sets.paintLive(g, set, tod, t);
+            skyNature(g, s, t, 0.38f);
         }
         g.restore();
         // ---- near layer: characters and effects
@@ -456,6 +509,12 @@ public final class Renderer {
             if (k.visible && k.anchor == Film.A_BRANCH) { branch(g, s, k.x); break; }
         }
         drawFxLayer(g, s, t, true);
+        if (film != null) {
+            float fire = film.weather(Film.W_FIRE, t);
+            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f) Nature.fire(g, w.x, s.ground + 6, t, fire);
+            float ff = film.weather(Film.W_FIREFLIES, t);
+            if (ff > 0) Nature.fireflies(g, s.ground, t, ff);
+        }
         List<Film.Actor> list = new ArrayList<Film.Actor>(s.actors);
         final float tt = t;
         Collections.sort(list, new Comparator<Film.Actor>() {
@@ -468,12 +527,24 @@ public final class Renderer {
         });
         for (Film.Actor a : list) drawActor(g, s, a, t);
         drawFxLayer(g, s, t, false);
+        if (film != null) {
+            float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t));
+            if (rain > 0 && Sets.outdoorSet(s.set)) Nature.rainSplashes(g, s.ground, t, rain);
+            float wet = film.wetness(t);
+            if (wet > 0.05f) for (Film.Actor a : s.actors) {
+                Film.Key k = a.stateAt(t);
+                if (!k.visible) continue;
+                float h = actorHeight(a.look, a.c, art, s);
+                Nature.drips(g, Director.xAt(a, t), s.ground - h, s.ground, h * 0.4f, t, wet, a.order);
+            }
+        }
         if (s.backdrop == null) Sets.paintFront(g, s.set, s.tod);
         g.restore();
         if (s.backdrop == null) {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
+        weatherScreen(g, s, t);
         light(g, s, t);
         foreground(g, s, t);
         grade(g, s);
@@ -577,6 +648,7 @@ public final class Renderer {
         p.holdL = k.holdL;
         p.eyesClosed = k.eyesShut;
         p.blink = blink(t, a.order);
+        if (film != null && Sets.outdoorSet(s.set)) { p.wind = film.wind(t); p.wet = film.wetness(t); }
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
         for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; }
@@ -912,6 +984,8 @@ public final class Renderer {
         Rig.State st = rs;
         st.reset();
         float t = p.time;
+        st.time = t;
+        st.wind = p.wind * (p.facing < 0 ? -1 : 1);     // the picture is mirrored when facing left
         st.armL = armSwing(p.armL);
         st.armR = armSwing(p.armR);
         st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f + p.seed) * 1.2f;
@@ -1005,14 +1079,17 @@ public final class Renderer {
             if (rise > 0) g.translate(0, rise);
             rig.bodyMesh(rf, st, left, top, w, h);
             g.imageMesh(sp.img, Rig.BW, Rig.BH, rf.body);
+            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, Rig.BW, Rig.BH, rf.body); g.restore(); }
             if (rig.face && rig.faceImg != null) {
                 rig.faceMesh(rf, st);
                 g.imageMesh(rig.faceImg, Rig.FW, Rig.FH, rf.face);
+                if (p.wet > 0.02f && rig.faceWetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, Rig.FW, Rig.FH, rf.face); g.restore(); }
             }
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);
         } else {
             g.image(sp.img, left, top, w, h);
+            if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.image(sp.wetImg, left, top, w, h); g.restore(); }
         }
         if (sp.faceKnown) {
             float ex1 = left + sp.eyeLX * w, ey1 = top + sp.eyeLY * h;
@@ -1161,6 +1238,17 @@ public final class Renderer {
                     sparkles(g, t, x - 120, f.y - 120, 240, 240, 14, f.color == 0 ? 0xFFFFF59D : f.color);
                 } break;
                 case Film.FX_SPLASH: if (!behind) splash(g, f, u); break;
+                case Film.FX_STONE: if (!behind) {
+                    // the stone's arc from the hand, then the splash and the rings of waves (or a puff of dust)
+                    float flight = f.t2 - f.t0;
+                    if (u < flight) {
+                        float hx = f.a != null ? Director.xAt(f.a, f.t0) + f.a.stateAt(f.t0).facing * 40 : f.x - 300;
+                        float hy = s.ground - (f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * 0.6f : 200);
+                        Nature.stone(g, hx, hy, f.x, f.y, u, flight);
+                    } else if (f.color == 1) Nature.splashRipples(g, f.x, f.y, u - flight, 1);
+                    else if (u - flight < 0.8f) { g.color(Puppet.alpha(0xFFBCAAA4, 0.6f * (1 - (u - flight) / 0.8f))); g.oval(f.x, f.y - 6, 18 + (u - flight) * 30, 8); }
+                } break;
+                case Film.FX_WATER_HIT: if (!behind) Nature.splashRipples(g, f.x, f.y, u, Math.max(1, f.color)); break;
                 case Film.FX_LEAVES: if (!behind) leaves(g, f, u); break;
                 case Film.FX_GREEN_GLOW: if (!behind) {
                     float k = (float) Math.sin(Math.min(1, u / (f.t1 - f.t0)) * Math.PI);
@@ -1191,7 +1279,9 @@ public final class Renderer {
         for (Film.Fx f : s.fx) {
             if (t < f.t0 || t >= f.t1) continue;
             float u = t - f.t0, d = f.t1 - f.t0;
-            if (f.type == Film.FX_FLASH) {
+            if (f.type == Film.FX_LIGHTNING) {
+                Nature.flash(g, vw, vh, u);
+            } else if (f.type == Film.FX_FLASH) {
                 float k = 1 - u / d;
                 g.color(Puppet.alpha(f.color == 0 ? 0xFFFFFFFF : f.color, 0.55f * k * k));
                 g.rect(0, 0, vw, vh);

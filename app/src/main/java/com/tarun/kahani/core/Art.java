@@ -34,6 +34,8 @@ public final class Art {
         public transient Cutout.Result pixelsForSampling;
         /** Bones and face for moving the picture (null = moved as one piece). */
         public Rig rig;
+        /** The same picture soaked by rain: darker, deeper colours (made only for rainy stories). */
+        public Object wetImg;
     }
 
     public static final class Backdrop {
@@ -41,6 +43,8 @@ public final class Art {
         public int w, h;
         public float x0 = 0, y0 = 0, x1 = 1, y1 = 1;  // crop window (fractions)
         public float ground = 0.9f;                    // where feet stand (fraction of frame height)
+        /** Sky, water, waterfall and plants found in the picture (null = not read). */
+        public Nature.Scan scan;
     }
 
     public static final class Shot {
@@ -142,6 +146,16 @@ public final class Art {
         b.w = L.width(img);
         b.h = L.height(img);
         fitCrop(b);
+        // where the sky, water and plants are, so the water can flow and the plants sway
+        try {
+            int[] d = L.decode(file, 480);
+            if (d != null) {
+                int[] px = new int[d[0] * d[1]];
+                System.arraycopy(d, 2, px, 0, px.length);
+                b.scan = Nature.scan(px, d[0], d[1]);
+            }
+        } catch (RuntimeException ignored) {
+        }
         return b;
     }
 
@@ -153,6 +167,7 @@ public final class Art {
      */
     public static Art fromManifest(String text, Story story, Loader L) {
         Art art = new Art();
+        boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
         for (String raw : text.split("\n")) {
             String line = raw.trim();
             if (line.length() == 0 || line.startsWith("#")) continue;
@@ -176,6 +191,10 @@ public final class Art {
                     }
                     // head, arms, legs and face for animating the picture (needs the final face points)
                     try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
+                    if (rainy && s.pixelsForSampling != null) {
+                        Cutout.Result cr = s.pixelsForSampling;
+                        s.wetImg = L.create(wetPixels(cr.px), cr.w, cr.h);
+                    }
                     s.pixelsForSampling = null;
                     art.sprites.put(c.id, s);
                 } else if (f[0].equals("scene") && f.length >= 3) {
@@ -208,6 +227,31 @@ public final class Art {
         }
         return art;
     }
+
+    static boolean mentions(Story st, String... words) {
+        if (st == null) return false;
+        for (Story.Scene sc : st.scenes) {
+            if (Txt.has(sc.setting + " " + sc.title, words)) return true;
+            for (Story.Beat b : sc.beats) if (Txt.has(b.text + " " + b.manner, words)) return true;
+        }
+        return false;
+    }
+
+    /** A picture's colours when soaked: darker and a little deeper, with a cool tint (alpha kept). */
+    public static int[] wetPixels(int[] px) {
+        int[] o = new int[px.length];
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i];
+            int a = c >>> 24;
+            float r = ((c >> 16) & 255), g = ((c >> 8) & 255), b = c & 255;
+            float l = (r + g + b) / 3;
+            r = (l + (r - l) * 1.15f) * 0.7f; g = (l + (g - l) * 1.15f) * 0.72f; b = (l + (b - l) * 1.15f) * 0.78f + 6;
+            o[i] = (a << 24) | (clamp255(r) << 16) | (clamp255(g) << 8) | clamp255(b);
+        }
+        return o;
+    }
+
+    static int clamp255(float v) { return v < 0 ? 0 : v > 255 ? 255 : (int) v; }
 
     /** Sets a centred 16:9 crop window for a picture of any shape. */
     public static void fitCrop(Backdrop b) {

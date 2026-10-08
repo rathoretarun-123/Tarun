@@ -135,6 +135,7 @@ public final class Mixer {
             case Film.SFX_CROWD: return "crowd_market.ogg";
             case Film.SFX_SWORD: return "sword_clash.ogg";
             case Film.SFX_NET: return "whoosh.ogg";
+            case Film.SFX_THUNDER: return "thunder.ogg";
             default: return null;
         }
     }

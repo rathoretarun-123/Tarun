@@ -246,7 +246,8 @@ public final class Puppet {
     static void drawOutfit(Gfx g, Look l, Pose p, Body b) {
         float sw = b.sw, hw = b.hw, shY = b.shY, hipY = b.hipY;
         float waistY = shY + b.T * 0.62f;
-        float sway = (float) Math.sin(p.time * 2.2f) * 0.03f + (float) Math.sin(p.walk) * p.walkAmt * 0.06f;
+        float sway = (float) Math.sin(p.time * 2.2f) * 0.03f + (float) Math.sin(p.walk) * p.walkAmt * 0.06f
+                + p.wind * 0.07f * (1 + 0.35f * (float) Math.sin(p.time * 7 + p.seed));   // the dress blows in the wind
         switch (l.outfit) {
             case Look.O_LEHENGA: {
                 // flared skirt to the floor
@@ -805,7 +806,8 @@ public final class Puppet {
     static void drawBackHair(Gfx g, Look l, Pose p, Body b) {
         if (l.kind == Look.MONSTER || l.hair == Look.H_NONE) return;
         float hy = b.headY, r = b.headR;
-        float swing = (float) Math.sin(p.time * 2.4f + p.seed) * 4 + (float) Math.sin(p.walk) * p.walkAmt * 8;
+        float swing = (float) Math.sin(p.time * 2.4f + p.seed) * 4 + (float) Math.sin(p.walk) * p.walkAmt * 8
+                + p.wind * r * 0.7f * (1 + 0.3f * (float) Math.sin(p.time * 6 + p.seed));     // hair flies in the wind
         g.color(l.hairColor);
         if (l.hair == Look.H_BRAID && l.headwear != Look.HW_PALLU) {
             // thick single braid falling behind one shoulder
@@ -850,7 +852,7 @@ public final class Puppet {
         if (l.hair == Look.H_PIGTAILS) {
             for (int s = -1; s <= 1; s += 2) {
                 float sx = s * r * 0.95f;
-                float swing = (float) Math.sin(p.time * 3 + s) * 3;
+                float swing = (float) Math.sin(p.time * 3 + s) * 3 + p.wind * 8 * (1 + 0.3f * (float) Math.sin(p.time * 6 + s));
                 g.color(l.hairColor);
                 for (int i = 0; i < 4; i++) g.oval(sx + s * 2 + swing * i / 4f, r * (0.35f + i * 0.33f), r * 0.2f, r * 0.19f);
                 if (l.ribbon1 != 0) {

@@ -103,16 +103,15 @@ public final class Renderer {
         g.translate(vw / 2 + panX, vh / 2 + panY);
         g.scale(zoom, zoom);
         Nature.Scan sc = b.scan;
-        if (sc != null) {   // every place picture is drawn through the fine mesh
-            // title pages and close-up shots live too: leaves sway, water flows, falls stream (fine mesh)
-            g.translate(-vw / 2, -vh / 2);
-            float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
-            Nature.backdropMesh(sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT, wind, sea, bdMesh);
-            g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
-            Nature.waterLife(g, sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT);
-        } else {
-            g.imageRect(b.img, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
-        }
+        // every picture is drawn through a mesh fine to the pixel: title pages and close-up shots live too
+        // (leaves sway, water flows, falls stream)
+        g.translate(-vw / 2, -vh / 2);
+        float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
+        int[] ms = Nature.meshSize(sc, vw / Math.max(1e-3f, cr[2] - cr[0]) * zoom * g.width() / vw, b.w, b.h);
+        float[] mesh = bdMesh(ms);
+        Nature.backdropMesh(sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT, wind, sea, mesh, ms[0], ms[1]);
+        g.imageMesh(b.img, ms[0], ms[1], mesh);
+        if (sc != null) Nature.waterLife(g, sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT);
         g.restore();
     }
 
@@ -404,7 +403,14 @@ public final class Renderer {
         }
     }
 
-    private final float[] bdMesh = new float[(Nature.MW + 1) * (Nature.MH + 1) * 2];
+    private float[] bdMesh = new float[(Nature.MW + 1) * (Nature.MH + 1) * 2];
+
+    /** The mesh buffer for a place picture of this many cells (grown when a finer mesh is needed). */
+    private float[] bdMesh(int[] ms) {
+        int need = (ms[0] + 1) * (ms[1] + 1) * 2;
+        if (bdMesh.length < need) bdMesh = new float[need];
+        return bdMesh;
+    }
 
     /** In the sky of the far layer: stars, a rainbow, and the bolts of lightning. */
     private void skyNature(Gfx g, Film.Seg s, float t, float skyBottom) {
@@ -611,13 +617,14 @@ public final class Renderer {
                 }
             };
             Nature.Scan sc = b.scan;
-            if (sc != null) {   // every place picture is drawn through the fine mesh
+            {   // every place picture is drawn through a mesh fine to the pixel
                 // a living picture: plants sway (more in the wind), water ripples along, a waterfall streams down
-                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), bdMesh);
-                g.imageMesh(b.img, Nature.MW, Nature.MH, bdMesh);
-                Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
-            } else {
-                g.layer("bd:" + System.identityHashCode(b), W, H, bp);
+                float onScreen = W / Math.max(1e-3f, b.x1 - b.x0) * (1 + (camZ - 1) * 0.78f) * 1.1f * g.width() / vw;
+                int[] ms = Nature.meshSize(sc, onScreen, b.w, b.h);
+                float[] mesh = bdMesh(ms);
+                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), mesh, ms[0], ms[1]);
+                g.imageMesh(b.img, ms[0], ms[1], mesh);
+                if (sc != null) Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
             }
             float dof = Math.max(0, Math.min(1, (camZ - 1.35f) / 0.45f));
             if (dof > 0.02f) {
@@ -1477,7 +1484,9 @@ public final class Renderer {
         Rig rig = sp.rig;
         boolean beast = rig != null && rig.animal;
         boolean bare = p.noHeadwear && sp.bareImg != null;          // the turban / cap has been taken off
-        boolean rigged = rig != null && (beast ? p.body != Pose.HANG : p.body != Pose.LIE && p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
+        // every picture moves through its mesh, also lying down or hanging upside down (the whole picture is
+        // turned; the body still breathes, the face still speaks and changes expression)
+        boolean rigged = rig != null && (!beast || p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
         Rig.State st = rigged ? rigState(p, actor) : null;
         if (rigged && beast) animalState(st, p);
         g.save();

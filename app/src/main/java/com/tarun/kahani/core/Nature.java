@@ -156,7 +156,27 @@ public final class Nature {
 
     // ================================================================== the living background
 
-    public static final int MW = 192, MH = 108;    // a very fine mesh: plants, water and falls bend smoothly
+    public static final int MW = 192, MH = 108;    // the smallest mesh of a living place (plants, water, falls)
+    /** The most cells a place picture is bent through (pixel level: about one cell per 2 screen pixels). */
+    public static final int MAX_COLS = 960, MAX_ROWS = 960, MAX_CELLS = 520000;
+    /** Screen pixels per mesh cell of a place picture (2 = pixel level). */
+    public static float CELL_PX = 2f;
+
+    /**
+     * How finely to bend a place picture this frame: {cols, rows}. A picture with plants, water or a waterfall
+     * gets about one cell per CELL_PX screen pixels (never more cells than it has pixels); a picture where
+     * nothing moves is mapped exactly to the pixel by a plain grid (every point of it lands where it belongs).
+     * screenW = the whole picture's width on screen in pixels.
+     */
+    public static int[] meshSize(Scan s, float screenW, int srcW, int srcH) {
+        boolean alive = s != null && (s.anyPlants || s.anyWater || s.anyFall);
+        if (!alive) return new int[]{16, Math.max(9, Math.round(16f * srcH / Math.max(1, srcW)))};
+        int cols = Math.round(screenW / CELL_PX);
+        cols = Math.max(MW, Math.min(Math.min(MAX_COLS, srcW), cols));
+        int rows = Math.max(MH, Math.min(Math.min(MAX_ROWS, srcH), Math.round(cols * srcH / (float) Math.max(1, srcW))));
+        while ((long) cols * rows > MAX_CELLS) { cols = cols * 9 / 10; rows = rows * 9 / 10; }
+        return new int[]{cols, rows};
+    }
 
     /**
      * Mesh points for drawing a background picture with its plants swaying in the wind (a gentle breeze always)
@@ -164,6 +184,10 @@ public final class Nature {
      * y0..y1 of the picture) fills the stage (0..W, 0..H).
      */
     public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out) {
+        backdropMesh(s, x0, y0, x1, y1, W, H, t, wind, sea, out, MW, MH);
+    }
+
+    public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out, int MW, int MH) {
         int k = 0;
         float sway = 0.25f + Math.abs(wind);
         float dir = wind >= 0 ? 1 : -1;
@@ -174,7 +198,7 @@ public final class Nature {
                 float X = (u - x0) / (x1 - x0) * W, Y = (v - y0) / (y1 - y0) * H;
                 float edge = Math.min(Math.min(i, MW - i), Math.min(j, MH - j)) >= 1 ? 1 : 0;
                 float dx = 0, dy = 0;
-                if (s.anyPlants) {
+                if (s != null && s.anyPlants) {
                     float p = s.at(s.plants, u, v);
                     if (p > 0.02f) {
                         // tops of plants move more than their roots; gusts travel across the picture
@@ -184,7 +208,7 @@ public final class Nature {
                         dy += p * 1.2f * sway * (float) Math.sin(t * 2.3 + u * 13);
                     }
                 }
-                if (s.anyWater) {
+                if (s != null && s.anyWater) {
                     float wv = s.at(s.water, u, v);
                     if (wv > 0.02f) {
                         // waves travelling along the river
@@ -193,7 +217,7 @@ public final class Nature {
                         dy += wv * 1.4f * big * (float) Math.sin(u * 45 + v * 60 - t * 3.3) + wv * sea * 4 * (float) Math.sin(v * 25 - t * 1.6);
                     }
                 }
-                if (s.anyFall) {
+                if (s != null && s.anyFall) {
                     float fv = s.at(s.fall, u, v);
                     if (fv > 0.02f) dy += fv * 3.2f * (float) Math.sin(v * 90 - t * 10);
                 }

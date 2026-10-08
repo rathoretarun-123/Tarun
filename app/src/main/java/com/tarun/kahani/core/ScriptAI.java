@@ -325,10 +325,16 @@ public final class ScriptAI {
     public static String matchName(String s, List<String> candidates) {
         if (s == null) return null;
         String n = s.replace('_', ' ').replace('-', ' ').replace('.', ' ');
+        String nn = Txt.norm(n).trim();
         String best = null;
-        int bestLen = 0;
+        int bestScore = 0;
         for (String c : candidates) {
-            if (CommandParser.nameIn(n, c) && c.length() > bestLen) { best = c; bestLen = c.length(); }
+            if (!CommandParser.nameIn(n, c)) continue;
+            // the same name beats shared words, shared words beat names that only sound alike ("राजा" / "राजू")
+            int score = c.length();
+            if (Txt.norm(c).trim().equals(nn)) score += 100000;
+            for (String part : c.split("\\s+")) if (part.length() >= 2 && !ScriptParser.isTitleWord(part) && Txt.has(n, part)) score += 1000;
+            if (score > bestScore) { best = c; bestScore = score; }
         }
         return best;
     }

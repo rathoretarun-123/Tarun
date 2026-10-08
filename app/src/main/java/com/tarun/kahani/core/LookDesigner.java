@@ -113,10 +113,61 @@ public final class LookDesigner {
                 {Look.SP_PEACOCK, "मोर", "peacock"}, {Look.SP_OWL, "उल्लू", "owl"}, {Look.SP_HEN, "मुर्गी", "मुर्गा", "hen", "rooster"},
                 {Look.SP_EAGLE, "चील", "बाज़", "गिद्ध", "eagle", "hawk"}, {Look.SP_DUCK, "बत्तख", "हंस", "duck", "swan"},
         };
-        // the name decides first (e.g. "चालाक लोमड़ी"), then the description
-        String head = t.length() > 40 ? t.substring(0, 40) : t;
-        for (Object[] e : sp) for (int i = 1; i < e.length; i++) if (wordIn(head, (String) e[i])) return (Integer) e[0];
-        return -1;
+        // the name and the first sentence of the description decide (e.g. "चालाक लोमड़ी", "शेरू: जंगल का राजा, एक बड़ा
+        // सुनहरा शेर।"); later details ("a dog sits at her feet") and likenesses ("शेर जैसा बहादुर") do not
+        int cut = t.length();
+        int nl = t.indexOf('\n');
+        int from = nl >= 0 && nl < 60 ? nl + 1 : 0;
+        for (char ch : new char[]{'।', '.', '!', '?', '\n'}) { int k = t.indexOf(ch, from); if (k > 0 && k < cut) cut = k; }
+        String head = t.substring(0, Math.min(cut, 160));
+        int best = -1, at = Integer.MAX_VALUE;
+        String hn = Txt.norm(head);
+        for (Object[] e : sp) for (int i = 1; i < e.length; i++) {
+            String w = (String) e[i];
+            if (!wordIn(head, w) || likeness(head, w) || owned(head, w)) continue;
+            int k = hn.indexOf(Txt.norm(w));
+            if (k >= 0 && k < at) { at = k; best = (Integer) e[0]; }
+        }
+        // "a girl who loves cats": a person named first is a person ("king of the jungle" is still a lion)
+        if (best >= 0) for (String hw : HUMAN) {
+            int k = hn.indexOf(Txt.norm(hw));
+            if (k >= 0 && k < at && wordIn(head, hw)) return -1;
+        }
+        return best;
+    }
+
+    static final String[] HUMAN = {"girl", "boy", "woman", "man", "lady", "princess", "prince", "queen", "child", "student", "farmer",
+            "लड़की", "लड़का", "औरत", "आदमी", "महिला", "राजकुमारी", "राजकुमार", "रानी", "बच्चा", "बच्ची", "किसान", "छात्र", "छात्रा"};
+
+    /** "her cat", "उसकी बिल्ली", "his pet dog": an animal the character has, not what the character is. */
+    static boolean owned(String t, String w) {
+        String n = Txt.norm(t), x = Txt.norm(w);
+        int i = n.indexOf(x);
+        while (i >= 0) {
+            String before = n.substring(0, i).trim();
+            boolean own = before.endsWith("her") || before.endsWith("his") || before.endsWith("their") || before.endsWith("pet") || before.endsWith("my")
+                    || before.endsWith("उसकी") || before.endsWith("उसका") || before.endsWith("उसके") || before.endsWith("अपनी") || before.endsWith("अपना")
+                    || before.endsWith("अपने") || before.endsWith("पालतू") || before.endsWith("with a") || before.endsWith("और उसका") || before.endsWith("और उसकी");
+            if (!own) return false;
+            i = n.indexOf(x, i + 1);
+        }
+        return true;
+    }
+
+    /** "शेर जैसा", "शेर-सा", "like a lion", "lion-hearted": a comparison, not what the character is. */
+    static boolean likeness(String t, String w) {
+        String n = Txt.norm(t), x = Txt.norm(w);
+        int i = n.indexOf(x);
+        while (i >= 0) {
+            String after = n.substring(i + x.length()).replaceFirst("^[\\s\\-]+", "");
+            String before = n.substring(0, i).trim();
+            boolean like = after.startsWith("जैस") || after.startsWith("सा ") || after.startsWith("सी ") || after.startsWith("से ") || after.startsWith("की तरह")
+                    || after.startsWith("hearted") || after.startsWith("heart") || before.endsWith("like a") || before.endsWith("like an") || before.endsWith("like")
+                    || before.endsWith("as a") || after.startsWith("दिल");
+            if (!like) return false;
+            i = n.indexOf(x, i + 1);
+        }
+        return true;
     }
 
     private static boolean wordIn(String t, String w) {
@@ -205,7 +256,8 @@ public final class LookDesigner {
             else if (species >= 0) { l.kind = Look.ANIMAL; l.species = species; }
             else {
                 l.female = fem > mal;
-                boolean child = (age > 0 && age < 14) || Txt.has(all, "बच्ची", "बच्चा", "child", "kid");
+                boolean child = (age > 0 && age < 14) || (age < 0 && (Txt.has(all, "बच्ची", "बच्चा", "बालक", "बालिका", "child", "kid")
+                        || wordIn(all, "girl") || wordIn(all, "boy") || wordIn(all, "लड़की") || wordIn(all, "लड़का")));
                 if (child) l.kind = l.female ? Look.GIRL : Look.BOY;
                 else if (old && !l.female) l.kind = Look.OLD_MAN;
                 else l.kind = l.female ? Look.WOMAN : Look.MAN;

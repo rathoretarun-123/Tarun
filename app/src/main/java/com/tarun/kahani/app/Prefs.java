@@ -30,6 +30,9 @@ public final class Prefs {
     public static Cloud cloud(Context c) {
         Cloud cl = new Cloud();
         cl.geminiKey = geminiKey(c);
+        cl.freesoundKey = get(c, "freesoundKey", "");
+        cl.pixabayKey = get(c, "pixabayKey", "");
+        cl.pexelsKey = get(c, "pexelsKey", "");
         return cl;
     }
 }

@@ -17,6 +17,8 @@ import java.util.Map;
  *  - Gemini (free API key from aistudio.google.com): script reading, picture recognition, expressive voices.
  *  - Pollinations (no key): text model fallback and picture generation.
  *  - Openverse / Wikimedia Commons (no key): free-licence pictures and sounds.
+ *  - Freesound, Pixabay, Pexels (optional free keys the user types into the app; kept only on the phone):
+ *    more and better recordings and photos. Nothing works less without them.
  * Pure Java (HttpURLConnection) so it can be tested on a desktop.
  */
 public final class Cloud {
@@ -28,6 +30,10 @@ public final class Cloud {
     public String pollinationsImage = "https://image.pollinations.ai/prompt/";
     public String openverse = "https://api.openverse.org/v1/";
     public String commons = "https://commons.wikimedia.org/w/api.php";
+    public String freesoundKey = "", pixabayKey = "", pexelsKey = "";
+    public String freesound = "https://freesound.org/apiv2/", pixabay = "https://pixabay.com/api/", pexels = "https://api.pexels.com/v1/";
+    /** One extra header for the next requests (Pexels wants its key as a header), or null. */
+    private String authHeader;
     public int timeoutMs = 90000;
     public volatile String lastError = "";
 
@@ -48,6 +54,7 @@ public final class Cloud {
         c.setRequestMethod(method);
         c.setRequestProperty("User-Agent", "KahaniFilm/6 (Android; children's film maker)");
         c.setRequestProperty("Accept", "*/*");
+        if (authHeader != null) c.setRequestProperty("Authorization", authHeader);
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", contentType);
@@ -297,9 +304,37 @@ public final class Cloud {
         public float seconds;
     }
 
-    /** Searches free-licence pictures (Openverse, then Wikimedia Commons). */
+    /** Searches free-licence pictures (Pixabay / Pexels with the user's keys, Openverse, then Wikimedia Commons). */
     public List<Found> searchPictures(String q, int max) {
         List<Found> out = new ArrayList<Found>();
+        if (pixabayKey != null && pixabayKey.trim().length() > 10) {
+            try {
+                Object r = getJson(pixabay + "?key=" + enc(pixabayKey.trim()) + "&q=" + enc(q) + "&safesearch=true&per_page=" + Math.max(3, Math.min(max, 50)));
+                List<Object> hits = Json.arr(r, "hits");
+                if (hits != null) for (Object x : hits) {
+                    Found f = new Found();
+                    f.title = Json.str(x, "tags", q); f.url = Json.str(x, "largeImageURL", Json.str(x, "webformatURL", ""));
+                    f.thumb = Json.str(x, "previewURL", f.url); f.license = "Pixabay"; f.creator = Json.str(x, "user", ""); f.source = "Pixabay";
+                    if (f.url.length() > 0 && out.size() < max) out.add(f);
+                }
+            } catch (IOException e) { lastError = e.getMessage(); }
+        }
+        if (pexelsKey != null && pexelsKey.trim().length() > 10 && out.size() < max) {
+            try {
+                authHeader = pexelsKey.trim();
+                Object r = getJson(pexels + "search?query=" + enc(q) + "&per_page=" + Math.max(3, Math.min(max, 40)));
+                List<Object> ph = Json.arr(r, "photos");
+                if (ph != null) for (Object x : ph) {
+                    Found f = new Found();
+                    Object src = Json.obj(x, "src");
+                    f.title = Json.str(x, "alt", q); f.url = Json.str(src, "large", Json.str(src, "original", ""));
+                    f.thumb = Json.str(src, "medium", f.url); f.license = "Pexels"; f.creator = Json.str(x, "photographer", ""); f.source = "Pexels";
+                    if (f.url.length() > 0 && out.size() < max) out.add(f);
+                }
+            } catch (IOException e) { lastError = e.getMessage(); }
+            finally { authHeader = null; }
+        }
+        if (out.size() >= max) return out;
         try {
             Object r = getJson(openverse + "images/?q=" + enc(q) + "&page_size=" + max + "&mature=false");
             List<Object> rs = Json.arr(r, "results");
@@ -307,7 +342,7 @@ public final class Cloud {
                 Found f = new Found();
                 f.title = Json.str(x, "title", q); f.url = Json.str(x, "url", ""); f.thumb = Json.str(x, "thumbnail", f.url);
                 f.license = Json.str(x, "license", ""); f.creator = Json.str(x, "creator", ""); f.source = "Openverse";
-                if (f.url.length() > 0) out.add(f);
+                if (f.url.length() > 0 && out.size() < max) out.add(f);
             }
         } catch (IOException e) { lastError = e.getMessage(); }
         if (out.size() < max) {
@@ -329,9 +364,25 @@ public final class Cloud {
         return out;
     }
 
-    /** Searches free-licence sounds (Openverse audio: Freesound, Jamendo, Wikimedia…). */
+    /** Searches free-licence sounds (Freesound with the user's key first, then Openverse audio: Freesound, Jamendo, Wikimedia…). */
     public List<Found> searchSounds(String q, int max) {
         List<Found> out = new ArrayList<Found>();
+        if (freesoundKey != null && freesoundKey.trim().length() > 10) {
+            try {
+                Object r = getJson(freesound + "search/text/?query=" + enc(q) + "&token=" + enc(freesoundKey.trim())
+                        + "&fields=name,previews,license,duration,username&sort=rating_desc&page_size=" + Math.max(3, Math.min(max, 30)));
+                List<Object> rs = Json.arr(r, "results");
+                if (rs != null) for (Object x : rs) {
+                    Found f = new Found();
+                    Object pv = Json.obj(x, "previews");
+                    f.title = Json.str(x, "name", q); f.url = Json.str(pv, "preview-hq-mp3", Json.str(pv, "preview-lq-mp3", ""));
+                    f.license = licenceOf(Json.str(x, "license", "")); f.creator = Json.str(x, "username", ""); f.source = "Freesound";
+                    f.seconds = (float) Json.num(x, "duration", 0);
+                    if (f.url.length() > 0 && out.size() < max) out.add(f);
+                }
+            } catch (IOException e) { lastError = e.getMessage(); }
+        }
+        if (out.size() >= max) return out;
         try {
             Object r = getJson(openverse + "audio/?q=" + enc(q) + "&page_size=" + max + "&mature=false");
             List<Object> rs = Json.arr(r, "results");
@@ -340,10 +391,20 @@ public final class Cloud {
                 f.title = Json.str(x, "title", q); f.url = Json.str(x, "url", "");
                 f.license = Json.str(x, "license", ""); f.creator = Json.str(x, "creator", ""); f.source = Json.str(x, "source", "Openverse");
                 f.seconds = (float) (Json.num(x, "duration", 0) / 1000.0);
-                if (f.url.length() > 0) out.add(f);
+                if (f.url.length() > 0 && out.size() < max) out.add(f);
             }
         } catch (IOException e) { lastError = e.getMessage(); }
         return out;
+    }
+
+    /** "http://creativecommons.org/licenses/by/4.0/" → "by"; the public-domain dedication → "cc0". */
+    static String licenceOf(String url) {
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        if (u.contains("zero") || u.contains("cc0")) return "cc0";
+        if (u.contains("by-nc")) return "by-nc";
+        if (u.contains("sampling")) return "sampling+";
+        if (u.contains("/by/")) return "by";
+        return u;
     }
 
     // ------------------------------------------------------------------ base64 (own copy: works on every Android version)

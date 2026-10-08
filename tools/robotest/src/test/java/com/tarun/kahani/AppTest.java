@@ -319,6 +319,62 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * No button: before the film the director takes what clearly fits from the library (a picture named after a
+     * character or place, a voice saved under a character's name), and pictures from older stories join the
+     * library once, without duplicates.
+     */
+    @Test
+    public void libraryIsUsedWithoutAnyButton() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        lib.addBytes("pic", "", "वृंदा", "", Files.readAllBytes(new File(ASSETS, "sample/char_vrinda.jpg").toPath()), ".jpg", "test");
+        lib.addBytes("pic", "", "रत्नगढ़ का महल और बगीचा", "", Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath()), ".jpg", "test");
+        com.tarun.kahani.app.Library.Item v = lib.addBytes("voice", "", "राजा तरुण", "", Files.readAllBytes(new File("voices/deep_slow.wav").toPath()), ".wav", "test");
+        Class<?> al = Class.forName("com.tarun.kahani.app.AutoLibrary");
+        Method fill = al.getDeclaredMethod("fill", android.content.Context.class, Project.class, Story.class);
+        fill.setAccessible(true);
+        String notes = (String) fill.invoke(null, ctx, p, st);
+        System.out.println("AUTO: " + notes + "\nCAST: " + p.read("cast.txt"));
+        String cast = p.read("cast.txt");
+        assertTrue(cast, cast.contains("char|वृंदा|"));
+        assertTrue(cast, cast.contains("scene|1|"));
+        assertTrue("voice not given: " + p.setting("vsample.राजा तरुण", ""), v.id.equals(p.setting("vsample.राजा तरुण", "")));
+        // nothing is taken twice: a second look finds nothing new
+        String again = (String) fill.invoke(null, ctx, p, st);
+        assertTrue(again, again.length() == 0);
+
+        // an older story with its own picture: adopted once; the library's own pictures (now in p) are not re-added
+        Project old = Project.create(ctx);
+        Files.write(new File(old.dir, "script.txt").toPath(), "पात्र:\n1. मोती (कुत्ता): भूरा, प्यारा कुत्ता।\n\nदृश्य 1: घर\nमोती: \"भौं!\"\n".getBytes("UTF-8"));
+        // a picture no other test has: random coloured blocks
+        Bitmap bm = Bitmap.createBitmap(300, 400, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+        java.util.Random rr = new java.util.Random(System.nanoTime());
+        android.graphics.Paint pt = new android.graphics.Paint();
+        for (int i = 0; i < 12; i++) { pt.setColor(0xFF000000 | rr.nextInt(0xFFFFFF)); cv.drawRect(rr.nextInt(300), rr.nextInt(400), rr.nextInt(300), rr.nextInt(400), pt); }
+        FileOutputStream fo = new FileOutputStream(new File(old.dir, "char_1.jpg"));
+        bm.compress(Bitmap.CompressFormat.JPEG, 90, fo);
+        fo.close();
+        old.write("cast.txt", "char|मोती|char_1.jpg\n");
+        Method adopt = al.getDeclaredMethod("adoptOldStories", android.content.Context.class, com.tarun.kahani.app.Library.class);
+        adopt.setAccessible(true);
+        int before = lib.find("pic", null, null).size();
+        adopt.invoke(null, ctx, lib);
+        int after = lib.find("pic", null, null).size();
+        boolean named = false;
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) if (it.name.equals("मोती") && it.tags.contains("कुत्ता")) named = true;
+        System.out.println("ADOPTED: " + (after - before) + " named=" + named);
+        assertTrue("old story's picture should be adopted exactly once (got " + (after - before) + ")", after - before == 1);
+        assertTrue(named);
+        adopt.invoke(null, ctx, lib);
+        assertTrue(lib.find("pic", null, null).size() == after);
+    }
+
     static byte[] wav16(float[] x, int sr) { return com.tarun.kahani.core.Wav.encode16(x, sr); }
 
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */

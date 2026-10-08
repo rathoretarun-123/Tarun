@@ -37,6 +37,8 @@ public final class FilmJob implements Runnable {
     public volatile boolean done, failed, cancelled;
     public volatile String error = "";
     public volatile String warning = "";
+    /** What the director took from the library by itself ("Vrinda ← picture …"). */
+    public volatile String info = "";
     public volatile Bitmap preview;         // latest rendered frame (small)
     public volatile long startedAt = System.currentTimeMillis();
     public volatile float filmSeconds;
@@ -139,6 +141,11 @@ public final class FilmJob implements Runnable {
                 }
             }
 
+            // the phone's library first: pictures and voices that clearly fit, no button needed
+            step("Director is looking through your library…", 0.025f);
+            String fromLib = AutoLibrary.fill(ctx, project, story);
+            if (fromLib.length() > 0) info = "Taken from your library: " + fromLib;
+            check();
             if (Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
@@ -264,6 +271,18 @@ public final class FilmJob implements Runnable {
                 if (sg == null || sg.scene < 0 || sg.scene >= story.scenes.size()) continue;
                 Library.Item it = lib.byId(project.setting("amb." + story.scenes.get(sg.scene).number, ""));
                 if (it != null) a.words = "#" + it.path;
+            }
+            // real recordings for backgrounds the library has none of yet (free, saved for every later film)
+            if (Prefs.online(ctx)) {
+                step("Finding real recordings for the backgrounds…", 0.295f);
+                java.util.List<String> got = new java.util.ArrayList<String>();
+                FreeSounds.fetchFor(ctx, film, lib, Prefs.cloud(ctx), 3, got);
+                if (!got.isEmpty()) {
+                    StringBuilder b = new StringBuilder();
+                    for (String g : got) b.append(b.length() > 0 ? ", " : "").append(g);
+                    info = (info.length() > 0 ? info + "\n" : "") + "New in your library: " + b;
+                }
+                check();
             }
             if (film.duration > 30 * 60 + 30) warning = "The film is longer than 30 minutes (" + fmt((long) film.duration) + ") — it will take longer to make.";
             film.subtitles = ed.subtitles;

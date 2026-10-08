@@ -111,6 +111,24 @@ final class Ui {
         return b;
     }
 
+    /** A quiet, light full-width button (for something that should not shout, like clearing the story). */
+    static Button soft(Context c, String s, int textColor, int fill, View.OnClickListener l) {
+        Button b = new Button(c);
+        b.setText(s);
+        b.setAllCaps(false);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        b.setTextColor(textColor);
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x14000000), round(fill, dp(c, 10), 0x22000000, dp(c, 1)), null));
+        b.setPadding(dp(c, 10), dp(c, 4), dp(c, 10), dp(c, 4));
+        b.setMinHeight(dp(c, 40));
+        b.setMinimumHeight(dp(c, 40));
+        b.setOnClickListener(l);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(c, 4), 0, dp(c, 2));
+        b.setLayoutParams(lp);
+        return b;
+    }
+
     static View space(Context c, int h) {
         View v = new View(c);
         v.setLayoutParams(new LinearLayout.LayoutParams(1, dp(c, h)));

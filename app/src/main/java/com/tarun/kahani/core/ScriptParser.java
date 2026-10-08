@@ -112,19 +112,47 @@ public final class ScriptParser {
                 && l.length() < 120;
     }
 
+    /** A line that can be the film's title: short, not a sentence, list entry, heading or "Name: words" line. */
+    private static boolean titleLike(String l, boolean allowColon) {
+        boolean bullet = l.startsWith("*") || l.startsWith("-") || l.startsWith("•");
+        boolean sentence = l.endsWith("।") || l.endsWith("|") || (l.endsWith(".") && l.length() > 60);
+        if (bullet || sentence || NUMBERED.matcher(l).matches() || l.length() > 100 || isCharHeader(l) || isPlaceHeader(l) || l.endsWith(":")) return false;
+        if (l.startsWith("\"") || l.startsWith("“") || l.startsWith("(")) return false;
+        int colon = colonOutsideParens(l);
+        if (colon > 0 && !allowColon) return false;
+        // "Meera: "Hello"" is a spoken line, never a title
+        return !(colon > 0 && l.substring(colon + 1).trim().matches("^[\"“].*"));
+    }
+
+    /** Words that start a description line ("Face: …", "पहनावा: …"), never a new character or place. */
+    static final String[] FIELDS = {"चेहरा", "पहनावा", "पोशाक", "कपड़े", "शरीर", "रूप", "आवाज़", "आवाज", "उम्र", "स्वभाव", "बाल", "आँखें", "कद",
+            "face", "dress", "outfit", "clothes", "costume", "body", "hair", "voice", "age", "personality", "nature", "look", "looks",
+            "appearance", "height", "eyes", "skin", "role", "note", "notes", "description", "features", "behaviour", "behavior", "accessories"};
+
+    private static boolean fieldLabel(String head) {
+        String h = Txt.norm(head.replaceAll("[*•\\-&]", " ")).trim();
+        for (String f : FIELDS) if (h.equals(Txt.norm(f)) || h.startsWith(Txt.norm(f) + " ")) return true;
+        return false;
+    }
+
+    private static boolean narratorName(String head) {
+        return Txt.has(head, "narrator", "कथावाचक", "सूत्रधार", "वाचक", "writer", "लेखक", "note", "नोट");
+    }
+
     private static void parsePreamble(Story story, String[] pre) {
-        // Find explicit or implicit title: last short non-description line before the first scene.
+        // The title: "Title: …" anywhere, else the last short line before the first scene, else the first line
         int titleIdx = -1;
-        for (int i = pre.length - 1; i >= 0; i--) {
+        for (int i = 0; i < pre.length && titleIdx < 0; i++) if (Txt.has(Txt.clean(pre[i]), "शीर्षक", "title:")) titleIdx = i;
+        for (int i = pre.length - 1; i >= 0 && titleIdx < 0; i--) {
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
-            if (Txt.has(l, "शीर्षक", "title:")) { titleIdx = i; break; }
-            boolean bullet = l.startsWith("*") || l.startsWith("-") || l.startsWith("•");
-            boolean sentence = l.endsWith("।") || l.endsWith("|") || (l.endsWith(".") && l.length() > 60);
-            if (!bullet && !sentence && !NUMBERED.matcher(l).matches() && l.length() <= 100
-                    && !isCharHeader(l) && !isPlaceHeader(l) && !l.endsWith(":")) {
-                titleIdx = i;
-            }
+            if (titleLike(l, false)) titleIdx = i;
+            break;
+        }
+        for (int i = 0; i < pre.length && titleIdx < 0; i++) {
+            String l = Txt.clean(pre[i]);
+            if (l.length() == 0) continue;
+            if (titleLike(l, true)) titleIdx = i;
             break;
         }
         if (titleIdx >= 0) {
@@ -142,6 +170,7 @@ public final class ScriptParser {
         String header = null;
         StringBuilder desc = new StringBuilder();
         int entryMode = 0;
+        boolean numbered = false;   // the list numbers its entries ("1. Meera"): other "x: y" lines describe them
         for (int i = 0; i < pre.length; i++) {
             if (i == titleIdx) continue;
             String l = Txt.clean(pre[i]);
@@ -160,7 +189,30 @@ public final class ScriptParser {
                     header = header.substring(0, colon).trim();
                 }
                 entryMode = mode == 0 ? 1 : mode;
+                numbered = true;
                 continue;
+            }
+            // unnumbered lists under a heading: "Meera (9 years): a curious girl…", "Village house – a mud house…"
+            boolean bullet = l.startsWith("*") || l.startsWith("•");
+            if (mode != 0 && !(numbered && header != null)) {
+                String body = bullet ? l.substring(1).trim() : l;
+                int colon = colonOutsideParens(body);
+                String head = null, rest = "";
+                if (colon > 0) { head = body.substring(0, colon).trim(); rest = body.substring(colon + 1).trim(); }
+                else {
+                    Matcher dm = Pattern.compile("^(.{2,40}?)\\s+[-–—]\\s+(.+)$").matcher(body);
+                    if (dm.matches()) { head = dm.group(1).trim(); rest = dm.group(2).trim(); }
+                }
+                if (head != null && head.length() <= 40 && Txt.withoutParens(head).trim().split("\\s+").length <= 5 && !fieldLabel(head)) {
+                    flushEntry(story, entryMode, header, desc);
+                    header = null;
+                    // a spoken line or a writer's note before the story starts: never a character, never acted
+                    if (rest.startsWith("\"") || rest.startsWith("“") || narratorName(head)) continue;
+                    header = head;
+                    if (rest.length() > 0) desc.append(rest).append('\n');
+                    entryMode = mode;
+                    continue;
+                }
             }
             if (header != null) desc.append(l.replaceFirst("^[*•\\-]\\s*", "")).append('\n');
         }

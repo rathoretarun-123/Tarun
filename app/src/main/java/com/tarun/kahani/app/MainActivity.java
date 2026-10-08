@@ -81,7 +81,7 @@ import java.util.Set;
 public class MainActivity extends Activity {
 
     static final int REQ_LOGIN = 11, REQ_SCRIPT = 12, REQ_IMAGE = 13, REQ_CAMERA = 14, REQ_AUDIO = 15, REQ_BULK = 16,
-            REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22;
+            REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22, REQ_LIB_MANY = 23;
     static final int S_HOME = 0, S_STORY = 1, S_STUDIO = 2, S_FACE = 3, S_PROGRESS = 4, S_PLAYER = 5, S_LIBRARY = 6,
             S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9;
 
@@ -115,6 +115,11 @@ public class MainActivity extends Activity {
         setContentView(root);
         getWindow().setStatusBarColor(Ui.PRIMARY_DARK);
         library = Library.get(this);
+        // pictures placed in older stories join the library (once), so every new story can use them
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            public void run() { try { AutoLibrary.adoptOldStories(app, library); } catch (Throwable ignored) {} }
+        }, "adopt-old-stories").start();
         if (b != null) {
             String pd = b.getString("project");
             if (pd != null && new File(pd).isDirectory()) project = new Project(new File(pd));
@@ -473,6 +478,16 @@ public class MainActivity extends Activity {
         scriptBox.setBackground(Ui.round(0xFFFFFDF7, Ui.dp(this, 10), 0x33000000, Ui.dp(this, 1)));
         scriptBox.setPadding(Ui.dp(this, 10), Ui.dp(this, 10), Ui.dp(this, 10), Ui.dp(this, 10));
         c1.addView(scriptBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
+        // right below the story, in a light shade: clears the whole story (asks first)
+        c1.addView(Ui.soft(this, "🧹  Clear the whole story", 0xFF8D6E63, 0xFFFBF3EA, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (scriptBox.getText().length() == 0) { toast("The story box is already empty"); return; }
+                new AlertDialog.Builder(MainActivity.this).setTitle("Clear the story?").setMessage("The whole story in the box will be removed.")
+                        .setPositiveButton("Yes, clear", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface d, int w) { scriptBox.setText(""); saveScript(); }
+                        }).setNegativeButton("No", null).show();
+            }
+        }));
         LinearLayout r1 = Ui.row(this);
         r1.addView(Ui.small(this, "📋 Paste", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) {
@@ -486,15 +501,6 @@ public class MainActivity extends Activity {
         }));
         r1.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { pick("text/*", REQ_SCRIPT, false); }
-        }));
-        r1.addView(Ui.small(this, "🧹 Clear", Ui.RED, new View.OnClickListener() {
-            public void onClick(View v) {
-                if (scriptBox.getText().length() == 0) return;
-                new AlertDialog.Builder(MainActivity.this).setTitle("Clear the story?").setMessage("The whole pasted story will be removed.")
-                        .setPositiveButton("Yes, clear", new DialogInterface.OnClickListener() {
-                            public void onClick(DialogInterface d, int w) { scriptBox.setText(""); saveScript(); }
-                        }).setNegativeButton("No", null).show();
-            }
         }));
         c1.addView(r1);
         boolean hasAi = project.has("script_ai.txt");
@@ -1825,6 +1831,80 @@ public class MainActivity extends Activity {
 
     // ================================================================== picking files
 
+    /**
+     * Many files at once into the library (photos from the whole gallery, sounds, voices — mixed is fine).
+     * audioAs: "voice", "sound" or "auto" (decided from the file's name and what it sounds like).
+     */
+    private void pickMany(String audioAs, String... mimes) {
+        manyAudioAs = audioAs;
+        try {
+            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+            i.setType(mimes.length == 1 ? mimes[0] : "*/*");
+            if (mimes.length > 1) i.putExtra(Intent.EXTRA_MIME_TYPES, mimes);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            startActivityForResult(Intent.createChooser(i, "Choose one or many"), REQ_LIB_MANY);
+            toast("Tip: long-press to select many at once");
+        } catch (Exception e) {
+            toast("No file picker app found");
+        }
+    }
+
+    private String manyAudioAs = "auto";
+
+    /** Adds every chosen file to the library; pictures and sounds are measured so the director can use them. */
+    private void addMany(final List<Uri> uris, final String audioAs) {
+        background("Adding " + uris.size() + (uris.size() == 1 ? " file" : " files") + " to your library…", new Work() {
+            public Object run() throws Exception {
+                int pics = 0, voices = 0, sounds = 0, bad = 0;
+                for (Uri u : uris) {
+                    try {
+                        String name = displayName(u);
+                        String mime = getContentResolver().getType(u);
+                        if (mime == null) mime = "";
+                        byte[] b = Project.readAll(getContentResolver().openInputStream(u));
+                        String base = name.replaceAll("\\.[A-Za-z0-9]+$", "");
+                        String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : "";
+                        boolean image = mime.startsWith("image/") || ext.matches("\\.(jpe?g|png|webp|gif|bmp|heic)");
+                        if (image) {
+                            library.addBytes(Library.PIC, "", base, name, b, ".jpg", "phone");
+                            pics++;
+                            continue;
+                        }
+                        if (ext.length() == 0) ext = ".m4a";
+                        boolean voice = audioAs.equals("voice") || (audioAs.equals("auto") && looksLikeVoice(name));
+                        Library.Item it = library.addBytes(voice ? Library.VOICE : Library.SOUND, voice ? "voice" : "amb", base, name, b, ext, "phone");
+                        if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); bad++; continue; }
+                        if (voice) voices++; else sounds++;
+                    } catch (Exception e) {
+                        bad++;
+                    }
+                }
+                library.save();
+                StringBuilder m = new StringBuilder("✅ Added");
+                if (pics > 0) m.append(" ").append(pics).append(pics == 1 ? " picture" : " pictures");
+                if (voices > 0) m.append(pics > 0 ? "," : "").append(" ").append(voices).append(voices == 1 ? " voice" : " voices");
+                if (sounds > 0) m.append(pics + voices > 0 ? "," : "").append(" ").append(sounds).append(sounds == 1 ? " sound" : " sounds");
+                if (pics + voices + sounds == 0) m = new StringBuilder("Nothing could be added");
+                if (bad > 0) m.append(" (").append(bad).append(" could not be opened)");
+                m.append(". The director uses them by itself in every story.");
+                return m.toString();
+            }
+        }, new Done() {
+            public void done(Object r, Exception e) {
+                if (e != null) { toast("Could not add them: " + e.getMessage()); return; }
+                toast((String) r);
+                if (screen == S_LIBRARY) showLibrary();
+            }
+        });
+    }
+
+    /** A voice sample rather than a sound, from its file name ("voice", "आवाज़", "dialogue", "sample"…). */
+    static boolean looksLikeVoice(String name) {
+        return com.tarun.kahani.core.Txt.has(name.replace('_', ' ').replace('-', ' '), "voice", "vocal", "speech", "speaking", "dialogue", "narration",
+                "sample", "आवाज़", "आवाज", "awaaz", "awaz", "बोल", "संवाद");
+    }
+
     private void pick(String type, int code, boolean multiple) {
         try {
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
@@ -1914,6 +1994,13 @@ public class MainActivity extends Activity {
             return;
         }
         if (result != RESULT_OK || data == null) return;
+        if (code == REQ_LIB_MANY) {
+            List<Uri> uris = new ArrayList<Uri>();
+            if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
+            else if (data.getData() != null) uris.add(data.getData());
+            if (!uris.isEmpty()) addMany(uris, manyAudioAs);
+            return;
+        }
         if (code == REQ_BULK) {
             List<Uri> uris = new ArrayList<Uri>();
             if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
@@ -2443,11 +2530,13 @@ public class MainActivity extends Activity {
         preview.setBackgroundColor(0xFF000000);
         final TextView note = Ui.text(this, "You can lock the phone or use other apps — the film keeps being made (progress shows in the notification).", 14, Ui.SUB, false);
         final TextView warn = Ui.text(this, "", 14, Ui.RED, false);
+        final TextView fromLib = Ui.text(this, "", 13, Ui.GREEN, false);
         c.addView(stage);
         c.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 22)));
         c.addView(eta);
         c.addView(preview, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 200)));
         c.addView(note);
+        c.addView(fromLib);
         c.addView(warn);
         final Button stop = Ui.button(this, "■  Stop", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) {
@@ -2469,6 +2558,7 @@ public class MainActivity extends Activity {
                 bar.setProgress((int) (j.progress * 1000));
                 if (j.preview != null) preview.setImageBitmap(j.preview);
                 if (j.warning.length() > 0) warn.setText("⚠ " + j.warning);
+                if (j.info.length() > 0) fromLib.setText("📚 " + j.info);
                 if (j.done) {
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     toast("🎉 Your film is ready!");
@@ -2690,7 +2780,7 @@ public class MainActivity extends Activity {
         if (libTab.equals(Library.PIC)) {
             add.addView(Ui.text(this, "Your pictures can be used in every film. Real photos can be turned into cartoon avatars.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
-            r.addView(Ui.small(this, "📂 From phone", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; pick("image/*", REQ_IMAGE, false); } }));
+            r.addView(Ui.small(this, "📂 From phone", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; pickMany("auto", "image/*"); } }));
             r.addView(Ui.small(this, "📷 Camera", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; camera(); } }));
             r.addView(Ui.small(this, "🌐 Search", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; searchPictures(""); } }));
             add.addView(r);
@@ -2698,18 +2788,25 @@ public class MainActivity extends Activity {
             add.addView(Ui.text(this, "Voice samples (10–20 seconds). Give one to a character in the studio and all their lines are made in that voice.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
             r.addView(Ui.small(this, "🎙 Record", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; record(Library.VOICE, ""); } }));
-            r.addView(Ui.small(this, "📂 From file", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pick("audio/*", REQ_AUDIO, false); } }));
+            r.addView(Ui.small(this, "📂 From files", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:voice"; pickMany("voice", "audio/*"); } }));
             add.addView(r);
         } else {
             add.addView(Ui.text(this, "Nature sounds (rain, river, birds), background voices (a market, a crowd), effects (a door, thunder, a horse) and music. "
                     + "Say what each one is — in English or Hindi — and the director uses it wherever a story describes it: backgrounds under the matching places, effects at the moment they happen.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
             r.addView(Ui.small(this, "🎙 Record", Ui.RED, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; record(Library.SOUND, ""); } }));
-            r.addView(Ui.small(this, "📂 File", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; pick("audio/*", REQ_AUDIO, false); } }));
+            r.addView(Ui.small(this, "📂 Files", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; pickMany("sound", "audio/*"); } }));
             r.addView(Ui.small(this, "🌐 Search", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:sound"; searchSounds(""); } }));
             add.addView(r);
         }
         body.addView(add);
+        LinearLayout many = Ui.card(this);
+        many.addView(Ui.text(this, "Add many at once — photos from your whole gallery, sounds and voice samples together. "
+                + "The director looks through the library by itself before every film and uses what fits.", 13, Ui.SUB, false));
+        many.addView(Ui.small(this, "➕ Add many (photos, sounds, voices)", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { pickMany("auto", "image/*", "audio/*"); }
+        }));
+        body.addView(many);
         LinearLayout safe = Ui.card(this);
         safe.addView(Ui.text(this, "🔒 Everything you add stays saved on this phone, even when the app is closed. A backup copy is also kept in Downloads/KahaniFilm/Library — it stays even if the app is removed.", 13, Ui.SUB, false));
         safe.addView(Ui.small(this, "♻ Restore from backup", Ui.BLUE, new View.OnClickListener() {
@@ -2842,6 +2939,31 @@ public class MainActivity extends Activity {
         });
         ai.addView(av);
         body.addView(ai);
+
+        // free picture and sound collections: Openverse and Wikimedia need nothing; these three give more with a free key
+        LinearLayout media = Ui.card(this);
+        media.addView(Ui.title(this, "Free pictures & sounds (optional keys)"));
+        media.addView(Ui.text(this, "Without any key the director already finds free-licence pictures and real sound recordings "
+                + "(Openverse, Wikimedia Commons) and saves them in your library. With these free keys it finds more and better ones. "
+                + "Each key stays only on this phone.\n• Freesound: freesound.org/apiv2/apply (sign in, \"Create new API credentials\", copy the API key)\n"
+                + "• Pixabay: pixabay.com/api/docs (sign in, your key is shown on that page)\n• Pexels: pexels.com/api (sign in, \"Your API key\")", 13, Ui.SUB, false));
+        final String[][] mk = {{"freesoundKey", "Freesound API key (sounds)"}, {"pixabayKey", "Pixabay API key (pictures)"}, {"pexelsKey", "Pexels API key (photos)"}};
+        final EditText[] mf = new EditText[mk.length];
+        for (int i = 0; i < mk.length; i++) {
+            mf[i] = new EditText(this);
+            mf[i].setHint(mk[i][1]);
+            mf[i].setSingleLine(true);
+            mf[i].setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            mf[i].setText(Prefs.get(this, mk[i][0], ""));
+            media.addView(mf[i]);
+        }
+        media.addView(Ui.small(this, "💾 Save keys", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) {
+                for (int i = 0; i < mk.length; i++) Prefs.put(MainActivity.this, mk[i][0], mf[i].getText().toString().trim());
+                toast("Saved on this phone");
+            }
+        }));
+        body.addView(media);
 
         LinearLayout ph = Ui.card(this);
         ph.addView(Ui.title(this, "Phone"));

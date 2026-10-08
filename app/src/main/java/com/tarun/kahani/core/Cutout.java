@@ -60,7 +60,201 @@ public final class Cutout {
         for (int y = 0; y < ch; y++) System.arraycopy(px, (y + minY) * w + minX, out, y * cw, cw);
         r.px = out; r.w = cw; r.h = ch;
         findFace(r);
+        refineFace(r);
         return r;
+    }
+
+    /**
+     * Finds the real eyes and mouth (instead of guessing them from face proportions): eyes are a matching pair of
+     * dark irises inside brighter whites, side by side in the upper part of the figure; the mouth is the darkest,
+     * reddest short line below them, at a distance that fits the eyes' spacing. Keeps the old guess when no
+     * convincing pair is found.
+     */
+    static void refineFace(Result r) {
+        int w = r.w, h = r.h;
+        if (w < 40 || h < 40) return;
+        int W1 = w + 1;
+        long[] iy = new long[W1 * (h + 1)], ia = new long[W1 * (h + 1)], is = new long[W1 * (h + 1)], ib = new long[W1 * (h + 1)], ic = new long[W1 * (h + 1)];
+        int[] lum = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            long rowY = 0, rowA = 0, rowS = 0, rowB = 0, rowC = 0;
+            for (int x = 0; x < w; x++) {
+                int c = r.px[y * w + x];
+                boolean op = (c >>> 24) > 200;
+                int l = op ? (((c >> 16) & 255) * 299 + ((c >> 8) & 255) * 587 + (c & 255) * 114) / 1000 : 0;
+                lum[y * w + x] = l;
+                rowY += l; rowA += op ? 1 : 0;
+                rowS += op && faceSkin(c) ? 1 : 0;
+                rowB += l > 175 ? 1 : 0;                 // whites of the eyes, highlights
+                rowC += l > 125 ? 1 : 0;                 // the same in a dark or shaded face
+                iy[(y + 1) * W1 + x + 1] = iy[y * W1 + x + 1] + rowY;
+                ia[(y + 1) * W1 + x + 1] = ia[y * W1 + x + 1] + rowA;
+                is[(y + 1) * W1 + x + 1] = is[y * W1 + x + 1] + rowS;
+                ib[(y + 1) * W1 + x + 1] = ib[y * W1 + x + 1] + rowB;
+                ic[(y + 1) * W1 + x + 1] = ic[y * W1 + x + 1] + rowC;
+            }
+        }
+        // where to look: the upper part of the figure (people: top half; the face is usually higher)
+        int top = (int) (r.headTop * h);
+        // the head: a full figure's face is in its top third; a portrait's in its upper two thirds
+        boolean full = h > w * 1.6f;
+        int yMax = Math.min(h - 1, top + (int) ((h - top) * (full ? 0.3f : 0.62f)));
+        int maxR = Math.max(3, (int) (w * 0.09f)), minR = Math.max(2, (int) (w * 0.018f));
+        java.util.List<float[]> cands = new java.util.ArrayList<float[]>();     // x, y, r, score
+        for (int rad = minR; rad <= maxR; rad = Math.max(rad + 1, (int) (rad * 1.18f))) {
+            int in = Math.max(1, (int) (rad * 0.6f)), out = (int) (rad * 1.55f);
+            int step = Math.max(1, rad / 3);
+            for (int y = top + out; y < yMax - out; y += step) {
+                for (int x = out; x < w - out; x += step) {
+                    long aIn = box(ia, W1, x - in, y - in, x + in, y + in), aOut = box(ia, W1, x - out, y - out, x + out, y + out);
+                    int nIn = (2 * in + 1) * (2 * in + 1), nOut = (2 * out + 1) * (2 * out + 1);
+                    float mIn = box(iy, W1, x - in, y - in, x + in, y + in) / (float) nIn;
+                    float mRing = (box(iy, W1, x - out, y - out, x + out, y + out) - box(iy, W1, x - in, y - in, x + in, y + in)) / (float) (nOut - nIn);
+                    float sc = mRing - mIn;
+                    if (aOut < nOut * 0.97f) continue;                 // the whole eye area must be inside the figure
+                    // darker than its surroundings (relative, so dark skin and shaded eyes count too)
+                    if (sc < Math.max(22, mRing * 0.33f) || mRing < 50) continue;
+                    // an eye has some white (the eyeball, a catch-light) in or around it
+                    if (box(mRing < 105 ? ic : ib, W1, x - out, y - out, x + out, y + out) < nOut * 0.04f) continue;
+                    cands.add(new float[]{x, y, rad, sc * (float) Math.sqrt(rad / (double) minR)});
+                }
+            }
+        }
+        if (cands.size() < 2) return;
+        java.util.Collections.sort(cands, new java.util.Comparator<float[]>() {
+            public int compare(float[] a, float[] b) { return Float.compare(b[3], a[3]); }
+        });
+        // keep the strongest, at least an eye apart from each other
+        java.util.List<float[]> peaks = new java.util.ArrayList<float[]>();
+        for (float[] c : cands) {
+            boolean near = false;
+            // (each size on its own: a small iris inside a large dark socket is still a candidate of its own size)
+            for (float[] p : peaks) if (Math.max(c[2], p[2]) < Math.min(c[2], p[2]) * 1.3f && Math.hypot(c[0] - p[0], c[1] - p[1]) < Math.max(c[2], p[2]) * 1.6f) { near = true; break; }
+            if (!near) peaks.add(c);
+            if (peaks.size() >= 400) break;
+        }
+        float bestS = -1e9f;
+        float[] bl = null, br = null;
+        java.util.List<float[]> good = new java.util.ArrayList<float[]>();     // Lx, Ly, Rx, Ry, score, iL, iR
+        for (int i = 0; i < peaks.size(); i++) for (int j = i + 1; j < peaks.size(); j++) {
+            float[] a = peaks.get(i), b = peaks.get(j);
+            float[] L = a[0] < b[0] ? a : b, R = a[0] < b[0] ? b : a;
+            float dx = R[0] - L[0], dy = Math.abs(R[1] - L[1]);
+            float rr = Math.max(L[2], R[2]);
+            if (dx < rr * 2.6f || dx > w * 0.6f || dy > dx * 0.18f) continue;
+            float ratio = L[2] / R[2];
+            if (ratio < 0.6f || ratio > 1.65f) continue;
+            float mid = (L[0] + R[0]) / 2;
+            if (Math.abs(mid - w / 2f) > w * 0.3f) continue;
+            // between the eyes: the bridge of the nose is brighter than the irises
+            float bridge = box(iy, W1, (int) (mid - rr * 0.5f), (int) ((L[1] + R[1]) / 2 - rr * 0.5f), (int) (mid + rr * 0.5f), (int) ((L[1] + R[1]) / 2 + rr * 0.5f))
+                    / (float) ((2 * (int) (rr * 0.5f) + 1) * (2 * (int) (rr * 0.5f) + 1));
+            // a face: skin (or fur) on both cheeks below the eyes and between them
+            float ey0 = (L[1] + R[1]) / 2;
+            int ch = Math.max(2, (int) (dx * 0.18f));
+            float cheekL = box(is, W1, (int) L[0] - ch, (int) (ey0 + dx * 0.35f), (int) L[0] + ch, (int) (ey0 + dx * 0.6f)) / (float) ((2 * ch + 1) * ((int) (dx * 0.25f) + 1));
+            float cheekR = box(is, W1, (int) R[0] - ch, (int) (ey0 + dx * 0.35f), (int) R[0] + ch, (int) (ey0 + dx * 0.6f)) / (float) ((2 * ch + 1) * ((int) (dx * 0.25f) + 1));
+            float between = box(is, W1, (int) (mid - ch), (int) (ey0 - ch), (int) (mid + ch), (int) (ey0 + ch)) / (float) ((2 * ch + 1) * (2 * ch + 1));
+            if (Math.min(cheekL, cheekR) < 0.25f || between < 0.2f) continue;
+            float sc = L[3] + R[3] - 0.6f * Math.abs(L[3] - R[3]) - dy * 0.8f + (bridge > 110 ? 12 : -25)
+                    + 40 * Math.min(cheekL, cheekR) + 20 * between
+                    - ((L[1] + R[1]) / 2 - top) / (float) h * 60;      // higher is more likely the face
+            good.add(new float[]{L[0], L[1], R[0], R[1], sc, a == L ? i : j, a == L ? j : i});
+            if (sc > bestS) { bestS = sc; bl = L; br = R; }
+        }
+        if (bl == null || bestS < 70) return;
+        // eyebrows make a pair too: if a nearly as good pair sits just below this one, those are the eyes
+        for (int pass = 0; pass < 2; pass++) {
+            float bdx = br[0] - bl[0], bey = (bl[1] + br[1]) / 2, bmx = (bl[0] + br[0]) / 2;
+            float[] lower = null;
+            for (float[] g : good) {
+                float gdx = g[2] - g[0], gey = (g[1] + g[3]) / 2, gmx = (g[0] + g[2]) / 2;
+                if (g[4] < bestS * 0.6f || gey - bey < bdx * 0.15f || gey - bey > bdx * 0.55f) continue;
+                if (Math.abs(gmx - bmx) > bdx * 0.25f || gdx < bdx * 0.7f || gdx > bdx * 1.4f) continue;
+                if (lower == null || g[4] > lower[4]) lower = g;
+            }
+            if (lower == null) break;
+            bl = peaks.get((int) lower[5]); br = peaks.get((int) lower[6]); bestS = lower[4];
+        }
+        float d = br[0] - bl[0], ey = (bl[1] + br[1]) / 2, mx = (bl[0] + br[0]) / 2;
+        // the mouth: the strongest dark / red line in a band below the eyes
+        int half = (int) (d * 0.38f);
+        float bestM = -1e9f;
+        int my = -1;
+        // a moustache: a thick band of dark hair under the nose; the lips are just below it
+        int mBot = -1, run = 0;
+        for (int y = (int) (ey + d * 0.35f); y < Math.min(h - 1, (int) (ey + d * 1.3f)); y++) {
+            int hairN = 0, n = 0;
+            for (int x = (int) mx - half; x <= (int) mx + half; x++) {
+                if (x < 0 || x >= w) continue;
+                int c = r.px[y * w + x];
+                n++;
+                if ((c >>> 24) >= 200 && lum[y * w + x] < 70 && ((c >> 16) & 255) - ((c >> 8) & 255) < 30) hairN++;
+            }
+            if (n > 0 && hairN > n * 0.45f) { run++; if (run >= Math.max(2, (int) (d * 0.07f))) mBot = y; }
+            else if (mBot > 0) break;
+            else run = 0;
+        }
+        float lo = 0.5f, hi = 1.3f, expect = 0.82f;
+        if (mBot > 0) { lo = (mBot - ey) / d - 0.05f; hi = lo + 0.4f; expect = lo + 0.13f; }
+        for (int y = (int) (ey + d * lo); y < Math.min(h - 2, (int) (ey + d * hi)); y++) {
+            float line = 0, around = 0;
+            int nl = 0, na = 0;
+            for (int x = (int) mx - half; x <= (int) mx + half; x++) {
+                if (x < 0 || x >= w) continue;
+                int c = r.px[y * w + x];
+                if ((c >>> 24) < 200) continue;
+                int red = ((c >> 16) & 255) - ((c >> 8) & 255);
+                // a moustache or beard is dark but not red: it is hair, not the lips
+                boolean hair = lum[y * w + x] < 70 && red < 25;
+                line += (hair ? 60 : 255 - lum[y * w + x]) + Math.max(0, red) * 1.6f;
+                nl++;
+                int ya = Math.max(0, y - (int) (d * 0.14f)), yb = Math.min(h - 1, y + (int) (d * 0.14f));
+                around += (255 - lum[ya * w + x]) + (255 - lum[yb * w + x]);
+                na += 2;
+            }
+            if (nl < half) continue;
+            float sc = line / nl - around / Math.max(1, na);
+            // a mouth is usually about one eye-distance below the eyes
+            sc -= Math.abs((y - ey) / d - expect) * 40;
+            if (sc > bestM) { bestM = sc; my = y; }
+        }
+        r.faceFound = true;
+        r.eyeLX = bl[0] / w; r.eyeRX = br[0] / w; r.eyeY = ey / h;
+        r.eyeR = Math.max(bl[2], br[2]) * 0.9f / w;
+        r.mouthX = mx / w;
+        r.mouthY = (my > 0 && bestM > 8 ? my : ey + d * expect) / h;
+        r.mouthW = d * 0.42f / w;
+        // the face's skin from the cheeks (below and outside the eyes)
+        long sr = 0, sg = 0, sb = 0, sn = 0;
+        for (int y = (int) (ey + d * 0.3f); y < Math.min(h, (int) (ey + d * 0.55f)); y++)
+            for (int x : new int[]{(int) (bl[0]), (int) (br[0])}) {
+                if (x < 0 || x >= w) continue;
+                int c = r.px[y * w + x];
+                if ((c >>> 24) < 200) continue;
+                sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; sn++;
+            }
+        if (sn > 3) {
+            r.skin = 0xFF000000 | ((int) (sr / sn) << 16) | ((int) (sg / sn) << 8) | (int) (sb / sn);
+            r.lip = Puppet.shade(Puppet.mix(r.skin, 0xFFB03A3A, 0.45f), 0.8f);
+        }
+    }
+
+    /** Skin of a face in pictures and cartoons (light to dark brown skin, and the monkey's fur-free face). */
+    static boolean faceSkin(int c) {
+        int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        // not red cloth (too little green) or gold (too little blue)
+        return r > 80 && r > g && g >= b - 10 && r - b > 20 && r - b < 150 && Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b)) > 18
+                && g > r * 0.42f && b > r * 0.3f;
+    }
+
+    static long box(long[] ii, int W1, int x0, int y0, int x1, int y1) {
+        x0 = Math.max(0, x0); y0 = Math.max(0, y0);
+        x1 = Math.min(W1 - 2, x1);
+        int hh = ii.length / W1 - 2;
+        y1 = Math.min(hh, y1);
+        if (x1 < x0 || y1 < y0) return 0;
+        return ii[(y1 + 1) * W1 + x1 + 1] - ii[y0 * W1 + x1 + 1] - ii[(y1 + 1) * W1 + x0] + ii[y0 * W1 + x0];
     }
 
     public static int[] cutFull(int[] src, int w, int h) { return cutFull(src, w, h, false); }

@@ -18,7 +18,8 @@ public final class FilmLook {
         public float saturation = 1;  // 1 = as drawn
         public float contrast = 1;    // 1 = the base filmic curve
         public float bloom = 0.14f;   // strength of the glow
-        public Params set(Params o) { warmth = o.warmth; saturation = o.saturation; contrast = o.contrast; bloom = o.bloom; return this; }
+        public float green;           // -1 magenta .. +1 green tint (the colour script: a cave is green, a night is blue)
+        public Params set(Params o) { warmth = o.warmth; saturation = o.saturation; contrast = o.contrast; bloom = o.bloom; green = o.green; return this; }
     }
 
     private final int w, h, sw, sh;
@@ -33,28 +34,14 @@ public final class FilmLook {
         this.small = new int[sw * sh];
     }
 
-    /** The look for a moment of the film: the colour script, from the part's mood and time of day. */
+    /** The look for a moment of the film: the colour script, from the place, the time of day, the mood and the act of the part. */
     public static Params forSeg(Film.Seg s, Params out) {
-        out.warmth = 0.08f; out.saturation = 1.03f; out.contrast = 1f; out.bloom = 0.14f;
+        out.warmth = 0.08f; out.saturation = 1.03f; out.contrast = 1f; out.bloom = 0.14f; out.green = 0;
         if (s == null) return out;
-        switch (s.mood) {
-            case Film.M_HAPPY: case Film.M_CELEBRATE: case Film.M_PLAYFUL:
-                out.warmth = 0.25f; out.saturation = 1.06f; out.bloom = 0.2f; break;
-            case Film.M_SAD:
-                out.warmth = -0.3f; out.saturation = 0.86f; out.contrast = 0.96f; out.bloom = 0.1f; break;
-            case Film.M_TENSE: case Film.M_VILLAIN:
-                out.warmth = -0.25f; out.saturation = 0.92f; out.contrast = 1.1f; out.bloom = 0.07f; break;
-            case Film.M_NIGHT:
-                out.warmth = -0.4f; out.saturation = 0.9f; out.contrast = 1.04f; out.bloom = 0.16f; break;
-            case Film.M_ACTION:
-                out.warmth = 0.15f; out.saturation = 1.06f; out.contrast = 1.1f; out.bloom = 0.1f; break;
-            default:
-        }
-        if (s.tod == Sets.EVENING) { out.warmth += 0.25f; out.bloom += 0.04f; }
-        else if (s.tod == Sets.MORNING) out.warmth += 0.08f;
-        else if (s.tod == Sets.NIGHT) out.warmth -= 0.15f;
+        // the colour script (Deakins): the place and the time of day dictate the colour, one palette per act
+        PixarLead.colorScript(s.set, s.tod, s.mood, s.act, out);
         if (s.festive) { out.saturation += 0.04f; out.bloom += 0.05f; }
-        out.warmth = Math.max(-0.5f, Math.min(0.4f, out.warmth));
+        out.warmth = Math.max(-0.5f, Math.min(0.45f, out.warmth));
         return out;
     }
 
@@ -79,6 +66,7 @@ public final class FilmLook {
         out.saturation = a.saturation + (b.saturation - a.saturation) * k;
         out.contrast = a.contrast + (b.contrast - a.contrast) * k;
         out.bloom = a.bloom + (b.bloom - a.bloom) * k;
+        out.green = a.green + (b.green - a.green) * k;
     }
 
     private void build(Params p) {
@@ -93,9 +81,10 @@ public final class FilmLook {
             // split toning: highlights warmer, shadows a touch cooler (more so in a warm or cool moment)
             float hi = Math.max(0, y - 0.5f) * 2, lo = Math.max(0, 0.5f - y) * 2;
             float wm = p.warmth;
-            lutR[i] = clamp((y + 0.025f * hi * (0.6f + wm) - 0.01f * lo * (0.5f - wm * 0.3f) + 0.02f * wm * y) * 255);
-            lutG[i] = clamp((y + 0.008f * hi * (0.6f + wm)) * 255);
-            lutB[i] = clamp((y - 0.022f * hi * (0.6f + wm) + 0.018f * lo * (0.6f - wm * 0.5f) - 0.025f * wm * y) * 255);
+            float gn = p.green;      // green tint: the mid tones lean green (a cave), or magenta when negative
+            lutR[i] = clamp((y + 0.025f * hi * (0.6f + wm) - 0.01f * lo * (0.5f - wm * 0.3f) + 0.02f * wm * y - 0.012f * gn * y) * 255);
+            lutG[i] = clamp((y + 0.008f * hi * (0.6f + wm) + 0.03f * gn * y * (1 - y) * 2) * 255);
+            lutB[i] = clamp((y - 0.022f * hi * (0.6f + wm) + 0.018f * lo * (0.6f - wm * 0.5f) - 0.025f * wm * y - 0.012f * gn * y) * 255);
         }
         last.set(p);
         built = true;
@@ -105,7 +94,7 @@ public final class FilmLook {
 
     /** Applies the finish to a frame (ARGB, w x h). */
     public void apply(int[] px, Params p) {
-        if (!built || Math.abs(p.warmth - last.warmth) > 0.01f || Math.abs(p.contrast - last.contrast) > 0.01f) build(p);
+        if (!built || Math.abs(p.warmth - last.warmth) > 0.01f || Math.abs(p.contrast - last.contrast) > 0.01f || Math.abs(p.green - last.green) > 0.01f) build(p);
         // ---- bloom: the bright parts, at a quarter of the size, blurred softly
         boolean glow = p.bloom > 0.01f;
         if (glow) {

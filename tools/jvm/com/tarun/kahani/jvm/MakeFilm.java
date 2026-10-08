@@ -107,6 +107,8 @@ public class MakeFilm {
         BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR);
         AwtGfx g = new AwtGfx(img);
         Renderer r = new Renderer(film, art);
+        r.safeZoneOverlay = System.getenv("SAFEZONE") != null;
+        if (stills != null) stillPages(dir, film, art, new File(stills));
         int frames = (int) (dur * fps);
         long tr = System.currentTimeMillis();
         int stillEvery = Math.max(1, (int) (fps * Float.parseFloat(System.getenv().getOrDefault("STILL_EVERY", "3"))));
@@ -138,6 +140,23 @@ public class MakeFilm {
         ff.waitFor();
         long ms = System.currentTimeMillis() - tr;
         System.out.println("rendered " + frames + " frames in " + ms + "ms (" + (frames * 1000f / Math.max(1, ms)) + " fps) -> " + out);
+    }
+
+    /** The thumbnail (1280x720) and the poster (1080x1920), made natively (RULE_RESIZE_8), next to the stills. */
+    static void stillPages(Director dir, Film film, Art art, File stills) throws Exception {
+        Film.Seg[] pages = dir.stills();
+        String[] names = {"thumbnail.jpg", "poster.jpg"};
+        int[][] sizes = {{1280, 720}, {1080, 1920}};
+        for (int i = 0; i < pages.length; i++) {
+            BufferedImage img = new BufferedImage(sizes[i][0], sizes[i][1], BufferedImage.TYPE_3BYTE_BGR);
+            AwtGfx g = new AwtGfx(img);
+            Renderer r = new Renderer(film, art);
+            r.safeZoneOverlay = System.getenv("SAFEZONE") != null;
+            r.renderSeg(g, pages[i], 0.5f);
+            com.tarun.kahani.core.FilmLook look = new com.tarun.kahani.core.FilmLook(sizes[i][0], sizes[i][1]);
+            finish(img, look, com.tarun.kahani.core.FilmLook.forSeg(pages[i], new com.tarun.kahani.core.FilmLook.Params()), new int[sizes[i][0] * sizes[i][1]]);
+            ImageIO.write(img, "jpg", new File(stills, names[i]));
+        }
     }
 
     /** The film look on a BGR frame (converted to ARGB and back). */

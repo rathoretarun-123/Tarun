@@ -18,7 +18,7 @@ public final class Edits {
     public float speed = 1f;        // overall pace of pauses/actions (0.7..1.3)
     public boolean subtitles = false;
     public int height = 1080;       // output height for 16:9 (or width for 9:16)
-    public String aspect = "16:9";  // 16:9 | 9:16 | 1:1
+    public String aspect = "16:9";  // 16:9 | 9:16 | 1:1 | 4:5 | 2.39:1 (PixarLead.FORMATS)
     public int quality = 2;         // 1 small file, 2 normal, 3 high
     public final Map<String, Float> voiceGain = new LinkedHashMap<String, Float>();
     public final Map<String, Float> voicePitch = new LinkedHashMap<String, Float>();
@@ -58,10 +58,13 @@ public final class Edits {
         return null;
     }
 
+    /** The output size: the chosen height (360-1080) in the format's exact shape, width a multiple of 16 (the encoder's block). */
     public int[] size() {
         int h = Math.max(360, Math.min(1080, height));
         if (aspect.equals("9:16")) return new int[]{h, h * 16 / 9 - (h * 16 / 9) % 16};
         if (aspect.equals("1:1")) return new int[]{h, h};
+        if (aspect.equals("4:5")) { int ph = h * 5 / 4 - (h * 5 / 4) % 16; return new int[]{h, ph}; }
+        if (aspect.equals("2.39:1")) { int w = h * 16 / 9; w -= w % 16; int ch = Math.round(w / 2.39f); return new int[]{w, ch - ch % 2}; }
         int w = h * 16 / 9;
         return new int[]{w - w % 16, h};
     }

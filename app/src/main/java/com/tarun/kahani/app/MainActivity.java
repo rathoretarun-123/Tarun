@@ -2546,10 +2546,11 @@ public class MainActivity extends Activity {
         final Edits ed = edits();
         LinearLayout body = Ui.column(this);
         body.setPadding(Ui.dp(this, 18), Ui.dp(this, 6), Ui.dp(this, 18), Ui.dp(this, 6));
-        body.addView(Ui.text(this, "Where will this film be shown? (decided once for the whole film)", 15, Ui.TEXT, true));
+        body.addView(Ui.text(this, "Where will this film be shown? (decided once for the whole film — every picture is made natively in that shape, with its own safe zones and character size)", 15, Ui.TEXT, true));
         final android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
-        final String[] ars = {"16:9", "9:16", "1:1"};
-        String[] labels = {"▭  YouTube / TV — landscape 16:9", "▯  Reels / Shorts / WhatsApp status — vertical 9:16", "▢  Instagram post — square 1:1"};
+        final String[] ars = {"16:9", "9:16", "1:1", "4:5", "2.39:1"};
+        String[] labels = {"▭  YouTube / TV — landscape 16:9 (1920x1080)", "▯  Reels / Shorts / TikTok / WhatsApp status — vertical 9:16 (1080x1920)",
+                "▢  Instagram post — square 1:1 (1080x1080)", "▯  Instagram portrait 4:5 (1080x1350)", "▬  Cinema — 2.39:1 widescreen (1920x804)"};
         for (int i = 0; i < ars.length; i++) {
             android.widget.RadioButton rb = new android.widget.RadioButton(this);
             rb.setText(labels[i]);
@@ -2590,7 +2591,7 @@ public class MainActivity extends Activity {
                     public void onClick(DialogInterface d, int w) {
                         int k = rg.getCheckedRadioButtonId() - 1000;
                         Edits e = edits();
-                        e.aspect = ars[Math.max(0, Math.min(2, k))];
+                        e.aspect = ars[Math.max(0, Math.min(ars.length - 1, k))];
                         saveEdits(e);
                         if (ai.getParent() != null) Prefs.put(MainActivity.this, "autoArt", ai.isChecked() ? "1" : "0");
                         Prefs.put(MainActivity.this, "humanQc", qc.isChecked() ? "1" : "0");
@@ -2629,7 +2630,8 @@ public class MainActivity extends Activity {
         LinearLayout head = Ui.card(this);
         head.addView(Ui.text(this, "The director planned " + countShots(j) + " shots of about 3 seconds each and made the first frame of each one. "
                 + "Look through them. Tap a shot to fix it (calmer, closer, wider, show the listener, or no cut there). Then tap Approve: "
-                + "the film is made exactly from this plan.", 14, Ui.SUB, false));
+                + "the film is made exactly from this plan.\nThe yellow lines are the format's safe zone (headroom, caption zone, side margins), "
+                + "the blue line the eye line, the orange lines where the feet of a full shot belong (85-98%).", 14, Ui.SUB, false));
         body.addView(head);
         final LinearLayout grid = Ui.column(this);
         body.addView(grid);
@@ -2701,9 +2703,11 @@ public class MainActivity extends Activity {
 
     /** The Technical Director protocol exactly as given, and how the app applies each part of it. */
     private void showProtocol() {
-        String given;
+        String given, lead;
         try { given = new String(Project.readAll(getAssets().open("technical_director_protocol.md")), "UTF-8"); }
         catch (Exception e) { given = com.tarun.kahani.core.TechnicalDirector.PROTOCOL; }
+        try { lead = new String(Project.readAll(getAssets().open("pixar_lead_protocol.md")), "UTF-8"); }
+        catch (Exception e) { lead = com.tarun.kahani.core.PixarLead.SUMMARY; }
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -2715,13 +2719,18 @@ public class MainActivity extends Activity {
                 + "• Pictures are bent through meshes fine to the pixel; gestures ease in and out, anticipation before moves, follow-through of hair and cloth.\n"
                 + "• Human QC: the first frame of every shot is shown to you before the film is made; your fixes use the protocol's error correction.\n"
                 + "• The validation layer checks every shot and every prompt; the descriptions file (📄) has the lock sheets, plates, shot table, "
-                + "the image and video templates filled in for every shot, and the validation result.\n\n";
-        TextView tv = Ui.text(this, how + given, 13, Ui.TEXT, false);
+                + "the image and video templates filled in for every shot, and the validation result.\n"
+                + "• Pixar-Lead v4.0: the story spine and acts of every script (the colour script follows the act), the Braintrust's four questions every 5 shots "
+                + "(suggestions in the descriptions, the director decides), two lights only (key + bounce), the Disney principle tags in every clip, a ma pause after "
+                + "two fast beats, one comic beat per scene, a shadow pass in funny scenes with a villain, steps by the floor's material, animation on twos (Settings), "
+                + "five delivery formats with their safe zones and character scale lock, pictures made natively at the format's size and checked for their shape, "
+                + "first-frame checks (head and feet inside), and a thumbnail and poster made separately.\n\n";
+        TextView tv = Ui.text(this, how + given + "\n\n" + lead, 13, Ui.TEXT, false);
         tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         tv.setTextIsSelectable(true);
         ScrollView sv = new ScrollView(this);
         sv.addView(tv);
-        new AlertDialog.Builder(this).setTitle("📜 Technical Director protocol").setView(sv).setPositiveButton("Close", null).show();
+        new AlertDialog.Builder(this).setTitle("📜 The director's protocols").setView(sv).setPositiveButton("Close", null).show();
     }
 
     private static int countShots(FilmJob j) {
@@ -2847,6 +2856,17 @@ public class MainActivity extends Activity {
             public void onClick(View v) { saveToGallery(true); }
         }));
         panel.addView(r);
+        final File thumb = project.file("thumbnail.jpg"), poster = project.file("poster.jpg");
+        if (thumb.exists() || poster.exists()) {
+            LinearLayout r2 = Ui.row(this);
+            if (thumb.exists()) r2.addView(Ui.small(this, "🖼 Thumbnail (16:9)", Ui.GREEN, new View.OnClickListener() {
+                public void onClick(View v) { showStill(thumb, "Thumbnail — made separately, 1280x720, for YouTube"); }
+            }));
+            if (poster.exists()) r2.addView(Ui.small(this, "🪧 Poster (9:16)", Ui.GREEN, new View.OnClickListener() {
+                public void onClick(View v) { showStill(poster, "Poster — made separately, 1080x1920, title space at the top"); }
+            }));
+            panel.addView(r2);
+        }
         outer.addView(panel);
         setScreen(S_PLAYER, outer);
         MediaController mc = new MediaController(this);
@@ -2860,6 +2880,41 @@ public class MainActivity extends Activity {
             }
         });
         vv.start();
+    }
+
+    /** Shows the thumbnail or the poster (RULE_RESIZE_8: made separately, never resized from a frame) with a share button. */
+    private void showStill(final File f, String title) {
+        Bitmap b;
+        try {
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = 2;
+            b = android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+        } catch (Throwable e) { b = null; }
+        if (b == null) { toast("Could not open the picture"); return; }
+        ImageView iv = new ImageView(this);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        iv.setAdjustViewBounds(true);
+        iv.setImageBitmap(b);
+        iv.setPadding(Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
+        new AlertDialog.Builder(this).setTitle(title).setView(iv)
+                .setPositiveButton("📤 Share", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            File out = new File(FilesProvider.sharedDir(MainActivity.this), safeName(project.name()) + "_" + f.getName());
+                            java.io.FileInputStream in = new java.io.FileInputStream(f);
+                            byte[] bytes = Project.readAll(in);
+                            in.close();
+                            FileOutputStream o = new FileOutputStream(out);
+                            o.write(bytes);
+                            o.close();
+                            Intent s = new Intent(Intent.ACTION_SEND);
+                            s.setType("image/jpeg");
+                            s.putExtra(Intent.EXTRA_STREAM, FilesProvider.uriFor(out));
+                            s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            startActivity(Intent.createChooser(s, "Share the picture"));
+                        } catch (Exception e) { toast("Could not share"); }
+                    }
+                }).setNegativeButton("Close", null).show();
     }
 
     private String pendingEditsNote() {
@@ -3158,7 +3213,14 @@ public class MainActivity extends Activity {
             public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "humanQc", on ? "1" : "0"); }
         });
         ai.addView(hq);
-        ai.addView(Ui.small(this, "📜 The director's protocol (hardcoded)", Ui.PRIMARY, new View.OnClickListener() {
+        CheckBox tw = new CheckBox(this);
+        tw.setText("Animate on twos (Spider-Verse): experts move every frame, learners on twos (12 fps), naughty characters on threes (8 fps) — off = everyone smooth");
+        tw.setChecked(Prefs.onTwos(this));
+        tw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) { Prefs.put(MainActivity.this, "onTwos", on ? "1" : "0"); }
+        });
+        ai.addView(tw);
+        ai.addView(Ui.small(this, "📜 The director's protocols (hardcoded)", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { showProtocol(); }
         }));
         CheckBox nv = new CheckBox(this);

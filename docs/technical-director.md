@@ -1,4 +1,7 @@
-# Technical Director protocol — hardcoded (v12, extended in v13)
+# Technical Director protocol — hardcoded (v12, extended in v13 and v14)
+
+Since v14 the Pixar-Lead protocol v4.0 (`docs/pixar-lead.md`) sits on top of this one: formats with safe zones and a
+character scale lock, two lights only, the story spine, the Braintrust, the Disney principle tags and the first-frame checks.
 
 The protocol below is hardcoded in `app/src/main/java/com/tarun/kahani/core/TechnicalDirector.java` (its text,
 numbers, templates, forbidden words, validation layer and error correction) and enforced by the director,

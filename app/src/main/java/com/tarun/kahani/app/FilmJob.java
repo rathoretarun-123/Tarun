@@ -175,6 +175,7 @@ public final class FilmJob implements Runnable {
             opt.narrateTitle = false;
             opt.pace = ed.speed;
             opt.sounds = Library.get(ctx).soundLib();   // the user's own effects play where the story mentions them
+            opt.onTwos = Prefs.onTwos(ctx);              // Spider-Verse stepping, only when the user asks for it
             Director dir = new Director(story, opt);
             Film film = dir.prepare();
 
@@ -412,6 +413,8 @@ public final class FilmJob implements Runnable {
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
             project.setSetting("saved", "0");
             if (aiLines > 0) project.setSetting("aiLines", String.valueOf(aiLines));
+            // the thumbnail and the poster, made separately in their own formats (extras: the film is done without them)
+            try { stillPages(film, art, dir); } catch (CancelledException e) { throw e; } catch (Throwable e) { android.util.Log.w("Kahani", "still pages: " + e); }
             step("Your film is ready!", 1f);
             etaSeconds = -1;
             done = true;
@@ -443,6 +446,56 @@ public final class FilmJob implements Runnable {
     /** The user has checked the shots: the fixes are applied and the film is made. */
     public void approve() { qcWaiting = false; }
 
+    /**
+     * RULE_RESIZE_2 / 4 / 7: the picture is asked for natively in its shape; its real width and height are checked
+     * (a stretched or cropped picture is never used — within 5% of the shape asked for); a wrong one is made again
+     * once; a size the service refuses falls back to a smaller native size of the same shape.
+     */
+    static byte[] makePictureNative(Cloud cloud, String prompt, int w, int h, int seed) throws IOException {
+        int[][] tries = {{w, h, seed}, {w, h, seed + 1000}, {w > h ? 1280 : Math.round(1280f * w / h), w > h ? Math.round(1280f * h / w) : 1280, seed + 2000}};
+        IOException last = null;
+        for (int[] tr : tries) {
+            try {
+                byte[] img = cloud.makePicture(prompt, tr[0], tr[1], tr[2]);
+                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeByteArray(img, 0, img.length, o);
+                if (o.outWidth <= 0 || o.outHeight <= 0) throw new IOException("not a picture");
+                float want = tr[0] / (float) tr[1], got = o.outWidth / (float) o.outHeight;
+                if (Math.abs(got / want - 1) <= com.tarun.kahani.core.PixarLead.STRETCH_TOLERANCE) return img;
+                last = new IOException("picture came back in the wrong shape (" + o.outWidth + "x" + o.outHeight + ")");
+            } catch (IOException e) { last = e; }
+        }
+        throw last == null ? new IOException("no picture") : last;
+    }
+
+    /** The thumbnail (1280x720) and the poster (1080x1920), made natively from the hero (RULE_RESIZE_8), saved next to the film. */
+    private void stillPages(Film film, Art art, Director dir) throws IOException {
+        Film.Seg[] pages = dir.stills();
+        String[] names = {"thumbnail.jpg", "poster.jpg"};
+        int[][] sizes = {{1280, 720}, {1080, 1920}};
+        for (int i = 0; i < pages.length; i++) {
+            step(i == 0 ? "Making the thumbnail…" : "Making the poster…", 0.99f);
+            int w = sizes[i][0], h = sizes[i][1];
+            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            try {
+                Renderer r = new Renderer(film, art);
+                r.renderSeg(g, pages[i], 0.5f);
+                int[] px = new int[w * h];
+                bmp.getPixels(px, 0, w, 0, 0, w, h);
+                new com.tarun.kahani.core.FilmLook(w, h).apply(px, com.tarun.kahani.core.FilmLook.forSeg(pages[i], new com.tarun.kahani.core.FilmLook.Params()));
+                bmp.setPixels(px, 0, w, 0, 0, w, h);
+                java.io.FileOutputStream o = new java.io.FileOutputStream(project.file(names[i]));
+                bmp.compress(Bitmap.CompressFormat.JPEG, 90, o);
+                o.close();
+            } finally {
+                g.release();
+                bmp.recycle();
+            }
+        }
+    }
+
     private void humanQc(Film film, Art art, Director dir, Edits ed, File tmp) throws IOException {
         File qd = new File(tmp, "qc");
         qd.mkdirs();
@@ -473,6 +526,7 @@ public final class FilmJob implements Runnable {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         AndroidGfx g = new AndroidGfx(bmp, 4);
         Renderer r = new Renderer(film, art);
+        r.safeZoneOverlay = true;        // the format's safe zones drawn over every first frame (RULE_RESIZE_3)
         com.tarun.kahani.core.FilmLook qlook = new com.tarun.kahani.core.FilmLook(w, h);
         com.tarun.kahani.core.FilmLook.Params qlp = new com.tarun.kahani.core.FilmLook.Params();
         int[] qpx = new int[w * h];
@@ -547,8 +601,9 @@ public final class FilmJob implements Runnable {
             todo.add(new String[]{"char", c.displayName, com.tarun.kahani.core.Bible.characterPrompt(c), "768", "1152", c.shown(), c.description});
         }
         java.util.Map<String, String> placeFile = new java.util.HashMap<String, String>();
-        // places, title and end are made natively in the film's shape (FINAL_AR), never cropped from another shape
-        final int[] plate = com.tarun.kahani.core.TechnicalDirector.sizeFor(ed.aspect);
+        // places, title and end are made natively in the film's shape (FINAL_AR), never cropped from another shape, at
+        // the format's native size (1920x1080, 1080x1920, …) so nothing is ever upscaled blurry (RULE_RESIZE_4)
+        final int[] plate = com.tarun.kahani.core.TechnicalDirector.sizeFor(ed.aspect, ed.size()[1]);
         for (Story.Scene sc : story.scenes) {
             if (haveScene.contains(String.valueOf(sc.number))) continue;
             String where = sc.setting.length() > 0 ? sc.setting : sc.title;
@@ -569,7 +624,7 @@ public final class FilmJob implements Runnable {
                 String file;
                 if (reuse != null) file = reuse;
                 else {
-                    byte[] img = cloud.makePicture(com.tarun.kahani.core.TechnicalDirector.clean(t[2]), Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
+                    byte[] img = makePictureNative(cloud, com.tarun.kahani.core.TechnicalDirector.clean(t[2]), Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
                     file = project.savePicture(img, "ai_" + t[0]);
                     try { lib.addBytes(Library.PIC, t[0].equals("char") ? "person" : t[0].equals("scene") ? "place" : t[0], t[5],
                             t[6].length() > 200 ? t[6].substring(0, 200) : t[6], img, ".jpg", "AI (studio)"); } catch (Exception ignored) {}

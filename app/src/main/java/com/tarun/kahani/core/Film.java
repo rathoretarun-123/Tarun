@@ -14,6 +14,10 @@ public final class Film {
     public final List<Amb> ambience = new ArrayList<Amb>();
     public final List<Weather> weather = new ArrayList<Weather>();
     public final List<String> notes = new ArrayList<String>();   // director's notes for the analysis screen
+    /** The story spine (six beats, PixarLead R4) and the Braintrust review of the shots (PixarLead), for the descriptions and the QC. */
+    public String[] spine;
+    public PixarLead.Review braintrust;
+    public String hero = "";
     /** Every shot as the director planned it (for the shot list and its quality check). */
     public final List<Shot> shots = new ArrayList<Shot>();
     /** The director's shot list and quality check, in the training guide's format. */
@@ -69,6 +73,14 @@ public final class Film {
         public int mood = -1;
         /** How this part begins: 0 a soft dissolve, 1 a dip to black (time passes), 2 a dip to white (magic, dreams, memories). */
         public int transition;
+        /** The act of the story this part belongs to (1 setup, 2 the turn, 3 escalation, 4 climax, 5 resolution): the colour script follows it. */
+        public int act = 1;
+        /** The character scale lock of the delivery format (PixarLead RULE_RESIZE_6): a standing character's height as a share of the frame height. */
+        public float charScale = 0.6f;
+        /** A solid colour behind everything (thumbnail / poster pages), or 0 for the painted or photographed set. */
+        public int solid;
+        /** The characters of this part are in a boat on the water (they stand on its deck and move with it). */
+        public boolean inBoat;
         public Actor find(Story.CharacterDef c) {
             for (Actor a : actors) if (a.c == c) return a;
             return null;
@@ -106,7 +118,9 @@ public final class Film {
             G_JUMP = 23, G_SHAKE_HEAD = 24, G_CLUTCH = 25, G_WALK_PLACE = 26, G_BOUNCE = 27, G_MIRROR = 28, G_THROW = 29,
             G_SPLASH = 30, G_WIGGLE = 31, G_COUGH = 32, G_PLAY = 33, G_LOOK_UP = 34, G_WHISPER = 35, G_PROUD = 36,
             G_ROAR = 37, G_BLOCK = 38, G_STEP_BACK = 39, G_OFFER = 40, G_HOLD_HAND = 41, G_BOW = 42, G_WAVE = 43, G_NOD = 44,
-            G_TURN = 45, G_LOOK_AWAY = 46;
+            G_TURN = 45, G_LOOK_AWAY = 46,
+            G_HEAD_SCRATCH = 47,  // the comic beat (Russo / Gunn): a puzzled scratch of the head, a shrug
+            G_WEIGHT_SHIFT = 48;  // secondary action while idle: the weight moves from one foot to the other, a glance aside
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;
@@ -131,6 +145,8 @@ public final class Film {
         public final List<Act> acts = new ArrayList<Act>();
         public final List<Speak> speaks = new ArrayList<Speak>();
         public int order;
+        /** Spider-Verse: the frame rate this character's poses step on (24 experts, 12 learners, 8 rebels; 0 = smooth, every frame). */
+        public int stepFps;
         public Key last() { return keys.get(keys.size() - 1); }
         /** Starts a new key at time t copying the current state. */
         public Key at(float t) {
@@ -159,7 +175,8 @@ public final class Film {
             FX_WATER_HIT = 24,    // something falls into water at x, y (color = size 1..3)
             FX_THROW = 25,        // a: thrower, b: target (or x, y); kind: what flies
             FX_FALL = 26,         // something falls from above at x (kind) and bounces
-            FX_SEAT = 27;         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a
+            FX_SEAT = 27,         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a
+            FX_SHADOW_PASS = 28;  // Gunn: one scary shadow sweeping over the ground in a funny scene (x = where it starts)
 
     public static final class Fx {
         public float t0, t1;
@@ -209,7 +226,9 @@ public final class Film {
             SFX_RUSTLE = 7, SFX_THUD = 8, SFX_WHOOSH = 9, SFX_BELL = 10, SFX_DRUMS = 11, SFX_NIGHT = 12, SFX_ROAR = 13, SFX_CLAP = 14,
             SFX_ANKLET = 15, SFX_HISS = 16, SFX_DRIP = 17, SFX_SCREAM_FX = 18, SFX_SPLASH = 19, SFX_NET = 20, SFX_WHOOSH_CARD = 21,
             SFX_FANFARE = 22, SFX_END_CHORD = 23, SFX_MAGIC = 24, SFX_STEPS = 25, SFX_CROWD = 26, SFX_GLASS = 27, SFX_SWORD = 28,
-            SFX_USER = 29, SFX_THUNDER = 30;
+            SFX_USER = 29, SFX_THUNDER = 30,
+            SFX_STEPS_HARD = 31,  // Nolan: real sounds — steps on stone, marble, a cave floor
+            SFX_STEPS_RUN = 32;   // running steps
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

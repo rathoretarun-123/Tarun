@@ -1,4 +1,4 @@
-# Kahani Film — v13
+# Kahani Film — v14
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,18 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v14
+
+* **The Pixar-Lead protocol v4.0 is hardcoded** (`core/PixarLead.java`, every rule and how it is enforced in `docs/pixar-lead.md`; the text exactly as given in ⚙ Settings → 📜 The director's protocols). It works for **any script**, not only the sample:
+  * **Story engine:** every script gets its six-beat spine (R4), its hero and its acts; the colour script follows the act (contrast rises to the climax, warmth returns at the end). The **Braintrust** asks its four questions every 5 shots (story clear without dialogue? a strong opinion? a ma pause? costume culturally accurate?) and checks R5 (at most four characters per 60 s) — suggestions in the descriptions and the quality check; the director decides.
+  * **Deakins: two lights only.** Every frame is lit by one key light (its side, colour and strength from the place and the hour) and one bounce from the ground in the ground's own colour. Garden warm yellow, cave green with orange accents, night blue.
+  * **Disney's 12 principles** as tags in every clip's prompt, plus **secondary action** while idle (a slow weight shift, a glance), and **timing by weight** (a monkey moves faster, a giant slower).
+  * **Enhancers:** Miyazaki's *ma* — after two fast beats a quiet 1.8 s shot on the hero; Russo — one comic beat per scene (a head scratch and a shrug by whoever can carry a joke); Gunn — a scary shadow sweeps through a funny scene when the story has a villain; Nolan — steps by the floor's material (stone, marble, cave, earth; running steps for runs); Narsimha — a note wherever a costume has no real garment name; Spider-Verse — **animation on twos** (⚙ Settings: experts 24, learners 12, naughty characters 8 fps; off by default).
+  * **Photo resizing for the format:** five formats — YouTube 16:9, Reels 9:16, square 1:1, Instagram portrait 4:5, cinema 2.39:1 — each with its own safe zones (eye line, headroom, caption zone, side margins) and **character scale lock** (60 % / 50 % / 65 % / 60 % of the frame height). AI pictures are made natively at the format's size (1920×1080, 1080×1920…), their real width and height are **verified** and a stretched one is made again. **First-frame checks:** head inside the frame, feet of full shots in the bottom 85–98 % with the shadow. The QC stills show the safe zones drawn over each first frame.
+  * **Thumbnail and poster made separately** (never resized from a frame): after every film a 1280×720 thumbnail (the hero's face, 60 % of the frame, on the hero's palette colour) and a 1080×1920 poster (full body, 40 % empty at the top for the title) — 🖼 / 🪧 buttons on the player screen, shareable.
+* **Any script:** characters whose scene is on the water stand **in the boat**, rolling and bobbing with it; a storm or heavy rain darkens the whole frame; the painted waterfall appears only in the palace garden. Two more test stories (`tools/testdata/`) run in the tests next to the sample.
+* The command box understands "Instagram portrait" (4:5) and "cinema" (2.39:1).
 
 ## New in v13
 
@@ -228,6 +240,8 @@ For better story reading, picture recognition and expressive AI voices, add a **
 * **Floor detection** compares the colours at the bottom of the place picture with the rest. On the 6 sample places it put the feet within 3 % of the hand-set positions; a picture whose floor looks like its walls may put the feet a little high or low.
 * **Eye and mouth finding** was measured on the 10 sample characters only; on one (an open laughing mouth under a curled moustache) the mouth point is still half an eye-distance off. Check the points with 👄 when lips look wrong.
 * **Mouth shapes** come from how bright the sound is, so they follow vowels roughly (wide / round / closed). They do not come from a phoneme-by-phoneme analysis.
+* **v14, the Pixar-Lead protocol:** the story spine, acts and turning points are found from the words of the script (trouble words, fight / rescue words, celebration words); on an unusual script the "One day" or climax beat may land on a neighbouring scene — the Braintrust's notes are suggestions, the script itself is never changed. "Two lights only" is a model of the light (a key and a bounce), painted over flat pictures, not a 3D lighting calculation. **Animation on twos** holds each character's pose for 2–3 frames (the camera, the place and the lips stay smooth) — a stylistic choice, off by default. The thumbnail's "face 60 %" uses the picture's own sharpness limit, so on a small picture the face is smaller. AI pictures at the format's native size (1920×1080) depend on the free picture service accepting that size; when it does not, the app falls back to 1280 on the long side, still in the right shape. The five formats keep the picture whole: a 2.39:1 film from a 16:9 place picture shows its middle band.
+* **In a boat:** the characters stand on the deck and move with it when the place says they are on the water; they do not row or climb in and out.
 
 * **3D:** the film looks 3D when its pictures are 3D-style: your uploads, or the studio's AI pictures, which are always requested in 3D animated style. The camera, depth, light and parallax add a 2.5D cinematic feel.
   * The characters are still flat pictures that move, turn and lip-sync. They are not rigged 3D models, so they don't walk around in true 3D like a Pixar film. That isn't possible with the phone engine.

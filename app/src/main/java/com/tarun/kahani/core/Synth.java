@@ -34,6 +34,9 @@ public final class Synth {
             case Film.SFX_MONKEY: { float t = 0.02f; while (t < dur - 0.12f) { tone(o, t, 0.07f + Math.abs(rnd()) * 0.05f, 1200 + rnd() * 300, 2400 + rnd() * 600, 0.35f, 1); t += 0.11f + Math.abs(rnd()) * 0.1f; } break; }
             case Film.SFX_THUD: { float t = 0; while (t < dur - 0.2f) { thump(o, t, 55, 0.9f); t += 0.55f; } break; }
             case Film.SFX_STEPS: { float t = 0; while (t < dur) { thump(o, t, 120, 0.25f); burst(o, t, 0.05f, 0.4f, 0.12f); t += 0.32f; } break; }
+            // hard ground (stone, marble, a cave floor): a sharper click with a short ring, less thump
+            case Film.SFX_STEPS_HARD: { float t = 0; while (t < dur) { thump(o, t, 220, 0.12f); burst(o, t, 0.012f, 0.9f, 0.22f); burst(o, t + 0.02f, 0.03f, 0.5f, 0.08f); t += 0.3f; } break; }
+            case Film.SFX_STEPS_RUN: { float t = 0; while (t < dur) { thump(o, t, 110, 0.3f); burst(o, t, 0.04f, 0.5f, 0.14f); t += 0.21f; } break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }
             case Film.SFX_DRUMS: dhol(o, 0, dur, 0.6f); break;

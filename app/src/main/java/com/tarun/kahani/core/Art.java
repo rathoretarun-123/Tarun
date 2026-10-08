@@ -52,6 +52,8 @@ public final class Art {
         public float ground = 0.9f;                    // where feet stand (fraction of frame height)
         /** Sky, water, waterfall and plants found in the picture (null = not read). */
         public Nature.Scan scan;
+        /** The average colour of the picture's lower part (the ground): the colour of the bounce light (0 = unknown). */
+        public int avgLow;
     }
 
     public static final class Shot {
@@ -186,6 +188,7 @@ public final class Art {
                 System.arraycopy(d, 2, px, 0, px.length);
                 b.scan = Nature.scan(px, d[0], d[1]);
                 b.ground = findGround(px, d[0], d[1], b);
+                b.avgLow = averageLow(px, d[0], d[1]);
             }
         } catch (RuntimeException ignored) {
         }
@@ -226,6 +229,17 @@ public final class Art {
     }
 
     static int bin(int c) { return (((c >> 20) & 15) << 8) | (((c >> 12) & 15) << 4) | ((c >> 4) & 15); }
+
+    /** The average colour of the bottom quarter of a picture (the ground that bounces the key light back up). */
+    public static int averageLow(int[] px, int w, int h) {
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int y = h * 3 / 4; y < h; y += 2) for (int x = 0; x < w; x += 2) {
+            int c = px[y * w + x];
+            r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255; n++;
+        }
+        if (n == 0) return 0;
+        return 0xFF000000 | ((int) (r / n) << 16) | ((int) (g / n) << 8) | (int) (b / n);
+    }
 
     // ------------------------------------------------------------------ manifest
 

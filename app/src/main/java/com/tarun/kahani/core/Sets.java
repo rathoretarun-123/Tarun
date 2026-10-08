@@ -85,7 +85,7 @@ public final class Sets {
             default:
         }
         sky(g, tod);
-        hills(g, tod);
+        hills(g, tod, set == GARDEN);        // only the palace garden has the waterfall on the far hill
         switch (set) {
             case GARDEN: palaceFar(g, tod, 0.82f); garden(g, tod); break;
             case COURTYARD: courtyard(g, tod); break;
@@ -137,7 +137,10 @@ public final class Sets {
         g.oval(x + 10 * s, y - 16 * s, 40 * s, 24 * s);
     }
 
-    static void hills(Gfx g, int tod) {
+    static void hills(Gfx g, int tod) { hills(g, tod, false); }
+
+    /** The far hills; falls = a waterfall on the far hill (only the palace garden has one). */
+    static void hills(Gfx g, int tod, boolean falls) {
         int far = tod == NIGHT ? 0xFF1C2A3A : tod == EVENING ? 0xFF6A4E7A : 0xFF7FB27A;
         int near = tod == NIGHT ? 0xFF16301F : tod == EVENING ? 0xFF4F6A4A : 0xFF5E9E4E;
         g.color(far);
@@ -145,7 +148,7 @@ public final class Sets {
         g.quadTo(160, 300, 330, 380); g.quadTo(520, 250, 720, 370); g.quadTo(930, 280, 1100, 360); g.quadTo(1200, 330, 1280, 360);
         g.lineTo(1280, GROUND); g.lineTo(0, GROUND); g.close(); g.fillPath();
         // waterfall on the far hill
-        if (tod != NIGHT) {
+        if (falls && tod != NIGHT) {
             g.color(0xCCE3F6FF);
             g.rect(548, 300, 18, 120);
             g.color(0x88FFFFFF); g.oval(557, 425, 30, 8);
@@ -435,8 +438,8 @@ public final class Sets {
         switch (set) {
             case GARDEN: case CELEBRATION: case GENERIC_OUT: case GATE: {
                 if (tod != NIGHT) {
-                    // waterfall shimmer
-                    if (set != GATE) {
+                    // waterfall shimmer (the palace garden's waterfall)
+                    if (set == GARDEN) {
                         g.color(0x88FFFFFF);
                         for (int i = 0; i < 4; i++) {
                             float y = 300 + ((t * 120 + i * 30) % 120);

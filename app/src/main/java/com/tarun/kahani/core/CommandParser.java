@@ -195,6 +195,8 @@ public final class CommandParser {
         // ---------- reset
         if (has(t, "reset", "पहले जैसा", "पहले जैसी", "undo all", "सब हटा", "original")) return cmd("reset");
         // ---------- platform / aspect
+        if (has(t, "4:5", "4 by 5", "insta portrait", "instagram portrait", "feed portrait", "पोर्ट्रेट")) { Map<String, Object> c = cmd("aspect"); c.put("value", "4:5"); return c; }
+        if (has(t, "2.39", "cinemascope", "cinema scope", "anamorphic", "widescreen", "सिनेमास्कोप", "theatre", "theater", "cinema")) { Map<String, Object> c = cmd("aspect"); c.put("value", "2.39:1"); return c; }
         if (has(t, "instagram", "इंस्टा", "reel", "रील", "shorts", "vertical", "खड़ा", "9:16")) { Map<String, Object> c = cmd("aspect"); c.put("value", "9:16"); return c; }
         if (has(t, "youtube", "यूट्यूब", "horizontal", "आड़ा", "16:9", "landscape")) { Map<String, Object> c = cmd("aspect"); c.put("value", "16:9"); return c; }
         if (has(t, "square", "वर्गाकार", "1:1")) { Map<String, Object> c = cmd("aspect"); c.put("value", "1:1"); return c; }

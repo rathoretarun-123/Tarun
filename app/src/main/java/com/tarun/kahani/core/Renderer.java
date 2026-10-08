@@ -21,9 +21,15 @@ public final class Renderer {
     }
 
     /** On-screen height (stage pixels) of a character standing on the floor. */
+    /**
+     * A character's height on the stage (720 units high): the format's character scale lock (PixarLead
+     * RULE_RESIZE_6 — a standing adult is 60 % of a 16:9 frame, 50 % of a 9:16 one, 65 % of a square) times the
+     * character's own height; a drawn puppet is a little shorter than a picture of the same person.
+     */
     public static float actorHeight(Look l, Story.CharacterDef c, Art art, Film.Seg seg) {
         boolean sprite = art != null && c != null && art.sprites.containsKey(c.id);
-        float base = sprite ? 400f : 345f;
+        float lock = seg == null ? 0.6f : seg.charScale;
+        float base = (sprite ? 1f : 0.8625f) * 720f * lock;
         float h = l.height;
         if (sprite && l.kind == Look.MONKEY) h = 0.42f;
         return base * h;
@@ -79,6 +85,19 @@ public final class Renderer {
     }
 
     static final float DISSOLVE = 0.9f;
+
+    /** Renders one part on its own, outside the film's timeline (the thumbnail and the poster pages). */
+    public void renderSeg(Gfx g, Film.Seg s, float t) {
+        curT = t;
+        vh = H;
+        vw = H * g.width() / (float) g.height();
+        g.save();
+        g.scale(g.width() / vw, g.height() / vh);
+        g.color(0xFF000000);
+        g.rect(0, 0, vw, vh);
+        drawScene(g, s, t);
+        g.restore();
+    }
 
     // ================================================================== title, cards, end
 
@@ -374,32 +393,56 @@ public final class Renderer {
     }
 
     /** Light in the air: sun rays through the scene in the morning/day, a warm key light, haze in caves. */
+    /**
+     * Deakins: two lights only. The key (one light, from one side, in the colour of the place and the hour) and
+     * its bounce (soft, from the ground, in the ground's own colour). Nothing else lights the frame — the rim
+     * light on the characters is the key's own edge.
+     */
     private void light(Gfx g, Film.Seg s, float t) {
+        PixarLead.Key key = PixarLead.keyLight(s.set, s.tod);
         boolean day = s.tod == Sets.MORNING || s.tod == Sets.DAY;
+        boolean cave = s.set == Sets.CAVE_IN || s.set == Sets.CAVE_MOUTH;
+        // 1. the key
+        float kx = vw * (0.5f + 0.42f * key.dir) - (camX - 640) * 0.1f;
+        int kc = key.color & 0xFFFFFF;
+        float ka = key.strength * (cave ? 0.22f : s.tod == Sets.NIGHT ? 0.3f : day && outdoor(s.set) ? 0.38f : 0.28f);
+        g.radial(kx, -vh * 0.12f, vw * (cave ? 0.6f : 0.95f), Puppet.alpha(0xFF000000 | kc, ka), kc);
+        g.rect(0, 0, vw, vh);
         if (day && outdoor(s.set)) {
-            // warm key light from the sun's side
-            g.radial(vw * 0.12f - (camX - 640) * 0.1f, -vh * 0.1f, vw * 0.9f, s.tod == Sets.MORNING ? 0x40FFE0A0 : 0x30FFF4D0, 0x00FFF4D0);
-            g.rect(0, 0, vw, vh);
-            // god rays
+            // the key's rays through the air (god rays), from the key's side
             for (int i = 0; i < 5; i++) {
                 float sway = (float) Math.sin(t * 0.25 + i * 1.7) * 18;
-                float x0 = vw * (0.05f + i * 0.13f) - (camX - 640) * 0.15f + sway;
+                float x0 = kx + (i - 2) * vw * 0.13f - 170 + sway;
                 float w0 = 26 + i * 9, w1 = 120 + i * 30;
+                float lean = -key.dir * 330;
                 g.begin();
                 g.moveTo(x0, -10);
                 g.lineTo(x0 + w0, -10);
-                g.lineTo(x0 + w0 + 330 + w1, vh + 10);
-                g.lineTo(x0 + 330, vh + 10);
+                g.lineTo(x0 + w0 + lean + w1 * Math.signum(lean == 0 ? 1 : lean), vh + 10);
+                g.lineTo(x0 + lean, vh + 10);
                 g.close();
-                g.linear(x0, 0, x0 + 300, vh, 0x22FFF3C8, 0x00FFF3C8);
+                g.linear(x0, 0, x0 + lean, vh, Puppet.alpha(0xFF000000 | kc, 0.13f), kc);
                 g.fillPath();
             }
-        } else if (s.set == Sets.CAVE_IN || s.set == Sets.CAVE_MOUTH) {
-            g.linear(0, vh * 0.55f, 0, vh, 0x00203A28, 0x5530584A);
-            g.rect(0, 0, vw, vh);
-        } else if (s.tod == Sets.NIGHT) {
-            g.radial(vw * 0.8f, vh * 0.05f, vw * 0.7f, 0x283050A0, 0x00000000);   // moonlight
-            g.rect(0, 0, vw, vh);
+        }
+        // 2. the bounce: from the ground, in its own colour (the picture's lower part, or the place's floor)
+        int bc = s.backdrop != null && s.backdrop.avgLow != 0 ? s.backdrop.avgLow : bounceColor(s.set, s.tod);
+        float ba = cave ? 0.3f : s.tod == Sets.NIGHT ? 0.12f : 0.17f;
+        g.linear(0, vh * 0.5f, 0, vh, Puppet.alpha(bc, 0f), Puppet.alpha(bc, ba));
+        g.rect(0, 0, vw, vh);
+    }
+
+    /** The colour the floor of a painted place bounces back (the bounce light). */
+    static int bounceColor(int set, int tod) {
+        if (set == Sets.CAVE_IN || set == Sets.CAVE_MOUTH) return 0xFF30584A;
+        if (tod == Sets.NIGHT) return 0xFF203050;
+        switch (set) {
+            case Sets.HALL: return 0xFFE8D8C0;
+            case Sets.COURTYARD: case Sets.GATE: return 0xFFD9C8A8;
+            case Sets.VILLAGE: return 0xFFC8A880;
+            case Sets.CELEBRATION: return 0xFFE8B070;
+            case Sets.FOREST: return 0xFF5C8A48;
+            default: return 0xFF9CB860;
         }
     }
 
@@ -433,24 +476,40 @@ public final class Renderer {
         }
     }
 
+    /** The water's band {top, bottom} on the stage (the picture's water, or the painted sea), or null when there is none. */
+    private float[] waterBand(Film.Seg s, Nature.Scan sc, Art.Backdrop b) {
+        if (sc != null && sc.anyWater && sc.waterTop >= 0) return new float[]{(sc.waterTop - b.y0) / (b.y1 - b.y0) * H, (sc.waterBottom - b.y0) / (b.y1 - b.y0) * H};
+        if (b == null) return new float[]{s.ground - 200, s.ground - 35};
+        return null;
+    }
+
+    /** The sea's roughness now: wind and storm. */
+    private float rough(float t) { return film == null ? 0 : Math.min(1.5f, Math.abs(film.wind(t)) + film.weather(Film.W_STORM, t)); }
+
     /** Water life: sea waves rolling to the shore and a floating boat (on the picture's water, or a painted sea). */
     private void waterNature(Gfx g, Film.Seg s, float t, Nature.Scan sc, Art.Backdrop b) {
         if (film == null) return;
         float sea = film.weather(Film.W_SEA, t), boat = film.weather(Film.W_BOAT, t);
-        if (sea <= 0 && boat <= 0) return;
-        float rough = Math.min(1.5f, Math.abs(film.wind(t)) + film.weather(Film.W_STORM, t));
-        float top, bottom;
-        if (sc != null && sc.anyWater && sc.waterTop >= 0) {
-            top = (sc.waterTop - b.y0) / (b.y1 - b.y0) * H;
-            bottom = (sc.waterBottom - b.y0) / (b.y1 - b.y0) * H;
-            if (sea > 0) Nature.shoreWaves(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, top, bottom, t, sea + rough * 0.5f);
-        } else if (b == null) {
-            top = s.ground - 200;
-            bottom = s.ground - 35;
-            Nature.paintedSea(g, W, top, bottom, t, sea + rough * 0.5f);
-            Nature.shoreWaves(g, null, 0, 0, 1, 1, W, H, top + 20, bottom, t, sea + rough * 0.5f);
-        } else return;     // the picture shows no water: no boat on dry land
-        if (boat > 0) Nature.boat(g, W * 0.72f, top + (bottom - top) * 0.45f, t, 0.9f + 0.4f * (bottom - top) / H, rough);
+        if (sea <= 0 && boat <= 0 && !s.inBoat) return;
+        float rough = rough(t);
+        float[] band = waterBand(s, sc, b);
+        if (band == null) return;     // the picture shows no water: no boat on dry land
+        float top = band[0], bottom = band[1];
+        if (b == null) Nature.paintedSea(g, W, top, bottom, t, Math.max(sea, s.inBoat ? 0.6f : 0) + rough * 0.5f);
+        if (sea > 0 || s.inBoat) Nature.shoreWaves(g, sc, b == null ? 0 : b.x0, b == null ? 0 : b.y0, b == null ? 1 : b.x1, b == null ? 1 : b.y1, W, H, b == null ? top + 20 : top, bottom, t, Math.max(sea, s.inBoat ? 0.6f : 0) + rough * 0.5f);
+        // the boat far out on the water; when the characters are in it, it is drawn with them (near layer)
+        if (boat > 0 && !s.inBoat) Nature.boat(g, W * 0.72f, top + (bottom - top) * 0.45f, t, 0.9f + 0.4f * (bottom - top) / H, rough);
+    }
+
+    /** The boat the characters are in: its deck's y on the stage, its bob and its roll (degrees) at t. */
+    private float[] deck(Film.Seg s, float t) {
+        float[] band = waterBand(s, s.backdrop == null ? null : s.backdrop.scan, s.backdrop);
+        if (band == null) band = new float[]{s.ground - 200, s.ground - 35};
+        float waterY = band[0] + (band[1] - band[0]) * 0.55f, size = 2.4f, rough = rough(t);
+        float bob = (float) Math.sin(t * 1.4) * 5 * size * (1 + 2 * rough);
+        float roll = (float) (Math.sin(t * 1.1 + 0.7) * (3 + 10 * rough) + (rough > 0.5f ? Math.sin(t * 23) * 1.5 * rough : 0));
+        float drift = (float) Math.sin(t * 0.2) * 20 * size;
+        return new float[]{waterY, bob, roll, drift, size};
     }
 
     /** Candles, diyas or torches, flickering and lighting the place. */
@@ -479,7 +538,9 @@ public final class Renderer {
             g.color(Puppet.alpha(0xFF40506A, 0.1f * Math.min(1, rain)));
             g.rect(0, 0, vw, vh);
         }
-        if (film.weather(Film.W_STORM, t) > 0) { g.color(0x2A101828); g.rect(0, 0, vw, vh); }
+        // a storm (and heavy rain) darkens the whole frame: the sky closes in
+        float storm = film.weather(Film.W_STORM, t);
+        if (storm > 0 || rain > 0.5f) { g.color(Puppet.alpha(0xFF101828, Math.min(0.45f, 0.3f * storm + 0.28f * Math.max(0, rain - 0.5f)))); g.rect(0, 0, vw, vh); }
         float snow = film.weather(Film.W_SNOW, t);
         if (snow > 0 && out) Nature.snow(g, vw, vh, t, snow, wind);
         float leaves = Math.max(film.weather(Film.W_LEAVES, t), out ? (Math.abs(wind) - 0.45f) * 1.4f : 0);
@@ -544,7 +605,7 @@ public final class Renderer {
 
     /** Slim cinema bars on wide (16:9) films. */
     private void letterbox(Gfx g) {
-        if (vw / vh < 1.6f) return;
+        if (vw / vh < 1.6f || (curSeg != null && curSeg.solid != 0)) return;
         float b = vh * 0.055f;
         g.color(0xFF000000);
         g.rect(0, 0, vw, b);
@@ -571,8 +632,9 @@ public final class Renderer {
             g.linear(0, 0, vw, 0, Puppet.alpha(0xFF000000, 0.0f), Puppet.alpha(0xFF000000, 0.28f * k));
             g.rect(0, 0, vw, vh);
         } else if (hard < 0.3f) {
+            // a soft moment: a warm veil over the whole frame (not a third light — two lights only)
             float k = (0.3f - hard) / 0.3f;
-            g.radial(vw * 0.45f, vh * 0.35f, Math.max(vw, vh) * 0.7f, Puppet.alpha(0xFFFFE6C0, 0.12f * k), 0x00FFE6C0);
+            g.color(Puppet.alpha(0xFFFFE6C0, 0.07f * k));
             g.rect(0, 0, vw, vh);
         }
         float r = Math.max(vw, vh) * (0.78f - 0.12f * Math.max(0, hard - 0.5f));
@@ -613,7 +675,13 @@ public final class Renderer {
         g.save();
         applyCam(g, 0.78f, s.ground);
         float wind = film == null ? 0 : film.wind(t);
-        if (s.backdrop != null) {
+        if (s.solid != 0) {
+            // a solid colour (the thumbnail and the poster): the hero's palette, nothing behind to distract
+            g.color(s.solid);
+            g.rect(-W, -H, W * 3, H * 3);
+            g.linear(0, s.ground - 40, 0, s.ground + 60, Puppet.alpha(0xFF000000, 0f), Puppet.alpha(0xFF000000, 0.25f));
+            g.rect(-W, s.ground - 40, W * 3, H);
+        } else if (s.backdrop != null) {
             final Art.Backdrop b = s.backdrop;
             Gfx.Painter bp = new Gfx.Painter() {
                 public void paint(Gfx gg) {
@@ -658,6 +726,8 @@ public final class Renderer {
             Film.Key k = a.stateAt(t);
             if (k.visible && k.anchor == Film.A_BRANCH) { branch(g, s, k.x); break; }
         }
+        // the boat the characters are in (they stand on its deck, rolling and bobbing with it)
+        if (s.inBoat) { float[] d = deck(s, t); Nature.boat(g, 640, d[0], t, d[4], rough(t)); }
         drawFxLayer(g, s, t, true);
         List<Film.Actor> list = new ArrayList<Film.Actor>(s.actors);
         final float tt = t;
@@ -703,9 +773,9 @@ public final class Renderer {
                 Nature.drips(g, Director.xAt(a, t), s.ground - h, s.ground, h * 0.4f, t, wet, a.order);
             }
         }
-        if (s.backdrop == null) Sets.paintFront(g, s.set, s.tod);
+        if (s.backdrop == null && s.solid == 0) Sets.paintFront(g, s.set, s.tod);
         g.restore();
-        if (s.backdrop == null) {
+        if (s.backdrop == null && s.solid == 0) {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
@@ -717,6 +787,22 @@ public final class Renderer {
         grain(g, t);
         letterbox(g);
         if (film.subtitles) drawSubs(g, s, t);
+        if (safeZoneOverlay) safeZone(g);
+    }
+
+    /** Draws the format's safe zones over the frame (Human QC stills): the side margins, the headroom, the caption zone, the eye line. */
+    public boolean safeZoneOverlay;
+
+    private void safeZone(Gfx g) {
+        PixarLead.Format f = PixarLead.specFor(vw / vh);
+        int c = 0x90FFD54F;
+        float l = vw * f.side, r = vw * (1 - f.side), tp = vh * f.top, bt = vh * (1 - f.bottom);
+        g.color(c);
+        g.rect(l, tp, r - l, 2); g.rect(l, bt - 2, r - l, 2); g.rect(l, tp, 2, bt - tp); g.rect(r - 2, tp, 2, bt - tp);
+        g.color(0x9080DEEA);
+        g.rect(l, vh * f.eyeLine - 1, r - l, 2);
+        g.color(0x60FF8A65);
+        g.rect(0, vh * PixarLead.FEET_MIN - 1, vw, 2); g.rect(0, vh * PixarLead.FEET_MAX - 1, vw, 2);
     }
 
     private static int layerOf(Film.Key k) {
@@ -807,6 +893,9 @@ public final class Renderer {
     private void drawActor(Gfx g, Film.Seg s, Film.Actor a, float t) {
         Film.Key k = a.stateAt(t);
         if (!k.visible) return;
+        // Spider-Verse: a character animated on twos or threes holds each pose for 2-3 frames (the walk, the
+        // gestures, the breathing); the place, the camera and the lip-sync stay on ones
+        final float tp = a.stepFps > 0 && a.stepFps < 24 ? (float) (Math.floor(t * a.stepFps) / a.stepFps) : t;
         Art.Sprite sp = art.sprites.get(a.c.id);
         float h = actorHeight(a.look, a.c, art, s);
         float x = Director.xAt(a, t);
@@ -821,7 +910,7 @@ public final class Renderer {
         // ---- pose
         Pose p = pose;
         p.reset();
-        p.time = t;
+        p.time = tp;
         p.seed = a.order * 13 + 5;
         p.facing = k.facing;
         p.body = k.body;
@@ -835,7 +924,7 @@ public final class Renderer {
         p.holdR = k.holdR;
         p.holdL = k.holdL;
         p.eyesClosed = k.eyesShut;
-        p.blink = blink(t, a.order);
+        p.blink = blink(tp, a.order);
         if (film != null && Sets.outdoorSet(s.set)) { p.wind = film.wind(t); p.wet = film.wetness(t); }
         float quakeNow = film == null ? 0 : film.weather(Film.W_QUAKE, t);
         p.sit = sitAmount(a, t);
@@ -856,8 +945,8 @@ public final class Renderer {
         if (mv != null) {
             float speed = mv.run ? 15f : 9f;
             // the steps start and stop gently (no snap into a stride), over a fifth of a second
-            float amt = Rig.smooth(0, 0.2f, t - mv.t) * Rig.smooth(0, 0.25f, mv.t + mv.moveDur - t);
-            p.walk = (t - mv.t) * speed;
+            float amt = Rig.smooth(0, 0.2f, tp - mv.t) * Rig.smooth(0, 0.25f, mv.t + mv.moveDur - tp);
+            p.walk = (tp - mv.t) * speed;
             p.walkAmt = amt;
             p.facing = mv.facing;
             // a calm, weighted step: a small rise and fall (no hopping) and a slight sway of the body
@@ -872,7 +961,7 @@ public final class Renderer {
                 if (mk.moveDur <= 0) continue;
                 float dir = Math.signum(mk.x - Director.prevX(a, mk));
                 if (dir == 0) continue;
-                float before = mk.t - t, after = t - (k.t + mk.moveDur);
+                float before = mk.t - tp, after = tp - (k.t + mk.moveDur);
                 if (before > 0 && before < 0.25f) {
                     float u = Rig.smooth(0.25f, 0, before);
                     mo.dy += 2.5f * u;
@@ -883,12 +972,21 @@ public final class Renderer {
                 }
             }
             // idle breathing
-            float br = (float) Math.sin(t * 2.1f + a.order);
+            float br = (float) Math.sin(tp * 2.1f + a.order);
             // (a rigged picture breathes through its own mesh: chest and shoulders, not the whole picture)
             if (sp == null || sp.rig == null) mo.sy = 1 + br * 0.006f;
             p.bob = br * 1.2f;
+            // secondary action (the 12 principles): while idle the weight shifts slowly from one foot to the
+            // other, and now and then the head turns a little — never while speaking (the head stays almost
+            // still in a lip-sync shot), and smaller the closer the camera is
+            if (spk == null && k.anchor == Film.A_GROUND && k.body == Pose.STAND) {
+                float ws = (float) Math.sin(tp * 0.45f + a.order * 1.3f), close = 1f / Math.max(1f, camZ);
+                mo.dx += ws * 2.2f * close; mo.rot += ws * 0.35f * close;
+                float gl = (float) Math.sin(tp * 0.21f + a.order * 2.1f);
+                if (gl > 0.93f) p.headTilt += (gl - 0.93f) / 0.07f * 3f * close * (p.facing < 0 ? -1 : 1);
+            }
         }
-        applyActs(a, p, t);
+        applyActs(a, p, tp);
         // a shot the user asked to be calmer (Human QC): every movement there is cut by 80%
         float calm = film == null ? 1f : film.calmAt(t);
         if (calm < 1f) {
@@ -918,9 +1016,9 @@ public final class Renderer {
             // talking: the body stays planted (no bobbing with every syllable, which reads as shaking on screen);
             // a drawn puppet sways slowly with the phrase, a picture only moves its head and lips
             boolean picture = sp != null && sp.rig != null;
-            if (!picture) mo.rot += (float) Math.sin(t * 1.6f + a.order) * 0.8f;
+            if (!picture) mo.rot += (float) Math.sin(tp * 1.6f + a.order) * 0.8f;
             if (p.armR < 30 && a.look.kind != Look.MONKEY) {
-                p.armR = picture ? 14 + (float) Math.sin(t * 1.1f + a.order) * 5 : 30 + (float) Math.sin(t * 2.7f) * 15;
+                p.armR = picture ? 14 + (float) Math.sin(tp * 1.1f + a.order) * 5 : 30 + (float) Math.sin(tp * 2.7f) * 15;
                 p.elbowR = 40;
             }
         }
@@ -969,6 +1067,18 @@ public final class Renderer {
                 y = s.ground + 10;
                 break;
             default:
+        }
+        if (s.inBoat && k.anchor == Film.A_GROUND) {
+            // in the boat: on its deck, spread along its length, moving with its bob and roll
+            float[] d = deck(s, t);
+            int n = 0, idx = 0;
+            for (Film.Actor o : s.actors) if (o.stateAt(t).visible && o.stateAt(t).anchor == Film.A_GROUND) { if (o == a) idx = n; n++; }
+            float along = (idx - (n - 1) / 2f) * Math.min(150, 360 / Math.max(1, n)) ;
+            float rollRad = (float) Math.toRadians(d[2]);
+            x = 640 + d[3] + along * (float) Math.cos(rollRad);
+            y = d[0] + d[1] - 4 + along * (float) Math.sin(rollRad);
+            mo.rot += d[2];
+            p.walkAmt = 0;
         }
         g.translate(x + mo.dx, y + mo.dy);
         if (scale != 1f) g.scale(scale, scale);
@@ -1167,6 +1277,23 @@ public final class Renderer {
                 case Film.G_TURN: {
                     float k2 = Math.min(1, u / (act.t1 - act.t0));
                     mo.sx *= Math.max(0.15f, Math.abs((float) Math.cos(Math.PI * k2)));
+                    break;
+                }
+                case Film.G_HEAD_SCRATCH: {
+                    // the comic beat (Russo / Gunn): a puzzled scratch of the head — the arm comes up, the fingers
+                    // wiggle, the head tilts into the hand, a small shrug
+                    float k2 = (float) Math.sin(Math.PI * Math.min(1, u / Math.max(0.3f, act.t1 - act.t0)));
+                    p.armR = Math.max(p.armR, 150 * k2);
+                    p.elbowR = 120 * k2 + (float) Math.sin(u * 22) * 8 * k2;
+                    p.headTilt += 7 * k2 * (p.facing < 0 ? -1 : 1);
+                    mo.rot += 1.5f * k2;
+                    mo.dy -= 2 * k2;
+                    if (p.emotion == Pose.NEUTRAL) p.emotion = Pose.SURPRISED;
+                    break;
+                }
+                case Film.G_WEIGHT_SHIFT: {
+                    mo.dx += (float) Math.sin(u * 1.5f) * 3;
+                    mo.rot += (float) Math.sin(u * 1.5f) * 0.6f;
                     break;
                 }
                 case Film.G_SHAKE_HEAD:
@@ -1801,6 +1928,15 @@ public final class Renderer {
                     Nature.flyingObject(g, hx, hy, vx, vy, s.ground + 8, u, f.kind, 1.3f);
                 } break;
                 case Film.FX_LEAVES: if (!behind) leaves(g, f, u); break;
+                case Film.FX_SHADOW_PASS: if (behind) {
+                    // Gunn: the shadow of something unseen sweeps over the ground of a funny scene, slow in, slow out
+                    float k = Math.min(1, u / (f.t1 - f.t0)), e = k * k * (3 - 2 * k);
+                    float x = f.x - e * (f.x + 760);
+                    g.color(Puppet.alpha(0xFF000000, 0.4f * (float) Math.sin(Math.PI * k)));
+                    g.oval(x, s.ground - 14, 300, 46);
+                    g.color(Puppet.alpha(0xFF000000, 0.22f * (float) Math.sin(Math.PI * k)));
+                    g.oval(x + 120, s.ground - 40, 180, 30);
+                } break;
                 case Film.FX_GREEN_GLOW: if (!behind) {
                     float k = (float) Math.sin(Math.min(1, u / (f.t1 - f.t0)) * Math.PI);
                     g.radial(f.x, f.y, 260, Puppet.alpha(0xFF76FF03, 0.7f * k), 0x0076FF03);

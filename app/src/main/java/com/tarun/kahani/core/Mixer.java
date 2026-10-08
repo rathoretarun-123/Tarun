@@ -164,6 +164,7 @@ public final class Mixer {
             case Film.SFX_DRIP: return "cave.ogg";
             case Film.SFX_SPLASH: return "water_splash.ogg";
             case Film.SFX_STEPS: return "footsteps.ogg";
+            case Film.SFX_STEPS_RUN: return "running_footsteps.ogg";
             case Film.SFX_CROWD: return "crowd_market.ogg";
             case Film.SFX_SWORD: return "sword_clash.ogg";
             case Film.SFX_NET: return "whoosh.ogg";

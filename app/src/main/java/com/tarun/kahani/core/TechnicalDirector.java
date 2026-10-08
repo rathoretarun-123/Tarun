@@ -51,6 +51,12 @@ public final class TechnicalDirector {
     public static final String CLOTH = "clothes have weight: heavy fabric with gravity folds, not weightless";
     public static final String GROUND = "feet firmly on the ground, shadow under feet touching the ground, gravity, weight";
     public static final String HANDS = "hands with 5 fingers, anatomically correct, or holding a prop";
+    /** The STYLE line of every first-frame prompt (the Pixar-lead prompt builder). */
+    public static final String STYLE = "premium 3D animated feature film, soft subsurface skin, rich fabric detail, cinematic depth of field, "
+            + "two lights only (key + bounce), warm catch-light in the eyes, clean background, no text";
+    /** The NEGATIVE line of every first-frame prompt: what must never appear. */
+    public static final String NEGATIVE = "stretched, distorted face, extra fingers, cut-off head, cut-off feet, floating, blurry upscale, morphing, "
+            + "text, watermark, camera motion, second light source";
     public static final String LIP_SYNC = "close-up, front-facing, face looking directly at the camera 0 degrees, face 65-75% of the frame, "
             + "mouth clearly visible, no shadow on the mouth, soft frontal light on the face, catch-light in the eyes, head almost still, "
             + "only mouth and jaw move, no head turn, contains_speech = true";
@@ -59,32 +65,42 @@ public final class TechnicalDirector {
     public static final String[][] FORBIDDEN = {{"running fast", "walking"}, {"running", "walking"}, {"runs", "walks"}, {"ran ", "walked "},
             {"flying", "standing"}, {"flies", "stands"}, {"spinning", "turning slowly"}, {"spins", "turns slowly"}, {"fast movement", "small movement"},
             {"camera follows", ""}, {"zooms", ""}, {"zooming", ""}, {"zoomed", ""}, {"zoom in", ""}, {"pans", ""}, {"panning", ""}, {"shaky", ""},
-            {"handheld", ""}, {"cropped", ""}, {"16:9", ""}, {"9:16", ""}, {"1:1", ""}, {"widescreen", ""}, {" wide ", " full "},
-            {"jumps", "steps"}, {"jumping", "standing"}};
+            {"handheld", ""}, {"cropped", ""}, {"16:9", ""}, {"9:16", ""}, {"1:1", ""}, {"4:5", ""}, {"2.39:1", ""}, {"widescreen", ""}, {" wide ", " full "},
+            {"jumps", "steps"}, {"jumping", "standing"},
+            // PixarLead RULE_RESIZE_1: a picture is made natively in its format, never stretched, cropped to fit or outpainted
+            // (only the instructions: "squash and stretch" and the NEGATIVE line's "stretched" stay)
+            {"stretch to", ""}, {"stretch it", ""}, {"stretch the", ""}, {"stretched to", ""}, {"resize to", ""}, {"crop to", ""},
+            {"convert aspect ratio", ""}, {"outpaint", ""}};
 
     // ------------------------------------------------------------------ section 9: the templates
 
     /** IMAGE TEMPLATE (first frame). Fill with {@link #fill}. */
     public static final String IMAGE_TEMPLATE =
-            "Parameters: shape.aspect_ratio = {FINAL_AR}; reference_image = {REFERENCES}.\n"
-            + "Premium 3D animated feature film still, {FRAMING}.\n"
+            "Parameters: shape.aspect_ratio = {FINAL_AR}; size = {SIZE}; reference_image = {REFERENCES}.\n"
+            + "FORMAT: {FORMAT}\n"
+            + "Premium 3D animated feature film still, {FRAMING}, {FOCAL} lens.\n"
             + "CHARACTERS: {CHARACTERS}\n"
             + "PLACEMENT: {PLACEMENT}\n"
             + "ACTION: {ACTION} (the moment it begins; one action only, max 10% frame movement)\n"
             + "GROUNDING: {GROUNDING}\n"
             + "LIGHTING: {LIGHTING}\n"
             + "CAMERA: " + CAMERA + "\n"
+            + "STYLE: " + STYLE + "\n"
+            + "NEGATIVE: " + NEGATIVE + "\n"
             + CLOTH + ". {HANDS}. " + STABLE + ". No text.";
 
     /** VIDEO TEMPLATE (from the approved first frame, 3 seconds). Fill with {@link #fill}. */
     public static final String VIDEO_TEMPLATE =
-            "Parameters: image input = first frame of shot {SHOT}; shape.aspect_ratio = {FINAL_AR}; duration = 3 s.\n"
+            "Parameters: image input = first frame of shot {SHOT}; resume_from_snapshot_id = {SNAPSHOT}; shape.aspect_ratio = {FINAL_AR}; "
+            + "duration = {DURATION} s; contains_speech = {SPEECH_FLAG}; fps = {FPS}.\n"
+            + "FORMAT: {FORMAT}\n"
             + "CHARACTERS: {CHARACTERS}\n"
             + "PLACEMENT: {PLACEMENT}\n"
             + "ACTION: {ACTION}; " + PHYSICS + "; " + CLOTH + "\n"
             + "GROUNDING: {GROUNDING}\n"
             + "LIGHTING: {LIGHTING}\n"
             + "CAMERA: " + CAMERA + "\n"
+            + "PRINCIPLES: " + PixarLead.PRINCIPLES + "\n"
             + STABLE + ". {SPEECH}";
 
     /** Replaces {NAME} fields; pairs of name, value. */
@@ -104,19 +120,38 @@ public final class TechnicalDirector {
         return o.trim().replaceAll("[ \\t]+", " ");
     }
 
-    /** C3: the picture size for FINAL_AR (the aspect ratio is a parameter of the generation, never a word). */
+    /** C3: the picture size for FINAL_AR (the aspect ratio is a parameter of the generation, never a word): the format's native size. */
     public static int[] sizeFor(String finalAr) {
-        if ("9:16".equals(finalAr)) return new int[]{720, 1280};
-        if ("1:1".equals(finalAr)) return new int[]{1024, 1024};
-        return new int[]{1280, 720};
+        PixarLead.Format f = PixarLead.spec(finalAr);
+        return new int[]{f.w, f.h};
+    }
+
+    /**
+     * The picture size for FINAL_AR at the film's output height (RULE_RESIZE_4: a plate is made at the size it is
+     * shown, never a blurry upscale): 1920x1080 for a 1080p 16:9 film, 1080x1920 for 9:16, 1920x804 for 2.39:1.
+     */
+    public static int[] sizeFor(String finalAr, int outHeight) {
+        PixarLead.Format f = PixarLead.spec(finalAr);
+        int h = Math.max(f.h, outHeight);
+        if (h == f.h) return new int[]{f.w, f.h};
+        // a taller output: scaled from the format's own native size, keeping its exact shape (even numbers for the encoder)
+        int w = Math.round(h * f.w / (float) f.h / 2) * 2;
+        return new int[]{w, h - h % 2};
     }
 
     /** The frame's width / height for FINAL_AR. */
     public static float ratio(String finalAr) {
-        if ("9:16".equals(finalAr)) return 9f / 16f;
-        if ("1:1".equals(finalAr)) return 1f;
-        return 16f / 9f;
+        return PixarLead.spec(finalAr).ratio;
     }
+
+    /** The FORMAT line of a prompt: the format's name, size and safe zone (RULE_RESIZE_3), with the ratio left to the parameter. */
+    public static String formatLine(String finalAr) {
+        PixarLead.Format f = PixarLead.spec(finalAr);
+        return f.id + " — " + f.w + "x" + f.h + " px; safe zone: " + f.note + "; character scale " + Math.round(f.charScale * 100) + "% of the frame height";
+    }
+
+    /** The focal length of the lens for a format (35mm for vertical, 85mm for landscape close-ups, 50mm square). */
+    public static String focalFor(String finalAr) { return PixarLead.spec(finalAr).focal; }
 
     // ------------------------------------------------------------------ section 10: the validation layer
 
@@ -136,6 +171,10 @@ public final class TechnicalDirector {
         public int words;                           // section 8.5
         public float face;                          // fraction of the frame height the face fills (lip-sync)
         public String prompt = "";                  // the finished prompt text
+        public boolean video;                       // a video prompt (needs the PRINCIPLES tags and the speech flag)
+        public float headTop = 0.1f, feet = 0.9f;   // the first-frame checks: the head's top and the feet, fractions of the frame height (full shots)
+        public boolean fullBody;                    // the feet are in the frame (a full shot)
+        public float faceStretch;                   // |width scale / height scale - 1| of the face (RULE_RESIZE_7: 5% at most)
         /** What the error correction did to this shot. */
         public final List<String> fixes = new ArrayList<String>();
     }
@@ -169,6 +208,11 @@ public final class TechnicalDirector {
         }
         if (s.actions > 1) bad.add("more than one action in the shot");
         if (s.seconds > MAX_SHOT_SECONDS + 0.05f) bad.add(String.format(Locale.US, "%.1f s long (never more than 4 s)", s.seconds));
+        // PixarLead: the Disney principle tags in every video prompt, and the first-frame checks of the resizing module
+        if (s.video && s.prompt.length() > 0 && !s.prompt.contains("PRINCIPLES:")) bad.add("principles missing: " + PixarLead.PRINCIPLES);
+        if (s.faceStretch > PixarLead.STRETCH_TOLERANCE) bad.add(String.format(Locale.US, "face stretched %.0f%% (5%% at most)", s.faceStretch * 100));
+        if (s.headTop < PixarLead.HEAD_MIN) bad.add("head cut by the top of the frame");
+        if (s.fullBody && (s.feet < PixarLead.FEET_MIN || s.feet > PixarLead.FEET_MAX)) bad.add(String.format(Locale.US, "feet at %.0f%% of the frame (must be within 85-98%%, with a shadow)", s.feet * 100));
         return bad;
     }
 
@@ -191,6 +235,10 @@ public final class TechnicalDirector {
                 else if (b.startsWith("costume")) { s.costumeVerbatim = true; s.fixes.add("costume lock text pasted"); }
                 else if (b.contains("s long")) { s.seconds = SHOT_SECONDS; s.fixes.add("split into 3-second clips"); }
                 else if (b.startsWith("more than one action")) { s.actions = 1; s.fixes.add("second action moved to its own shot"); }
+                else if (b.startsWith("principles")) { s.prompt += "\nPRINCIPLES: " + PixarLead.PRINCIPLES; s.fixes.add("principle tags added"); }
+                else if (b.startsWith("face stretched")) { s.faceStretch = 0; s.fixes.add("regenerated natively in the format (no stretch)"); }
+                else if (b.startsWith("head cut")) { s.headTop = PixarLead.HEAD_MIN + 0.08f; s.fixes.add("framed wider: headroom added"); }
+                else if (b.startsWith("feet at")) { s.feet = 0.92f; s.fixes.add("framed wider: feet and shadow inside the frame"); }
             }
         }
         return validate(s);

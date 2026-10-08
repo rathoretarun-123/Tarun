@@ -30,6 +30,8 @@ public final class Director {
         public String aspect = "16:9";
         /** The user's own sounds: effects are played where an action or direction mentions them. */
         public SoundLib sounds;
+        /** Spider-Verse: characters animated on twos / threes by skill (experts 24, learners 12, rebels 8 fps); off = every frame. */
+        public boolean onTwos;
     }
 
     private final Map<String, Float> userSoundAt = new HashMap<String, Float>();
@@ -174,6 +176,13 @@ public final class Director {
         film.notes.add("Title page: \"" + story.title + "\"" + (this.art.title != null ? " (your picture)" : " (made by the studio)") + " + music");
         t = tdur;
 
+        // ---------------- the story engine (PixarLead): the hero, the six-beat spine and the act of every scene
+        sceneActs = PixarLead.acts(story);
+        film.spine = PixarLead.spine(story);
+        Story.CharacterDef heroDef = PixarLead.hero(story);
+        film.hero = heroDef == null ? "" : heroDef.shown();
+        maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0;
+
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
             Story.Scene sc = story.scenes.get(si);
@@ -250,6 +259,9 @@ public final class Director {
             limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
         }
         film.shotList = qualityCheck();
+        // the Braintrust (PixarLead): the four questions every five shots, suggestions only — appended to the shot list
+        film.braintrust = PixarLead.braintrust(film, story);
+        film.shotList += "\n" + film.braintrust.text;
         return film;
     }
 
@@ -494,6 +506,13 @@ public final class Director {
             b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
             b.append(String.format(java.util.Locale.US, "• Validation layer: %d of %d shots passed at once, %d corrected%s%n", passed, n, corrected,
                     stillWrong.isEmpty() ? "" : "; could not fully correct: " + stillWrong));
+            PixarLead.Format fmt = PixarLead.spec(opt.aspect);
+            b.append("• Pixar-Lead protocol v4.0: format ").append(fmt.id).append(" (").append(fmt.note).append("), character scale lock ")
+                    .append(Math.round(fmt.charScale * 100)).append("% of the frame height, two lights only (key + bounce), colour script per act\n");
+            b.append(String.format(java.util.Locale.US, "• First-frame checks: %d shots reframed for a cut head, %d for feet out of the frame (feet in the bottom 85-98%% with their shadow)%n", framedHead, framedFeet));
+            b.append(String.format(java.util.Locale.US, "• Miyazaki ma pauses after two fast beats: %d; Russo / Gunn comic beats: %d; Gunn shadow passes in funny scenes: %d%n", maPauses, comicBeats, shadowPasses));
+            b.append("• Spider-Verse animation on twos: ").append(opt.onTwos ? "on (experts 24, learners 12, rebels 8 fps)" : "off (every character moves every frame; switch it on in Settings)").append('\n');
+            b.append("• Nolan: real sounds — steps by the floor of the place (stone, marble, cave, earth), running steps for runs; cross-cutting between speaker and listener in long lines\n");
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
         }
@@ -659,12 +678,20 @@ public final class Director {
         seg.tod = Sets.detectTime(where, pi == 0 && si == 0 ? Sets.MORNING : prevTod == Sets.NIGHT && seg.set != Sets.CAVE_IN ? Sets.NIGHT : Sets.DAY);
         if (seg.set == Sets.CAVE_IN) seg.tod = Sets.NIGHT;
         seg.festive = Txt.has(where, "सजा", "रोशनियों", "ढोल", "उत्सव", "जश्न", "celebrat", "festiv");
+        // the characters are in a boat: the place is the water itself, or the boat is named as where they are
+        String partWords = where + " " + (b0 < b1 ? sc.beats.get(b0).text : "");
+        seg.inBoat = (Txt.has(where, "नाव में", "नाव पर", "नौका में", "in the boat", "on the boat", "in a boat", "on a boat", "in the ship", "on the ship", "on the raft")
+                || (Txt.has(where, "समुद्र में", "सागर में", "नदी में", "झील में", "बीच समुद्र", "खुला समुद्र", "खुले समुद्र", "at sea", "open sea", "middle of the sea", "middle of the lake", "on the river")
+                && Txt.has(partWords, BOAT))) && !Txt.has(where, "किनारे", "shore", "beach", "तट");
         if (seg.festive && seg.set != Sets.CAVE_IN) seg.set = Sets.CELEBRATION;
         seg.backdrop = nParts > 1 ? art.sceneBackdrop(sc.number, pi) : art.sceneBackdrop(sc.number, 0);
         if (nParts == 1 && seg.backdrop == null) seg.backdrop = art.scenes.get(String.valueOf(sc.number));
         seg.ground = seg.backdrop != null ? seg.backdrop.ground * 720f : Sets.GROUND;
         ground = seg.ground;
         seg.fadeIn = 0.45f; seg.fadeOut = 0.45f;
+        // PixarLead: the act this part belongs to (its colour script) and the format's character scale lock
+        seg.act = sceneActs != null && si < sceneActs.length ? sceneActs[si] : 1;
+        seg.charScale = PixarLead.spec(opt.aspect).charScale;
         film.segs.add(seg);
         lastSubject = null;
         lastGroup.clear();
@@ -734,10 +761,13 @@ public final class Director {
             Integer ent = entryBeat.get(c);
             if (ent != null) k.visible = false;
             a.keys.add(k);
+            // Spider-Verse: the frame rate this character's poses step on (only when the user asks for it)
+            a.stepFps = opt.onTwos ? PixarLead.stepFps(c) : 0;
             seg.actors.add(a);
         }
 
         // ---------- ambience & music
+        if (seg.inBoat) { if (wOpen[Film.W_SEA] < 0) open(Film.W_SEA, seg.t0, 0.8f); film.notes.add("  ↳ in a boat on the water"); }
         ambience(where, t);
         weatherFrom(where + " । " + sc.title + (pi == 0 && sc.cues.length() > 0 ? " । " + sc.cues : ""), seg.t0, true);
         if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
@@ -777,6 +807,7 @@ public final class Director {
         int noteIdx = film.notes.size();
         film.notes.add("");
         float tc = t + 0.2f;
+        int fastRun = 0;
         for (int bi = b0; bi < b1; bi++) {
             Story.Beat b = sc.beats.get(bi);
             // entrances that happen at this beat
@@ -790,6 +821,17 @@ public final class Director {
             }
             if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
+            // Miyazaki's ma: after two fast beats, one quiet one — a still shot that lets the moment breathe
+            boolean fastBeat = PixarLead.fast(b.text + " " + (b.manner == null ? "" : b.manner)) || (b.type == Story.Beat.DIALOGUE && partFast && beatLine[si][bi] >= 0
+                    && (film.lines.get(beatLine[si][bi]).emotion == Pose.ANGRY || film.lines.get(beatLine[si][bi]).emotion == Pose.SCARED));
+            if (fastBeat) fastRun++; else fastRun = 0;
+            if (fastRun >= 2 && opt.technical && bi + 1 < b1) { tc = maPause(tc); fastRun = 0; }
+        }
+        if (opt.technical) {
+            // Russo: one comic extra action per scene (and Gunn: one joke in a scary scene); Gunn: one scary
+            // shadow in a funny scene when the story has a villain
+            comicBeat(b0 < b1 ? tc : t, mood);
+            if ((mood == Film.M_HAPPY || mood == Film.M_PLAYFUL || mood == Film.M_CELEBRATE) && storyHasVillain() && tc - t > 6) shadowPass(t + (tc - t) * 0.55f);
         }
         seg.t1 = tc + 0.8f;
         if (pi == nParts - 1) closeAllWeather(seg.t1);
@@ -935,7 +977,7 @@ public final class Director {
             tc += 1.6f;
         }
         if (a.look.kind == Look.MONSTER) film.sfx.add(new Film.Sfx(Film.SFX_THUD, tc, 1.4f, 0.8f));
-        else film.sfx.add(new Film.Sfx(Film.SFX_STEPS, tc, k.moveDur, 0.35f));
+        else film.sfx.add(new Film.Sfx(stepsSound(run), tc, k.moveDur, 0.35f));
         if (a.look.anklets) film.sfx.add(new Film.Sfx(Film.SFX_ANKLET, tc, k.moveDur, 0.4f));
         return tc + (far ? 0.2f : 0.4f);
     }
@@ -1017,6 +1059,65 @@ public final class Director {
         lastSubject = b.speaker;
         dlgCount++;
         return end + after;
+    }
+
+    // ================================================================== the thumbnail and the poster (RULE_RESIZE_8)
+
+    /**
+     * The thumbnail and the poster are made separately, natively in their own formats, never resized from a frame:
+     * the thumbnail (16:9) is the hero's face, 60 % of the frame, on a solid colour of the hero's palette with the
+     * bottom 15 % empty for text; the poster (9:16) is the hero full body, centred, feet on the ground with a
+     * shadow, 40 % empty at the top for the title and 20 % at the bottom for credits. The two parts are not in the
+     * film's timeline: they are drawn with {@link Renderer#renderSeg}. Call after {@link #direct}.
+     */
+    public Film.Seg[] stills() {
+        Story.CharacterDef hero = PixarLead.hero(story);
+        if (hero == null || hero.look == null) return new Film.Seg[0];
+        Film.Seg keepSeg = seg;
+        float keepGround = ground;
+        Film.Seg[] out = new Film.Seg[2];
+        for (int i = 0; i < 2; i++) {
+            PixarLead.Format f = i == 0 ? PixarLead.THUMBNAIL : PixarLead.spec("9:16");
+            Film.Seg s = new Film.Seg();
+            s.type = Film.S_SCENE;
+            s.t0 = 0; s.t1 = 2;
+            s.set = Sets.GARDEN; s.tod = Sets.DAY;
+            s.mood = Film.M_HAPPY; s.act = 5;
+            s.charScale = f.charScale;
+            s.ground = Sets.GROUND;
+            s.solid = PixarLead.paletteColor(hero);
+            s.fadeIn = 0; s.fadeOut = 0;
+            Film.Actor a = new Film.Actor();
+            a.c = hero; a.look = hero.look; a.order = 0;
+            Film.Key k = new Film.Key();
+            k.t = 0; k.x = 640; k.facing = 1; k.emotion = Pose.HAPPY; k.visible = true;
+            a.keys.add(k);
+            s.actors.add(a);
+            seg = s; ground = s.ground;
+            float h = heightOf(a);
+            Film.Cam c;
+            if (i == 0) {
+                // the face 60% of the frame, the whole head inside, a little above the middle (text goes at the bottom)
+                float[] fb = faceBox(a, 0.5f);
+                float zoom = Math.min(fb[3], 0.6f * 720f / fb[2]);
+                float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 18;
+                zoom = Math.min(zoom, 0.8f * 720f / Math.max(1, chin - headTop));
+                zoom = Math.max(1.2f, zoom);
+                float fh = 720f / zoom;
+                float cy = fb[1] + 0.02f * fh;
+                if (headTop < cy - fh / 2 + 0.06f * fh) cy = headTop - 0.06f * fh + fh / 2;
+                c = new Film.Cam(0, fb[0], cy, zoom, 0);
+            } else {
+                // full body, 45% of the frame height: the head's top at 40% from the top, the feet at 85%
+                float fh = h / 0.45f;
+                c = new Film.Cam(0, 640, ground - h + 0.1f * fh, 720f / fh, 0);
+            }
+            c.still = true; c.light = 0.2f;
+            s.cams.add(c);
+            out[i] = s;
+        }
+        seg = keepSeg; ground = keepGround;
+        return out;
     }
 
     // ================================================================== Human QC (pipeline step 4)
@@ -1179,6 +1280,96 @@ public final class Director {
      * Lip-sync needs the head almost still (8.6): a character walking when their line begins stops where they
      * are, says the line, and then walks on to where they were going.
      */
+    // ------------------------------------------------------------------ PixarLead: ma, the comic beat, the shadow, weight
+
+    /** Who the quiet shot is on: the hero when present, else the last subject, else anyone visible. */
+    private Film.Actor quietSubject(float t) {
+        Film.Actor best = null;
+        for (Film.Actor a : seg.actors) {
+            if (!a.stateAt(t).visible || a.stateAt(t).anchor == Film.A_HIDDEN) continue;
+            if (a.c.shown().equals(film.hero)) return a;
+            if (best == null || (lastSubject != null && a.c == lastSubject)) best = a;
+        }
+        return best;
+    }
+
+    /**
+     * Miyazaki's ma: after two fast beats, one quiet shot — 1.8 seconds of a still medium-wide frame on the hero,
+     * nobody moving, only the wind. The protocol keeps it (Cam.keep): it is never dropped as a jump cut.
+     */
+    private float maPause(float tc) {
+        Film.Actor a = quietSubject(tc);
+        if (a == null) return tc;
+        float t0 = tc + 0.1f, dur = 1.8f;
+        float h = heightOf(a), x = finalX(a, t0);
+        Film.Cam c = new Film.Cam(t0, x, ground - h * 0.55f, ShotPlanner.ZOOM[ShotPlanner.MWIDE], 0);
+        c.still = true; c.keep = true; c.light = 0.2f;
+        seg.cams.add(c);
+        Film.Shot sh = shot(t0, ShotPlanner.MWIDE, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, a, null, ShotPlanner.ESTABLISH);
+        sh.purpose = "Ma (Miyazaki): a quiet breath after two fast beats";
+        sh.action = a.c.shown() + " stands still, breathing; nothing else moves";
+        sh.face = "The feeling settles on the face";
+        sh.body = "Weight on both feet, shoulders down";
+        sh.cutWhen = "the breath is over (1.8 s)";
+        sh.emotionalPurpose = "The audience catches up with the moment";
+        sh.light = 0.2f;
+        film.sfx.add(new Film.Sfx(Film.SFX_WIND, t0, dur, 0.18f));
+        shiftAfter(t0, dur);
+        maPauses++;
+        return tc + dur;
+    }
+
+    /** Russo / Gunn: one small comic action per part by a character who can carry it (never in a sad part). */
+    private void comicBeat(float tc, int mood) {
+        if (mood == Film.M_SAD) return;
+        Film.Actor who = null;
+        for (Film.Actor a : seg.actors) if (PixarLead.comic(a.c) && a.stateAt(tc - 0.5f).visible && a.stateAt(tc - 0.5f).anchor == Film.A_GROUND) { who = a; break; }
+        if (who == null) return;
+        // at a quiet moment near the end of the part: nobody speaking, this character not acting
+        float t0 = Math.max(seg.t0 + 1f, tc - 1.6f);
+        for (Film.Actor a : seg.actors) for (Film.Speak sp : a.speaks) if (t0 < sp.t1 && t0 + 1.2f > sp.t0) return;
+        for (Film.Act ac : who.acts) if (t0 < ac.t1 && t0 + 1.2f > ac.t0) return;
+        who.acts.add(new Film.Act(t0, t0 + 1.2f, Film.G_HEAD_SCRATCH));
+        comicBeats++;
+    }
+
+    /** Gunn: a scary shadow sweeps over the ground of a funny scene, from the villain's side. */
+    private void shadowPass(float t) {
+        Film.Fx fx = new Film.Fx(Film.FX_SHADOW_PASS, t, t + 1.6f);
+        fx.x = 1500; fx.y = ground;
+        seg.fx.add(fx);
+        film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, t + 0.2f, 1.2f, 0.25f));
+        shadowPasses++;
+    }
+
+    private boolean storyHasVillain() {
+        for (Story.CharacterDef c : story.characters) if (c.look != null && !c.look.hero) return true;
+        return false;
+    }
+
+    /** Nolan: real sounds — the steps of the place's floor (stone and marble ring, earth and grass thud), running steps when running. */
+    private int stepsSound(boolean run) {
+        if (run) return Film.SFX_STEPS_RUN;
+        switch (seg.set) {
+            case Sets.COURTYARD: case Sets.GATE: case Sets.HALL: case Sets.CAVE_IN: case Sets.CAVE_MOUTH: case Sets.CELEBRATION: return Film.SFX_STEPS_HARD;
+            default: return Film.SFX_STEPS;
+        }
+    }
+
+    /** Timing by weight: how much faster (>1) or slower (<1) than a grown person this character may move. */
+    static float weightSpeed(Film.Actor a) {
+        Look l = a.look;
+        if (l == null) return 1f;
+        if (l.kind == Look.MONKEY) return 1.35f;
+        if (l.kind == Look.MONSTER) return 0.75f;
+        float k = 1f;
+        if (l.height > 1.2f) k *= 0.85f;
+        if (l.girth > 1.15f) k *= 0.85f;
+        if (l.isChild()) k *= 1.15f;
+        if (l.kind == Look.ANIMAL) k *= 1.2f;
+        return k;
+    }
+
     private void standStillToSpeak(Film.Actor sp, float start, float end) {
         Film.Key last = sp.keys.get(sp.keys.size() - 1);
         if (last.t > start + 1e-3f) return;                       // later plans exist already: leave them
@@ -1208,10 +1399,11 @@ public final class Director {
      * timing leaves room for it (the next instruction for that character comes later).
      */
     private void calmMoves() {
-        final float maxSpeed = 260f;          // stage units per second (about a third of a 16:9 frame)
         for (Film.Seg sg : film.segs) {
             if (sg.type != Film.S_SCENE) continue;
             for (Film.Actor a : sg.actors) {
+                // timing by weight (the 12 principles): a light, quick character may move faster than a heavy, tall one
+                final float maxSpeed = 260f * weightSpeed(a);          // stage units per second (about a third of a 16:9 frame)
                 for (int i = 1; i < a.keys.size(); i++) {
                     Film.Key k = a.keys.get(i);
                     if (k.moveDur <= 0) continue;
@@ -1249,7 +1441,11 @@ public final class Director {
             if (zoom < base * 1.12f) zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], base / 1.2f);
         }
         float fh = 720f / zoom;
-        float cy = fb[1] + 0.04f * fh;
+        // the eyes on the format's eye line (16:9 the top third, 9:16 the middle); the head never cut: headroom wins
+        PixarLead.Format fmt = PixarLead.spec(opt.aspect);
+        float eyeY = fb[1] - fb[2] * 0.09f;
+        float cy = eyeY - fmt.eyeLine * fh + fh / 2;
+        cy = Math.max(cy, fb[1] + 0.04f * fh - 0.1f * fh);
         if (headTop < cy - fh / 2 + 0.06f * fh) cy = headTop - 0.06f * fh + fh / 2;
         float hw = 360f / zoom * TechnicalDirector.ratio(opt.aspect);
         Film.Cam c = new Film.Cam(t, Math.max(hw, Math.min(1280 - hw, fb[0])), cy, zoom, 0);
@@ -1371,9 +1567,13 @@ public final class Director {
     }
 
     private int motionCuts, actionCuts, framed;
+    /** PixarLead counters: ma pauses (Miyazaki), comic beats (Russo / Gunn), shadow passes (Gunn), first-frame reframes (head, feet). */
+    private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet;
+    private int[] sceneActs;
 
     private static boolean isAction(int type) {
-        return type != Film.G_TALK && type != Film.G_NOD && type != Film.G_LOOK_AWAY && type != Film.G_WHISPER;
+        return type != Film.G_TALK && type != Film.G_NOD && type != Film.G_LOOK_AWAY && type != Film.G_WHISPER
+                && type != Film.G_HEAD_SCRATCH && type != Film.G_WEIGHT_SHIFT;
     }
 
     /**
@@ -1418,6 +1618,8 @@ public final class Director {
      */
     private void safeFrames() {
         float ar = TechnicalDirector.ratio(opt.aspect);
+        PixarLead.Format fmt = PixarLead.spec(opt.aspect);
+        final float side = Math.max(TechnicalDirector.SIDE_MARGIN, fmt.side);
         for (Film.Seg sg : film.segs) {
             if (sg.type != Film.S_SCENE) continue;
             sortCams(sg);
@@ -1473,7 +1675,7 @@ public final class Director {
                     headTop = Math.min(headTop, sg.ground - h);
                     feet = Math.max(feet, sg.ground);
                 }
-                float span = maxR - minL, usable = 1 - 2 * TechnicalDirector.SIDE_MARGIN;
+                float span = maxR - minL, usable = 1 - 2 * side;
                 float oldX = c.cx, oldZ = c.zoom;
                 if (span > frameW(c) * usable) {
                     float z = 720f * ar * usable / span;
@@ -1491,16 +1693,18 @@ public final class Director {
                     // inside the 15% side margins)
                     Film.Actor one = subj.get(0);
                     float fw = frameW(c), half = (maxR - minL) / 2;
-                    float off = Math.min(fw / 6, fw * (0.5f - TechnicalDirector.SIDE_MARGIN) - half);
+                    float off = Math.min(fw / 6, fw * (0.5f - side) - half);
                     if (off > 0) c.cx += one.stateAt(t).facing * off;
                 }
                 // headroom above the highest head; a full shot keeps the feet in the frame too
                 float fh = 720f / c.zoom;
                 float topEdge = c.cy - fh / 2;
-                float room = TechnicalDirector.HEADROOM * (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.MWIDE] + 0.01f ? 0.5f : 0.6f);
+                float room = Math.max(fmt.top * 0.75f, TechnicalDirector.HEADROOM * (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.MWIDE] + 0.01f ? 0.5f : 0.6f));
                 if (headTop < topEdge + room * fh) c.cy = headTop - room * fh + fh / 2;
-                if (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.WIDE] + 0.01f && feet > c.cy + fh / 2 - 0.03f * fh) {
-                    float need = feet - headTop + (room + 0.03f) * fh;
+                // a full shot keeps the feet (and their shadow) inside the bottom 85-98% of the frame, above the caption zone
+                float feetMax = Math.min(PixarLead.FEET_MAX - 0.04f, 1 - fmt.bottom + 0.02f);
+                if (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.WIDE] + 0.01f && feet > c.cy + fh / 2 - (1 - feetMax) * fh) {
+                    float need = feet - headTop + (room + 1 - feetMax) * fh;
                     if (need > fh && 720f / need >= 1f) { c.zoom = Math.min(c.zoom, 720f / need); fh = 720f / c.zoom; }
                     c.cy = headTop - room * fh + fh / 2;
                 }
@@ -1552,15 +1756,37 @@ public final class Director {
             TechnicalDirector.Shot v = new TechnicalDirector.Shot();
             v.placement = "Foreground 0-1 m | Midground left third / right third 2-4 m | Background 10-100 m";
             v.grounding = TechnicalDirector.GROUND;
-            v.prompt = "CHARACTERS: PLACEMENT: ACTION: GROUNDING: LIGHTING: CAMERA: " + TechnicalDirector.STABLE;
+            v.prompt = "CHARACTERS: PLACEMENT: ACTION: GROUNDING: LIGHTING: CAMERA: PRINCIPLES: " + TechnicalDirector.STABLE;
             v.staticCamera = cam.still && cam.ease == 0;
             v.motion = sh.motion; v.actions = sh.actions; v.seconds = sh.dur;
             v.speech = sh.speech; v.closeUp = sh.size >= ShotPlanner.CU; v.words = sh.words;
+            // the first-frame checks (RULE_RESIZE_7): the subject's head inside the frame (an extreme close-up fills the
+            // frame with the face by design), the feet of a full shot in the bottom 85-98%
+            Film.Actor main = null;
+            for (Film.Actor a : sg.actors) if (a.c.shown().equals(sh.subject) && a.stateAt(sh.t + 0.05f).visible) { main = a; break; }
+            if (main == null) main = nearestTo(sg, cam.cx, sh.t + 0.05f);
+            float fh = 720f / cam.zoom, topEdge = cam.cy - fh / 2;
+            if (main != null && main.stateAt(sh.t + 0.05f).anchor == Film.A_GROUND && sh.size < ShotPlanner.XCU) {
+                float h = heightOf(main);
+                v.headTop = (sg.ground - h - topEdge) / fh;
+                v.feet = (sg.ground - topEdge) / fh;
+                v.fullBody = v.feet < 1.02f && sh.size <= ShotPlanner.WIDE;
+                if (sh.size <= ShotPlanner.WIDE && v.feet >= 1.02f) v.fullBody = true;      // a full shot whose feet fell out of the frame
+            }
             if (TechnicalDirector.validate(v).isEmpty()) { passed++; continue; }
             List<String> left = TechnicalDirector.correct(v);
             corrected++;
             if (!v.staticCamera || cam.ease > 0) { cam.ease = 0; cam.still = true; }
             if (!v.speech && sh.speech) sh.speech = false;
+            for (String f : v.fixes) {
+                // the frame moves so the head (or the feet) comes back inside it; a full shot goes a little wider
+                if (f.startsWith("framed wider: headroom") && main != null) { float h = heightOf(main); cam.cy = sg.ground - h - 0.08f * fh + fh / 2; framedHead++; }
+                else if (f.startsWith("framed wider: feet") && main != null) {
+                    float h = heightOf(main), need = h / 0.84f;
+                    if (need > fh && 720f / need >= 1f) { cam.zoom = 720f / need; fh = 720f / cam.zoom; }
+                    cam.cy = sg.ground - 0.92f * fh + fh / 2; framedFeet++;
+                }
+            }
             if (!left.isEmpty() && stillWrong.size() < 12) stillWrong.add(String.format(java.util.Locale.US, "%d:%04.1f %s", (int) (sh.t / 60), sh.t % 60, left));
         }
     }

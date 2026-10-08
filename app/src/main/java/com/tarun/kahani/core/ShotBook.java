@@ -79,15 +79,11 @@ public final class ShotBook {
         }
     }
 
+    /** The LIGHTING field: two lights only (Deakins) — the key and its bounce; the rim is the key's own edge light. */
     static String light(int set, int tod, float hard) {
-        String k;
-        if (set == Sets.CAVE_IN) k = "Key: green-tinted shaft of light from the cave mouth, top left 40 deg, Fill: very low cave bounce, Rim: cold edge light on hair";
-        else if (tod == Sets.MORNING) k = "Key: warm low sun from the left at 30 deg, Fill: soft sky bounce from the right, Rim: golden backlight on hair";
-        else if (tod == Sets.EVENING) k = "Key: orange sunset from the right at 15 deg, Fill: purple sky bounce, Rim: strong orange backlight";
-        else if (tod == Sets.NIGHT) k = "Key: cool moonlight top right 40 deg, Fill: dim blue ambient, Rim: warm lamp glow on the edge of the face";
-        else if (set == Sets.HALL) k = "Key: warm window light top left 45 deg, Fill: soft bounce from marble, Rim: lamp light on hair";
-        else k = "Key: warm sun top left 45 deg, Fill: soft bounce, Rim: backlight on hair";
-        return k + (hard >= 0.7f ? " (harder key, fill ratio 4:1, deeper shadows)" : hard <= 0.25f ? " (soft key, fill ratio 1.5:1)" : " (fill ratio 2:1)");
+        PixarLead.Key k = PixarLead.keyLight(set, tod);
+        String ratio = hard >= 0.7f ? "harder key, bounce ratio 4:1, deeper shadows" : hard <= 0.25f ? "soft key, bounce ratio 1.5:1" : "bounce ratio 2:1";
+        return k.name + " | " + k.bounce + " | Rim: the key's own edge light on hair and shoulders (no third lamp) — two lights only (" + ratio + ")";
     }
 
     static String framing(int size) {
@@ -130,10 +126,16 @@ public final class ShotBook {
         StringBuilder b = new StringBuilder();
         String ar = aspect == null ? "16:9" : aspect;
         b.append(TechnicalDirector.PROTOCOL).append("\n\n");
+        b.append(PixarLead.SUMMARY).append("\n\n");
+        PixarLead.Format fmt = PixarLead.spec(ar);
         b.append("TECHNICAL DIRECTOR PACKAGE — ").append(st.title).append("\n");
         b.append("============================================================\n");
         b.append("FINAL_AR = ").append(ar).append("   (decided once; set it as the generator's shape.aspect_ratio parameter, never write it in a prompt)\n");
-        b.append("Safe zone: face in the centre 60% of the frame, 20% headroom, 15% empty at left and right.\n");
+        b.append("FORMAT: ").append(TechnicalDirector.formatLine(ar)).append("\n");
+        b.append("Safe zone (").append(fmt.id).append("): ").append(fmt.note).append(". Character scale lock: a standing adult is ")
+                .append(Math.round(fmt.charScale * 100)).append("% of the frame height. Lens: ").append(fmt.focal).append(".\n");
+        b.append("Resizing: never stretch; the ratio is a parameter; a plate is made natively at ").append(fmt.w).append("x").append(fmt.h)
+                .append(" (no blurry upscale); letterbox or pillarbox instead of cutting heads or sides; the thumbnail and the poster are made separately.\n");
         b.append("Every shot: about 3 seconds, one action, locked tripod. Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot.\n\n");
         b.append("PIPELINE ORDER\n");
         b.append("1. Make the Character Lock Sheets (images) below.\n2. Make the Location Lock Plates (images, no characters).\n3. Use the Shot table below.\n"
@@ -144,6 +146,18 @@ public final class ShotBook {
                 + "8. Final check at 0.25x speed: morphing, floating feet, finger count.\n"
                 + "Or upload your finished pictures, clips' stills, voices and sounds into this app: the studio places them by their names.\n\n");
 
+        // ---- 0. the story engine: hero, spine, acts, Braintrust
+        String[] spine = film.spine != null ? film.spine : PixarLead.spine(st);
+        Story.CharacterDef hero = PixarLead.hero(st);
+        int[] acts = PixarLead.acts(st);
+        b.append("0. STORY SPINE (R4) — hero: ").append(hero == null ? "—" : hero.shown()).append("\n------------------------------------------------------------\n");
+        for (String sp : spine) b.append("• ").append(sp).append("\n");
+        b.append("Acts: ");
+        for (int i = 0; i < st.scenes.size(); i++) b.append(i > 0 ? ", " : "").append("scene ").append(st.scenes.get(i).number).append(" = act ").append(acts[i]);
+        b.append("\n");
+        for (String r : PixarLead.STORY_RULES) b.append(r).append("\n");
+        b.append("\n").append(film.braintrust != null ? film.braintrust.text : PixarLead.braintrust(film, st).text).append("\n");
+
         // ---- 1. characters
         b.append("1. CHARACTER LOCK SHEETS (").append(st.characters.size()).append(")\n------------------------------------------------------------\n");
         for (Story.CharacterDef c : st.characters) {
@@ -153,6 +167,8 @@ public final class ShotBook {
             String f = face(c);
             if (f.length() > 0) b.append("FACE (verbatim): ").append(f).append("\n");
             b.append("COSTUME LOCK (verbatim — copy-paste this text into every prompt, never paraphrase): ").append(costume(c)).append("\n");
+            if (!PixarLead.costumeCultural(c.description)) b.append("   (Braintrust: the costume has no real garment name — a ghagra-choli, a Banarasi saree, an achkan, a pagdi… — the writer decides.)\n");
+            b.append("ANIMATION: ").append(PixarLead.stepName(PixarLead.stepFps(c))).append("; principles in every clip: ").append(PixarLead.PRINCIPLES).append("\n");
             List<String> vw = new ArrayList<String>(VoiceMatch.want(c).words);
             vw.addAll(VoiceStyle.forCharacter(c).words);
             b.append("VOICE LOCK: ").append(Bible.voiceHint(c, false));
@@ -292,17 +308,25 @@ public final class ShotBook {
             String refs = inFrame.isEmpty() ? "none" : "";
             for (Film.Actor a : inFrame) refs += (refs.length() > 0 ? ", " : "") + "Lock Sheet of " + a.c.shown();
             // the ratio is a parameter: kept out of the text while it is checked, filled in last (C3)
-            String image = TechnicalDirector.fill(TechnicalDirector.IMAGE_TEMPLATE, "FINAL_AR", "@AR@", "REFERENCES", refs, "FRAMING", framing(sh.size),
+            int fps = 24;
+            for (Film.Actor a : inFrame) if (a.c.shown().equals(sh.subject)) fps = a.stepFps > 0 ? a.stepFps : PixarLead.stepFps(a.c);
+            String formatLine = fmt.id + " — safe zone: " + fmt.note;
+            String image = TechnicalDirector.fill(TechnicalDirector.IMAGE_TEMPLATE, "FINAL_AR", "@AR@", "SIZE", fmt.w + "x" + fmt.h, "REFERENCES", refs,
+                    "FORMAT", formatLine, "FRAMING", framing(sh.size), "FOCAL", fmt.focal,
                     "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
                     "LIGHTING", lighting, "HANDS", hands);
-            String video = TechnicalDirector.fill(TechnicalDirector.VIDEO_TEMPLATE, "SHOT", id, "FINAL_AR", "@AR@",
+            boolean speaks = speech && sh.size >= ShotPlanner.CU;
+            String video = TechnicalDirector.fill(TechnicalDirector.VIDEO_TEMPLATE, "SHOT", id, "SNAPSHOT", "first_frame_" + id, "FINAL_AR", "@AR@",
+                    "DURATION", String.format(Locale.US, "%.1f", Math.min(sh.dur, TechnicalDirector.MAX_SHOT_SECONDS)), "SPEECH_FLAG", speaks ? "true" : "false",
+                    "FPS", fps + (fps < 24 ? " (animated " + PixarLead.stepName(fps) + ", rendered at 24)" : ""), "FORMAT", formatLine,
                     "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
-                    "LIGHTING", lighting, "SPEECH", speech && sh.size >= ShotPlanner.CU ? "contains_speech = true" : "contains_speech = false");
+                    "LIGHTING", lighting, "SPEECH", speaks ? "contains_speech = true" : "contains_speech = false");
             // the validation layer: every prompt is checked before it is written; what fails is corrected first
             TechnicalDirector.Shot chk = new TechnicalDirector.Shot();
             chk.id = id; chk.characters = chars.toString(); chk.placement = placement; chk.action = action; chk.grounding = groundingTxt;
             chk.lighting = lighting; chk.prompt = image + "\n" + video; chk.seconds = Math.min(sh.dur, TechnicalDirector.MAX_SHOT_SECONDS);
-            chk.motion = sh.motion; chk.speech = speech; chk.closeUp = sh.size >= ShotPlanner.CU; chk.words = sh.words;
+            chk.motion = sh.motion; chk.speech = speech; chk.closeUp = sh.size >= ShotPlanner.CU; chk.words = sh.words; chk.video = true;
+            chk.fullBody = sh.size <= ShotPlanner.WIDE; chk.headTop = sh.size <= ShotPlanner.WIDE ? fmt.top : 0.1f; chk.feet = 0.92f;
             List<String> left = TechnicalDirector.correct(chk);
             if (!chk.fixes.isEmpty()) { image = clean(image); video = clean(video); }
             image = image.replace("@AR@", ar); video = video.replace("@AR@", ar);
@@ -310,7 +334,7 @@ public final class ShotBook {
             b.append("VIDEO PROMPT (from the approved first frame, 3 s):\n").append(video).append("\n");
             b.append("VALIDATION: ").append(left.isEmpty() ? "passed — reference image per character, costume verbatim, layers + thirds + depth, ground contact + shadow, "
                     + "motion under 15% of the frame, static camera, aspect ratio as a parameter, " + (speech ? (chk.speech ? "lip-sync in a front close-up of at most 6 words, " : "silent (lip-sync in post), ") : "")
-                    + "no morphing / static background / smooth motion" : "NOT passed: " + left);
+                    + "no morphing / static background / smooth motion, principle tags, head and feet inside the frame" : "NOT passed: " + left);
             if (!chk.fixes.isEmpty()) b.append("  (corrected: ").append(chk.fixes).append(")");
             b.append("\n\n");
         }
@@ -324,6 +348,13 @@ public final class ShotBook {
         b.append("Hands deformed → hide them: \"hands behind the back, not visible\" or a face-only close-up.\n");
         b.append("Lip-sync bad → make a silent close-up and add the lip-sync in post (Wav2Lip).\n\n");
         b.append("FINAL LAW: Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot. Always think in 3-second static shots.\n\n");
+
+        // ---- 7. thumbnail and poster (RULE_RESIZE_8: made separately, never resized from a frame)
+        b.append("7. THUMBNAIL AND POSTER (made separately)\n------------------------------------------------------------\n");
+        String heroName = hero == null ? "the hero" : hero.shown(), heroCostume = hero == null ? "" : costume(hero);
+        b.append(PixarLead.thumbnailPrompt(heroName, heroCostume, PixarLead.paletteName(hero))).append("\n");
+        b.append(PixarLead.posterPrompt(heroName, heroCostume)).append("\n");
+        b.append("The app makes both itself (thumbnail.jpg 1280x720, poster.jpg 1080x1920) next to the film.\n\n");
         b.append(film.shotList);
         return b.toString();
     }

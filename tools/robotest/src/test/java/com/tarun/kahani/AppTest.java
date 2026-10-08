@@ -504,4 +504,130 @@ public class AppTest {
         assertTrue("frame looks blank", distinct > 50);
         g.release();
     }
+
+    /**
+     * Pixar-Lead v4.0: the five delivery formats keep their exact shape, the hardcoded safe zones and scale lock are
+     * there, the command box understands the new formats, the story spine and the Braintrust are in every film and
+     * the descriptions package, and the thumbnail and poster are made natively in their own formats.
+     */
+    @Test
+    public void pixarLeadFormatsSpineBraintrustAndStillPages() throws Exception {
+        // formats: the output size always has the format's exact shape (never a stretched frame)
+        String[] ars = {"16:9", "9:16", "1:1", "4:5", "2.39:1"};
+        for (String ar : ars) {
+            com.tarun.kahani.core.Edits e = new com.tarun.kahani.core.Edits();
+            e.aspect = ar; e.height = 1080;
+            int[] sz = e.size();
+            float want = com.tarun.kahani.core.PixarLead.spec(ar).ratio, got = sz[0] / (float) sz[1];
+            assertTrue(ar + " came out as " + sz[0] + "x" + sz[1], Math.abs(got / want - 1) < 0.02f);
+            assertTrue(ar + " width must be a multiple of 16 or 2", sz[0] % 2 == 0 && sz[1] % 2 == 0);
+        }
+        assertTrue(com.tarun.kahani.core.PixarLead.spec("9:16").charScale == 0.5f && com.tarun.kahani.core.PixarLead.spec("16:9").charScale == 0.6f
+                && com.tarun.kahani.core.PixarLead.spec("1:1").charScale == 0.65f);
+        assertTrue(com.tarun.kahani.core.PixarLead.spec("9:16").top == 0.15f && com.tarun.kahani.core.PixarLead.spec("16:9").top == 0.20f);
+        int[] plate = com.tarun.kahani.core.TechnicalDirector.sizeFor("16:9", 1080);
+        assertTrue("native plate size", plate[0] == 1920 && plate[1] == 1080);
+        plate = com.tarun.kahani.core.TechnicalDirector.sizeFor("2.39:1", 720);
+        assertTrue("cinema plate " + plate[0] + "x" + plate[1], plate[0] == 1920 && plate[1] == 804);
+        // the command box
+        com.tarun.kahani.core.CommandParser.Result cr = com.tarun.kahani.core.CommandParser.parse("make it for the cinema screen", new ArrayList<String>());
+        assertTrue("cinema command: " + cr.commands, cr.commands.size() == 1 && "2.39:1".equals(cr.commands.get(0).get("value")));
+        cr = com.tarun.kahani.core.CommandParser.parse("instagram portrait please", new ArrayList<String>());
+        assertTrue("4:5 command: " + cr.commands, cr.commands.size() == 1 && "4:5".equals(cr.commands.get(0).get("value")));
+        // the film: spine, acts, Braintrust, the protocol's counters in the quality check
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director.Options opt = new Director.Options();
+        opt.aspect = "9:16";
+        Director d = new Director(story, opt);
+        d.prepare();
+        Film film = d.direct(art);
+        assertTrue("spine", film.spine != null && film.spine.length == 6 && film.spine[0].startsWith("Once upon a time"));
+        assertTrue("braintrust", film.braintrust != null && film.braintrust.windows > 10 && film.braintrust.text.contains("Q3 a ma pause"));
+        assertTrue("acts", film.segs.get(1).act >= 1 && film.segs.get(film.segs.size() - 2).act == 5);
+        assertTrue("scale lock", Math.abs(film.segs.get(1).charScale - 0.5f) < 1e-6f);
+        assertTrue("qc lines", film.shotList.contains("Pixar-Lead protocol v4.0") && film.shotList.contains("ma pauses") && film.shotList.contains("First-frame checks"));
+        for (Film.Shot sh : film.shots) assertTrue("shot over 4 s", sh.dur <= 4.05f);
+        // the thumbnail (16:9) and the poster (9:16), made separately: the poster's top 35% is empty for the title
+        Film.Seg[] pages = d.stills();
+        assertTrue(pages.length == 2);
+        int[][] sizes = {{1280, 720}, {1080, 1920}};
+        OUT.mkdirs();
+        for (int i = 0; i < 2; i++) {
+            Bitmap bmp = Bitmap.createBitmap(sizes[i][0], sizes[i][1], Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            new Renderer(film, art).renderSeg(g, pages[i], 0.5f);
+            int[] px = new int[sizes[i][0] * sizes[i][1]];
+            bmp.getPixels(px, 0, sizes[i][0], 0, 0, sizes[i][0], sizes[i][1]);
+            FileOutputStream o = new FileOutputStream(new File(OUT, i == 0 ? "thumbnail.png" : "poster.png"));
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, o);
+            o.close();
+            int distinct = 0, last = 0;
+            for (int k = 0; k < px.length; k += 997) if (px[k] != last) { distinct++; last = px[k]; }
+            assertTrue("page " + i + " looks blank", distinct > 30);
+            if (i == 1) {
+                // nothing but the solid colour (and its soft light) in the top 35%: the title's space
+                int w = sizes[i][0];
+                for (int y = 0; y < sizes[i][1] * 0.35f; y += 40) for (int x = 0; x < w; x += 40) {
+                    int cpx = px[y * w + x];
+                    int r = (cpx >> 16) & 255, gg = (cpx >> 8) & 255, b = cpx & 255;
+                    assertTrue("something in the poster's title space at " + x + "," + y, r > gg && r > b);   // the crimson palette, no skin or costume
+                }
+            }
+            g.release();
+            bmp.recycle();
+        }
+        // the descriptions package carries the protocol's sections
+        String book = com.tarun.kahani.core.ShotBook.write(story, null, "16:9");
+        for (String must : new String[]{"0. STORY SPINE", "BRAINTRUST (every 5 shots", "two lights only", "PRINCIPLES: anticipation", "FORMAT: YOUTUBE_MAIN_16_9",
+                "7. THUMBNAIL AND POSTER", "size = 1920x1080", "contains_speech = true", "squash and stretch"})
+            assertTrue("descriptions missing: " + must, book.contains(must));
+        assertTrue("a stretch instruction slipped into a prompt", !book.contains("stretch to") && !book.contains("crop to"));
+    }
+
+    /** A different script (no pictures): a boat at sea, a storm with rain, a tiger, candles at night — every rule holds. */
+    @Test
+    public void anyScriptIsStagedByTheProtocol() throws Exception {
+        File f = new File(ASSETS, "../../../../tools/testdata/machhuare_ka_beta.txt");
+        assertTrue("test story missing: " + f, f.exists());
+        Story story = ScriptParser.parse(new String(Files.readAllBytes(f.toPath()), "UTF-8"));
+        assertTrue("characters: " + story.characters.size(), story.characters.size() == 6);
+        Director.Options opt = new Director.Options();
+        opt.aspect = "16:9";
+        opt.onTwos = true;
+        Director d = new Director(story, opt);
+        d.prepare();
+        Art art = new Art();
+        Film film = d.direct(art);
+        Film.Seg boat = null, night = null;
+        for (Film.Seg sg : film.segs) { if (sg.inBoat && boat == null) boat = sg; if (sg.type == Film.S_SCENE && sg.scene == 3) night = sg; }
+        assertTrue("the sea scene puts the characters in the boat", boat != null);
+        assertTrue("night in the village", night != null && night.tod == com.tarun.kahani.core.Sets.NIGHT);
+        boolean rain = false, candles = false;
+        for (Film.Weather w : film.weather) { if (w.type == Film.W_RAIN || w.type == Film.W_STORM) rain = true; if (w.type == Film.W_CANDLES) candles = true; }
+        assertTrue("rain", rain);
+        assertTrue("diyas at night", candles);
+        // on twos: the brave son and his father are experts (24), the naughty little sister steps on threes (8)
+        int stepped = 0, expert = 0;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) { if (a.stepFps > 0 && a.stepFps < 24) stepped++; if (a.stepFps == 24) expert++; }
+        assertTrue("a rebel or learner moves on twos / threes", stepped >= 1);
+        assertTrue("experts move on ones", expert >= 1);
+        for (Film.Shot sh : film.shots) { assertTrue(sh.dur <= 4.05f); if (sh.speech) assertTrue("words " + sh.words, sh.words <= 6); }
+        assertTrue(film.shotList.contains("Miyazaki ma pauses"));
+        Bitmap bmp = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer r = new Renderer(film, art);
+        r.safeZoneOverlay = true;
+        int[] px = new int[640 * 360];
+        float[] times = {boat.t0 + 3f, night.t0 + 4f};
+        for (float t : times) {
+            r.render(g, t);
+            bmp.getPixels(px, 0, 640, 0, 0, 640, 360);
+            int distinct = 0, last = 0;
+            for (int k = 0; k < px.length; k += 331) if (px[k] != last) { distinct++; last = px[k]; }
+            assertTrue("frame blank at " + t, distinct > 30);
+        }
+        g.release();
+    }
 }

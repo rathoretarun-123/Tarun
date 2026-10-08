@@ -27,6 +27,8 @@ public final class Prefs {
     /** Human QC (protocol step 4): the director shows the first frame of every shot and waits for the user's check. */
     public static boolean humanQc(Context c) { return !"0".equals(get(c, "humanQc", "1")); }
     public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }
+    /** Spider-Verse animation on twos: characters step by skill (experts 24, learners 12, rebels 8 fps). Off by default (smooth). */
+    public static boolean onTwos(Context c) { return "1".equals(get(c, "onTwos", "0")); }
 
     /** A Cloud client configured from the settings. */
     public static Cloud cloud(Context c) {

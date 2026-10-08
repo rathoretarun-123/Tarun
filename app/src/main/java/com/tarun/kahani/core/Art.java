@@ -259,6 +259,28 @@ public final class Art {
                     // head, arms, legs and face for animating the picture (needs the final face points)
                     try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
                     if (c.look != null && c.look.headwear == Look.HW_TURBAN && !beast) takeOffHeadwear(s, L);
+                    if (s.rig != null && s.rig.face && !beast) {
+                        // the face again from the full picture, for sharp close-ups
+                        try {
+                            int[] hi = L.decode(f[2], 2400);
+                            if (hi != null) {
+                                int[] px = new int[hi[0] * hi[1]];
+                                System.arraycopy(hi, 2, px, 0, px.length);
+                                Cutout.Result cr = s.pixelsForSampling;
+                                // the cut-out is a crop of the picture: the same crop in the large one
+                                if (cr != null && cr.cropW > 0) {
+                                    float k = hi[0] / (float) cr.srcW;
+                                    int x0 = Math.round(cr.cropX * k), y0 = Math.round(cr.cropY * k), w = Math.round(cr.w * k), h = Math.round(cr.h * k);
+                                    w = Math.min(w, hi[0] - x0); h = Math.min(h, hi[1] - y0);
+                                    int[] crop = new int[w * h];
+                                    for (int y = 0; y < h; y++) System.arraycopy(px, (y + y0) * hi[0] + x0, crop, y * w, w);
+                                    s.rig.sharpFace(crop, w, h, cr, L);
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                            // out of memory or an unusual file: the face layer stays at the picture's size
+                        }
+                    }
                     if (rainy && s.pixelsForSampling != null) {
                         Cutout.Result cr = s.pixelsForSampling;
                         s.wetImg = L.create(wetPixels(cr.px), cr.w, cr.h);

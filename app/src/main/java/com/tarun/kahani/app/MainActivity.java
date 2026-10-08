@@ -1328,7 +1328,9 @@ public class MainActivity extends Activity {
         final int seed = (int) (System.currentTimeMillis() % 100000);
         background("AI is drawing… (30-60 seconds)", new Work() {
             public Object run() throws Exception {
-                return Prefs.cloud(MainActivity.this).makePicture(prompt, tall ? 768 : 1280, tall ? 1152 : 720, seed);
+                // characters are made tall (native, never cropped); places in the film's shape (FINAL_AR, a parameter)
+                int[] plate = com.tarun.kahani.core.TechnicalDirector.sizeFor(edits().aspect);
+                return Prefs.cloud(MainActivity.this).makePicture(com.tarun.kahani.core.TechnicalDirector.clean(prompt), tall ? 768 : plate[0], tall ? 1152 : plate[1], seed);
             }
         }, new Done() {
             public void done(Object r, Exception e) {

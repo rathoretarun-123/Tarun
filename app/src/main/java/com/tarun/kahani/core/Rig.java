@@ -32,15 +32,20 @@ public final class Rig {
     public float[] hairW;
 
     /**
-     * The finest meshes: 80 x 160 cells over a person (160 x 80 over an animal) and 96 x 96 over the face.
-     * Each frame uses as many as the picture's size on screen needs (about one cell per 6 pixels), so a
-     * character in a close-up bends as smoothly as a drawing, and small far-away figures cost little.
+     * Meshes down to pixel level. Every frame each picture gets as many mesh cells as it has room for on screen,
+     * about one cell per CELL_PX screen pixels: in a close-up a person is bent through up to 256 x 512 cells and
+     * the face through up to 256 x 256, so every bend, blink and lip movement is smooth to the pixel; never fewer
+     * than 80 x 160 (96 x 96 for the face), and never more cells than the picture has pixels.
+     * BW x BH is also the grid of the hair weights.
      */
     public static final int BW = 80, BH = 160, FW = 96, FH = 96;
-    /** The most mesh columns and rows for this picture: tall for people, wide (the same number of points) for animals. */
+    public static final int MAX_ROWS = 512, MAX_FACE = 256;
+    /** The shape of the mesh: tall for people (1 : 2), wide for animals (2 : 1). */
     public int mw = BW, mh = BH;
-    /** Screen pixels per mesh cell the fine mesh aims for. */
-    public static float CELL_PX = 6f;
+    /** Screen pixels per mesh cell (2 = pixel level: a cell is never bigger than two pixels). */
+    public static float CELL_PX = 2f;
+    /** The picture's and the face crop's size in pixels (the mesh never gets finer than the picture). */
+    public int srcW = 1100, srcH = 1100, faceW = 300, faceH = 300;
     public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows
 
     /** What the rig does in one frame. Angles in degrees (positive = clockwise on screen). */
@@ -61,7 +66,10 @@ public final class Rig {
         public float tail, jaw, ear, earBack, walkPhase, walkAmt;
         // lips (people): how wide (ee, s) or round (oo, o) the mouth is while it opens with the voice (jaw)
         public float lipWide, lipRound;
+        /** Follow-through: how far the head (degrees) and the body's lean have just turned (hair and cloth lag). */
+        public float follow, followLean;
         public void reset() {
+            follow = followLean = 0;
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = 0;
             lipWide = lipRound = 0;
@@ -112,6 +120,7 @@ public final class Rig {
         }
         if (topRow < 0 || botRow - topRow < h / 2) return null;
         Rig g = new Rig();
+        g.srcW = r.w; g.srcH = r.h;
         g.top = topRow / (float) h;
         g.bottom = botRow / (float) h;
         g.face = s.faceKnown;
@@ -320,6 +329,7 @@ public final class Rig {
         fv1 = Math.min(chinY, 1);
         int x0 = (int) (fu0 * r.w), x1 = (int) Math.ceil(fu1 * r.w), y0 = (int) (fv0 * r.h), y1 = (int) Math.ceil(fv1 * r.h);
         int cw = Math.min(r.w, x1) - x0, ch = Math.min(r.h, y1) - y0;
+        faceW = Math.max(1, cw); faceH = Math.max(1, ch);
         if (cw < 12 || ch < 12) { face = false; return; }
         int[] px = new int[cw * ch];
         float feather = Math.min(cw, ch) * 0.16f;
@@ -337,6 +347,38 @@ public final class Rig {
         fv0 = y0 / (float) r.h; fv1 = (y0 + ch) / (float) r.h;
         faceImg = L.create(px, cw, ch);
         faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+    }
+
+    /** How many times sharper the face layer is than the body picture (the face is cut from the full picture). */
+    public float faceScale = 1f;
+
+    /**
+     * The face layer again, from the full-resolution picture (up to twice as sharp as the body), so a close-up
+     * where the face fills most of the frame stays crisp. The outline (alpha) comes from the cut-out.
+     */
+    public void sharpFace(int[] hi, int hw, int hh, Cutout.Result r, Art.Loader L) {
+        if (!face || faceImg == null || hi == null || hw < r.w * 1.25f) return;
+        float k = hw / (float) r.w;
+        int x0 = Math.round(fu0 * hw), y0 = Math.round(fv0 * hh), cw = Math.min(hw - x0, Math.round((fu1 - fu0) * hw)), ch = Math.min(hh - y0, Math.round((fv1 - fv0) * hh));
+        if (cw < 24 || ch < 24) return;
+        int[] px = new int[cw * ch];
+        float feather = Math.min(cw, ch) * 0.16f;
+        for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
+            // the cut-out's alpha at this point (bilinear from the smaller picture)
+            float lx = (x + x0 + 0.5f) / k - 0.5f, ly = (y + y0 + 0.5f) / k - 0.5f;
+            int ix = Math.max(0, Math.min(r.w - 2, (int) lx)), iy = Math.max(0, Math.min(r.h - 2, (int) ly));
+            float fx = Math.max(0, Math.min(1, lx - ix)), fy = Math.max(0, Math.min(1, ly - iy));
+            float a = ((r.px[iy * r.w + ix] >>> 24) * (1 - fx) + (r.px[iy * r.w + ix + 1] >>> 24) * fx) * (1 - fy)
+                    + ((r.px[(iy + 1) * r.w + ix] >>> 24) * (1 - fx) + (r.px[(iy + 1) * r.w + ix + 1] >>> 24) * fx) * fy;
+            float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
+            float f = Math.min(1, e / feather);
+            int al = (int) (a * f * f * (3 - 2 * f));
+            px[y * cw + x] = (Math.max(0, Math.min(255, al)) << 24) | (hi[(y + y0) * hw + x + x0] & 0xFFFFFF);
+        }
+        faceImg = L.create(px, cw, ch);
+        faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+        faceW = cw; faceH = ch;
+        faceScale = k;
     }
 
     /** The same face crop (same place, same soft edges) from another version of the picture, e.g. bare-headed. */
@@ -372,10 +414,14 @@ public final class Rig {
         float hCos = 1, hSin, lCos = 1, lSin, nodS = 1, nodDy;
         final float[] armC = new float[2], armS = new float[2], legC = new float[3], legS = new float[3];
         final float[] tmp = new float[2], legTmp = new float[2], o = new float[2], bumps = new float[5 * 40];
-        public final float[] body = new float[(BW + 1) * (BH + 1) * 2];
+        public final float[] body = new float[(MAX_ROWS / 2 + 1) * (MAX_ROWS + 1) * 2];
         /** The mesh size used in this frame (pass these to Gfx.imageMesh). */
         public int cols = BW, rows = BH;
-        public final float[] face = new float[(FW + 1) * (FH + 1) * 2];
+        public final float[] face = new float[(MAX_FACE + 1) * (MAX_FACE + 1) * 2];
+        /** The face mesh size used in this frame. */
+        public int fcols = FW, frows = FH;
+        /** The picture's height on screen in this frame (pixels). */
+        public float screenPx = 1e9f;
     }
 
     private void frame(Frame f, State s, float left, float top, float w, float h) {
@@ -456,6 +502,9 @@ public final class Rig {
         o[0] += f.W0 * alive * (0.0045f * hair * (float) Math.sin(t * 1.7 + v * 5 + u * 2)
                 + 0.0035f * cloth * cloth * (float) Math.sin(t * 2.3 + v * 9 - u * 3));
         o[1] -= f.H0 * 0.0022f * s.breathe * (1 - smooth(hipY - 0.12f, hipY, v)) * smooth(top, shoulderY, v + 0.05f);
+        // follow-through: loose hair and a hem are still on their way when the head or body has already turned
+        if (s.follow != 0 || s.followLean != 0)
+            o[0] -= f.W0 * (0.0035f * hair * s.follow * (0.5f + v) + 0.0025f * cloth * s.followLean);
         if (s.wind == 0) return;
         // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
         float flap = 0.75f + 0.35f * (float) Math.sin(t * 6.3 + v * 9 + u * 3);
@@ -549,6 +598,11 @@ public final class Rig {
     }
 
     /** Mesh points of the whole picture for this frame into f.body, at the finest detail. */
+    static int clampCells(float want, int min, int max) {
+        int n = Math.round(want);
+        return Math.max(Math.min(min, max), Math.min(max, n));
+    }
+
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h) {
         bodyMesh(f, s, left, top, w, h, 1e9f);
     }
@@ -559,8 +613,17 @@ public final class Rig {
      */
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h, float screenPx) {
         frame(f, s, left, top, w, h);
-        // always the finest mesh: every picture is bent through the full grid, whatever its size on screen
-        int rows = mh, cols = mw;
+        f.screenPx = screenPx;
+        // as fine as the picture's size on screen allows: about one cell per CELL_PX pixels
+        int rows, cols;
+        if (mw <= mh) {     // a person: rows along the height
+            rows = clampCells(screenPx / CELL_PX, BH, Math.min(MAX_ROWS, srcH));
+            cols = Math.max(BW, Math.min(Math.min(MAX_ROWS / 2, srcW), rows / 2));
+        } else {            // an animal: columns along the length
+            float wide = screenPx * (srcW / (float) Math.max(1, srcH));
+            cols = clampCells(wide / CELL_PX, BH, Math.min(MAX_ROWS, srcW));
+            rows = Math.max(BW, Math.min(Math.min(MAX_ROWS / 2, srcH), cols / 2));
+        }
         f.rows = rows; f.cols = cols;
         int k = 0;
         for (int j = 0; j <= rows; j++) {
@@ -623,6 +686,9 @@ public final class Rig {
             n = add(d, n, mx - mh, my, 0.6f * mh, 0, 0.15f * mh * s.anger);
             n = add(d, n, mx + mh, my, 0.6f * mh, 0, 0.15f * mh * s.anger);
         }
+        // the face mesh: as fine as the face is large on screen (pixel level in a close-up)
+        int FW = clampCells((fv1 - fv0) * f.screenPx / CELL_PX, Rig.FW, Math.min(MAX_FACE, faceH)), FH = FW;
+        f.fcols = FW; f.frows = FH;
         int k = 0;
         for (int j = 0; j <= FH; j++) {
             for (int i = 0; i <= FW; i++) {
@@ -630,7 +696,9 @@ public final class Rig {
                 float dx = 0, dy = 0;
                 for (int b = 0; b < n; b += 5) {
                     float ddx = x - d[b], ddy = y - d[b + 1], sg = d[b + 2];
-                    float g = (float) Math.exp(-(ddx * ddx + ddy * ddy) / (2 * sg * sg));
+                    float q = (ddx * ddx + ddy * ddy) / (2 * sg * sg);
+                    if (q > 12) continue;          // too far for this shift to move the point at all
+                    float g = (float) Math.exp(-q);
                     dx += g * d[b + 3];
                     dy += g * d[b + 4];
                 }
@@ -713,6 +781,7 @@ public final class Rig {
     static Rig buildAnimal(Cutout.Result r, Art.Sprite s, int[] top, int[] bot, int x0, int x1, int y0, int y1) {
         int w = r.w, h = r.h;
         Rig g = new Rig();
+        g.srcW = r.w; g.srcH = r.h;
         g.animal = true;
         g.top = y0 / (float) h;
         g.bottom = y1 / (float) h;

@@ -27,6 +27,7 @@ public class AwtGfx implements Gfx {
     public AwtGfx(BufferedImage img) {
         this.img = img;
         this.g = img.createGraphics();
+        this.mainG = g;
         setup(g);
     }
 
@@ -148,6 +149,7 @@ public class AwtGfx implements Gfx {
     public void imageMesh(Object im, int meshW, int meshH, float[] v) {
         apply();
         BufferedImage bi = (BufferedImage) im;
+        if (g.getClip() == null && rasterMesh(bi, meshW, meshH, v)) return;
         float cw = bi.getWidth() / (float) meshW, ch = bi.getHeight() / (float) meshH;
         AffineTransform saved = g.getTransform();
         Shape savedClip = g.getClip();
@@ -161,6 +163,126 @@ public class AwtGfx implements Gfx {
         }
         g.setTransform(saved);
         g.setClip(savedClip);
+    }
+
+    // ---------------------------------------------------------------- per-pixel mesh rasterizer
+
+    /** The picture each Graphics draws into (the frame, or a layer while it is being painted). */
+    private BufferedImage target() { return g == mainG ? img : layerTarget; }
+    private Graphics2D mainG;
+    private BufferedImage layerTarget;
+    private static final java.util.Map<BufferedImage, int[]> SRC = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<BufferedImage, int[]>());
+
+    private static int[] pixels(BufferedImage bi) {
+        int[] p = SRC.get(bi);
+        if (p == null) { p = bi.getRGB(0, 0, bi.getWidth(), bi.getHeight(), null, 0, bi.getWidth()); SRC.put(bi, p); }
+        return p;
+    }
+
+    /**
+     * Draws the mesh pixel by pixel, like a graphics card: every destination pixel inside a triangle takes the
+     * picture's colour at the exactly interpolated source point (bilinear), blended over what is there. Each
+     * pixel belongs to exactly one triangle (top-left rule), so fine meshes and soft edges show no seams.
+     */
+    private boolean rasterMesh(BufferedImage bi, int meshW, int meshH, float[] v) {
+        BufferedImage dst = target();
+        if (dst == null) return false;
+        java.awt.image.DataBuffer db = dst.getRaster().getDataBuffer();
+        int type = dst.getType();
+        byte[] bytes = null; int[] ints = null;
+        if (type == BufferedImage.TYPE_3BYTE_BGR && db instanceof java.awt.image.DataBufferByte) bytes = ((java.awt.image.DataBufferByte) db).getData();
+        else if ((type == BufferedImage.TYPE_INT_RGB || type == BufferedImage.TYPE_INT_ARGB) && db instanceof java.awt.image.DataBufferInt) ints = ((java.awt.image.DataBufferInt) db).getData();
+        else return false;
+        boolean dstAlpha = type == BufferedImage.TYPE_INT_ARGB;
+        int[] src = pixels(bi);
+        int sw = bi.getWidth(), sh = bi.getHeight(), dw = dst.getWidth(), dh = dst.getHeight();
+        AffineTransform T = g.getTransform();
+        int n = (meshW + 1) * (meshH + 1);
+        float[] d = new float[n * 2];
+        T.transform(v, 0, d, 0, n);
+        float cw = sw / (float) meshW, ch = sh / (float) meshH;
+        int ga = Math.round(alpha * 256);
+        for (int j = 0; j < meshH; j++) {
+            for (int i = 0; i < meshW; i++) {
+                int a = j * (meshW + 1) + i, b = a + 1, c = a + meshW + 1, e = c + 1;
+                float sx = i * cw, sy = j * ch;
+                triangle(d, a, b, c, sx, sy, sx + cw, sy, sx, sy + ch, src, sw, sh, bytes, ints, dstAlpha, dw, dh, ga);
+                triangle(d, b, e, c, sx + cw, sy, sx + cw, sy + ch, sx, sy + ch, src, sw, sh, bytes, ints, dstAlpha, dw, dh, ga);
+            }
+        }
+        return true;
+    }
+
+    private static void triangle(float[] d, int i0, int i1, int i2, float u0, float v0, float u1, float v1, float u2, float v2,
+                                 int[] src, int sw, int sh, byte[] bytes, int[] ints, boolean dstAlpha, int dw, int dh, int ga) {
+        float x0 = d[i0 * 2], y0 = d[i0 * 2 + 1], x1 = d[i1 * 2], y1 = d[i1 * 2 + 1], x2 = d[i2 * 2], y2 = d[i2 * 2 + 1];
+        float area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+        if (Math.abs(area) < 1e-6f) return;
+        if (area < 0) {     // make it counter-clockwise in screen terms
+            float tx = x1, ty = y1, tu = u1, tv = v1;
+            x1 = x2; y1 = y2; u1 = u2; v1 = v2;
+            x2 = tx; y2 = ty; u2 = tu; v2 = tv;
+            area = -area;
+        }
+        int minX = Math.max(0, (int) Math.floor(Math.min(x0, Math.min(x1, x2)))), maxX = Math.min(dw - 1, (int) Math.ceil(Math.max(x0, Math.max(x1, x2))));
+        int minY = Math.max(0, (int) Math.floor(Math.min(y0, Math.min(y1, y2)))), maxY = Math.min(dh - 1, (int) Math.ceil(Math.max(y0, Math.max(y1, y2))));
+        if (minX > maxX || minY > maxY) return;
+        // edge functions w_k(p) = (b - a) x (p - a); top-left rule through a tiny bias on the other edges
+        float b0 = topLeft(x1, y1, x2, y2) ? 0 : -1e-5f, b1 = topLeft(x2, y2, x0, y0) ? 0 : -1e-5f, b2 = topLeft(x0, y0, x1, y1) ? 0 : -1e-5f;
+        float inv = 1f / area;
+        for (int y = minY; y <= maxY; y++) {
+            float py = y + 0.5f;
+            for (int x = minX; x <= maxX; x++) {
+                float px = x + 0.5f;
+                float w0 = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1);
+                float w1 = (x0 - x2) * (py - y2) - (y0 - y2) * (px - x2);
+                float w2 = (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0);
+                if (w0 + b0 < 0 || w1 + b1 < 0 || w2 + b2 < 0) continue;
+                w0 *= inv; w1 *= inv; w2 *= inv;
+                float u = w0 * u0 + w1 * u1 + w2 * u2 - 0.5f, vv = w0 * v0 + w1 * v1 + w2 * v2 - 0.5f;
+                // bilinear sample (non-premultiplied ARGB, weighted by alpha so edges stay clean)
+                int ix = (int) Math.floor(u), iy = (int) Math.floor(vv);
+                float fx = u - ix, fy = vv - iy;
+                int xa = Math.max(0, Math.min(sw - 1, ix)), xb = Math.max(0, Math.min(sw - 1, ix + 1));
+                int ya = Math.max(0, Math.min(sh - 1, iy)), yb = Math.max(0, Math.min(sh - 1, iy + 1));
+                int c00 = src[ya * sw + xa], c10 = src[ya * sw + xb], c01 = src[yb * sw + xa], c11 = src[yb * sw + xb];
+                float k00 = (1 - fx) * (1 - fy) * (c00 >>> 24), k10 = fx * (1 - fy) * (c10 >>> 24), k01 = (1 - fx) * fy * (c01 >>> 24), k11 = fx * fy * (c11 >>> 24);
+                float al = k00 + k10 + k01 + k11;
+                if (al < 0.5f) continue;
+                float r = (k00 * ((c00 >> 16) & 255) + k10 * ((c10 >> 16) & 255) + k01 * ((c01 >> 16) & 255) + k11 * ((c11 >> 16) & 255)) / al;
+                float gg = (k00 * ((c00 >> 8) & 255) + k10 * ((c10 >> 8) & 255) + k01 * ((c01 >> 8) & 255) + k11 * ((c11 >> 8) & 255)) / al;
+                float bb = (k00 * (c00 & 255) + k10 * (c10 & 255) + k01 * (c01 & 255) + k11 * (c11 & 255)) / al;
+                int A = (int) (al * ga) >> 8;          // 0..255
+                if (A <= 0) continue;
+                if (A > 255) A = 255;
+                int k = y * dw + x;
+                if (bytes != null) {
+                    int o = k * 3;
+                    int db0 = bytes[o] & 255, dg = bytes[o + 1] & 255, dr = bytes[o + 2] & 255;
+                    bytes[o] = (byte) (db0 + ((int) bb - db0) * A / 255);
+                    bytes[o + 1] = (byte) (dg + ((int) gg - dg) * A / 255);
+                    bytes[o + 2] = (byte) (dr + ((int) r - dr) * A / 255);
+                } else {
+                    int dc = ints[k];
+                    int da = dstAlpha ? dc >>> 24 : 255, dr = (dc >> 16) & 255, dg = (dc >> 8) & 255, dbb = dc & 255;
+                    int oa = A + da * (255 - A) / 255;
+                    int nr, ng, nb;
+                    if (oa == 0) { nr = ng = nb = 0; }
+                    else {
+                        nr = ((int) r * A + dr * da * (255 - A) / 255) / oa;
+                        ng = ((int) gg * A + dg * da * (255 - A) / 255) / oa;
+                        nb = ((int) bb * A + dbb * da * (255 - A) / 255) / oa;
+                    }
+                    ints[k] = ((dstAlpha ? oa : 255) << 24) | (Math.min(255, nr) << 16) | (Math.min(255, ng) << 8) | Math.min(255, nb);
+                }
+            }
+        }
+    }
+
+    /** A top edge (horizontal, going left in a counter-clockwise triangle) or a left edge (going down). */
+    private static boolean topLeft(float ax, float ay, float bx, float by) {
+        float ex = bx - ax, ey = by - ay;
+        return (ey == 0 && ex < 0) || ey > 0;
     }
 
     private void tri(BufferedImage bi, float s0x, float s0y, float s1x, float s1y, float s2x, float s2y,
@@ -205,10 +327,11 @@ public class AwtGfx implements Gfx {
             ArrayDeque<Object[]> savedStack = new ArrayDeque<Object[]>(stack);
             Paint sp = paint; float sa = alpha;
             g = lg; alpha = 1f;
+            BufferedImage savedT = layerTarget; layerTarget = l;
             lg.scale(img.getWidth() / w, img.getHeight() / h);
             painter.paint(this);
             lg.dispose();
-            g = saved; paint = sp; alpha = sa;
+            g = saved; paint = sp; alpha = sa; layerTarget = savedT;
             stack.clear(); stack.addAll(savedStack);
             layers.put(key, l);
         }
@@ -227,10 +350,11 @@ public class AwtGfx implements Gfx {
             ArrayDeque<Object[]> savedStack = new ArrayDeque<Object[]>(stack);
             Paint sp = paint; float sa = alpha;
             g = lg; alpha = 1f;
+            BufferedImage savedT = layerTarget; layerTarget = l;
             lg.scale(lw / w, lh / h);
             painter.paint(this);
             lg.dispose();
-            g = saved; paint = sp; alpha = sa;
+            g = saved; paint = sp; alpha = sa; layerTarget = savedT;
             stack.clear(); stack.addAll(savedStack);
             int[] px = l.getRGB(0, 0, lw, lh, null, 0, lw);
             com.tarun.kahani.core.Blur.gauss(px, lw, lh, Math.max(1, Math.round(lw * 0.005f)));

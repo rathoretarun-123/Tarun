@@ -17,6 +17,8 @@ public final class Cutout {
         public float headTop = 0f, faceTop = 0.05f, chinY = 0.25f;
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E;
         public boolean faceFound;
+        /** Where this cut-out sits in the picture it was cut from (pixels), and that picture's width. */
+        public int cropX, cropY, cropW, srcW;
     }
 
     private static int dist(int a, int b) {
@@ -59,6 +61,7 @@ public final class Cutout {
         int[] out = new int[cw * ch];
         for (int y = 0; y < ch; y++) System.arraycopy(px, (y + minY) * w + minX, out, y * cw, cw);
         r.px = out; r.w = cw; r.h = ch;
+        r.cropX = minX; r.cropY = minY; r.cropW = cw; r.srcW = w;
         findFace(r);
         refineFace(r);
         return r;

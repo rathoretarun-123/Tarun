@@ -456,16 +456,18 @@ public final class FilmJob implements Runnable {
             todo.add(new String[]{"char", c.displayName, com.tarun.kahani.core.Bible.characterPrompt(c), "768", "1152", c.shown(), c.description});
         }
         java.util.Map<String, String> placeFile = new java.util.HashMap<String, String>();
+        // places, title and end are made natively in the film's shape (FINAL_AR), never cropped from another shape
+        final int[] plate = com.tarun.kahani.core.TechnicalDirector.sizeFor(ed.aspect);
         for (Story.Scene sc : story.scenes) {
             if (haveScene.contains(String.valueOf(sc.number))) continue;
             String where = sc.setting.length() > 0 ? sc.setting : sc.title;
             todo.add(new String[]{"scene", String.valueOf(sc.number), com.tarun.kahani.core.Bible.placePrompt(
-                    com.tarun.kahani.core.Bible.firstClauseOf(where), where, "16:9"), "1280", "720", com.tarun.kahani.core.Bible.firstClauseOf(where), where});
+                    com.tarun.kahani.core.Bible.firstClauseOf(where), where, ed.aspect), String.valueOf(plate[0]), String.valueOf(plate[1]), com.tarun.kahani.core.Bible.firstClauseOf(where), where});
         }
         if (!haveTitle) todo.add(new String[]{"title", "title", "3D animated movie poster for a premium Indian children's film named '" + story.title
-                + "', main characters together, cinematic lighting, depth of field, no text, no letters", "1280", "720", "Title", story.title});
+                + "', main characters together, cinematic lighting, depth of field, no text, no letters", String.valueOf(plate[0]), String.valueOf(plate[1]), "Title", story.title});
         if (!haveEnd) todo.add(new String[]{"end", "end", "Beautiful calm sunset landscape, cinematic 3D animated film style, volumetric light, "
-                + "for the ending of a children's film, no text, no letters", "1280", "720", "End", "ending"});
+                + "for the ending of a children's film, no text, no letters", String.valueOf(plate[0]), String.valueOf(plate[1]), "End", "ending"});
         for (int i = 0; i < todo.size(); i++) {
             check();
             if (fails[0] >= 2) { warning = "The free AI picture service could not be reached — the studio drew the missing pictures itself."; break; }
@@ -476,7 +478,7 @@ public final class FilmJob implements Runnable {
                 String file;
                 if (reuse != null) file = reuse;
                 else {
-                    byte[] img = cloud.makePicture(t[2], Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
+                    byte[] img = cloud.makePicture(com.tarun.kahani.core.TechnicalDirector.clean(t[2]), Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
                     file = project.savePicture(img, "ai_" + t[0]);
                     try { lib.addBytes(Library.PIC, t[0].equals("char") ? "person" : t[0].equals("scene") ? "place" : t[0], t[5],
                             t[6].length() > 200 ? t[6].substring(0, 200) : t[6], img, ".jpg", "AI (studio)"); } catch (Exception ignored) {}

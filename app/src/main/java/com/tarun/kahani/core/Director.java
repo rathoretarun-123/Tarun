@@ -240,7 +240,15 @@ public final class Director {
         film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
         scoreMusic();
-        if (opt.technical) { lockCameras(); limitShotLength(4.2f); }
+        if (opt.technical) {
+            // the Technical Director protocol, in its own order: lock the camera, then no shot may move a character
+            // more than 15% of the frame, hold two actions, or last longer than 4 seconds
+            calmMoves();
+            lockCameras();
+            enforceMotion();
+            oneActionPerShot();
+            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+        }
         film.shotList = qualityCheck();
         return film;
     }
@@ -287,11 +295,14 @@ public final class Director {
                 Film.Cam c = sg.cams.get(i);
                 float next = i + 1 < sg.cams.size() ? sg.cams.get(i + 1).t : sg.t1;
                 if (next - c.t <= max) continue;
-                int n = (int) Math.ceil((next - c.t) / 3.2f);
+                int n = (int) Math.ceil((next - c.t) / TechnicalDirector.SHOT_SECONDS);
                 float step = (next - c.t) / n;
                 for (int k = 1; k < n; k++) {
                     boolean tight = k % 2 == 1;
-                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? c.cy - 14 / c.zoom : c.cy, tight ? Math.min(ShotPlanner.MAX_ZOOM, c.zoom * 1.22f) : c.zoom, 0);
+                    float z2 = c.zoom * 1.2f;
+                    if (z2 > Math.max(ShotPlanner.MAX_ZOOM, c.zoom * 1.0f) && c.zoom >= ShotPlanner.MAX_ZOOM) z2 = c.zoom / 1.15f;     // already very close: a touch wider
+                    else z2 = Math.min(Math.max(ShotPlanner.MAX_ZOOM, c.zoom), z2);
+                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? c.cy - 14 / c.zoom : c.cy, tight ? z2 : c.zoom, 0);
                     d.still = true; d.roll = c.roll; d.angle = c.angle; d.light = c.light;
                     add.add(d);
                 }
@@ -344,7 +355,16 @@ public final class Director {
                     Film.Sub talk = null;
                     for (Film.Sub sb : sg.subs) if (c.t + 0.1f >= sb.t0 && c.t + 0.1f < sb.t1) talk = sb;
                     sh.type = sh.size <= ShotPlanner.MWIDE ? ShotPlanner.TWO_SHOT : ShotPlanner.SINGLE;
-                    if (talk != null) for (Film.Line fl : film.lines) if (fl.start <= c.t + 0.1f && fl.start + fl.dur > c.t + 0.1f) { sh.line = fl.index; break; }
+                    if (talk != null) for (Film.Line fl : film.lines) if (fl.start <= c.t + 0.1f && fl.start + fl.dur > c.t + 0.1f) {
+                        sh.line = fl.index;
+                        // a cut inside a line spoken in close-up is still a lip-sync shot: its share of the words
+                        if (c.zoom >= ShotPlanner.ZOOM[ShotPlanner.CU] * 0.95f) {
+                            sh.speech = true;
+                            sh.spoken = wordsIn(fl, c.t, next);
+                            sh.words = sh.spoken.isEmpty() ? 0 : sh.spoken.split("\\s+").length;
+                        }
+                        break;
+                    }
                     sh.purpose = talk != null ? "A cut-in / cut-out on the speaker so no shot is longer than about 3 seconds"
                             : sh.size <= ShotPlanner.MWIDE ? "Follow the action: everyone who moves stays in the frame" : "Show what " + sh.subject + " does";
                     sh.action = talk != null ? (talk.who.length() > 0 ? talk.who + ": \"" + clip(talk.text, 40) + "\"" : clip(talk.text, 50))
@@ -390,18 +410,35 @@ public final class Director {
                 if (c.ease > 0) continue;
                 // a cut to almost the same framing jars (a jump cut): keep the shot running instead
                 // (with a locked camera), or glide there
-                if (prevCut != null && Math.abs(c.zoom - prevCut.zoom) < 0.1f && Math.abs(c.cx - prevCut.cx) < 55 && Math.abs(c.cy - prevCut.cy) < 40
+                if (!c.keep && prevCut != null && Math.abs(c.zoom - prevCut.zoom) < 0.1f && Math.abs(c.cx - prevCut.cx) < 55 && Math.abs(c.cy - prevCut.cy) < 40
                         && c.t - prevCut.t > 0.3f) { if (opt.technical) drop.add(c); else c.ease = 0.8f; jump++; }
                 else prevCut = c;
             }
             sg.cams.removeAll(drop);
         }
-        if (opt.technical) limitShotLength(4.2f);
+        if (opt.technical) {
+            // the protocol's passes again until nothing changes (a reframed shot has a different frame width)
+            for (int pass = 0; pass < 3; pass++) {
+                int before = motionCuts + actionCuts;
+                limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+                safeFrames();
+                enforceMotion();
+                oneActionPerShot();
+                if (motionCuts + actionCuts == before) break;
+            }
+            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+            safeFrames();
+            // the last word goes to the motion and action limits (their new shots are framed on the action)
+            enforceMotion();
+            oneActionPerShot();
+            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+        }
         shotsFromCuts();
+        if (opt.technical) validateShots();
         int longest = 0;
         for (Film.Shot sh : film.shots) {
             if (!opt.technical && !sh.reaction && sh.stage == ShotPlanner.PEAK && sh.move != ShotPlanner.STATIC && sh.move != ShotPlanner.PUSH_IN) { sh.move = ShotPlanner.STATIC; still++; }
-            if (sh.dur > 4.5f) longest++;
+            if (sh.dur > TechnicalDirector.MAX_SHOT_SECONDS + 0.05f) longest++;
         }
         StringBuilder b = new StringBuilder();
         b.append("DIRECTOR'S SHOT LIST — ").append(story.title).append('\n');
@@ -440,9 +477,21 @@ public final class Director {
         b.append("• Every part opens on a readable wide shot: ").append(estab == 0 ? "yes" : "fixed " + estab).append('\n');
         b.append("• Jump cuts (a cut to almost the same framing): ").append(jump == 0 ? "none" : jump + (opt.technical ? " removed (the shot simply continues)" : " turned into smooth reframes")).append('\n');
         if (opt.technical) {
+            int speech = 0, over6 = 0, overMotion = 0, multi = 0;
+            for (Film.Shot sh : film.shots) {
+                if (sh.speech) { speech++; if (sh.words > TechnicalDirector.LIP_SYNC_WORDS) over6++; }
+                if (sh.motion >= TechnicalDirector.MAX_MOTION) overMotion++;
+                if (sh.actions > 1) multi++;
+            }
             b.append("• Technical Director protocol: locked tripod, every shot static, no camera shake unless the story asks for it\n");
-            b.append(String.format(java.util.Locale.US, "• Shots longer than 4.5 s: %d%n", longest));
-            b.append(String.format(java.util.Locale.US, "• Close-ups (all dialogue of more than six words, front-facing for lip-sync): %d of %d shots%n", cus, n));
+            b.append(String.format(java.util.Locale.US, "• Shots longer than 4 s: %d%n", longest));
+            b.append(String.format(java.util.Locale.US, "• Lip-sync shots (front close-ups, face filling the frame, at most 6 words): %d; with more than 6 words: %d%n", speech, over6));
+            b.append(String.format(java.util.Locale.US, "• Runs slowed to walking pace: %d; characters who stop walking to speak: %d%n", calmed, stillToSpeak));
+            b.append(String.format(java.util.Locale.US, "• Cuts made so no character moves 15%% of the frame in one shot: %d; shots still over the limit (very fast moves the story's timing leaves no room to slow): %d%n", motionCuts, overMotion));
+            b.append(String.format(java.util.Locale.US, "• Cuts made so each shot holds one action: %d; shots with more than one: %d%n", actionCuts, multi));
+            b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
+            b.append(String.format(java.util.Locale.US, "• Validation layer: %d of %d shots passed at once, %d corrected%s%n", passed, n, corrected,
+                    stillWrong.isEmpty() ? "" : "; could not fully correct: " + stillWrong));
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
         }
@@ -954,8 +1003,8 @@ public final class Director {
             if (words > 6 && plan.size < ShotPlanner.CU) { plan.size = ShotPlanner.CU; plan.type = ShotPlanner.SINGLE; plan.hold = false; }
             else if (plan.size < ShotPlanner.MCU && !(plan.type == ShotPlanner.TWO_SHOT && words <= 6)) plan.size = ShotPlanner.MCU;
         }
-        camDialogue(sp, to, start, line.emotion, plan, line);
-        if (opt.technical && to != null && line.dur > 4.2f && to.stateAt(start).visible) splitLongLine(sp, to, start, end, line);
+        if (opt.technical) { standStillToSpeak(sp, start, end); lipSyncShots(sp, to, start, end, line, plan); }
+        else camDialogue(sp, to, start, line.emotion, plan, line);
         float after = 0.35f;
         if (to != null && plan != null && to.stateAt(start).visible) {
             listenerPerformance(sp, to, start, end, line, plan);
@@ -966,6 +1015,443 @@ public final class Director {
         lastSubject = b.speaker;
         dlgCount++;
         return end + after;
+    }
+
+    // ================================================================== Technical Director protocol (enforced)
+
+    /**
+     * Lip-sync protocol (section 8): a line is spoken only in front-facing close-ups whose face fills most of the
+     * frame, at most six words per shot. A longer line is split into close-ups of balanced word groups (e.g. 4 + 5
+     * words), alternating the close-up with a tighter one and, every third part, the listener's silent reaction.
+     */
+    private void lipSyncShots(Film.Actor sp, Film.Actor to, float start, float end, Film.Line line, ShotPlanner.Plan plan) {
+        String text = line.shown == null || line.shown.trim().isEmpty() ? line.text : line.shown;
+        String[] w = text.trim().split("\\s+");
+        int n = Math.max(1, (int) Math.ceil(w.length / (float) TechnicalDirector.LIP_SYNC_WORDS));
+        float total = 0;
+        for (String x : w) total += x.length() + 1;
+        float light = plan == null ? -1 : plan.light;
+        int stage = plan == null ? ShotPlanner.DEVELOP : plan.stage;
+        boolean listener = to != null && to.stateAt(start).visible && to.stateAt(start).anchor == Film.A_GROUND && to.stateAt(start).body != Pose.LIE;
+        float before = 0;
+        int done = 0;
+        for (int k = 0; k < n; k++) {
+            int from = Math.round(k * w.length / (float) n), upto = Math.round((k + 1) * w.length / (float) n);
+            float tk = start + (end - start) * before / Math.max(1, total);
+            StringBuilder words = new StringBuilder();
+            for (int i = from; i < upto; i++) { words.append(i > from ? " " : "").append(w[i]); before += w[i].length() + 1; }
+            boolean reaction = listener && k % 3 == 2;
+            Film.Shot sh;
+            if (reaction) {
+                // Shot C = reaction: the listener's face, silent; the line goes on off-screen
+                Film.Cam c = faceCam(to, tk, light, 0.75f);
+                c.keep = true;
+                seg.cams.add(c);
+                sh = shot(tk, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, to, sp, stage);
+                sh.reaction = true;
+                sh.purpose = "Reaction (part " + (k + 1) + " of " + n + "): " + to.c.shown() + " listens; the line goes on off-screen";
+                sh.action = to.c.shown() + " listens, subtle breathing, one small change of expression";
+                sh.face = faceOf(empathy(line.emotion, sp, to));
+                sh.speech = false;
+            } else {
+                Film.Cam c = faceCam(sp, tk, light, k % 2 == 1 ? 1.18f : 1f);
+                c.keep = true;
+                seg.cams.add(c);
+                sh = shot(tk, k % 2 == 1 ? ShotPlanner.XCU : ShotPlanner.CU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, sp, to, stage);
+                sh.line = line.index;
+                sh.speech = true;
+                sh.words = upto - from;
+                sh.spoken = words.toString();
+                sh.purpose = "Lip-sync close-up" + (n > 1 ? " (part " + (k + 1) + " of " + n + ")" : "") + ": front-facing, head still, only the mouth and jaw move";
+                sh.action = sp.c.shown() + ": \"" + words + "\"";
+                sh.face = faceOf(line.emotion);
+                done++;
+            }
+            sh.light = light;
+            sh.cutWhen = k + 1 < n ? "after these " + (upto - from) + " words" : "the line ends";
+            sh.emotionalPurpose = "Lip-sync only in a locked close-up (contains_speech = " + (!reaction) + ")";
+            sh.other = "Face in the centre of the frame, " + Math.round(TechnicalDirector.HEADROOM * 100) + "% headroom";
+        }
+        lastDlgShot = null; lastDlgA = sp; lastDlgB = to;
+    }
+
+    /**
+     * The words of a line heard between t0 and t1 (each word is timed by its share of the letters, the same
+     * timing the lip-sync shots are cut on).
+     */
+    static String wordsIn(Film.Line fl, float t0, float t1) {
+        String text = fl.shown == null || fl.shown.trim().isEmpty() ? fl.text : fl.shown;
+        String[] w = text.trim().split("\\s+");
+        float total = 0;
+        for (String x : w) total += x.length() + 1;
+        StringBuilder b = new StringBuilder();
+        float before = 0;
+        for (String x : w) {
+            float mid = fl.start + fl.dur * (before + (x.length() + 1) / 2f) / Math.max(1, total);
+            before += x.length() + 1;
+            if (mid >= t0 && mid < t1) b.append(b.length() > 0 ? " " : "").append(x);
+        }
+        return b.toString();
+    }
+
+    /**
+     * Lip-sync needs the head almost still (8.6): a character walking when their line begins stops where they
+     * are, says the line, and then walks on to where they were going.
+     */
+    private void standStillToSpeak(Film.Actor sp, float start, float end) {
+        Film.Key last = sp.keys.get(sp.keys.size() - 1);
+        if (last.t > start + 1e-3f) return;                       // later plans exist already: leave them
+        Film.Key cur = sp.stateAt(start);
+        if (cur.moveDur <= 0 || start >= cur.t + cur.moveDur - 0.15f || cur.anchor != Film.A_GROUND) return;
+        float x = xAt(sp, start), dest = cur.x, remaining = cur.t + cur.moveDur - start;
+        boolean run = cur.run;
+        Film.Key stop = sp.at(start);
+        stop.x = x; stop.moveDur = 0; stop.run = false;
+        Film.Key go = sp.at(end + 0.15f);
+        go.x = dest; go.moveDur = Math.max(0.6f, remaining); go.run = run;
+        stillToSpeak++;
+    }
+
+    private int stillToSpeak, calmed;
+
+    /**
+     * C5: no running in a shot. A move faster than a brisk walk is slowed to walking pace where the story's
+     * timing leaves room for it (the next instruction for that character comes later).
+     */
+    private void calmMoves() {
+        final float maxSpeed = 260f;          // stage units per second (about a third of a 16:9 frame)
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            for (Film.Actor a : sg.actors) {
+                for (int i = 1; i < a.keys.size(); i++) {
+                    Film.Key k = a.keys.get(i);
+                    if (k.moveDur <= 0) continue;
+                    float dist = Math.abs(k.x - prevX(a, k));
+                    if (dist / k.moveDur <= maxSpeed) continue;
+                    float want = dist / maxSpeed, room = sg.t1 - k.t;
+                    if (i + 1 < a.keys.size()) room = Math.min(room, a.keys.get(i + 1).t - k.t);
+                    float d = Math.min(want, room - 0.05f);
+                    if (d > k.moveDur + 0.05f) { k.moveDur = d; k.run = false; calmed++; }
+                }
+            }
+        }
+    }
+
+    /**
+     * A close-up framed on the face itself (section 8.3): the face fills 65-75% of the frame where the picture is
+     * sharp enough for it (never enlarged more than 1.25x beyond its own pixels), centred, with headroom.
+     * In a narrow frame (9:16) the face's width keeps to the centre 60%.
+     */
+    private Film.Cam faceCam(Film.Actor a, float t, float light, float tight) {
+        float[] fb = faceBox(a, t);
+        float ar = TechnicalDirector.ratio(opt.aspect);
+        float fill = Math.min(TechnicalDirector.FACE_MIN, TechnicalDirector.SAFE_ZONE * ar / 0.85f) * (tight > 1 ? 1.1f : tight < 1 ? 0.75f : 1f);
+        float zoom = fill * 720f / fb[2];
+        // the whole head stays in the frame: hair, a turban or a cap (from its top to the chin) fills at most
+        // 85% of the frame height, with headroom above it
+        float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4];
+        zoom = Math.min(zoom, 0.85f * 720f / Math.max(1, chin - headTop));
+        zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], zoom));
+        if (tight > 1) {
+            // the next group of words gets a visibly different framing (never a jump cut): closer if the picture
+            // allows it, otherwise a little wider
+            float base = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], Math.min(fill / 1.1f * 720f / fb[2], 0.85f * 720f / Math.max(1, fb[1] + fb[2] * 0.5f - fb[4]))));
+            if (zoom < base * 1.12f) zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], base / 1.2f);
+        }
+        float fh = 720f / zoom;
+        float cy = fb[1] + 0.04f * fh;
+        if (headTop < cy - fh / 2 + 0.06f * fh) cy = headTop - 0.06f * fh + fh / 2;
+        Film.Cam c = new Film.Cam(t, fb[0], cy, zoom, 0);
+        c.still = true;
+        c.light = light;
+        return c;
+    }
+
+    /**
+     * Where a character's face is on the stage: {centre x, centre y, face height, the closest zoom that keeps it
+     * sharp}. From the picture's eye and mouth points when it has them.
+     */
+    private float[] faceBox(Film.Actor a, float t) {
+        float h = heightOf(a), x = finalX(a, t);
+        Film.Key k = a.stateAt(t);
+        float top = ground - h;
+        if (k.body == Pose.SIT) top += h * 0.17f;
+        else if (k.body == Pose.KNEEL || k.body == Pose.CROUCH) top += h * 0.25f;
+        if (k.anchor == Film.A_BRANCH) top = ground - 450 - h * 0.1f;
+        else if (k.anchor == Film.A_SHOULDER || k.anchor == Film.A_ON_FACE) top = ground - 320 - h * 0.1f;
+        Art.Sprite sp = art == null ? null : art.sprites.get(a.c.id);
+        if (sp != null && sp.faceKnown && sp.mouthY > (sp.eyeLY + sp.eyeRY) / 2) {
+            float ey = (sp.eyeLY + sp.eyeRY) / 2, d = sp.mouthY - ey;
+            float fh = Math.max(0.05f, 3.2f * d) * h;
+            float fy = top + (ey + 0.3f * d) * h;
+            float w = h * sp.w / (float) Math.max(1, sp.h);
+            float fx = x + ((sp.eyeLX + sp.eyeRX) / 2 - 0.5f) * w * (k.facing < 0 ? -1 : 1);
+            float scale = sp.rig != null ? sp.rig.faceScale : 1f;
+            float srcPx = 3.2f * d * sp.h * scale;
+            float zmax = Math.max(ShotPlanner.MAX_ZOOM, srcPx * 1.25f / fh);
+            // the top of the head: the top of the picture (hair, turban), higher when wearing someone's turban
+            float headTop = top;
+            if (k.wearsTurban) headTop -= Math.abs(sp.eyeRX - sp.eyeLX) * w * 1.6f;
+            return new float[]{fx, fy, fh, Math.min(8f, zmax), headTop};
+        }
+        return new float[]{x, top + 0.11f * h, 0.17f * h, ShotPlanner.MAX_ZOOM, top - (k.wearsTurban ? 0.12f * h : 0)};
+    }
+
+    /** The frame's width on the stage for a camera (FINAL_AR decides it). */
+    private float frameW(Film.Cam c) { return 720f / c.zoom * TechnicalDirector.ratio(opt.aspect); }
+
+    /** The cut that ends the shot starting with camera i (or the end of the part). */
+    private static float shotEnd(Film.Seg sg, int i) {
+        for (int j = i + 1; j < sg.cams.size(); j++) if (sg.cams.get(j).ease == 0) return sg.cams.get(j).t;
+        return sg.t1;
+    }
+
+    private static void sortCams(Film.Seg sg) {
+        java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
+            public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
+        });
+    }
+
+    /**
+     * The largest distance a character in the frame travels within [t0, t1), as a fraction of the frame width
+     * (from where they first appear in the frame; characters off-screen do not count).
+     */
+    private float motionIn(Film.Seg sg, Film.Cam c, float t0, float t1) {
+        float fw = frameW(c), most = 0;
+        for (Film.Actor a : sg.actors) {
+            float ref = Float.NaN;
+            for (float t = t0 + 0.01f; t < t1; t += 0.05f) {
+                if (!a.stateAt(t).visible) { ref = Float.NaN; continue; }
+                float x = xAt(a, t);
+                boolean in = Math.abs(x - c.cx) < fw * 0.55f;
+                if (Float.isNaN(ref)) { if (in) ref = x; continue; }
+                if (in || Math.abs(ref - c.cx) < fw * 0.55f) {
+                    most = Math.max(most, Math.abs(x - ref) / fw);
+                }
+            }
+        }
+        return most;
+    }
+
+    /**
+     * C5 motion limit: within one shot no character travels 15% of the frame width or more. A long walk or a run
+     * becomes several static shots: at the moment the limit is reached the film cuts to a new, still framing that
+     * has the moving character ahead of them again (fast action = more cuts, never a moving camera).
+     */
+    private void enforceMotion() {
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            sortCams(sg);
+            for (int i = 0; i < sg.cams.size() && i < 4000; i++) {
+                Film.Cam c = sg.cams.get(i);
+                if (c.ease > 0) continue;
+                float t0 = c.t, t1 = shotEnd(sg, i), fw = frameW(c);
+                Film.Cam cut = null;
+                for (Film.Actor a : sg.actors) {
+                    float ref = Float.NaN;
+                    for (float t = t0 + 0.01f; t < t1 - 0.3f; t += 0.05f) {
+                        if (!a.stateAt(t).visible) { ref = Float.NaN; continue; }
+                        float x = xAt(a, t);
+                        boolean in = Math.abs(x - c.cx) < fw * 0.55f;
+                        if (Float.isNaN(ref)) { if (in) ref = x; continue; }
+                        float dx = x - ref;
+                        if (Math.abs(dx) >= fw * (TechnicalDirector.MAX_MOTION - 0.005f) && (in || Math.abs(ref - c.cx) < fw * 0.55f)) {
+                            if (cut == null || t < cut.t) {
+                                // the new framing: the mover a little behind the centre, room ahead to move into
+                                float nx = c.zoom >= ShotPlanner.ZOOM[ShotPlanner.MCU] ? x : c.cx + dx + Math.signum(dx) * fw * 0.1f;
+                                cut = new Film.Cam(Math.max(t, t0 + 0.4f), nx, c.cy, c.zoom, 0);
+                                cut.still = true; cut.roll = c.roll; cut.angle = c.angle; cut.light = c.light;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (cut != null && cut.t - t0 >= 0.39f) { sg.cams.add(i + 1, cut); motionCuts++; }
+            }
+        }
+    }
+
+    private int motionCuts, actionCuts, framed;
+
+    private static boolean isAction(int type) {
+        return type != Film.G_TALK && type != Film.G_NOD && type != Film.G_LOOK_AWAY && type != Film.G_WHISPER;
+    }
+
+    /**
+     * P1: one action per shot. When a second action begins inside a shot, the film cuts to it: a closer, still
+     * framing on whoever does it.
+     */
+    private void oneActionPerShot() {
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            sortCams(sg);
+            for (int i = 0; i < sg.cams.size() && i < 4000; i++) {
+                Film.Cam c = sg.cams.get(i);
+                if (c.ease > 0) continue;
+                float t0 = c.t, t1 = shotEnd(sg, i);
+                List<Float> starts = new ArrayList<Float>();
+                for (Film.Actor a : sg.actors) for (Film.Act ac : a.acts) if (isAction(ac.type) && ac.t0 >= t0 - 0.05f && ac.t0 < t1 && a.stateAt(ac.t0 + 0.01f).visible) starts.add(ac.t0);
+                if (starts.size() < 2) continue;
+                java.util.Collections.sort(starts);
+                float first = starts.get(0), second = -1;
+                for (float x : starts) if (x - first > 0.3f) { second = x; break; }
+                if (second < 0 || second - t0 < 0.5f || t1 - second < 0.5f) continue;
+                Film.Actor who = null;
+                for (Film.Actor a : sg.actors) for (Film.Act ac : a.acts) if (isAction(ac.type) && Math.abs(ac.t0 - second) < 0.001f) who = a;
+                if (who == null) continue;
+                float z = c.zoom * 1.25f;
+                if (z > ShotPlanner.MAX_ZOOM && c.zoom >= ShotPlanner.MAX_ZOOM) z = c.zoom / 1.25f;
+                z = Math.min(Math.max(ShotPlanner.MAX_ZOOM, c.zoom), z);
+                float h = Renderer.actorHeight(who.look, who.c, art, sg);
+                Film.Cam d = new Film.Cam(second, xAt(who, second), sg.ground - h * 0.55f, z, 0);
+                d.still = true; d.angle = c.angle; d.light = c.light;
+                sg.cams.add(i + 1, d);
+                actionCuts++;
+            }
+        }
+    }
+
+    /**
+     * Section 7, resizing: in the film's own shape (FINAL_AR), everyone a shot is about stays whole inside the
+     * frame with 15% empty at left and right, faces in the centre 60%, and room above the heads. A group too
+     * wide for a narrow frame is taken in by a wider shot; when even that cannot hold them, the shot frames its
+     * main character completely rather than cutting anyone in half.
+     */
+    private void safeFrames() {
+        float ar = TechnicalDirector.ratio(opt.aspect);
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            sortCams(sg);
+            for (int i = 0; i < sg.cams.size(); i++) {
+                Film.Cam c = sg.cams.get(i);
+                if (c.ease > 0) continue;
+                float t = c.t + 0.05f;
+                boolean faceShot = false;
+                for (Film.Shot sh : film.shots) if (Math.abs(sh.t - c.t) < 0.06f && (sh.speech || sh.reaction)) faceShot = true;
+                // who the shot is about: the characters inside the framing the director chose (planned in 16:9)
+                float intent = 1280f / c.zoom;
+                List<Film.Actor> subj = new ArrayList<Film.Actor>();
+                Film.Actor main = null;
+                float bd = 1e9f;
+                for (Film.Actor a : sg.actors) {
+                    if (!a.stateAt(t).visible) continue;
+                    float x = xAt(a, t);
+                    if (Math.abs(x - c.cx) < intent / 2) subj.add(a);
+                    if (Math.abs(x - c.cx) < bd) { bd = Math.abs(x - c.cx); main = a; }
+                }
+                if (main == null) continue;
+                if (faceShot) {
+                    // a face shot is framed on its face already; keep the face inside the centre 60%, and nobody
+                    // else half in the frame: a neighbour cut by the edge is moved out of it (or fully in)
+                    float fw = frameW(c);
+                    float[] fb = faceBox(main, t);
+                    float lim = fw * TechnicalDirector.SAFE_ZONE / 2;
+                    for (Film.Actor o : sg.actors) {
+                        if (o == main || !o.stateAt(t).visible) continue;
+                        float[] ob = faceBox(o, t);
+                        float half = ob[2] * 0.95f, left = c.cx - fw / 2, right = c.cx + fw / 2;     // the whole head with its hair
+                        boolean cut = (ob[0] - half < left && ob[0] + half > left) || (ob[0] - half < right && ob[0] + half > right);
+                        if (!cut) continue;
+                        // push the frame away from them, as far as the main face can stay in the safe zone
+                        float away = ob[0] > c.cx ? -1 : 1;
+                        float need = away < 0 ? (c.cx + fw / 2) - (ob[0] - half) : (ob[0] + half) - (c.cx - fw / 2);
+                        float room = lim - Math.abs(fb[0] - (c.cx + away * need));
+                        if (room >= 0) { c.cx += away * need; framed++; }
+                    }
+                    if (Math.abs(fb[0] - c.cx) > lim) { c.cx = fb[0] + Math.signum(c.cx - fb[0]) * lim * 0.8f; framed++; }
+                    continue;
+                }
+                if (subj.isEmpty()) subj.add(main);
+                float minL = 1e9f, maxR = -1e9f, headTop = 1e9f, feet = -1e9f;
+                for (Film.Actor a : subj) {
+                    float h = Renderer.actorHeight(a.look, a.c, art, sg), x = xAt(a, t);
+                    float half = h * bodyAspect(a) / 2;
+                    minL = Math.min(minL, x - half); maxR = Math.max(maxR, x + half);
+                    headTop = Math.min(headTop, sg.ground - h);
+                    feet = Math.max(feet, sg.ground);
+                }
+                float span = maxR - minL, usable = 1 - 2 * TechnicalDirector.SIDE_MARGIN;
+                float oldX = c.cx, oldZ = c.zoom;
+                if (span > frameW(c) * usable) {
+                    float z = 720f * ar * usable / span;
+                    if (z >= 1f) c.zoom = Math.min(c.zoom, z);
+                    else {
+                        // not everyone fits even in the widest shot: frame the main character whole and centred
+                        float h = Renderer.actorHeight(main.look, main.c, art, sg), x = xAt(main, t), half = h * bodyAspect(main) / 2;
+                        minL = x - half; maxR = x + half; headTop = sg.ground - h;
+                        c.zoom = Math.min(c.zoom, Math.max(1f, 720f * ar * usable / (2 * half)));
+                    }
+                }
+                c.cx = (minL + maxR) / 2;
+                // headroom above the highest head; a full shot keeps the feet in the frame too
+                float fh = 720f / c.zoom;
+                float topEdge = c.cy - fh / 2;
+                float room = TechnicalDirector.HEADROOM * (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.MWIDE] + 0.01f ? 0.5f : 0.6f);
+                if (headTop < topEdge + room * fh) c.cy = headTop - room * fh + fh / 2;
+                if (c.zoom <= ShotPlanner.ZOOM[ShotPlanner.WIDE] + 0.01f && feet > c.cy + fh / 2 - 0.03f * fh) {
+                    float need = feet - headTop + (room + 0.03f) * fh;
+                    if (need > fh && 720f / need >= 1f) { c.zoom = Math.min(c.zoom, 720f / need); fh = 720f / c.zoom; }
+                    c.cy = headTop - room * fh + fh / 2;
+                }
+                if (Math.abs(c.cx - oldX) > 2 || Math.abs(c.zoom - oldZ) > 0.01f) framed++;
+            }
+        }
+    }
+
+    /** Width / height of a character's picture (for keeping it whole inside the frame). */
+    private float bodyAspect(Film.Actor a) {
+        Art.Sprite sp = art == null ? null : art.sprites.get(a.c.id);
+        if (sp != null && sp.h > 0) return Math.min(1.6f, sp.w / (float) sp.h);
+        return a.look.kind == Look.ANIMAL ? 1.4f : 0.45f;
+    }
+
+    private int passed, corrected;
+    private final List<String> stillWrong = new ArrayList<String>();
+
+    /**
+     * Section 10, the validation layer, on the finished shot list: every shot is checked (static camera, at most
+     * 4 s, motion under 15% of the frame, one action, lip-sync only in a front close-up of at most six words,
+     * feet on the ground); what fails is corrected by the error-correction rules (section 12).
+     */
+    private void validateShots() {
+        passed = 0; corrected = 0; stillWrong.clear();
+        for (Film.Shot sh : film.shots) {
+            Film.Seg sg = film.segAt(sh.t + 0.01f);
+            if (sg == null) continue;
+            Film.Cam cam = null;
+            int ci = -1;
+            for (int i = 0; i < sg.cams.size(); i++) if (sg.cams.get(i).t <= sh.t + 0.01f) { cam = sg.cams.get(i); ci = i; }
+            if (cam == null) continue;
+            sh.motion = motionIn(sg, cam, sh.t, sh.t + sh.dur);
+            // actions = distinct moments something starts (0.3 s apart), by characters who are there
+            List<Float> starts = new ArrayList<Float>();
+            for (Film.Actor a : sg.actors) for (Film.Act ac : a.acts)
+                if (isAction(ac.type) && ac.t0 >= sh.t - 0.05f && ac.t0 < sh.t + sh.dur && a.stateAt(ac.t0 + 0.01f).visible) starts.add(ac.t0);
+            java.util.Collections.sort(starts);
+            int acts = 0;
+            float lastStart = -9;
+            for (float x : starts) if (x - lastStart > 0.3f) { acts++; lastStart = x; }
+            // one that begins in the last half second belongs to the next shot (it is cut on the action)
+            if (acts > 1 && lastStart > sh.t + sh.dur - 0.5f) acts--;
+            sh.actions = Math.max(1, acts);
+            if (sh.speech && sh.line >= 0 && sh.line < film.lines.size()) {
+                sh.spoken = wordsIn(film.lines.get(sh.line), sh.t, sh.t + sh.dur);
+                sh.words = sh.spoken.isEmpty() ? 0 : sh.spoken.split("\\s+").length;
+            }
+            TechnicalDirector.Shot v = new TechnicalDirector.Shot();
+            v.placement = "Foreground 0-1 m | Midground left third / right third 2-4 m | Background 10-100 m";
+            v.grounding = TechnicalDirector.GROUND;
+            v.prompt = "CHARACTERS: PLACEMENT: ACTION: GROUNDING: LIGHTING: CAMERA: " + TechnicalDirector.STABLE;
+            v.staticCamera = cam.still && cam.ease == 0;
+            v.motion = sh.motion; v.actions = sh.actions; v.seconds = sh.dur;
+            v.speech = sh.speech; v.closeUp = sh.size >= ShotPlanner.CU; v.words = sh.words;
+            if (TechnicalDirector.validate(v).isEmpty()) { passed++; continue; }
+            List<String> left = TechnicalDirector.correct(v);
+            corrected++;
+            if (!v.staticCamera || cam.ease > 0) { cam.ease = 0; cam.still = true; }
+            if (!v.speech && sh.speech) sh.speech = false;
+            if (!left.isEmpty() && stillWrong.size() < 12) stillWrong.add(String.format(java.util.Locale.US, "%d:%04.1f %s", (int) (sh.t / 60), sh.t % 60, left));
+        }
     }
 
     /**
@@ -1980,7 +2466,9 @@ public final class Director {
         int i = a.keys.indexOf(k);
         if (i <= 0) return k.x;
         Film.Key p = a.keys.get(i - 1);
-        // the previous key may itself be mid-move at k.t; use its final x
+        // the previous key may itself be mid-move at k.t: start from where the character really is then, so a
+        // new instruction never makes anyone jump
+        if (p.moveDur > 0 && k.t < p.t + p.moveDur && k.t > p.t) return xAt(a, k.t - 1e-4f);
         return p.x;
     }
 

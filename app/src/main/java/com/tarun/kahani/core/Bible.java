@@ -79,9 +79,11 @@ public final class Bible {
     }
 
     public static String placePrompt(String name, String description, String aspect) {
-        return "Cinematic 3D animated film background for a premium Indian children's film, " + (aspect == null ? "16:9" : aspect)
-                + " wide establishing shot, no people, no text. Place: " + name + ". " + oneLine(description)
-                + " Style: rich 3D render, volumetric light, depth of field, atmospheric perspective, vivid but natural colours.";
+        // the aspect ratio is a parameter of the picture (its width and height), never words in the prompt (C3)
+        return TechnicalDirector.clean("Cinematic 3D animated film background plate for a premium Indian children's film, establishing plate, "
+                + "no people, no characters, no text. Place: " + name + ". " + oneLine(description)
+                + " Layers: blurry foreground 0-1 m, empty midground stage 2-4 m with flat ground, background 10-100 m. "
+                + "Style: rich 3D render, volumetric light, depth of field, atmospheric perspective, vivid but natural colours. " + TechnicalDirector.STABLE + ".");
     }
 
     public static String oneLine(String s) {

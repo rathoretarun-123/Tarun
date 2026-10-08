@@ -596,7 +596,9 @@ public final class Renderer {
 
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         camera(s, t);
-        if (vw < W * 0.9f) followSpeaker(s, t);
+        // a narrow frame follows the speaker only when the camera is free; a locked shot (Technical Director)
+        // was framed for this shape by the director and never moves
+        if (vw < W * 0.9f && !camStill) followSpeaker(s, t);
         // ---- far layer: the background (parallax)
         g.save();
         applyCam(g, 0.78f, s.ground);
@@ -788,6 +790,9 @@ public final class Renderer {
         Art.Sprite sp = art.sprites.get(a.c.id);
         float h = actorHeight(a.look, a.c, art, s);
         float x = Director.xAt(a, t);
+        // nobody far outside the frame is drawn (their pixel-level mesh would cost time for nothing); anyone
+        // carried or held by someone keeps being drawn with them
+        if (k.anchor == Film.A_GROUND && Math.abs(x - camX) > vw / 2 / camZ + h * 1.5f + 200) return;
         float y = s.ground;
         float scale = 1f;
         if (k.depth > 0) { y -= 26; scale = 0.88f; }
@@ -830,14 +835,33 @@ public final class Renderer {
         mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
         if (mv != null) {
             float speed = mv.run ? 15f : 9f;
-            p.walk = t * speed;
-            p.walkAmt = 1f;
+            // the steps start and stop gently (no snap into a stride), over a fifth of a second
+            float amt = Rig.smooth(0, 0.2f, t - mv.t) * Rig.smooth(0, 0.25f, mv.t + mv.moveDur - t);
+            p.walk = (t - mv.t) * speed;
+            p.walkAmt = amt;
             p.facing = mv.facing;
-            mo.dy = -(float) Math.abs(Math.sin(t * speed)) * (mv.run ? 16 : 7);
-            mo.rot = (float) Math.sin(t * speed) * (mv.run ? 4 : 2.5f);
-            p.armL = 25 + (float) Math.sin(t * speed) * 25;
-            p.armR = 25 - (float) Math.sin(t * speed) * 25;
+            // a calm, weighted step: a small rise and fall (no hopping) and a slight sway of the body
+            mo.dy = -bump(p.walk) * (mv.run ? 6 : 3.5f) * amt;
+            mo.rot = (float) Math.sin(p.walk) * (mv.run ? 1.8f : 1.1f) * amt;
+            p.armL = 8 + (17 + (float) Math.sin(p.walk) * 25) * amt;
+            p.armR = 8 + (17 - (float) Math.sin(p.walk) * 25) * amt;
         } else {
+            // anticipation: just before setting off the body dips and leans back a little; after arriving it
+            // settles forward and back once (slow in, slow out, follow-through)
+            for (Film.Key mk : a.keys) {
+                if (mk.moveDur <= 0) continue;
+                float dir = Math.signum(mk.x - Director.prevX(a, mk));
+                if (dir == 0) continue;
+                float before = mk.t - t, after = t - (k.t + mk.moveDur);
+                if (before > 0 && before < 0.25f) {
+                    float u = Rig.smooth(0.25f, 0, before);
+                    mo.dy += 2.5f * u;
+                    mo.rot -= dir * 1.2f * u;
+                } else if (after >= 0 && after < 0.4f) {
+                    float u = after / 0.4f;
+                    mo.rot += dir * 1.3f * (float) Math.sin(u * Math.PI) * (1 - u);
+                }
+            }
             // idle breathing
             float br = (float) Math.sin(t * 2.1f + a.order);
             // (a rigged picture breathes through its own mesh: chest and shoulders, not the whole picture)
@@ -899,7 +923,7 @@ public final class Renderer {
                     p.body = Pose.LIE;
                     scale *= 0.85f;
                     Film.Key mv2 = moving(t2, t);
-                    if (mv2 != null) y -= (float) Math.abs(Math.sin(t * 9)) * 8;
+                    if (mv2 != null) y -= bump(t * 9) * 8;
                 }
                 break;
             }
@@ -939,24 +963,48 @@ public final class Renderer {
         g.restore();
     }
 
+    /** 0..1..0 with the rhythm of |sin x| but rounded at the bottom: a bounce that never jerks. */
+    static float bump(double x) { return (float) (0.5 - 0.5 * Math.cos(2 * x)); }
+
     /** Converts gestures into arm angles (cartoon puppets) and body motion (picture sprites). */
     private void applyActs(Film.Actor a, Pose p, float t) {
         for (Film.Act act : a.acts) {
             if (t < act.t0 || t >= act.t1) continue;
             float u = t - act.t0;
             float s = (float) Math.sin(u * 10);
+            // slow in, slow out: every gesture grows in over a quarter second and settles back at its end,
+            // so nothing snaps into place (anticipation and follow-through of the arms and body)
+            float env = Rig.smooth(0, 0.28f, u) * Rig.smooth(0, 0.32f, act.t1 - t);
+            float aL = p.armL, aR = p.armR, eL = p.elbowL, eR = p.elbowR, dx0 = mo.dx, dy0 = mo.dy, r0 = mo.rot, sx0 = mo.sx, sy0 = mo.sy;
+            applyAct(a, p, act, t, u, s);
+            if (env < 1) {
+                p.armL = aL + (p.armL - aL) * env; p.armR = aR + (p.armR - aR) * env;
+                p.elbowL = eL + (p.elbowL - eL) * env; p.elbowR = eR + (p.elbowR - eR) * env;
+                mo.dx = dx0 + (mo.dx - dx0) * env; mo.dy = dy0 + (mo.dy - dy0) * env; mo.rot = r0 + (mo.rot - r0) * env;
+                mo.sx = sx0 + (mo.sx - sx0) * env; mo.sy = sy0 + (mo.sy - sy0) * env;
+            }
+        }
+    }
+
+    private void applyAct(Film.Actor a, Pose p, Film.Act act, float t, float u, float s) {
+        {
             switch (act.type) {
                 case Film.G_TALK:
-                    p.armR = Math.max(p.armR, 35 + (float) Math.sin(u * 3.1f) * 20); p.elbowR = 45;
+                    // a picture speaking in a close-up keeps its body calm (lip-sync protocol): a small, slow hand
+                    if (art != null && art.sprites.containsKey(a.c.id) && art.sprites.get(a.c.id).rig != null) {
+                        p.armR = Math.max(p.armR, 12 + (float) Math.sin(u * 1.3f) * 4);
+                    } else {
+                        p.armR = Math.max(p.armR, 35 + (float) Math.sin(u * 3.1f) * 20); p.elbowR = 45;
+                    }
                     break;
                 case Film.G_CLAP:
                     p.armL = 60; p.armR = 60; p.elbowL = 70 + s * 20; p.elbowR = 70 + s * 20;
-                    mo.dy -= Math.abs(s) * 4;
+                    mo.dy -= bump(u * 10) * 4;
                     break;
                 case Film.G_LAUGH:
                     p.emotion = p.mouth > 0.05f ? p.emotion : Pose.LAUGH;
                     if (p.emotion == Pose.NEUTRAL) p.emotion = Pose.LAUGH;
-                    mo.dy -= Math.abs((float) Math.sin(u * 14)) * 6;
+                    mo.dy -= bump(u * 14) * 6;
                     mo.rot += (float) Math.sin(u * 7) * 3;
                     p.armL = 30; p.armR = 30; p.elbowL = 80; p.elbowR = 80;
                     break;
@@ -989,7 +1037,7 @@ public final class Renderer {
                     break;
                 case Film.G_CRY:
                     p.tears = true; p.emotion = Pose.SAD;
-                    mo.dy += Math.abs(s) * 2;
+                    mo.dy += bump(u * 10) * 2;
                     break;
                 case Film.G_TREMBLE:
                     mo.dx += (float) Math.sin(t * 70) * 2.2f;
@@ -1001,7 +1049,7 @@ public final class Renderer {
                     break;
                 case Film.G_DANCE:
                     mo.rot += (float) Math.sin(u * 6) * 8;
-                    mo.dy -= Math.abs((float) Math.sin(u * 6)) * 12;
+                    mo.dy -= bump(u * 6) * 12;
                     p.armL = 140 + s * 20; p.armR = 140 - s * 20;
                     p.emotion = Pose.EVIL;
                     break;
@@ -1032,7 +1080,7 @@ public final class Renderer {
                 case Film.G_PULL_ROPE:
                     p.armL = 165; p.armR = 165; p.elbowL = 10; p.elbowR = 10;
                     p.carrying = a.look.kind == Look.MONSTER;
-                    if (a.look.kind != Look.MONSTER) mo.dy += Math.abs(s) * 10;
+                    if (a.look.kind != Look.MONSTER) mo.dy += bump(u * 10) * 10;
                     break;
                 case Film.G_TWIRL:
                     p.armR = 140; p.elbowR = 120 + s * 12;
@@ -1103,10 +1151,10 @@ public final class Renderer {
                     break;
                 case Film.G_WALK_PLACE:
                     p.walk = t * 9; p.walkAmt = 0.8f;
-                    mo.dy -= Math.abs((float) Math.sin(t * 9)) * 5;
+                    mo.dy -= bump(t * 9) * 5;
                     break;
                 case Film.G_PLAY: case Film.G_BOUNCE:
-                    mo.dy -= Math.abs((float) Math.sin(u * 6)) * 14;
+                    mo.dy -= bump(u * 6) * 14;
                     mo.rot += (float) Math.sin(u * 3) * 4;
                     p.emotion = Pose.HAPPY;
                     p.armL = 60 + s * 30; p.armR = 60 - s * 30;
@@ -1123,8 +1171,8 @@ public final class Renderer {
                     mo.dx += (float) Math.sin(u * 8) * 6;
                     break;
                 case Film.G_COUGH:
-                    mo.rot += (float) Math.abs(Math.sin(u * 6)) * 6 * p.facing;
-                    mo.dy += Math.abs((float) Math.sin(u * 6)) * 4;
+                    mo.rot += bump(u * 6) * 6 * p.facing;
+                    mo.dy += bump(u * 6) * 4;
                     p.armR = 120; p.elbowR = 120;
                     break;
                 case Film.G_LOOK_UP:
@@ -1141,8 +1189,8 @@ public final class Renderer {
                     p.emotion = Pose.PROUD;
                     break;
                 case Film.G_ROAR:
-                    mo.sx *= 1 + 0.04f * (float) Math.abs(Math.sin(u * 3));
-                    mo.sy *= 1 + 0.04f * (float) Math.abs(Math.sin(u * 3));
+                    mo.sx *= 1 + 0.04f * bump(u * 3);
+                    mo.sy *= 1 + 0.04f * bump(u * 3);
                     mo.dx += (float) Math.sin(t * 50) * 3;
                     p.armL = 110; p.armR = 110; p.fist = true;
                     p.emotion = Pose.ANGRY;
@@ -1278,6 +1326,27 @@ public final class Renderer {
         }
     }
 
+    private final Rig.State rsLag = new Rig.State();
+
+    /** The body language of one feeling, weighted (for blending over time). */
+    static void bodyFor(int emotion, Rig.State st, float w, float t) {
+        switch (emotion) {
+            case Pose.SAD: st.nod += 0.9f * w; st.armL -= 2 * w; st.armR -= 2 * w; st.lean += 1.5f * w; break;
+            case Pose.ANGRY: st.lean += 3 * w; st.nod += 0.3f * w; st.armL += 4 * w; st.armR += 4 * w; break;
+            case Pose.SCARED: st.lean -= 4 * w; st.armL -= 3 * w; st.armR -= 3 * w; st.headRot += (float) Math.sin(t * 17) * 0.35f * w; break;
+            case Pose.SURPRISED: st.nod -= 0.6f * w; st.armL += 6 * w; st.armR += 6 * w; st.lean -= 2 * w; break;
+            case Pose.HAPPY: st.headRot += 3 * w; break;
+            case Pose.LAUGH: st.nod -= 0.7f * w; st.headRot += (float) Math.sin(t * 3.5f) * 1.8f * w; st.armL += (float) Math.sin(t * 7) * 2 * w; st.armR += (float) Math.sin(t * 7) * 2 * w; break;
+            case Pose.PROUD: st.nod -= 0.5f * w; st.lean -= 2 * w; st.breathe += w; break;
+            case Pose.DETERMINED: st.nod += 0.2f * w; st.lean += 1.5f * w; break;
+            case Pose.CURIOUS: st.headRot += 6 * w; break;
+            case Pose.PAIN: st.nod += 0.5f * w; st.lean += 3 * w; break;
+            case Pose.DIZZY: st.headRot += (float) Math.sin(t * 3) * 8 * w; break;
+            case Pose.EVIL: st.nod += 0.3f * w; st.headRot -= 3 * w; break;
+            default:
+        }
+    }
+
     /** The emotion an actor shows at time t (its key, its line, its gesture), without drawing anything. */
     private int emotionAt(Film.Actor a, float t) {
         Film.Key k = a.stateAt(t);
@@ -1339,21 +1408,20 @@ public final class Renderer {
             case Pose.CROUCH: st.legScale = 0.75f; st.lean += 9; st.nod += 0.4f; break;
             default:
         }
-        // body language of the feeling
-        switch (p.emotion) {
-            case Pose.SAD: st.nod += 0.9f; st.armL -= 2; st.armR -= 2; st.lean += 1.5f; break;
-            case Pose.ANGRY: st.lean += 3; st.nod += 0.3f; st.armL += 4; st.armR += 4; break;
-            case Pose.SCARED: st.lean -= 4; st.armL -= 3; st.armR -= 3; st.headRot += (float) Math.sin(t * 17) * 0.35f; break;
-            case Pose.SURPRISED: st.nod -= 0.6f; st.armL += 6; st.armR += 6; st.lean -= 2; break;
-            case Pose.HAPPY: st.headRot += 3; break;
-            case Pose.LAUGH: st.nod -= 0.7f; st.headRot += (float) Math.sin(t * 3.5f) * 1.8f; st.armL += (float) Math.sin(t * 7) * 2; st.armR += (float) Math.sin(t * 7) * 2; break;
-            case Pose.PROUD: st.nod -= 0.5f; st.lean -= 2; st.breathe += 1; break;
-            case Pose.DETERMINED: st.nod += 0.2f; st.lean += 1.5f; break;
-            case Pose.CURIOUS: st.headRot += 6; break;
-            case Pose.PAIN: st.nod += 0.5f; st.lean += 3; break;
-            case Pose.DIZZY: st.headRot += (float) Math.sin(t * 3) * 8; break;
-            case Pose.EVIL: st.nod += 0.3f; st.headRot -= 3; break;
-            default:
+        // body language of the feeling, blended over the last half second (a body has weight: it settles into a
+        // new feeling instead of snapping), and hair and cloth lag a quarter second behind the head (follow-through)
+        if (a != null) {
+            int n = 8;
+            float r0 = st.headRot, l0 = st.lean;
+            for (int i = 0; i < n; i++) bodyFor(emotionAt(a, t - i * 0.06f), st, 1f / n, t);
+            float rNow = st.headRot - r0, lNow = st.lean - l0;
+            Rig.State lag = rsLag;
+            lag.reset();
+            for (int i = 0; i < n; i++) bodyFor(emotionAt(a, t - 0.25f - i * 0.06f), lag, 1f / n, t - 0.25f);
+            st.follow = rNow - lag.headRot;
+            st.followLean = lNow - lag.lean;
+        } else {
+            bodyFor(p.emotion, st, 1f, t);
         }
         // the face: an average over the last 0.3 s, so expressions melt into each other
         // (a function of time only, so frames drawn by different threads agree)
@@ -1461,8 +1529,8 @@ public final class Renderer {
             Object faceLayer = bare ? rig.faceBareImg : rig.faceImg;
             if (rig.face && faceLayer != null) {
                 rig.faceMesh(rf, st);
-                g.imageMesh(faceLayer, Rig.FW, Rig.FH, rf.face);
-                if (p.wet > 0.02f && rig.faceWetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, Rig.FW, Rig.FH, rf.face); g.restore(); }
+                g.imageMesh(faceLayer, rf.fcols, rf.frows, rf.face);
+                if (p.wet > 0.02f && rig.faceWetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(rig.faceWetImg, rf.fcols, rf.frows, rf.face); g.restore(); }
             }
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);
@@ -1842,7 +1910,7 @@ public final class Renderer {
             y = sy + (f.y - 60 - sy) * u - (float) Math.sin(u * Math.PI) * 60;
         } else { x = f.x + 22; y = f.y - 66; }
         boolean resting = t >= f.t2 + 1.2f;
-        float flap = resting ? 0.4f + 0.3f * (float) Math.sin(t * 3) : (float) Math.abs(Math.sin(t * 18));
+        float flap = resting ? 0.4f + 0.3f * (float) Math.sin(t * 3) : bump(t * 18);
         g.save();
         g.translate(x, y);
         float wing = 18 * (0.25f + flap);

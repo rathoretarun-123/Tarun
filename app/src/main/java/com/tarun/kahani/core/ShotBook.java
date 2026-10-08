@@ -22,14 +22,8 @@ import java.util.Map;
 public final class ShotBook {
     private ShotBook() {}
 
-    static final String STABLE = "static background, no background movement, background locked, smooth motion, no morphing, "
-            + "consistent character, temporal coherence";
-    static final String CAMERA = "locked tripod, static shot, static background, no camera movement, smooth 24fps, no morphing, no wobble";
-    /** Words the protocol never allows in a generation prompt (P4, C3). */
-    static final String[][] FORBIDDEN = {{"running fast", "walking"}, {"running", "walking"}, {"runs", "walks"}, {"ran ", "walked "},
-            {"flying", "standing"}, {"spinning", "turning slowly"}, {"fast movement", "small movement"}, {"camera follows", ""},
-            {"zooms", ""}, {"zoomed", ""}, {"pans", ""}, {"shaky", ""}, {"handheld", ""}, {"cropped", ""}, {"16:9", ""}, {"9:16", ""},
-            {" wide ", " full "}, {"jumps", "steps"}, {"jumping", "standing"}};
+    static final String STABLE = TechnicalDirector.STABLE;
+    static final String CAMERA = TechnicalDirector.CAMERA;
 
     public static final String[] OBJECTS = {"तलवार", "sword", "भाला", "spear", "ढाल", "shield", "छड़ी", "wand", "stick", "शीशा", "दर्पण", "mirror",
             "पोटली", "potli", "satchel", "bag", "थैला", "घंटा", "घंटी", "bell", "दीया", "दीपक", "diya", "lamp", "लालटेन", "lantern", "मशाल", "torch",
@@ -55,14 +49,7 @@ public final class ShotBook {
         return Bible.oneLine(s).replaceFirst("^[*•\\s]+", "");
     }
 
-    static String clean(String s) {
-        String o = " " + (s == null ? "" : s) + " ";
-        for (String[] f : FORBIDDEN) {
-            int i;
-            while ((i = o.toLowerCase(Locale.ROOT).indexOf(f[0])) >= 0) o = o.substring(0, i) + f[1] + o.substring(i + f[0].length());
-        }
-        return o.trim().replaceAll("\\s+", " ");
-    }
+    static String clean(String s) { return TechnicalDirector.clean(s); }
 
     static String ground(int set) {
         switch (set) {
@@ -142,6 +129,7 @@ public final class ShotBook {
         Film film = d.direct(null);
         StringBuilder b = new StringBuilder();
         String ar = aspect == null ? "16:9" : aspect;
+        b.append(TechnicalDirector.PROTOCOL).append("\n\n");
         b.append("TECHNICAL DIRECTOR PACKAGE — ").append(st.title).append("\n");
         b.append("============================================================\n");
         b.append("FINAL_AR = ").append(ar).append("   (decided once; set it as the generator's shape.aspect_ratio parameter, never write it in a prompt)\n");
@@ -293,33 +281,38 @@ public final class ShotBook {
             b.append("6. CAMERA: ").append(CAMERA).append("\n");
             // lip-sync: only in a front-facing close-up, at most six words per shot
             if (line != null && !sh.reaction) {
-                List<Film.Shot> parts = byLine.get(sh.line);
-                int idx = parts == null ? 0 : parts.indexOf(sh), total = parts == null ? 1 : parts.size();
-                List<String> words = chunks(line.shown, 6);
-                int per = (int) Math.ceil(words.size() / (float) total);
-                List<String> mine = words.subList(Math.min(words.size(), idx * per), Math.min(words.size(), (idx + 1) * per));
-                char sub = 'a';
-                for (String w : mine) {
-                    b.append("   LIP-SYNC ").append(id).append(sub++).append(": \"").append(w).append("\" — close-up, front-facing 0 deg, face 65-75% of the frame, ")
-                            .append("mouth clearly visible, soft frontal light with a catch-light in the eyes, head almost still, contains_speech = true")
-                            .append(line.manner.length() > 0 ? ", said: " + Bible.oneLine(line.manner) : "").append("\n");
-                }
+                // exactly the words heard in this shot (at most six, timed like the film's own lip-sync shots)
+                String w = sh.spoken.length() > 0 ? sh.spoken : Director.wordsIn(line, sh.t, sh.t + sh.dur);
+                if (w.length() > 0) b.append("   LIP-SYNC ").append(id).append(": \"").append(w).append("\" — ").append(TechnicalDirector.LIP_SYNC)
+                        .append(line.manner.length() > 0 ? ", said: " + Bible.oneLine(line.manner) : "").append("\n");
                 if (sh.size < ShotPlanner.CU) b.append("   (This framing is not a close-up: make it silent and add the lip-sync in post, e.g. Wav2Lip.)\n");
             }
-            String cloth = inFrame.isEmpty() ? "" : " Clothes have weight: fabric with gravity folds, not weightless.";
-            String hands = sh.size >= ShotPlanner.CU ? " Hands out of the frame." : " Hands with 5 fingers, anatomically correct, or holding a prop.";
-            b.append("IMAGE PROMPT (first frame): Parameters: shape.aspect_ratio = FINAL_AR; reference_image = the Lock Sheet of each character named. ")
-                    .append("Premium 3D animated feature still, ").append(framing(sh.size)).append(". CHARACTERS: ").append(chars.length() > 0 ? chars : "none")
-                    .append(". PLACEMENT: ").append(placement).append(". ACTION (the moment it begins): ").append(action).append(". GROUNDING: ").append(groundingTxt)
-                    .append(". LIGHTING: ").append(lighting).append(". CAMERA: ").append(CAMERA).append(".").append(cloth).append(hands).append(" No text.\n");
-            b.append("VIDEO PROMPT (from the approved first frame, 3 s): image input = first frame of shot ").append(id).append(". Motion: ").append(action)
-                    .append("; anticipation before any move (weight shifts first), slow in and slow out, follow-through: hair and dupatta settle 0.5 s after the head stops.")
-                    .append(cloth).append(" ").append(STABLE).append(", feet firmly planted, shadow under feet touching the ground. CAMERA: ").append(CAMERA)
-                    .append(line != null && !sh.reaction && sh.size >= ShotPlanner.CU ? ". contains_speech = true" : ". contains_speech = false").append("\n");
-            b.append("VALIDATION: [✔] reference image per character  [✔] costume verbatim  [✔] foreground/midground/background + thirds + depth  ")
-                    .append("[✔] ground contact + shadow  [✔] motion under 15% of the frame  [✔] static camera  [✔] aspect ratio as a parameter  ")
-                    .append(line != null && !sh.reaction ? (sh.size >= ShotPlanner.CU ? "[✔] lip-sync in a front close-up, at most 6 words per shot  " : "[✔] silent (lip-sync in post)  ") : "")
-                    .append("[✔] no morphing, static background, smooth motion\n\n");
+            String hands = sh.size >= ShotPlanner.CU ? "hands out of the frame" : TechnicalDirector.HANDS;
+            boolean speech = line != null && !sh.reaction;
+            String refs = inFrame.isEmpty() ? "none" : "";
+            for (Film.Actor a : inFrame) refs += (refs.length() > 0 ? ", " : "") + "Lock Sheet of " + a.c.shown();
+            // the ratio is a parameter: kept out of the text while it is checked, filled in last (C3)
+            String image = TechnicalDirector.fill(TechnicalDirector.IMAGE_TEMPLATE, "FINAL_AR", "@AR@", "REFERENCES", refs, "FRAMING", framing(sh.size),
+                    "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
+                    "LIGHTING", lighting, "HANDS", hands);
+            String video = TechnicalDirector.fill(TechnicalDirector.VIDEO_TEMPLATE, "SHOT", id, "FINAL_AR", "@AR@",
+                    "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
+                    "LIGHTING", lighting, "SPEECH", speech && sh.size >= ShotPlanner.CU ? "contains_speech = true" : "contains_speech = false");
+            // the validation layer: every prompt is checked before it is written; what fails is corrected first
+            TechnicalDirector.Shot chk = new TechnicalDirector.Shot();
+            chk.id = id; chk.characters = chars.toString(); chk.placement = placement; chk.action = action; chk.grounding = groundingTxt;
+            chk.lighting = lighting; chk.prompt = image + "\n" + video; chk.seconds = Math.min(sh.dur, TechnicalDirector.MAX_SHOT_SECONDS);
+            chk.motion = sh.motion; chk.speech = speech; chk.closeUp = sh.size >= ShotPlanner.CU; chk.words = sh.words;
+            List<String> left = TechnicalDirector.correct(chk);
+            if (!chk.fixes.isEmpty()) { image = clean(image); video = clean(video); }
+            image = image.replace("@AR@", ar); video = video.replace("@AR@", ar);
+            b.append("IMAGE PROMPT (first frame):\n").append(image).append("\n");
+            b.append("VIDEO PROMPT (from the approved first frame, 3 s):\n").append(video).append("\n");
+            b.append("VALIDATION: ").append(left.isEmpty() ? "passed — reference image per character, costume verbatim, layers + thirds + depth, ground contact + shadow, "
+                    + "motion under 15% of the frame, static camera, aspect ratio as a parameter, " + (speech ? (chk.speech ? "lip-sync in a front close-up of at most 6 words, " : "silent (lip-sync in post), ") : "")
+                    + "no morphing / static background / smooth motion" : "NOT passed: " + left);
+            if (!chk.fixes.isEmpty()) b.append("  (corrected: ").append(chk.fixes).append(")");
+            b.append("\n\n");
         }
 
         // ---- 6. error correction

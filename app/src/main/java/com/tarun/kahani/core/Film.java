@@ -28,6 +28,13 @@ public final class Film {
         public float light = 0.4f;
         public boolean reaction;
         public int line = -1;            // the dialogue line spoken in this shot (index into lines), or -1
+        /** Technical Director checks: the largest movement of a character (fraction of the frame width), the
+         *  words spoken in the shot, how many actions start in it. */
+        public float motion;
+        public int words, actions;
+        public boolean speech;
+        /** The words spoken in this shot (lip-sync shots). */
+        public String spoken = "";
     }
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;
@@ -121,6 +128,8 @@ public final class Film {
             if (Math.abs(l.t - t) < 0.001f && l.moveDur == 0) return l;
             Key k = l.copy();
             k.t = t;
+            // a character still on the way keeps going (from where they are) instead of arriving all at once
+            if (l.moveDur > 0 && t > l.t && t < l.t + l.moveDur) { k.moveDur = l.t + l.moveDur - t; k.run = l.run; }
             keys.add(k);
             return k;
         }
@@ -160,6 +169,7 @@ public final class Film {
         public boolean still;                 // a strong performance: the camera holds perfectly still
         public int angle;                     // -1 high angle (vulnerable), 0 eye level, +1 low angle (power)
         public float light = -1;              // 0 soft and warm .. 1 hard and directional (-1 = from the scene's mood)
+        public boolean keep;                  // a cut the protocol needs (a new group of at most six words): never dropped
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

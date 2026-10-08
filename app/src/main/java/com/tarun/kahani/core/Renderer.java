@@ -40,19 +40,36 @@ public final class Renderer {
         g.color(0xFF000000);
         g.rect(0, 0, vw, vh);
         if (s != null) {
-            switch (s.type) {
-                case Film.S_TITLE: drawTitle(g, s, t); break;
-                case Film.S_CARD: drawCard(g, s, t); break;
-                case Film.S_END: drawEnd(g, s, t); break;
-                default: drawScene(g, s, t);
+            int si = film.segs.indexOf(s);
+            Film.Seg prev = si > 0 ? film.segs.get(si - 1) : null, next = si + 1 < film.segs.size() ? film.segs.get(si + 1) : null;
+            // one scene melts into the next (a dissolve), like a film, instead of going through black
+            boolean dissolveIn = prev != null && prev.type == Film.S_SCENE && s.type == Film.S_SCENE && t - s.t0 < DISSOLVE;
+            boolean dissolveOut = next != null && next.type == Film.S_SCENE && s.type == Film.S_SCENE;
+            if (dissolveIn) {
+                float keepFollow = followX;
+                drawScene(g, prev, t);
+                followX = keepFollow;
+                g.save();
+                g.setAlpha(Math.max(0, (t - s.t0) / DISSOLVE));
+                drawScene(g, s, t);
+                g.restore();
+            } else {
+                switch (s.type) {
+                    case Film.S_TITLE: drawTitle(g, s, t); break;
+                    case Film.S_CARD: drawCard(g, s, t); break;
+                    case Film.S_END: drawEnd(g, s, t); break;
+                    default: drawScene(g, s, t);
+                }
             }
             float a = 1f;
-            if (s.fadeIn > 0) a = Math.min(a, (t - s.t0) / s.fadeIn);
-            if (s.fadeOut > 0) a = Math.min(a, (s.t1 - t) / s.fadeOut);
+            if (s.fadeIn > 0 && !dissolveIn && !(prev != null && prev.type == Film.S_SCENE && s.type == Film.S_SCENE)) a = Math.min(a, (t - s.t0) / s.fadeIn);
+            if (s.fadeOut > 0 && !dissolveOut) a = Math.min(a, (s.t1 - t) / s.fadeOut);
             if (a < 1f) { g.color(Puppet.alpha(0xFF000000, 1f - Math.max(0, a))); g.rect(0, 0, vw, vh); }
         }
         g.restore();
     }
+
+    static final float DISSOLVE = 0.9f;
 
     // ================================================================== title, cards, end
 
@@ -702,6 +719,9 @@ public final class Renderer {
         p.blink = blink(t, a.order);
         if (film != null && Sets.outdoorSet(s.set)) { p.wind = film.wind(t); p.wet = film.wetness(t); }
         float quakeNow = film == null ? 0 : film.weather(Film.W_QUAKE, t);
+        p.sit = sitAmount(a, t);
+        if (p.sit > 0 && p.sit < 1 && k.body != Pose.SIT) p.body = Pose.STAND;        // getting up: still rising
+        int seat = seatOf(a, t);
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
         for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; }
@@ -791,10 +811,20 @@ public final class Renderer {
         g.translate(x + mo.dx, y + mo.dy);
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;
+        if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
+        g.save();
         if (sp != null) drawSprite(g, sp, a.look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             Puppet.draw(g, a.look, p, h);
+        }
+        g.restore();
+        // seated on a throne or stool: its front (cushion edge, armrests) is in front of the sitter's legs
+        if (seat >= Film.SEAT_STOOL && p.sit > 0.35f && p.body != Pose.LIE) {
+            g.save();
+            g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
+            drawSeat(g, seat, h, true);
+            g.restore();
         }
         g.restore();
     }
@@ -896,6 +926,7 @@ public final class Renderer {
                     break;
                 case Film.G_TWIRL:
                     p.armR = 140; p.elbowR = 120 + s * 12;
+                    p.twirl = true;
                     p.emotion = Pose.PROUD;
                     break;
                 case Film.G_HOLD_HEAD:
@@ -916,10 +947,33 @@ public final class Renderer {
                     p.emotion = Pose.ANGRY;
                     break;
                 case Film.G_JUMP: {
-                    float d = act.t1 - act.t0;
-                    float v = Math.min(1, u / d);
-                    mo.dy -= (float) Math.sin(v * Math.PI) * 70;
-                    p.armL = 150; p.armR = 150;
+                    // a real jump: crouch, take off, fly on a parabola under gravity, land and squash
+                    float d = act.t1 - act.t0, crouch = Math.min(0.15f, d * 0.2f), air = d - crouch - 0.12f;
+                    if (u < crouch) { mo.sy *= 1 - 0.1f * (u / crouch); }
+                    else if (u < crouch + air) {
+                        float a2 = u - crouch, peak = 80, g2 = 8 * peak / (air * air), v0 = g2 * air / 2;
+                        mo.dy -= v0 * a2 - 0.5f * g2 * a2 * a2;
+                        mo.sy *= 1.06f;
+                        p.armL = 150; p.armR = 150;
+                    } else { mo.sy *= 1 - 0.1f * (1 - (u - crouch - air) / 0.12f); }
+                    break;
+                }
+                case Film.G_BOW: {
+                    float k2 = (float) Math.sin(Math.PI * Math.min(1, u / (act.t1 - act.t0)));
+                    p.tilt += 18 * k2; p.nod += 0.8f * k2; p.headTilt += 4 * k2;
+                    p.armL = 55; p.armR = 55; p.elbowL = 115; p.elbowR = 115;     // hands together: namaste
+                    break;
+                }
+                case Film.G_WAVE:
+                    p.wave = 1; p.armR = 150 + (float) Math.sin(u * 12) * 20; p.elbowR = 30;
+                    if (p.emotion == Pose.NEUTRAL) p.emotion = Pose.HAPPY;
+                    break;
+                case Film.G_NOD:
+                    p.nod += (float) Math.sin(u * 10) * 0.9f;
+                    break;
+                case Film.G_TURN: {
+                    float k2 = Math.min(1, u / (act.t1 - act.t0));
+                    mo.sx *= Math.max(0.15f, Math.abs((float) Math.cos(Math.PI * k2)));
                     break;
                 }
                 case Film.G_SHAKE_HEAD:
@@ -992,6 +1046,86 @@ public final class Renderer {
     private final Pose pose2 = new Pose();
     private final float[] hand = new float[2];
 
+    /** 0 standing .. 1 seated: sitting down and getting up each take about 0.7 s. */
+    static float sitAmount(Film.Actor a, float t) {
+        Film.Key cur = null, prev = null;
+        float runStart = 0;
+        boolean sitting = false;
+        for (Film.Key k : a.keys) {
+            if (k.t > t) break;
+            boolean s2 = k.body == Pose.SIT;
+            if (cur == null || s2 != sitting) runStart = k.t;
+            prev = cur;
+            cur = k;
+            sitting = s2;
+        }
+        if (cur == null) return 0;
+        float u = Math.min(1, (t - runStart) / 0.7f);
+        u = u * u * (3 - 2 * u);
+        if (sitting) return runStart <= a.keys.get(0).t ? 1 : u;    // already seated when the scene starts
+        boolean wasSitting = false;
+        for (Film.Key k : a.keys) { if (k.t >= runStart) break; wasSitting = k.body == Pose.SIT; }
+        return wasSitting ? 1 - u : 0;
+    }
+
+    /** The seat of the last sitting key up to t. */
+    static int seatOf(Film.Actor a, float t) {
+        int seat = -1;
+        for (Film.Key k : a.keys) { if (k.t > t) break; if (k.body == Pose.SIT) seat = k.seat; }
+        return seat;
+    }
+
+    /**
+     * A seat (feet line at 0,0; h = the sitter's standing height). front = only the parts in front of a seated
+     * person (cushion edge and armrests), drawn over them so the folded legs read as sitting.
+     */
+    private void drawSeat(Gfx g, int seat, float h, boolean front) {
+        float top = -h * 0.3f, w = h * 0.62f;
+        switch (seat) {
+            case Film.SEAT_THRONE: {
+                if (!front) {
+                    // carved golden back with red velvet, jewels and finials
+                    float bt = -h * 1.02f;
+                    g.begin(); g.moveTo(-w * 0.52f, top); g.lineTo(-w * 0.52f, bt + h * 0.12f); g.quadTo(0, bt - h * 0.1f, w * 0.52f, bt + h * 0.12f); g.lineTo(w * 0.52f, top); g.close();
+                    g.linear(-w * 0.5f, 0, w * 0.5f, 0, 0xFFB8860B, 0xFFF6D365); g.fillPath();
+                    g.begin(); g.moveTo(-w * 0.4f, top); g.lineTo(-w * 0.4f, bt + h * 0.16f); g.quadTo(0, bt - h * 0.02f, w * 0.4f, bt + h * 0.16f); g.lineTo(w * 0.4f, top); g.close();
+                    g.linear(0, bt, 0, top, 0xFF7F0000, 0xFFC62828); g.fillPath();
+                    g.color(0x22FFFFFF); g.oval(-w * 0.15f, bt + h * 0.3f, w * 0.08f, h * 0.25f);
+                    g.color(0xFF1B5E20); g.oval(0, bt + h * 0.02f, h * 0.03f, h * 0.03f);
+                    g.color(0xFFFFE082); g.oval(-w * 0.52f, bt + h * 0.1f, h * 0.03f, h * 0.03f); g.oval(w * 0.52f, bt + h * 0.1f, h * 0.03f, h * 0.03f);
+                    // legs
+                    g.linear(0, top, 0, 0, 0xFFC9A227, 0xFF8B6914);
+                    g.rect(-w * 0.5f, top, h * 0.06f, -top); g.rect(w * 0.5f - h * 0.06f, top, h * 0.06f, -top);
+                    // seat cushion
+                    g.linear(0, top - h * 0.04f, 0, top + h * 0.04f, 0xFFD32F2F, 0xFF8E0000);
+                    g.roundRect(-w * 0.5f, top - h * 0.035f, w, h * 0.07f, h * 0.02f);
+                }
+                // armrests and the cushion's gold-trimmed front edge
+                g.linear(0, top - h * 0.14f, 0, top + h * 0.06f, 0xFFF6D365, 0xFFB8860B);
+                g.roundRect(-w * 0.6f, top - h * 0.14f, w * 0.14f, h * 0.2f, h * 0.025f);
+                g.roundRect(w * 0.46f, top - h * 0.14f, w * 0.14f, h * 0.2f, h * 0.025f);
+                g.color(0xFFFFE082); g.oval(-w * 0.53f, top - h * 0.15f, h * 0.025f, h * 0.025f); g.oval(w * 0.53f, top - h * 0.15f, h * 0.025f, h * 0.025f);
+                g.linear(0, top, 0, top + h * 0.08f, 0xFFC62828, 0xFF7F0000);
+                g.roundRect(-w * 0.46f, top + h * 0.0f, w * 0.92f, h * 0.075f, h * 0.02f);
+                g.color(0xFFE0B040); g.rect(-w * 0.46f, top + h * 0.065f, w * 0.92f, h * 0.012f);
+                break;
+            }
+            case Film.SEAT_STOOL:
+                if (!front) {
+                    g.color(0xFF6D4C41);
+                    g.rect(-w * 0.36f, top, h * 0.035f, -top); g.rect(w * 0.36f - h * 0.035f, top, h * 0.035f, -top);
+                }
+                g.linear(0, top, 0, top + h * 0.06f, 0xFFA1887F, 0xFF6D4C41);
+                g.roundRect(-w * 0.42f, top, w * 0.84f, h * 0.055f, h * 0.02f);
+                break;
+            case Film.SEAT_ROCK:
+                if (!front) { g.color(0xFF7E7E74); g.oval(0, top * 0.45f, w * 0.55f, -top * 0.6f); }
+                g.color(0xFF9A9A8E); g.oval(0, top * 0.25f, w * 0.5f, -top * 0.3f);
+                break;
+            default:
+        }
+    }
+
     /** Draws one character in a given pose at (0,0) = feet (previews and checks). */
     public void drawPosed(Gfx g, Story.CharacterDef c, Pose p, float h) {
         Art.Sprite sp = art == null ? null : art.sprites.get(c.id);
@@ -1062,8 +1196,13 @@ public final class Renderer {
             st.legRAng = sw * 4 * p.walkAmt;
             st.headRot += sw * 1.2f;
         }
+        st.nod += p.nod;
+        if (p.wave > 0) st.armR = 20 + 7 * (float) Math.sin(t * 12);
+        st.twirl = p.twirl;
+        st.sit = p.sit;
+        if (p.sit > 0) st.lean -= 2 * p.sit;
         switch (p.body) {
-            case Pose.SIT: st.legScale = 0.72f; st.lean -= 2; break;
+            case Pose.SIT: break;
             case Pose.KNEEL: st.legScale = 0.7f; st.lean += 4; break;
             case Pose.CROUCH: st.legScale = 0.75f; st.lean += 9; st.nod += 0.4f; break;
             default:
@@ -1297,6 +1436,10 @@ public final class Renderer {
                     sparkles(g, t, x - 120, f.y - 120, 240, 240, 14, f.color == 0 ? 0xFFFFF59D : f.color);
                 } break;
                 case Film.FX_SPLASH: if (!behind) splash(g, f, u); break;
+                case Film.FX_SEAT: if (behind) {
+                    float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 400;
+                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, hh, false); drawSeat(g, f.kind, hh, true); g.restore();
+                } break;
                 case Film.FX_STONE: if (!behind) {
                     // the stone's arc from the hand, then the splash and the rings of waves (or a puff of dust)
                     float flight = f.t2 - f.t0;

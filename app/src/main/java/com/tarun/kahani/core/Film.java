@@ -55,12 +55,13 @@ public final class Film {
         public Actor anchorActor;
         public boolean visible = true, run, disguised, noHeadwear, wearsTurban, redFace, tears, netted, sweat, eyesShut;
         public int holdR = Pose.I_NONE, holdL = Pose.I_NONE;
+        public int seat = -1;       // when sitting: SEAT_* (-1 = none drawn)
         public Key copy() {
             Key k = new Key();
             k.t = t; k.moveDur = 0; k.x = x; k.depth = depth; k.body = body; k.facing = facing; k.emotion = emotion; k.anchor = anchor;
             k.anchorActor = anchorActor; k.visible = visible; k.run = false; k.disguised = disguised; k.noHeadwear = noHeadwear;
             k.wearsTurban = wearsTurban; k.redFace = redFace; k.tears = tears; k.netted = netted; k.sweat = sweat; k.eyesShut = eyesShut;
-            k.holdR = holdR; k.holdL = holdL;
+            k.holdR = holdR; k.holdL = holdL; k.seat = seat;
             return k;
         }
     }
@@ -70,7 +71,11 @@ public final class Film {
             G_PUSH = 16, G_PULL_ROPE = 17, G_TWIRL = 18, G_HOLD_HEAD = 19, G_REACH = 20, G_FIST = 21, G_SCRATCH = 22,
             G_JUMP = 23, G_SHAKE_HEAD = 24, G_CLUTCH = 25, G_WALK_PLACE = 26, G_BOUNCE = 27, G_MIRROR = 28, G_THROW = 29,
             G_SPLASH = 30, G_WIGGLE = 31, G_COUGH = 32, G_PLAY = 33, G_LOOK_UP = 34, G_WHISPER = 35, G_PROUD = 36,
-            G_ROAR = 37, G_BLOCK = 38, G_STEP_BACK = 39, G_OFFER = 40, G_HOLD_HAND = 41;
+            G_ROAR = 37, G_BLOCK = 38, G_STEP_BACK = 39, G_OFFER = 40, G_HOLD_HAND = 41, G_BOW = 42, G_WAVE = 43, G_NOD = 44,
+            G_TURN = 45;
+
+    /** Seats under a sitting character. */
+    public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;
 
     public static final class Act {
         public float t0, t1;
@@ -117,7 +122,8 @@ public final class Film {
             FX_STONE = 23,        // a: the thrower; x, y: where it lands; t2: when it lands
             FX_WATER_HIT = 24,    // something falls into water at x, y (color = size 1..3)
             FX_THROW = 25,        // a: thrower, b: target (or x, y); kind: what flies
-            FX_FALL = 26;         // something falls from above at x (kind) and bounces
+            FX_FALL = 26,         // something falls from above at x (kind) and bounces
+            FX_SEAT = 27;         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a
 
     public static final class Fx {
         public float t0, t1;

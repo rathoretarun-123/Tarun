@@ -32,6 +32,10 @@ public final class Pose {
     public float time;                 // seconds, for idle motion (hair, cloak)
     public float wind;                 // wind on hair and clothes (+ blows to the right)
     public float wet;                  // 0 dry .. 1 soaked
+    public float sit;                  // 0 standing .. 1 seated (sitting down and getting up move through it)
+    public float nod;                  // + head down, - head up
+    public float wave;                 // > 0 while waving: the arm swings out and back
+    public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
     public long seed;
 
     public void reset() {
@@ -39,5 +43,6 @@ public final class Pose {
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
+        sit = 0; nod = 0; wave = 0; twirl = false;
     }
 }

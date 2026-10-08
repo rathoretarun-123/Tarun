@@ -368,7 +368,10 @@ public final class Director {
     private int dlgCount;
     private Film.Actor lastSpeaker;
 
+    private boolean leading;
+
     private float stagePart(int si, Story.Scene sc, int pi, int nParts, int b0, int b1, String where, int prevTod, float t) {
+        leading = true;
         seg = new Film.Seg();
         seg.type = Film.S_SCENE;
         seg.scene = si;
@@ -477,7 +480,7 @@ public final class Director {
                     tc = enter(a, tc, sent, far);
                 }
             }
-            if (b.type == Story.Beat.DIALOGUE) tc = dialogue(si, bi, b, tc);
+            if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
         }
         seg.t1 = tc + 0.8f;
@@ -694,6 +697,9 @@ public final class Director {
 
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
         if (m == null || m.length() == 0) return;
+        List<Film.Actor> me = new ArrayList<Film.Actor>();
+        me.add(a);
+        postureFrom(m, t0, a, me);
         userEffect(m, t0);
         natureFrom(m, t0, a);
         if (Txt.has(m, "तलवार")) {
@@ -767,7 +773,7 @@ public final class Director {
             cam(t0 + 0.1f, 640, 372, 1.06f, 5.0f);
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
-        estab = establishing;
+        estab = establishing || leading;      // descriptions before anyone speaks set how things are from the start
         String cue = newCues(b.cue, text);
         if (cue.length() > 0) {
             Film.Actor who = null;
@@ -919,7 +925,7 @@ public final class Director {
             focusSet = true;
             d = Math.max(d, 2.5f);
         }
-        if (Txt.has(s, "बैठा है", "बैठा हुआ", "पर बैठा") && subj != null && subj.look.kind != Look.MONKEY) { Film.Key k = subj.at(ts(t)); k.body = Pose.SIT; }
+        d = Math.max(d, postureFrom(s, t, subj, group));
         if (Txt.has(s, "मसल") && subj != null) { Film.Key k = subj.at(t); k.holdR = Pose.I_FLOWER; subj.acts.add(new Film.Act(t + 0.5f, t + 2f, Film.G_CRUSH)); Film.Key k2 = subj.at(t + 2f); k2.holdR = Pose.I_NONE; d = Math.max(d, 2.2f); }
         if (Txt.has(s, "आँखें") && Txt.has(s, "धधक", "दहक", "चमक") && subj != null && !subj.look.hero) {
             camOn(subj, t, 1.9f); focusSet = true; film.sfx.add(new Film.Sfx(Film.SFX_ROAR, t, 1.2f, 0.25f));
@@ -1331,6 +1337,72 @@ public final class Director {
         seg.fx.add(f);
         film.sfx.add(new Film.Sfx(Film.SFX_THUNDER, t + 0.3f + Nature.rnd(i, 5) * 0.6f, 5f, 0.85f));
         shake(t + 0.35f, t + 1.1f);
+    }
+
+    // ================================================================== postures and gestures
+
+    static final String[] SIT_DOWN = {"बैठ गया", "बैठ गई", "बैठ गए", "बैठ गयी", "बैठ जाता", "बैठ जाती", "बैठ जाते", "बैठते हैं", "बैठा है", "बैठी है",
+            "बैठे हैं", "बैठा हुआ", "बैठी हुई", "बैठे हुए", "पर बैठा", "पर बैठी", "पर बैठे", "बैठकर", "बैठ कर", "sat down", "sits down", "sat on", "sits on",
+            "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi"};
+    static final String[] STAND_UP = {"उठ खड़", "उठकर खड़", "खड़ा हो गया", "खड़ी हो गई", "खड़े हो गए", "खड़ी हो गयी", "उठ गया", "उठ गई", "उठ गए",
+            "stood up", "stands up", "got up", "gets up", "rose to", "uth khada"};
+    static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "सो गया", "सो गई", "सो गए", "lay down", "lies down", "fell asleep"};
+    static final String[] THRONE = {"सिंहासन", "राजगद्दी", "गद्दी पर", "throne"};
+    static final String[] STOOL = {"कुर्सी", "मूढ़ा", "मूढ़े", "चौकी", "बेंच", "चारपाई", "खाट", "chair", "stool", "bench", "cot"};
+    static final String[] ROCK = {"चट्टान", "पत्थर पर", "rock", "boulder"};
+    static final String[] FLOOR = {"ज़मीन पर", "जमीन पर", "धरती पर", "फर्श पर", "दरी", "चटाई", "floor", "ground", "on the grass", "घास पर"};
+    static final String[] BOW = {"प्रणाम", "नमस्ते", "नमस्कार", "झुककर", "सिर झुका", "bow", "bowed", "namaste", "pranam"};
+    static final String[] WAVE = {"हाथ हिला", "टाटा", "wave", "waved", "waving"};
+    static final String[] NOD = {"हाँ में सिर", "सिर हिलाकर हाँ", "nodded", "nods"};
+    static final String[] TURN = {"पीछे मुड़", "मुड़कर", "मुड़ गया", "मुड़ गई", "turned around", "turns around", "turned back"};
+
+    /** Sitting down, getting up, lying down, bowing, waving, nodding, turning — for the subject (or the whole group). */
+    private float postureFrom(String s, float t, Film.Actor subj, List<Film.Actor> group) {
+        if (subj == null) return 0;
+        float d = 0;
+        List<Film.Actor> who = group != null && group.size() > 1 && Txt.has(s, "सब", "सभी", "दोनों", "तीनों", "all", "both", "everyone") ? group : null;
+        if (who == null) { who = new ArrayList<Film.Actor>(); who.add(subj); }
+        boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
+        if (Txt.has(s, STAND_UP)) {
+            for (Film.Actor a : who) { Film.Key k = a.at(t + 0.1f); if (k.body == Pose.SIT || k.body == Pose.KNEEL || k.body == Pose.LIE) { k.body = Pose.STAND; } }
+            d = Math.max(d, 1.0f);
+        } else if (Txt.has(s, SIT_DOWN) && !birdLike && !Txt.has(s, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder")) {
+            int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK
+                    : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
+            for (Film.Actor a : who) {
+                Film.Key k = a.at(ts(t));
+                k.body = Pose.SIT;
+                int st = seat;
+                if (st == -2) {
+                    // a king or queen in their hall sits on the throne; others on a stool, or on the ground outdoors
+                    boolean royal = Txt.has(a.c.displayName + " " + a.c.fullName + " " + a.c.description, "राजा", "रानी", "महाराज", "king", "queen");
+                    st = royal && (seg.set == Sets.HALL || seg.set == Sets.COURTYARD) ? Film.SEAT_THRONE : Sets.outdoorSet(seg.set) ? Film.SEAT_FLOOR : Film.SEAT_STOOL;
+                }
+                k.seat = st;
+                // the seat is furniture: it stays in the place after they get up
+                if (st >= Film.SEAT_STOOL) {
+                    boolean have = false;
+                    for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && f.a == a) have = true;
+                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, ts(t)), ground, a, null); f.kind = st; }
+                }
+            }
+            d = Math.max(d, estab ? 0 : 1.0f);
+        } else if (Txt.has(s, LIE_DOWN)) {
+            for (Film.Actor a : who) { Film.Key k = a.at(t + 0.2f); k.body = Pose.LIE; }
+            d = Math.max(d, 1.2f);
+        }
+        if (Txt.has(s, BOW)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
+        if (Txt.has(s, WAVE)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.8f, Film.G_WAVE)); d = Math.max(d, 1.6f); }
+        if (Txt.has(s, NOD)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.2f, Film.G_NOD)); d = Math.max(d, 1.2f); }
+        if (Txt.has(s, TURN)) {
+            for (Film.Actor a : who) {
+                a.acts.add(new Film.Act(t, t + 0.36f, Film.G_TURN));
+                Film.Key k = a.at(t + 0.18f);
+                k.facing = -a.stateAt(t).facing;
+            }
+            d = Math.max(d, 0.8f);
+        }
+        return d;
     }
 
     /** The AI's cues for a line, without the events the text itself already sets off (no double lightning or stones). */

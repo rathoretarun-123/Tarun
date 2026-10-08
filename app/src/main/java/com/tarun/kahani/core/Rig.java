@@ -17,6 +17,9 @@ public final class Rig {
     public boolean legs;          // two separate legs (trousers, bare legs) — otherwise a skirt / robe
     public float armEnd;          // where the hands end (fraction of the picture height)
     public float armInner;        // distance from the middle where the arms start (fraction of shoulderHalf)
+    public final boolean[] armUp = new boolean[2];   // an arm raised beside the face (e.g. a hand on the moustache)
+    public float headHalf = 0.12f;                   // half the face width (fraction of the picture width)
+    public float eyeV;
     // face landmarks
     public boolean face;
     public float eLX, eLY, eRX, eRY, eR, mX, mY, mHW;
@@ -26,7 +29,8 @@ public final class Rig {
     /** How much each body mesh point is loose hair (0..1), from the picture's dark hair colours. */
     public float[] hairW;
 
-    public static final int BW = 14, BH = 28, FW = 16, FH = 16;
+    public static final int BW = 22, BH = 44, FW = 26, FH = 26;
+    public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows
 
     /** What the rig does in one frame. Angles in degrees (positive = clockwise on screen). */
     public static final class State {
@@ -34,7 +38,9 @@ public final class Rig {
         public float lean;                   // upper body
         public float armL, armR;             // outward swing of the arm on the picture's left / right side
         public float legLAng, legRAng, legLLift, legRLift;
-        public float legScale = 1;           // < 1 when sitting / kneeling
+        public float legScale = 1;           // < 1 when kneeling / crouching
+        public float sit;                    // 0 standing .. 1 seated: thighs fold towards the viewer, shins stay
+        public boolean twirl;                // the raised hand fidgets (twirling a moustache)
         public float breathe;                // -1..1
         // face, 0..1
         public float smile, frown, innerUp, browUp, browUpR, anger, wide, squint;
@@ -42,7 +48,7 @@ public final class Rig {
         public float time;
         public void reset() {
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
-            legScale = 1;
+            legScale = 1; sit = 0; twirl = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
         /** Moves the face part of this state towards target (k = 0..1 per frame). */
@@ -141,6 +147,36 @@ public final class Rig {
             g.armEnd = g.chinY + 0.36f * body;
             g.armInner = 0.55f;
         }
+        // an arm raised to the face: skin beside the head, well outside the face, between the eyes and shoulders
+        g.eyeV = s.faceKnown ? eyeY : g.top + 0.1f;
+        g.headHalf = headW / 2f / w;
+        int eyeRow = (int) (g.eyeV * h), shRow = (int) (g.chinY * h);     // beside the face: from the eyes to the chin
+        int[] armRows = new int[2];
+        int rowsN = 0;
+        // the face width from the eyes (the outline at eye level may already include a raised arm)
+        if (s.faceKnown && Math.abs(s.eyeRX - s.eyeLX) > 0.02f) headW = Math.abs(s.eyeRX - s.eyeLX) * w * 2.6f;
+        g.headHalf = headW / 2f / w;
+        for (int y = Math.max(topRow, eyeRow); y < Math.min(botRow, shRow); y++) {
+            rowsN++;
+            for (int side = 0; side < 2; side++) {
+                // what sticks out beside the face on this side: bright (a sleeve, a hand), not dark hair
+                int from = side == 0 ? Math.max(0, left[y]) : (int) (cxPx + headW * 0.7f);
+                int to = side == 0 ? (int) (cxPx - headW * 0.7f) : Math.min(w - 1, right[y]);
+                if (left[y] < 0 || to - from < headW * 0.3f) continue;
+                float lum = 0;
+                int n = 0, skin = 0;
+                for (int x = from; x <= to; x += 2) {
+                    int c = r.px[y * w + x];
+                    if ((c >>> 24) < 128) continue;
+                    n++;
+                    lum += (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 765f;
+                    if (Cutout.isSkin(c)) skin++;
+                }
+                if (n > headW * 0.08f && (lum / n > 0.42f || skin > n * 0.3f)) armRows[side]++;
+            }
+        }
+        if (DEBUG) System.out.println("armRows " + armRows[0] + "/" + armRows[1] + " of " + rowsN);
+        for (int side = 0; side < 2; side++) g.armUp[side] = rowsN > 4 && armRows[side] > rowsN * 0.3f;
         g.gapX = g.legs ? gapSum / two / w : g.cx;
         g.legHalf = g.legs ? halfSum / two / w : 0.1f;
         g.hairW = new float[(BW + 1) * (BH + 1)];
@@ -289,7 +325,13 @@ public final class Rig {
         f.hCos = (float) Math.cos(hr); f.hSin = (float) Math.sin(hr);
         f.lCos = (float) Math.cos(lr); f.lSin = (float) Math.sin(lr);
         for (int side = 0; side < 2; side++) {
-            double a = Math.toRadians(side == 0 ? s.armL : -s.armR);   // outward: the left arm turns clockwise
+            float ang = side == 0 ? s.armL : -s.armR;
+            if (armUp[side]) {
+                // a hand held at the face does not swing out; it fidgets (twirls the moustache), more when acting
+                float fid = (float) (Math.sin(s.time * 2.2 + side) * 2.5 + (s.twirl ? Math.sin(s.time * 7) * 5 : 0));
+                ang = (side == 0 ? 1 : -1) * fid;
+            }
+            double a = Math.toRadians(ang);   // outward: the left arm turns clockwise
             f.armC[side] = (float) Math.cos(a); f.armS[side] = (float) Math.sin(a);
         }
         float[] la = {s.legLAng, s.legRAng, (s.legLAng - s.legRAng) * 0.15f};
@@ -346,6 +388,15 @@ public final class Rig {
         float wArmV = smooth(armTop, armTop + 0.04f, v) * (1 - smooth(armBot - 0.03f, armBot + 0.02f, v));
         float off = (u - cx) / Math.max(0.05f, shoulderHalf);
         float wArmL = wArmV * smooth(-armInner + 0.1f, -armInner - 0.15f, off), wArmR = wArmV * smooth(armInner - 0.1f, armInner + 0.15f, off);
+        // a raised arm beside the face belongs to the arm, not the head
+        for (int side = 0; side < 2; side++) {
+            if (!armUp[side]) continue;
+            float out = (side == 0 ? cx - u : u - cx);
+            float wr = smooth(headHalf * 1.0f, headHalf * 1.3f, out) * smooth(eyeV - 0.05f, eyeV - 0.01f, v) * (1 - smooth(shoulderY, shoulderY + 0.03f, v));
+            if (wr <= 0) continue;
+            wHead *= 1 - wr;
+            if (side == 0) wArmL = Math.max(wArmL, wr); else wArmR = Math.max(wArmR, wr);
+        }
         // breathing: the chest widens a little
         float chest = smooth(shoulderY, shoulderY + 0.05f, v) * (1 - smooth(hipY - 0.08f, hipY, v));
         float px = f.L0 + (cx + (u - cx) * (1 + 0.012f * s.breathe * chest)) * f.W0, py = y;
@@ -373,16 +424,30 @@ public final class Rig {
         if (wLow <= 0) { o[0] = ux; o[1] = uy; return; }
         float lx, ly;
         float hy = f.T0 + hipY * f.H0;
+        // sitting: the thighs come towards the viewer (they shorten), the shins stay and the knees part a little
+        float sx2 = x, sy2 = y;
+        if (s.sit > 0) {
+            float knee = hipY + (bottom - hipY) * 0.5f;
+            if (legs) {
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = y - (knee - hipY) * f.H0 * 0.8f * s.sit;
+                sx2 = x + (u < gapX ? -1 : 1) * 0.035f * f.W0 * s.sit * smooth(hipY, knee, v);
+            } else {
+                // a skirt or robe settles and spreads over the seat
+                sy2 = hy + (y - hy) * (1 - 0.38f * s.sit);
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.12f * s.sit * smooth(hipY, bottom, v))) * f.W0;
+            }
+        }
         if (legs) {
             float side = smooth(gapX - 0.02f, gapX + 0.02f, u);     // 0 = left leg, 1 = right leg
             float jx = f.L0 + gapX * f.W0;
-            legPoint(f, x, y, jx - legHalf * f.W0, hy, 0, s.legLLift, s.legScale);
+            legPoint(f, sx2, sy2, jx - legHalf * f.W0, hy, 0, s.legLLift, s.legScale);
             float rlx = f.legTmp[0], rly = f.legTmp[1];
-            legPoint(f, x, y, jx + legHalf * f.W0, hy, 1, s.legRLift, s.legScale);
+            legPoint(f, sx2, sy2, jx + legHalf * f.W0, hy, 1, s.legRLift, s.legScale);
             lx = rlx + (f.legTmp[0] - rlx) * side;
             ly = rly + (f.legTmp[1] - rly) * side;
         } else {
-            legPoint(f, x, y, f.L0 + cx * f.W0, hy, 2, 0, Math.max(0.7f, s.legScale));
+            legPoint(f, sx2, sy2, f.L0 + cx * f.W0, hy, 2, 0, Math.max(0.7f, s.legScale));
             lx = f.legTmp[0]; ly = f.legTmp[1];
         }
         o[0] = ux + (lx - ux) * wLow;
@@ -508,6 +573,8 @@ public final class Rig {
 
     /** How far the feet come up (sitting, kneeling), so the picture can be lowered to keep them on the ground. */
     public float feetRise(State s, float h) {
-        return (1 - s.legScale) * (bottom - hipY) * h;
+        float rise = (1 - s.legScale) * (bottom - hipY) * h;
+        if (s.sit > 0) rise += (legs ? 0.8f * 0.5f : 0.38f) * s.sit * (bottom - hipY) * h;
+        return rise;
     }
 }

@@ -116,7 +116,7 @@ public class MakeFilm {
             for (String ts : System.getenv("TIMES").split(",")) {
                 float t = Float.parseFloat(ts);
                 r.render(g, t);
-                ImageIO.write(img, "jpg", new File(stills, String.format("t_%06.1f.jpg", t)));
+                ImageIO.write(img, "jpg", new File(stills, String.format("t_%08.3f.jpg", t)));
             }
             System.out.println("frames written");
             return;

@@ -187,6 +187,11 @@ public final class AndroidGfx implements Gfx {
             painter.paint(this);
             while (alphaStack.size() > depth) restore();
             c = saved; alpha = sa; shader = ss; color = sc;
+            // a real (Gaussian-like) blur, so the enlarged background is soft instead of blocky
+            int[] px = new int[lw * lh];
+            l.getPixels(px, 0, lw, 0, 0, lw, lh);
+            com.tarun.kahani.core.Blur.gauss(px, lw, lh, Math.max(1, Math.round(lw * 0.005f)));
+            l.setPixels(px, 0, lw, 0, 0, lw, lh);
             layers.put(key, l);
         }
         img.setAlpha((int) (255 * alpha));

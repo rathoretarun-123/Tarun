@@ -30,11 +30,11 @@ public final class Rig {
     public float[] hairW;
 
     /**
-     * The finest meshes: up to 48 x 96 cells over a person (96 x 48 over an animal) and 48 x 48 over the face.
+     * The finest meshes: 80 x 160 cells over a person (160 x 80 over an animal) and 96 x 96 over the face.
      * Each frame uses as many as the picture's size on screen needs (about one cell per 6 pixels), so a
      * character in a close-up bends as smoothly as a drawing, and small far-away figures cost little.
      */
-    public static final int BW = 64, BH = 128, FW = 64, FH = 64;
+    public static final int BW = 80, BH = 160, FW = 96, FH = 96;
     /** The most mesh columns and rows for this picture: tall for people, wide (the same number of points) for animals. */
     public int mw = BW, mh = BH;
     /** Screen pixels per mesh cell the fine mesh aims for. */
@@ -227,6 +227,17 @@ public final class Rig {
                 g.hairW[j * (BW + 1) + i] = n == 0 || v > g.hipY + 0.25f * (g.bottom - g.hipY) ? 0 : dark / (float) n;
             }
         }
+        // the face itself never sways like loose hair: brows, eyes, a moustache or a beard stay with the head
+        if (g.face) {
+            float fcx = (g.eLX + g.eRX) / 2, d = Math.max(0.02f, Math.abs(g.eRX - g.eLX)), ey = (g.eLY + g.eRY) / 2;
+            float dv = d * w / (float) h, fcy = (ey - 0.5f * dv + Math.max(g.chinY, g.mY + 0.4f * dv)) / 2;
+            float ry = Math.max(dv, (Math.max(g.chinY, g.mY + 0.4f * dv) - ey + 0.5f * dv) / 2) * 1.15f, rx = 1.25f * d;
+            for (int j = 0; j <= BH; j++) for (int i = 0; i <= BW; i++) {
+                float du = (i / (float) BW - fcx) / rx, dvv = (j / (float) BH - fcy) / ry;
+                float e = (float) Math.sqrt(du * du + dvv * dvv);
+                g.hairW[j * (BW + 1) + i] *= smooth(0.85f, 1.25f, e);
+            }
+        }
         if (g.face && L != null) g.makeFace(r, L);
         return g;
     }
@@ -411,8 +422,13 @@ public final class Rig {
         float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
         float hair = 0;
         if (hairW != null) {
-            int i = Math.max(0, Math.min(BW, Math.round(u * BW))), j = Math.max(0, Math.min(BH, Math.round(v * BH)));
-            hair = hairW[j * (BW + 1) + i] * smooth(top + 0.04f, top + 0.3f, v);
+            // between the grid points smoothly, so the fine face mesh and the body mesh agree everywhere
+            float gu = Math.max(0, Math.min(BW, u * BW)), gv = Math.max(0, Math.min(BH, v * BH));
+            int i = Math.min(BW - 1, (int) gu), j = Math.min(BH - 1, (int) gv);
+            float fu = gu - i, fv = gv - j;
+            int k = j * (BW + 1) + i;
+            float hw = (hairW[k] * (1 - fu) + hairW[k + 1] * fu) * (1 - fv) + (hairW[k + BW + 1] * (1 - fu) + hairW[k + BW + 2] * fu) * fv;
+            hair = hw * smooth(top + 0.04f, top + 0.3f, v);
         }
         float cloth = smooth(hipY, bottom, v) * (legs ? 0.3f : 1f);
         float t = s.time;
@@ -608,7 +624,9 @@ public final class Rig {
                 // nothing moves at the edges of the crop, so it melts into the picture below
                 float edge = Math.min(Math.min(i, FW - i) / (float) FW, Math.min(j, FH - j) / (float) FH);
                 float keep = smooth(0, 0.18f, edge);
-                head(f, x + dx * keep, y + dy * keep, f.o);
+                // exactly the body's own motion (head, lean, breathing) plus the expression: the face layer and
+                // the picture under it never drift apart, so no second pair of lips or eyes can show
+                move(f, s, x + dx * keep, y + dy * keep, f.o);
                 f.face[k++] = f.o[0];
                 f.face[k++] = f.o[1];
             }

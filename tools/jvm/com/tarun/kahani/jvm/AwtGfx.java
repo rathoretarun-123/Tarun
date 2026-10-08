@@ -232,10 +232,13 @@ public class AwtGfx implements Gfx {
             lg.dispose();
             g = saved; paint = sp; alpha = sa;
             stack.clear(); stack.addAll(savedStack);
+            int[] px = l.getRGB(0, 0, lw, lh, null, 0, lw);
+            com.tarun.kahani.core.Blur.gauss(px, lw, lh, Math.max(1, Math.round(lw * 0.005f)));
+            l.setRGB(0, 0, lw, lh, px, 0, lw);
             layers.put(key, l);
         }
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.drawImage(l, 0, 0, Math.round(w), Math.round(h), null);
     }
 

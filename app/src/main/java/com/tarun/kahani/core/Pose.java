@@ -37,10 +37,11 @@ public final class Pose {
     public float nod;                  // + head down, - head up
     public float wave;                 // > 0 while waving: the arm swings out and back
     public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
+    public boolean swing;              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
 
     public void reset() {
-        body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
+        body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; swing = false; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;

@@ -156,7 +156,7 @@ public final class Nature {
 
     // ================================================================== the living background
 
-    public static final int MW = 160, MH = 90;     // a very fine mesh: plants, water and falls bend smoothly
+    public static final int MW = 192, MH = 108;    // a very fine mesh: plants, water and falls bend smoothly
 
     /**
      * Mesh points for drawing a background picture with its plants swaying in the wind (a gentle breeze always)

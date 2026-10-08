@@ -25,10 +25,17 @@ public final class Mixer {
         for (int i = 0; i < n; i++) {
             float v = (e[i] / ref - 0.14f) / 0.8f;
             v = v < 0 ? 0 : v > 1 ? 1 : v;
-            y += (v > y ? 0.65f : 0.3f) * (v - y);   // fast open, slower close
+            y += (v > y ? 0.5f : 0.25f) * (v - y);   // quick to open, slower to close
             e[i] = y;
         }
-        return e;
+        // smoothed backwards too (no flicker between frames: real lips glide from syllable to syllable) ...
+        y = 0;
+        for (int i = n - 1; i >= 0; i--) { y += 0.4f * (e[i] - y); e[i] = 0.5f * (e[i] + y); }
+        // ... and the lips move a moment before the sound is heard (about 40 ms), as real speakers' do
+        int lead = 4;
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) o[i] = e[Math.min(n - 1, i + lead)];
+        return o;
     }
 
     /**
@@ -50,7 +57,7 @@ public final class Mixer {
                 double fc = sr / (2 * Math.PI) * Math.sqrt(d / e);
                 v = (float) Math.max(0, Math.min(1, (fc - 650) / 1500));
             }
-            y += 0.45f * (v - y);
+            y += 0.3f * (v - y);
             out[i] = y;
         }
         return out;

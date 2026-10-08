@@ -621,7 +621,7 @@ public final class Renderer {
             if (dof > 0.02f) {
                 g.save();
                 g.setAlpha(dof);
-                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.09f, bp);
+                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.25f, bp);
                 g.restore();
             }
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
@@ -744,11 +744,15 @@ public final class Renderer {
                 Film.Line l = film.lines.get(sp.line);
                 if (l.env == null || l.env.length == 0) {
                     // fallback: syllable-like motion
-                    return 0.35f + 0.35f * (float) Math.abs(Math.sin((t - sp.t0) * 11));
+                    return 0.3f + 0.3f * (0.5f - 0.5f * (float) Math.cos((t - sp.t0) * 22));
                 }
-                int i = (int) ((t - l.start) * 100);
+                // between the 10 ms steps, and closing gently at the very start and end of the line
+                float fi = (t - l.start) * 100;
+                int i = (int) Math.floor(fi);
                 if (i < 0 || i >= l.env.length) return 0;
-                return l.env[i];
+                float v = l.env[i] + (l.env[Math.min(l.env.length - 1, i + 1)] - l.env[i]) * (fi - i);
+                float edge = Math.min(t - sp.t0, sp.t1 - t);
+                return edge < 0.05f ? v * Math.max(0, edge) / 0.05f : v;
             }
         }
         return 0;
@@ -760,8 +764,10 @@ public final class Renderer {
             if (t >= sp.t0 && t < sp.t1) {
                 Film.Line l = film.lines.get(sp.line);
                 if (l.shape == null || l.shape.length == 0) return 0.5f + 0.3f * (float) Math.sin((t - sp.t0) * 7);
-                int i = (int) ((t - l.start) * 100);
-                return i < 0 || i >= l.shape.length ? 0.5f : l.shape[i];
+                float fi = (t - l.start) * 100;
+                int i = (int) Math.floor(fi);
+                if (i < 0 || i >= l.shape.length) return 0.5f;
+                return l.shape[i] + (l.shape[Math.min(l.shape.length - 1, i + 1)] - l.shape[i]) * (fi - i);
             }
         }
         return 0.5f;
@@ -834,10 +840,22 @@ public final class Renderer {
         } else {
             // idle breathing
             float br = (float) Math.sin(t * 2.1f + a.order);
-            mo.sy = 1 + br * 0.006f;
+            // (a rigged picture breathes through its own mesh: chest and shoulders, not the whole picture)
+            if (sp == null || sp.rig == null) mo.sy = 1 + br * 0.006f;
             p.bob = br * 1.2f;
         }
         applyActs(a, p, t);
+        if (p.holdR == Pose.I_WOOD_SWORD || p.holdR == Pose.I_SWORD) {
+            // a sword is carried for its fight only: swung while fighting, resting at the side just before and
+            // after, and put away once the fight is a few seconds over
+            boolean near = false;
+            for (Film.Act ac : a.acts) {
+                if (ac.type != Film.G_SWORD && ac.type != Film.G_BLOCK) continue;
+                if (t >= ac.t0 && t < ac.t1) { p.swing = true; near = true; }
+                else if (t >= ac.t0 - 1.5f && t < ac.t1 + 5) near = true;
+            }
+            if (!near) p.holdR = Pose.I_NONE;
+        }
         if (quakeNow > 0) {
             // the ground shakes: everyone staggers and is frightened
             mo.dx += (float) Math.sin(t * 47 + a.order) * 5 * quakeNow;
@@ -845,11 +863,14 @@ public final class Renderer {
             if (p.emotion == Pose.NEUTRAL || p.emotion == Pose.HAPPY) p.emotion = Pose.SCARED;
         }
         if (spk != null) {
-            // talking: small nods with the voice (a rigged picture nods its head instead of its whole body)
-            float m = p.mouth;
-            if (sp == null || sp.rig == null) mo.rot += (float) Math.sin(t * 5.3f + a.order) * 1.2f * (0.3f + m);
-            mo.dy -= m * 3;
-            if (p.armR < 30 && a.look.kind != Look.MONKEY) { p.armR = 30 + (float) Math.sin(t * 2.7f) * 15; p.elbowR = 40; }
+            // talking: the body stays planted (no bobbing with every syllable, which reads as shaking on screen);
+            // a drawn puppet sways slowly with the phrase, a picture only moves its head and lips
+            boolean picture = sp != null && sp.rig != null;
+            if (!picture) mo.rot += (float) Math.sin(t * 1.6f + a.order) * 0.8f;
+            if (p.armR < 30 && a.look.kind != Look.MONKEY) {
+                p.armR = picture ? 14 + (float) Math.sin(t * 1.1f + a.order) * 5 : 30 + (float) Math.sin(t * 2.7f) * 15;
+                p.elbowR = 40;
+            }
         }
 
         // ---- placement by anchor
@@ -1286,8 +1307,9 @@ public final class Renderer {
         st.lean = p.tilt;
         st.breathe = (float) Math.sin(t * 2.1f + p.seed);
         if (p.mouth > 0.02f) {
-            st.headRot += (float) Math.sin(t * 5.3f + p.seed) * 2.6f * (0.3f + p.mouth) * en;
-            st.nod += (float) Math.sin(t * 4.1f + p.seed) * 0.5f * (0.2f + p.mouth);
+            // a speaker's head stays almost still: a slow, small accent of the phrase, never a shake with every syllable
+            st.headRot += (float) Math.sin(t * 1.3f + p.seed) * 0.9f * en;
+            st.nod += (float) Math.sin(t * 1.7f + p.seed) * 0.18f;
         }
         if (p.walkAmt > 0) {
             float sw = (float) Math.sin(p.walk);
@@ -1303,7 +1325,7 @@ public final class Renderer {
         // the lips: the jaw opens with the voice, the corners follow the sound (wide "ee", round "oo")
         float open = p.mouth;
         if (open < 0.06f && p.emotion == Pose.SURPRISED) open = 0.3f;
-        if (open < 0.06f && p.emotion == Pose.LAUGH) open = 0.3f + 0.2f * Math.abs((float) Math.sin(t * 9));
+        if (open < 0.06f && p.emotion == Pose.LAUGH) open = 0.32f + 0.12f * (float) Math.sin(t * 9);
         st.jaw = open > 0.04f ? open : 0;
         st.lipWide = Math.max(0, Math.min(1, (p.mouthWide - 0.5f) * 2.2f));
         st.lipRound = Math.max(0, Math.min(1, (0.5f - p.mouthWide) * 2.2f));
@@ -1321,10 +1343,10 @@ public final class Renderer {
         switch (p.emotion) {
             case Pose.SAD: st.nod += 0.9f; st.armL -= 2; st.armR -= 2; st.lean += 1.5f; break;
             case Pose.ANGRY: st.lean += 3; st.nod += 0.3f; st.armL += 4; st.armR += 4; break;
-            case Pose.SCARED: st.lean -= 4; st.armL -= 3; st.armR -= 3; st.headRot += (float) Math.sin(t * 38) * 0.8f; break;
+            case Pose.SCARED: st.lean -= 4; st.armL -= 3; st.armR -= 3; st.headRot += (float) Math.sin(t * 17) * 0.35f; break;
             case Pose.SURPRISED: st.nod -= 0.6f; st.armL += 6; st.armR += 6; st.lean -= 2; break;
             case Pose.HAPPY: st.headRot += 3; break;
-            case Pose.LAUGH: st.nod -= 0.7f; st.headRot += (float) Math.sin(t * 7) * 3; st.armL += (float) Math.sin(t * 14) * 3; st.armR += (float) Math.sin(t * 14) * 3; break;
+            case Pose.LAUGH: st.nod -= 0.7f; st.headRot += (float) Math.sin(t * 3.5f) * 1.8f; st.armL += (float) Math.sin(t * 7) * 2; st.armR += (float) Math.sin(t * 7) * 2; break;
             case Pose.PROUD: st.nod -= 0.5f; st.lean -= 2; st.breathe += 1; break;
             case Pose.DETERMINED: st.nod += 0.2f; st.lean += 1.5f; break;
             case Pose.CURIOUS: st.headRot += 6; break;
@@ -1486,7 +1508,7 @@ public final class Renderer {
             // lip-sync mouth (open in surprise or laughter even when not speaking)
             float m = p.mouth;
             if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
-            if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.3f + 0.2f * Math.abs((float) Math.sin(p.time * 9));
+            if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.32f + 0.12f * (float) Math.sin(p.time * 9);
             if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f) {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
@@ -1498,22 +1520,22 @@ public final class Renderer {
                 g.color(0xF0200608);
                 g.oval(mx, cy, ow * 0.9f, oh * 0.92f);
                 if (gap > hw * 0.12f) {
-                    g.color(0xE8F2EEE6);   // upper teeth, a soft strip under the upper lip
-                    g.roundRect(mx - ow * 0.62f, cy - oh * 0.9f, ow * 1.24f, Math.min(oh * 0.55f, hw * 0.16f), hw * 0.06f);
+                    // upper teeth: a faint, rounded hint under the upper lip (a bright bar looks pasted on)
+                    float th = Math.min(oh * 0.42f, hw * 0.11f);
+                    g.color(0x80E6DDD2);
+                    g.oval(mx, cy - oh * 0.88f + th * 0.5f, ow * 0.5f, th * 0.5f);
                 }
                 if (st.jaw > 0.38f) { g.color(0xD8C8545E); g.oval(mx, cy + oh * 0.5f, ow * 0.55f, oh * 0.35f); }
-            } else if (m > 0.06f && !(rigged && rig.animal)) {
+            } else if (m > 0.12f && !(rigged && rig.animal)) {
+                // a picture that cannot be meshed here (lying down, head cut for a lost turban): no painted lips over
+                // the real ones, only a soft dark opening between them that grows with the voice
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;
                 float hw = sp.mouthHW * w;
-                float oh = hw * (0.18f + 0.62f * m);
-                float ow = hw * (0.95f - 0.15f * m);
-                g.color(sp.lip);
-                g.oval(mx, my + oh * 0.35f, ow + hw * 0.1f, oh + hw * 0.1f);
-                g.color(0xFF3B0E0E);
-                g.oval(mx, my + oh * 0.35f, ow, oh);
-                g.color(0xFFF5F2EA);
-                g.roundRect(mx - ow * 0.7f, my + oh * 0.35f - oh * 0.92f, ow * 1.4f, oh * 0.38f, oh * 0.15f);
-                if (m > 0.3f) { g.color(0xFFD9636B); g.oval(mx, my + oh * 0.35f + oh * 0.55f, ow * 0.55f, oh * 0.32f); }
+                float oh = hw * 0.32f * (m - 0.12f), ow = hw * 0.62f;
+                g.color(0x88300A0E);
+                g.oval(mx, my + oh * 0.5f, ow, oh + hw * 0.04f);
+                g.color(0xB01C0507);
+                g.oval(mx, my + oh * 0.5f, ow * 0.8f, oh * 0.8f + hw * 0.02f);
             }
             if (p.wearsTurban) {
                 float tx = left + sp.mouthX * w;
@@ -1534,7 +1556,8 @@ public final class Renderer {
             if (p.holdR == Pose.I_WOOD_SWORD || p.holdR == Pose.I_SWORD) {
                 g.save();
                 g.translate(hx, hy);
-                g.rotate(p.facing * (-40 + (float) Math.sin(p.time * 10) * 35));
+                // swinging in the fight; otherwise held low and still at the side, the blade pointing down and forward
+                g.rotate(p.swing ? p.facing * (40 + (float) Math.sin(p.time * 7) * 25) : p.facing * (150 + (float) Math.sin(p.time * 1.3f) * 2));
                 g.color(0xFF5D4037); g.line(0, 0, 0, 16, 7);
                 g.color(0xFFE5B530); g.line(-10, 0, 10, 0, 5);
                 g.color(p.holdR == Pose.I_SWORD ? 0xFFE0E0E0 : 0xFFC08A55);

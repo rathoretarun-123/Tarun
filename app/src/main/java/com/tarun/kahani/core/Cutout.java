@@ -21,7 +21,7 @@ public final class Cutout {
         public int cropX, cropY, cropW, srcW;
     }
 
-    private static int dist(int a, int b) {
+    static int dist(int a, int b) {
         int dr = ((a >> 16) & 255) - ((b >> 16) & 255);
         int dg = ((a >> 8) & 255) - ((b >> 8) & 255);
         int db = (a & 255) - (b & 255);
@@ -468,6 +468,11 @@ public final class Cutout {
             for (int x : xs) { int c = px[y * w + x]; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
         }
         int bg = 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+        removeBackground(px, w, h, holes, bg);
+    }
+
+    /** The same with a known background colour (v26: a piece cut from a sheet whose border may touch a neighbour). */
+    public static void removeBackground(int[] px, int w, int h, boolean holes, int bg) {
         final int TOL = 60, SOFT = 120;
         byte[] state = new byte[w * h]; // 0 unknown, 1 background, 2 queued
         int[] queue = new int[w * h];

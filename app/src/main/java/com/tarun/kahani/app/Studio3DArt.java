@@ -133,6 +133,12 @@ final class Studio3DArt {
 
     static boolean hasViews(Project project, String key) { for (String f : viewFiles(project, key)) if (f != null) return true; return false; }
 
+    /** v26: the user gave real pictures of this character from several angles — no view is ever drawn for it (the drawn ones read as very bad). */
+    static boolean realAngles(Project project, String key) { return "1".equals(project.setting("realangles." + key, "")); }
+
+    /** v26: this view slot holds a real picture of the user's (never replaced by a drawn one). */
+    static boolean realView(Project project, String key, float angle) { return "1".equals(project.setting("realview." + key + "." + (int) angle, "")); }
+
     /** Every view (three-quarter, side, back) is there. */
     static boolean allViews(Project project, String key) { for (String f : viewFiles(project, key)) if (f == null) return false; return true; }
 
@@ -411,6 +417,7 @@ final class Studio3DArt {
     static int makeViews(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p, boolean freeSpace) throws IOException {
         String file = charFile(project, story, c);
         if (file == null) return 0;
+        if (realAngles(project, keyFor(project, story, c))) return 0;       // v26: real angles, never drawn ones
         Look look = c.look != null ? c.look : new Look();
         boolean beast = look.kind == Look.ANIMAL || look.kind == Look.BIRD;
         int[] d = project.loader().decode(file, 1600);
@@ -583,7 +590,7 @@ final class Studio3DArt {
         int made = 0;
         for (Story.CharacterDef c : story.cast()) {
             String key = keyFor(project, story, c);
-            if (charFile(project, story, c) == null || allViews(project, key) || !viewProposals(project, key).isEmpty() || rejected(project, P_VIEW, key)) continue;
+            if (charFile(project, story, c) == null || allViews(project, key) || realAngles(project, key) || !viewProposals(project, key).isEmpty() || rejected(project, P_VIEW, key)) continue;
             try { if (makeViews(project, story, c, lib, ctx, cue, ask, meshyKey, cloud, p, freeSpace) > 0) made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D views: " + e); }
         }
         return made;

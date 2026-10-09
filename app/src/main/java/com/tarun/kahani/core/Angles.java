@@ -20,11 +20,271 @@ public final class Angles {
     }
 
     /**
-     * Splits a picture that holds several figures side by side (a sheet of angles) into its figures: the
-     * background is removed, the opaque parts are grouped (parts closer than 2% of the width belong together),
-     * groups under 3% of the area are noise, and the pieces come back left to right. One figure gives one piece.
+     * Splits a sheet that holds several figures (angles, poses, expressions — in a row, or rows and columns)
+     * into them. v26: the sheet's background colour is read from its border; the figures are found by the empty
+     * columns and rows between them (projection), rows first then columns within each row, or the other way
+     * round — whichever finds more figures; thin grid lines and small labels never count; every piece is then
+     * cut out on its own (its real background removed, its holes kept). When no empty column or row separates
+     * anything, the opaque groups of the cut-out are used (the v21 way). One figure gives one piece.
      */
-    public static List<Piece> split(int[] src, int w, int h) {
+    public static List<Piece> split(int[] src, int w, int h) { return split(src, w, h, true); }
+
+    /**
+     * The same for a sheet of place pictures (v26): the panels of a background sheet (rows and columns of views
+     * of one place) come back as whole crops — nothing is cut out of them. cutOut = false.
+     */
+    public static List<Piece> split(int[] src, int w, int h, boolean cutOut) {
+        boolean alpha = Cutout.hasAlpha(src);
+        boolean[] on = new boolean[w * h];
+        int bg = borderColour(src, w, h);
+        if (alpha) { for (int i = 0; i < on.length; i++) on[i] = (src[i] >>> 24) > 100; }
+        else {
+            // the background is what the border's colour reaches from the border (white clothes on a white sheet
+            // stay part of the figure: a plain colour distance would cut a white kurta into gaps)
+            int[] tmp = src.clone();
+            try { Cutout.removeBackground(tmp, w, h, false, bg); } catch (RuntimeException e) { for (int i = 0; i < tmp.length; i++) tmp[i] = Cutout.dist(src[i], bg) > 60 ? src[i] | 0xFF000000 : 0; }
+            for (int i = 0; i < on.length; i++) on[i] = (tmp[i] >>> 24) > 100;
+        }
+        clearGridLines(on, w, h);
+        List<int[]> cellsA = cells(on, w, h, true), cellsB = cells(on, w, h, false);
+        List<Piece> a = pieces(src, w, h, cellsA, alpha || !cutOut ? 0 : bg), b = pieces(src, w, h, cellsB, alpha || !cutOut ? 0 : bg);
+        List<Piece> best = figures(a, w, h).size() >= figures(b, w, h).size() ? a : b;
+        if (figures(best, w, h).size() >= 2) return order(best, h);
+        return splitByGroups(src, w, h);
+    }
+
+    /** The sheet's background colour: the mean of its border pixels. */
+    static int borderColour(int[] px, int w, int h) {
+        long sr = 0, sg = 0, sb = 0; int n = 0;
+        for (int x = 0; x < w; x += Math.max(1, w / 64)) for (int y : new int[]{0, 1, h - 2, h - 1}) { int c = px[y * w + x]; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
+        for (int y = 0; y < h; y += Math.max(1, h / 64)) for (int x : new int[]{0, 1, w - 2, w - 1}) { int c = px[y * w + x]; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    /** The thin lines of a sheet's grid or table (long, under 0.6% of the sheet thick) cleared, so they never join the figures. */
+    static void clearGridLines(boolean[] on, int w, int h) {
+        int[] cols = new int[w], rows = new int[h];
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (on[y * w + x]) { cols[x]++; rows[y]++; }
+        int thinW = Math.max(4, Math.round(w * 0.006f)), thinH = Math.max(4, Math.round(h * 0.006f));
+        for (int x = 0; x < w; ) {
+            if (cols[x] < h * 0.5f) { x++; continue; }
+            int x1 = x;
+            while (x1 < w && cols[x1] >= h * 0.5f) x1++;
+            if (x1 - x <= thinW) for (int xx = x; xx < x1; xx++) for (int y = 0; y < h; y++) on[y * w + xx] = false;
+            x = x1;
+        }
+        for (int y = 0; y < h; ) {
+            if (rows[y] < w * 0.5f) { y++; continue; }
+            int y1 = y;
+            while (y1 < h && rows[y1] >= w * 0.5f) y1++;
+            if (y1 - y <= thinH) for (int yy = y; yy < y1; yy++) for (int x = 0; x < w; x++) on[yy * w + x] = false;
+            y = y1;
+        }
+    }
+
+    /** The occupied runs of a profile: runs thinner than 'noise' are dropped (grid lines), gaps thinner than 'join' are closed. Returns {start, end} pairs (end exclusive). */
+    static List<int[]> runs(int[] count, int threshold, int noise, int join) {
+        boolean[] occ = new boolean[count.length];
+        for (int i = 0; i < count.length; i++) occ[i] = count[i] > threshold;
+        List<int[]> out = new ArrayList<int[]>();
+        int i = 0;
+        while (i < occ.length) {
+            if (!occ[i]) { i++; continue; }
+            int j = i;
+            while (j < occ.length && occ[j]) j++;
+            if (j - i >= noise) out.add(new int[]{i, j});
+            i = j;
+        }
+        // close the small gaps — and the seams of a sheet's grid running through a figure (an empty band under 0.8% of
+        // the length with the figure going on at over half its peak on both sides)
+        int max = 0;
+        for (int v : count) max = Math.max(max, v);
+        int reach = Math.max(3, Math.round(count.length * 0.02f));
+        List<int[]> merged = new ArrayList<int[]>();
+        for (int[] r : out) {
+            if (!merged.isEmpty()) {
+                int[] prev = merged.get(merged.size() - 1);
+                int gap = r[0] - prev[1];
+                boolean seam = gap < Math.max(3, count.length * 0.008f) && count[Math.max(0, prev[1] - reach)] > 0.5f * max && count[Math.min(count.length - 1, r[0] + reach)] > 0.5f * max;
+                if (gap < join || seam) { prev[1] = r[1]; continue; }
+            }
+            merged.add(r);
+        }
+        return merged;
+    }
+
+    /**
+     * The cells {x0, y0, x1, y1} of the sheet: a recursive cut along empty rows and columns (rows first or columns
+     * first), and where nothing empty separates two figures that touch (a sword tip, a braid, a horn, a tail) a
+     * cut at the thinnest place between them — only when the part is clearly too long for one figure and both
+     * halves are figure-tall, so an outstretched arm is never cut off.
+     */
+    static List<int[]> cells(boolean[] on, int w, int h, boolean rowsFirst) {
+        List<int[]> out = new ArrayList<int[]>();
+        xy(on, w, h, new int[]{0, 0, w, h}, rowsFirst, false, 0, 0, out);
+        return out;
+    }
+
+    /** The tight box {x0, y0, x1, y1} of the occupied pixels inside a region, or null when it is empty. */
+    static int[] tight(boolean[] on, int w, int[] r) {
+        int x0 = r[2], y0 = r[3], x1 = r[0] - 1, y1 = r[1] - 1;
+        for (int y = r[1]; y < r[3]; y++) for (int x = r[0]; x < r[2]; x++) if (on[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        return x1 < x0 ? null : new int[]{x0, y0, x1 + 1, y1 + 1};
+    }
+
+    static int[] profile(boolean[] on, int w, int[] r, boolean rows) {
+        int[] p = new int[rows ? r[3] - r[1] : r[2] - r[0]];
+        for (int y = r[1]; y < r[3]; y++) for (int x = r[0]; x < r[2]; x++) if (on[y * w + x]) p[rows ? y - r[1] : x - r[0]]++;
+        return p;
+    }
+
+    private static void xy(boolean[] on, int w, int h, int[] region, boolean rows, boolean triedOther, int depth, int siblingMedian, List<int[]> out) {
+        int[] r = tight(on, w, region);
+        if (r == null) return;
+        int rw = r[2] - r[0], rh = r[3] - r[1];
+        if (rw < 2 || rh < 2) return;
+        if (depth > 14) { out.add(r); return; }
+        int[] p = profile(on, w, r, rows);
+        int along = rows ? rh : rw, across = rows ? rw : rh;
+        int dim = rows ? h : w;
+        List<int[]> runs = runs(p, Math.max(2, across / 400), Math.max(3, dim / 100), Math.max(2, dim / 160));
+        if (runs.size() >= 2) {
+            List<Integer> lens = new ArrayList<Integer>();
+            for (int[] run : runs) lens.add(run[1] - run[0]);
+            java.util.Collections.sort(lens);
+            int med = lens.get(lens.size() / 2);
+            for (int[] run : runs) {
+                int[] sub = rows ? new int[]{r[0], r[1] + run[0], r[2], r[1] + run[1]} : new int[]{r[0] + run[0], r[1], r[0] + run[1], r[3]};
+                xy(on, w, h, sub, !rows, false, depth + 1, runs.size() >= 3 ? med : 0, out);
+            }
+            return;
+        }
+        // one run. A soft gap first: a nearly empty line (a braid tip or a sword point crossing it) between two
+        // figure-sized parts is a gap all the same.
+        int cutAt = valley(on, w, r, rows, p, siblingMedian, 0.03f);
+        // else two figures touching: cut at the thinnest place when the part is too long for one figure (a
+        // figure is taller than wide (a side view up to 3 times): stacked ones over 3.4 times as tall as wide, side-by-side ones over 1.3 times as wide as tall)
+        boolean tooLong = along > (rows ? 3.4f : 1.3f) * across || (siblingMedian > 0 && along > 1.6f * siblingMedian);
+        // (a stacked pair is cut only at a nearly empty line — a raised hand or a sword crossing it — never at a neck or a waist)
+        if (cutAt < 0 && tooLong) cutAt = valley(on, w, r, rows, p, siblingMedian, rows ? 0.08f : 0.3f);
+        if (cutAt > 0) {
+            int[] a = rows ? new int[]{r[0], r[1], r[2], r[1] + cutAt} : new int[]{r[0], r[1], r[0] + cutAt, r[3]};
+            int[] b = rows ? new int[]{r[0], r[1] + cutAt, r[2], r[3]} : new int[]{r[0] + cutAt, r[1], r[2], r[3]};
+            xy(on, w, h, a, rows, false, depth + 1, siblingMedian, out);
+            xy(on, w, h, b, rows, false, depth + 1, siblingMedian, out);
+            return;
+        }
+        if (!triedOther) { xy(on, w, h, r, !rows, true, depth + 1, siblingMedian, out); return; }
+        out.add(r);
+    }
+
+    /**
+     * The place to cut a part that holds two touching figures: the thinnest place of the profile (under 30% of
+     * its peak), away from both ends, where both halves are still at least 60% as tall (or wide) as the whole —
+     * so an arm or a sword sticking out is never cut off as a "figure". Returns the offset, or -1.
+     */
+    private static int valley(boolean[] on, int w, int[] r, boolean rows, int[] p, int siblingMedian, float maxFrac) {
+        int along = p.length, across = rows ? r[2] - r[0] : r[3] - r[1];
+        int minPart = Math.max(8, Math.max(siblingMedian > 0 ? Math.round(siblingMedian * 0.35f) : 0, Math.round(across * 0.28f)));
+        if (along < 2 * minPart) return -1;
+        int k = Math.max(2, along / 60);
+        int max = 0;
+        for (int v : p) max = Math.max(max, v);
+        List<int[]> cands = new ArrayList<int[]>();      // {offset, smoothed value}
+        for (int x = minPart; x < along - minPart; x++) {
+            int v = 0, n = 0;
+            for (int d = -k; d <= k; d++) { int xx = x + d; if (xx >= 0 && xx < along) { v += p[xx]; n++; } }
+            v = Math.round(v / (float) Math.max(1, n));
+            if (v <= maxFrac * max) cands.add(new int[]{x, v});
+        }
+        java.util.Collections.sort(cands, new java.util.Comparator<int[]>() {
+            public int compare(int[] a, int[] b) { return Integer.compare(a[1], b[1]); }
+        });
+        int tried = 0;
+        for (int[] c : cands) {
+            if (++tried > 40) break;
+            int cutAt = c[0];
+            // a seam of the sheet's grid running through a figure: an empty band thinner than 0.8% of the length with the
+            // figure going on at full width on both sides of it — never a place to cut
+            int b0 = cutAt, b1 = cutAt;
+            while (b0 > 0 && p[b0 - 1] <= 0.1f * max) b0--;
+            while (b1 < along - 1 && p[b1 + 1] <= 0.1f * max) b1++;
+            int reach = Math.max(3, Math.round(along * 0.02f));
+            int left = Math.max(0, b0 - reach), right = Math.min(along - 1, b1 + reach);
+            if (b1 - b0 + 1 < Math.max(3, along * 0.008f) && p[left] > 0.5f * max && p[right] > 0.5f * max) continue;
+            int[] a = rows ? new int[]{r[0], r[1], r[2], r[1] + cutAt} : new int[]{r[0], r[1], r[0] + cutAt, r[3]};
+            int[] b = rows ? new int[]{r[0], r[1] + cutAt, r[2], r[3]} : new int[]{r[0] + cutAt, r[1], r[2], r[3]};
+            int[] ta = tight(on, w, a), tb = tight(on, w, b);
+            if (ta == null || tb == null) continue;
+            int ea = rows ? ta[2] - ta[0] : ta[3] - ta[1], eb = rows ? tb[2] - tb[0] : tb[3] - tb[1];
+            // a vertical cut needs both halves nearly as wide as the whole (a head on a neck is narrower: no cut there)
+            float need = rows ? 0.8f : 0.6f;
+            if (ea >= need * across && eb >= need * across) return cutAt;
+        }
+        return -1;
+    }
+
+    /** Each cell cut out on its own: a margin of background around it, the real background removed, the holes kept. */
+    static List<Piece> pieces(int[] src, int w, int h, List<int[]> cells, int bg) {
+        boolean alpha = bg == 0;
+        List<Piece> out = new ArrayList<Piece>();
+        for (int[] c : cells) {
+            int m = Math.max(2, Math.min(w, h) / 200);
+            int x0 = Math.max(0, c[0] - m), y0 = Math.max(0, c[1] - m), x1 = Math.min(w, c[2] + m), y1 = Math.min(h, c[3] + m);
+            Piece p = new Piece();
+            p.x0 = x0; p.y0 = y0; p.w = x1 - x0; p.h = y1 - y0;
+            if (p.w < 2 || p.h < 2) continue;
+            p.px = new int[p.w * p.h];
+            for (int y = 0; y < p.h; y++) System.arraycopy(src, (y + y0) * w + x0, p.px, y * p.w, p.w);
+            if (!alpha) {
+                // a cell's own background: its border is background (the gap around the figure), the figure is not
+                try { Cutout.removeBackground(p.px, p.w, p.h, true, bg); } catch (RuntimeException e) { /* kept as it is */ }
+            }
+            out.add(p);
+        }
+        return out;
+    }
+
+    /**
+     * The figures among the pieces (v26): at least 30% as tall as the tallest, 12% of the sheet's height and 4% of
+     * its width (labels, arrows, crumbs and grid bits dropped), the ten largest. Fewer than two: not a sheet.
+     */
+    public static List<Piece> figures(List<Piece> parts, int w, int h) {
+        List<Piece> out = new ArrayList<Piece>();
+        int tallest = 0;
+        for (Piece pc : parts) tallest = Math.max(tallest, pc.h);
+        for (Piece pc : parts) if (pc.h >= tallest * 0.3f && pc.h >= h * 0.12f && pc.w >= w * 0.04f && opaqueShare(pc) > 0.04f) out.add(pc);
+        if (out.size() < 2) return new ArrayList<Piece>();
+        if (out.size() > 10) {
+            java.util.Collections.sort(out, new java.util.Comparator<Piece>() {
+                public int compare(Piece a, Piece b) { return Long.compare((long) b.w * b.h, (long) a.w * a.h); }
+            });
+            out = new ArrayList<Piece>(out.subList(0, 10));
+        }
+        return order(out, h);
+    }
+
+    static float opaqueShare(Piece p) {
+        int n = 0;
+        for (int i = 0; i < p.px.length; i += 7) if ((p.px[i] >>> 24) > 100) n++;
+        return n * 7f / Math.max(1, p.px.length);
+    }
+
+    /** Reading order: row by row (pieces whose tops lie within a quarter of the height of each other), left to right. */
+    static List<Piece> order(List<Piece> in, final int h) {
+        List<Piece> out = new ArrayList<Piece>(in);
+        final int band = Math.max(1, h / 4);
+        java.util.Collections.sort(out, new java.util.Comparator<Piece>() {
+            public int compare(Piece a, Piece b) {
+                int ra = a.y0 / band, rb = b.y0 / band;
+                return ra != rb ? Integer.compare(ra, rb) : Integer.compare(a.x0, b.x0);
+            }
+        });
+        return out;
+    }
+
+    /** The v21 split: the opaque groups of the cut-out (parts closer than 2% of the width belong together), groups under 3% of the area are noise. */
+    public static List<Piece> splitByGroups(int[] src, int w, int h) {
         int[] px = src.clone();
         if (!Cutout.hasAlpha(px)) Cutout.removeBackground(px, w, h);
         // a coarse grid of opaque cells (joins parts across small gaps)
@@ -72,11 +332,7 @@ public final class Angles {
             }
             out.add(p);
         }
-        // left to right (a sheet reads that way)
-        java.util.Collections.sort(out, new java.util.Comparator<Piece>() {
-            public int compare(Piece a, Piece b) { return Integer.compare(a.x0, b.x0); }
-        });
-        return out;
+        return order(out, h);
     }
 
     /**

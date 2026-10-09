@@ -197,13 +197,15 @@ public final class Director {
                 // bridge of the place alone (its picture, a slow push) when the place changes between two scenes
                 int newSet = Sets.detect(firstSentence(sc.setting.length() > 0 ? sc.setting : sc.title));
                 Film.Seg last = film.segs.isEmpty() ? null : film.segs.get(film.segs.size() - 1);
-                Art.Backdrop plate = this.art.sceneBackdrop(sc.number, 0);
-                if (si > 0 && last != null && last.type == Film.S_SCENE && last.set != newSet && plate != null) {
+                // v26: the user's own picture of the journey into this place (ScenePlan) is the bridge when given
+                Art.Backdrop journey = this.art.journeyBackdrop(sc.number);
+                Art.Backdrop plate = journey != null ? journey : this.art.sceneBackdrop(sc.number, 0);
+                if (si > 0 && last != null && last.type == Film.S_SCENE && (last.set != newSet || (journey != null && ScenePlan.bridgeBefore(story, si))) && plate != null) {
                     Film.Seg bridge = new Film.Seg();
                     bridge.type = Film.S_CARD;
                     bridge.scene = si;
                     bridge.t0 = t;
-                    bridge.t1 = t + 2.6f;
+                    bridge.t1 = t + (journey != null ? 2.6f : 2.4f);
                     bridge.text1 = "";
                     bridge.text2 = "";
                     bridge.set = newSet;
@@ -211,7 +213,7 @@ public final class Director {
                     bridge.backdrop = plate;
                     bridge.fadeIn = 0.3f; bridge.fadeOut = 0.3f;
                     film.segs.add(bridge);
-                    film.notes.add("Bridge before " + sc.heading + ": the new place established on its own (" + Sets.label(newSet) + ") before anyone speaks there");
+                    film.notes.add("Bridge before " + sc.heading + ": the new place established on its own (" + Sets.label(newSet) + ") before anyone speaks there" + (journey != null ? " — your picture of the way there" : ""));
                     bridges++;
                     t = bridge.t1;
                 }
@@ -609,8 +611,8 @@ public final class Director {
             hs.thoughtBeats = thoughtBeats; hs.dutch = dutchCount; hs.calmedRuns = calmed; hs.spine = film.hero.length() > 0; hs.faceFill = faceFillN == 0 ? 0 : faceFillSum / faceFillN;
             hs.durationsDistinct = durs.size();
             hs.pov = povShots; hs.loudReactions = loudReactions;
-            for (Film.Shot sh : film.shots) if (sh.stage == ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) { hs.estabTotal++; if (sh.dur >= 3.0f) hs.estabHeld++; }
-            b.append(String.format(java.util.Locale.US, "• Director's manual (v2.0): establishing shots held for the cut length (3.1 s; shots are cut at 3.2 s, the 4-s cap stays): %d of %d (the rest are cut sooner by the "
+            for (Film.Shot sh : film.shots) if (sh.stage == ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) { hs.estabTotal++; if (sh.dur >= 2.4f) hs.estabHeld++; }
+            b.append(String.format(java.util.Locale.US, "• Director's manual (v2.0): establishing shots held for the cut length (2.5 s; shots are cut at 2.6 s since v26, the 4-s cap stays): %d of %d (the rest are cut sooner by the "
                     + "protocol's motion rule — someone enters or moves during them, and the move is seen wide); point-of-view shots for looks: %d; "
                     + "reactions staged for loud sounds: %d; suspicion and relief read from the manners; every shot carries its ASSETS, TRANSITION IN, STATE AT START / END and "
                     + "VOICE / MUSIC lines; the beat sheet, scene records, coverage report, prop ledger and location records follow the ledger%n", hs.estabHeld, hs.estabTotal, povShots, loudReactions));
@@ -2289,12 +2291,12 @@ public final class Director {
         estab = false;
         // the director's manual (3.6): an establishing shot wants 4-10 s; the protocol caps every shot at 4 s — so it is
         // held for the top of the cap (3.9 s) before anything comes closer
-        float minDur = establishing ? 3.1f : 2.2f;
+        float minDur = establishing ? 2.5f : 2.0f;
         if (tc - t0 < minDur) tc = t0 + minDur;
         if (establishing) {
             // nothing cuts closer before the establishing shot has been held: a cut planned inside it (an entrance, a
             // first action) waits until the hold is over — the action itself is seen wide, as the manual's table wants
-            for (Film.Cam c : seg.cams) if (c.ease == 0 && c.t > t0 + 0.15f && c.t < t0 + 3.1f) c.t = t0 + 3.1f;
+            for (Film.Cam c : seg.cams) if (c.ease == 0 && c.t > t0 + 0.15f && c.t < t0 + 2.5f) c.t = t0 + 2.5f;
         }
         if (li >= 0) { // narrator speaks the direction
             Film.Line l = film.lines.get(li);

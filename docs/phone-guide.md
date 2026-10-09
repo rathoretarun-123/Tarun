@@ -96,3 +96,19 @@ The user gave two documents with "Train your director with these and hardcode th
 | Objects | Only the two word lists' things were listed; a story's own thing (पगड़ी…) could not be added. A photo with a real background was sometimes "split" into junk pieces. | "➕ A thing of the story (name it)" on the things card, the story screen and the popup; the things card lists both word lists and the user's things. A split counts only when every piece is figure-sized; camera photos are never split. |
 | After adding | The user was sent to the Studio | Back to where the pictures were asked for; the make-film popup reopens. |
 | Selection still bad | Pictures from Home carried camera file names (IMG_…), so they were matched by look alone at 0.66; nothing was learnt from the user's corrections. | Naming step after adding (person / place / thing); `is:`/`not:` marks learnt from the user's choices and ✖ in the Studio (`AutoLibrary.labelKey`), by the label's words so they hold in every story; a camera-named picture with no fitting words needs 0.82 on its look, else the user is asked (the guide §1.1: never silently guess). The character card says when the director chose the picture itself. |
+
+## v26 follow-up (the user's 60 sheets)
+
+| Note | Done |
+|---|---|
+| "Splitting of pictures uploaded in one image with 10 angles should be perfect" | Rebuilt: border background → flood-fill mask (white clothes stay in the figure) → grid lines cleared → recursive XY cut on empty rows/columns, soft gaps (a braid tip crossing the gap), and a cut at the thinnest place for touching figures only when the part is too long for one figure (side by side: over 1.3× as wide as tall; stacked: over 3.4× as tall as wide) and both halves are figure-tall → each piece cut out on its own with its holes. 60 real sheets: 57 at 10/10, 3 at 9/10, every piece whole. |
+| 10 images × 10 angles, activities, emotions → 100 per thing | `saveAngles`: up to 10 files, each up to 10 figure-sized pieces (100), best real piece per slot, the rest in the library as pictures of the same thing (`ofName`); places: wide, reverse, the rest in the library. |
+| Drawn angles are very bad | Never drawn once real angles exist (`Studio3DArt.realAngles`, `makeAllViews`/`makeViews` skip; the Studio button is gone). |
+| Objects uploadable everywhere | Studio things card, story screen, make-film popup, progress screen ("Pictures in this film"), each with "name it". |
+| Film-making screen shows what was not uploaded or asked | "Pictures in this film" card on the progress screen: every character, place, thing and added scene with its status and an add/replace button. |
+| Smaller shots, finer meshing | Cuts at 2.6 s (`TechnicalDirector.CUT_SECONDS`), establishing 2.5 s; meshes are already one cell per pixel (v17); pictures read at a size following the output. |
+| Director adds scenes and asks for pictures | `ScenePlan` extras (journey into every new place) with key `<n>j`, asked for on three screens, used as the bridge by the `Director`. |
+| Slide the mouth/eye page to pick the front | ◀ ▶ and swipe through every picture of the character; "Save" makes it the front. |
+| RAM > 8 GB | Honest limit: the Java heap Android grants (largeHeap) and the cores bound the renderer, not the phone's RAM; stated in the README. |
+| Natural effects / physics "perfect", "world class" | No claim made; unchanged this version. |
+| GitHub sources | Searched (Animated Drawings, Pose Animator, Stretchy Studio, Inochi2D, DragonBones); none runs on the phone as is; recorded in the README. |

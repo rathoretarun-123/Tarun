@@ -90,6 +90,9 @@ public final class Art {
     /** The user's reverse angle of a scene's place (manifest line scene|<number>r|file), or null. */
     public Backdrop reverseBackdrop(int number) { return scenes.get(number + "r"); }
 
+    /** The user's picture of the journey into a scene's place (manifest line scene|<number>j|file, ScenePlan), or null. */
+    public Backdrop journeyBackdrop(int number) { return scenes.get(number + "j"); }
+
     public Shot shotFor(int scene, String text) {
         for (Shot s : shots) {
             if (s.scene.length() > 0 && !s.scene.equals(String.valueOf(scene))) continue;
@@ -333,6 +336,9 @@ public final class Art {
      * Reads a cast manifest (see assets/sample/cast.txt) and loads all pictures.
      * Character names are matched against the parsed story.
      */
+    /** v26: the size pictures are read at follows the film's output (set by the job before loading): a 1080p film reads sharper pictures than a 480p one. */
+    public static int spriteSide = 1100, backdropSide = 1600;
+
     public static Art fromManifest(String text, Story story, Loader L) {
         Art art = new Art();
         boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
@@ -348,7 +354,7 @@ public final class Art {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
                     if (c == null) continue;
                     boolean beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
-                    Sprite s = makeSprite(L, f[2], 1100, beast);
+                    Sprite s = makeSprite(L, f[2], spriteSide, beast);
                     if (s == null) continue;
                     if (f.length >= 11) {
                         float[] v = new float[8];
@@ -404,7 +410,7 @@ public final class Art {
                     s.pixelsForSampling = null;
                     art.sprites.put(c.id, s);
                 } else if (f[0].equals("scene") && f.length >= 3) {
-                    Backdrop b = makeBackdrop(L, f[2], 1600);
+                    Backdrop b = makeBackdrop(L, f[2], backdropSide);
                     if (b == null) continue;
                     if (f.length >= 8) {
                         b.x0 = Float.parseFloat(f[3]); b.y0 = Float.parseFloat(f[4]);
@@ -413,7 +419,7 @@ public final class Art {
                     }
                     art.scenes.put(f[1], b);
                 } else if (f[0].equals("shot") && f.length >= 4) {
-                    Backdrop b = makeBackdrop(L, f[3], 1600);
+                    Backdrop b = makeBackdrop(L, f[3], backdropSide);
                     if (b == null) continue;
                     Shot s = new Shot();
                     s.scene = f[1];
@@ -423,7 +429,7 @@ public final class Art {
                     b.object = s.object;
                     art.shots.add(s);
                 } else if (f[0].equals("title") || f[0].equals("end")) {
-                    Backdrop b = makeBackdrop(L, f[1], 1600);
+                    Backdrop b = makeBackdrop(L, f[1], backdropSide);
                     if (b == null) continue;
                     boolean txt = f.length < 3 || !f[2].equals("0");
                     if (f[0].equals("title")) { art.title = b; art.titleText = txt; }
@@ -441,7 +447,7 @@ public final class Art {
                 Sprite main = art.sprites.get(c.id);
                 int idx = Figure3D.viewIndex(Float.parseFloat(f[2].trim()));
                 if (main == null || idx < 0) continue;
-                Sprite v = makeSprite(L, f[3], 1100, false);
+                Sprite v = makeSprite(L, f[3], spriteSide, false);
                 if (v == null) continue;
                 v.faceKnown = false;
                 if (f.length >= 12) {

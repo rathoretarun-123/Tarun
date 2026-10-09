@@ -1,4 +1,4 @@
-# Kahani Film — v25
+# Kahani Film — v26
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,18 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v26
+
+* **Sheet splitting rebuilt and tested on 60 of the user's own sheets** — characters in 10 angles, poses and emotions, places in 10 views. The director reads the background from the sheet's border, finds the figures by the empty rows and columns between them (a recursive cut, rows first or columns first, whichever finds more), cuts touching figures at the thinnest place only when a part is clearly too long for one figure and both halves stay figure-tall (no arm or sword is ever cut off), drops labels, arrows and grid lines, and cuts every figure out on its own with its holes kept. Result on the 60 sheets: 57 split 10 of 10, 3 split 9 of 10, every piece a whole figure (`Angles.split`, `tools/testdata/sheets`, the test `userSheetsSplitIntoTheirFigures`).
+* **10 pictures × 10 angles = up to 100 pictures per character, place or thing** — every slot (front, three-quarter, side, back) takes the best real picture of that angle; everything else goes to the library as more pictures of the same thing; a place sheet's panels become the wide view, the reverse angle and library views. One upload button does it all; the separate back/side pickers and the "views from this picture" button are gone.
+* **Real angles only** — once a character has real pictures from several angles, no view is drawn for it any more (`Studio3DArt.realAngles`); the drawn views that read as very bad are never made or used.
+* **The mouth/eye page steps through every picture of the character** (◀ ▶ and a swipe over the picture); "Save" makes the shown picture the front one with its mouth and eyes.
+* **The director adds scenes and asks for their pictures** — `ScenePlan`: a journey into every new place, listed on the story screen, the progress screen and the make-film popup with its own upload (up to 10 pictures, 10 angles each); the director uses the given picture as the bridge.
+* **Pictures in this film, on the progress screen** — every character, place, thing and added scene with what it has and an add/replace button, so what was never asked for can be given while the film is made.
+* **Smaller shots**: cuts at 2.6 s (establishing held 2.5 s); pictures are read at a size that follows the output (sharper at 1080p).
+* **Memory, honestly**: the renderer is bound by the phone's cores and the Java heap Android grants the app (512 MB–1 GB with `largeHeap`), not by the phone's total RAM; an 8 GB phone does not render faster than the heap and cores allow. The budget already uses every core and the free heap.
+* **GitHub sources looked at for this version** (none can run on the phone as they are): Meta's Animated Drawings (MIT, Python/PyTorch — rigging from a single drawing), Pose Animator (TensorFlow.js), Stretchy Studio (FOSS mesh deformation from layered illustrations), Inochi2D (BSD), DragonBones (MIT runtime, editor-made rigs). The one that could be ported is the DragonBones runtime, which needs rigs authored in its editor; it is not in this version.
 
 ## New in v25
 

@@ -243,6 +243,9 @@ public final class FilmJob implements Runnable {
                 }
             }
             step("Preparing pictures (removing backgrounds)…", 0.03f);
+            // v26: pictures are read at a size that fits the output (sharper at 1080p, lighter at 480p), within the memory left
+            Art.spriteSide = Math.max(900, Math.min(2000, Math.round(ed.height * 1.25f)));
+            Art.backdropSide = Math.max(1280, Math.min(2600, Math.round(ed.height * 16f / 9f * 1.15f)));
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
             check();
 

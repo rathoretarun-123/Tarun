@@ -547,6 +547,29 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * The figures of a sheet (v26): the pieces at least 30% as tall as the tallest and 4% of the sheet's width (the
+     * labels, arrows and crumbs dropped), the ten largest, left to right. Fewer than two figures: not a sheet.
+     */
+    static List<com.tarun.kahani.core.Angles.Piece> sheetFigures(List<com.tarun.kahani.core.Angles.Piece> parts, int w, int h) {
+        if (true) return com.tarun.kahani.core.Angles.figures(parts, w, h);
+        List<com.tarun.kahani.core.Angles.Piece> out = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+        int tallest = 0;
+        for (com.tarun.kahani.core.Angles.Piece pc : parts) tallest = Math.max(tallest, pc.h);
+        for (com.tarun.kahani.core.Angles.Piece pc : parts) if (pc.h >= tallest * 0.3f && pc.h >= h * 0.12f && pc.w >= w * 0.04f) out.add(pc);
+        if (out.size() < 2) return new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+        if (out.size() > 10) {
+            java.util.Collections.sort(out, new java.util.Comparator<com.tarun.kahani.core.Angles.Piece>() {
+                public int compare(com.tarun.kahani.core.Angles.Piece a, com.tarun.kahani.core.Angles.Piece b) { return Long.compare((long) b.w * b.h, (long) a.w * a.h); }
+            });
+            out = new ArrayList<com.tarun.kahani.core.Angles.Piece>(out.subList(0, 10));
+        }
+        java.util.Collections.sort(out, new java.util.Comparator<com.tarun.kahani.core.Angles.Piece>() {
+            public int compare(com.tarun.kahani.core.Angles.Piece a, com.tarun.kahani.core.Angles.Piece b) { return Integer.compare(a.x0, b.x0); }
+        });
+        return out;
+    }
+
+    /**
      * The pictures of one thing from several angles: a sheet holding several figures is split into them
      * (Angles.split); a figure's angle is read from its face (Angles.guess); the front becomes the thing's picture
      * when it has none, the other angles its views (a real angle always beats a made one), a place's second
@@ -569,29 +592,31 @@ public class MainActivity extends Activity {
                 // 1. every picture; a sheet of several figures split into them
                 List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
                 int split = 0;
-                int unreadable = 0;
+                int unreadable = 0, files = 0;
                 for (byte[] d : datas) {
-                    int[] dec = decodeBytes(d, 1400);
+                    if (++files > 10) break;                                    // v26: up to 10 pictures, each up to 10 angles
+                    int[] dec = decodeBytes(d, 1600);
                     if (dec == null) { unreadable++; continue; }
                     int w = dec[0], h = dec[1];
                     int[] px = new int[w * h];
                     System.arraycopy(dec, 2, px, 0, px.length);
                     boolean camera = Library.cameraPhoto(d);
                     List<com.tarun.kahani.core.Angles.Piece> parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
-                    // a sheet of several figures: split; a photo with a real background is never split (v25: the split
-                    // only counts when every piece is figure-sized, else the picture stays whole)
-                    if (!kind.equals("scene") && !camera) {
-                        try { parts = com.tarun.kahani.core.Angles.split(px, w, h); } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
-                        boolean figures = parts.size() >= 2;
-                        for (com.tarun.kahani.core.Angles.Piece pc : parts) if (pc.h < h * 0.35f || pc.w < w * 0.06f) figures = false;
-                        if (!figures) parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+                    // a sheet of several figures (angles, poses, expressions) is split into them: the figure-sized pieces
+                    // only (labels and crumbs dropped), the ten largest, in reading order; a sheet of place views is split
+                    // into its panels (whole crops); a camera photo with a real background stays whole
+                    if (!camera) {
+                        try {
+                            parts = kind.equals("scene") ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, false), w, h)
+                                    : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h);
+                        } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
                     }
                     if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }
                     else pics.add(new Object[]{px, w, h, Boolean.FALSE, camera});
-                    if (pics.size() >= 10) break;
+                    if (pics.size() >= 100) break;
                 }
                 if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG) or a smaller picture" : "No picture could be read";
-                if (pics.size() > 10) pics = pics.subList(0, 10);
+                if (pics.size() > 100) pics = pics.subList(0, 100);
                 StringBuilder done = new StringBuilder();
                 if (kind.equals("char")) {
                     // 2. the angle of each figure from its face, then the front, the views, the extras
@@ -608,14 +633,41 @@ public class MainActivity extends Activity {
                         if (camera && !cut) { try { b = toonify(b, true); } catch (Exception ignored) { /* the photo itself then */ } }
                         bytes[i] = b;
                     }
-                    float[] angles = com.tarun.kahani.core.Angles.assign(guessed);
+                    // v26: every slot (front, three-quarter, side, back) takes the best real picture guessed at that angle —
+                    // the largest one; the others of that angle go to the library as more pictures of the same thing.
+                    // A slot the user gave nothing for stays empty: no drawn view is ever put there.
+                    float[] angles = new float[pics.size()];
+                    java.util.Arrays.fill(angles, Float.NaN);
+                    float[] slotAngles = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
+                    for (float sa : slotAngles) {
+                        int best = -1; long bestArea = -1;
+                        for (int i = 0; i < pics.size(); i++) {
+                            if (guessed[i] != sa) continue;
+                            long area = (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2];
+                            if (area > bestArea) { bestArea = area; best = i; }
+                        }
+                        if (best >= 0) angles[best] = sa;
+                    }
                     String have = c == null ? null : Studio3DArt.charFile(project, st, c);
+                    boolean frontReal = "1".equals(project.setting("realview." + key + ".0", ""));
+                    // a drawn front (a doll, a 3D-made picture) gives way to the first real front
+                    boolean haveFront = false;
+                    for (float a : angles) if (a == com.tarun.kahani.core.Angles.FRONT) haveFront = true;
+                    if (have != null && haveFront && !frontReal && have.startsWith("3d_")) { project.setManifest("char", key, null); have = null; }
+                    // the drawn views (made from the picture) go: real angles replace them, slot by slot or entirely
+                    for (float sa : slotAngles) {
+                        if (sa == com.tarun.kahani.core.Angles.FRONT) continue;
+                        if (!Studio3DArt.realView(project, key, sa)) Studio3DArt.setView(project, key, sa, null);
+                    }
+                    project.setSetting("realangles." + key, "1");
+                    project.setSetting("rejected3d.view." + key, "1");
                     String libKey = project.setting("pic.char:" + key, "");
                     for (int i = 0; i < pics.size(); i++) {
                         float a = angles[i];
                         boolean png = bytes[i].length > 8 && (bytes[i][1] & 255) == 'P';
                         String ext = png ? ".png" : ".jpg";
                         if (!Float.isNaN(a) && a == com.tarun.kahani.core.Angles.FRONT) {
+                            project.setSetting("realview." + key + ".0", "1");
                             if (have == null) {
                                 String f = project.savePicture(bytes[i], "char");
                                 project.setManifest("char", key, "char|" + key + "|" + f);
@@ -631,15 +683,19 @@ public class MainActivity extends Activity {
                         } else if (!Float.isNaN(a)) {
                             String f = project.savePicture(bytes[i], "view");
                             Studio3DArt.setView(project, key, a, "view|" + key + "|" + (int) a + "|" + f);
-                            project.setSetting("rejected3d.view." + key, "0");
+                            project.setSetting("realview." + key + "." + (int) a, "1");
                             Library.Item it = library.addBytes(Library.PIC, "view", shown + " (" + com.tarun.kahani.core.Angles.name(a) + " view)", com.tarun.kahani.core.Angles.name(a), bytes[i], ext, "angles");
                             it.setMeta("view", String.valueOf((int) a));
                             it.setMeta("ofName", shown);
                             if (libKey.length() > 0) it.setMeta("of", libKey);
                             done.append(com.tarun.kahani.core.Angles.name(a)).append(" view; ");
                         } else {
-                            library.addBytes(Library.PIC, "person", shown + " (angle " + (i + 1) + ")", "", bytes[i], ext, "angles");
-                            done.append("angle ").append(i + 1).append(" (library); ");
+                            String an = com.tarun.kahani.core.Angles.name(guessed[i]);
+                            Library.Item it = library.addBytes(Library.PIC, guessed[i] == com.tarun.kahani.core.Angles.FRONT ? "person" : "view", shown + " (" + an + ", picture " + (i + 1) + ")", an, bytes[i], ext, "angles");
+                            it.setMeta("ofName", shown);
+                            if (guessed[i] != com.tarun.kahani.core.Angles.FRONT) it.setMeta("view", String.valueOf((int) guessed[i]));
+                            if (libKey.length() > 0) it.setMeta("of", libKey);
+                            done.append(an).append(" ").append(i + 1).append(" (library); ");
                         }
                     }
                     Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
@@ -664,7 +720,8 @@ public class MainActivity extends Activity {
                             haveRev = true;
                             done.append("the reverse angle (behind the reverse shots); ");
                         } else {
-                            library.addBytes(Library.PIC, "place", shown + " (angle " + (i + 1) + ")", "", b, ".jpg", "angles");
+                            Library.Item it = library.addBytes(Library.PIC, "place", shown + " (angle " + (i + 1) + ")", "", b, ".jpg", "angles");
+                            it.setMeta("ofName", shown);
                             done.append("angle ").append(i + 1).append(" (library); ");
                         }
                     }
@@ -754,10 +811,82 @@ public class MainActivity extends Activity {
             }));
         }
         if (n == 0) m.addView(Ui.text(this, "Every character and place has a picture. More angles can be added from the Studio cards.", 13, Ui.GREEN, false));
+        // v26: the scenes the director adds (the journey into every new place) ask for their own pictures here
+        for (final com.tarun.kahani.core.ScenePlan.Extra x : com.tarun.kahani.core.ScenePlan.extras(st)) {
+            final boolean has = project.manifestLine("scene", x.key) != null;
+            final String tgt = "angles:scene:" + x.key + ":" + x.label;
+            m.addView(Ui.small(this, (has ? "✅ " : "🎬 ") + x.label + (has ? " — more angles" : " — add its picture (up to 10, 10 angles each)"), has ? Ui.GREEN : Ui.PRIMARY_DARK, new View.OnClickListener() {
+                public void onClick(View v) { anglesFor(tgt, x.label); }
+            }));
+        }
         m.addView(Ui.small(this, "➕ A thing of the story (name it) — its pictures", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { askThingName(null); }
         }));
         body.addView(m);
+    }
+
+    /** How many library pictures were saved as angles or poses of this name. */
+    private int countAngles(String shown) {
+        int n = 0;
+        for (Library.Item it : library.find(Library.PIC, null, null)) if (shown.equals(it.meta("ofName")) || it.name.equals(shown) || it.name.startsWith(shown + " (")) n++;
+        return n;
+    }
+
+    /**
+     * v26: every picture of this film on the progress screen — the characters, places, things and the director's
+     * added scenes, each with what it has (your picture, a made one, none) and an upload button right there, so what
+     * was never asked for can be given while the film is made (used from the next make).
+     */
+    private void picturesCard(LinearLayout body, final Story st) {
+        if (project == null || st == null) return;
+        LinearLayout card = Ui.card(this);
+        card.addView(Ui.text(this, "🖼 Pictures in this film — add or replace any of them here (up to 10 pictures, 10 angles or poses each; the sheet is split by the director)", 15, Ui.TEXT, true));
+        String cast = project.read("cast.txt");
+        for (final Story.CharacterDef c : st.cast()) {
+            String file = charFile(c);
+            boolean real = Studio3DArt.realAngles(project, keyFor(c));
+            String status = file == null ? "▫ no picture" : real ? "✅ your pictures (" + countAngles(c.shown()) + ")" : file.startsWith("3d_") ? "🧊 made in 3D" : "✅ picture";
+            pictureRow(card, c.shown(), status, file, "angles:char:" + keyFor(c) + ":" + c.shown());
+        }
+        for (final Story.Scene sc : st.scenes) {
+            String file = sceneFile(sc);
+            String nm = sc.title.length() > 0 ? sc.title : Bible.firstClauseOf(sc.setting);
+            String status = file == null ? "▫ no background" : file.startsWith("3d_") ? "🧊 made in 3D" : project.manifestLine("scene", sc.number + "r") != null ? "✅ wide + reverse" : "✅ background";
+            pictureRow(card, "Part " + sc.number + ": " + nm, status, file, "angles:scene:" + sc.number + ":" + nm);
+        }
+        for (final com.tarun.kahani.core.ScenePlan.Extra x : com.tarun.kahani.core.ScenePlan.extras(st)) {
+            String line = project.manifestLine("scene", x.key);
+            String file = line == null ? null : line.split("\\|")[2];
+            pictureRow(card, "🎬 " + x.label, file == null ? "▫ none (the place itself is shown)" : "✅ picture", file, "angles:scene:" + x.key + ":" + x.label);
+        }
+        Set<String> seen = new HashSet<String>();
+        for (String[] o : FreeArt.wanted(st)) if (seen.add(o[0])) pictureRow(card, o[1], cast.contains("|" + o[0] + "|") ? "✅ picture" : "▫ none", null, "angles:obj:" + o[0] + ":" + o[1]);
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 5 && f[0].equals("shot") && f[4].trim().equals("object") && seen.add(f[2])) pictureRow(card, f[2].replace(',', ' '), "✅ picture", f[3], "angles:obj:" + f[2] + ":" + f[2].replace(',', ' '));
+        }
+        card.addView(Ui.small(this, "➕ A thing of the story (name it) — its pictures", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { askThingName(null); }
+        }));
+        body.addView(card);
+    }
+
+    private void pictureRow(LinearLayout card, final String label, String status, String file, final String tgt) {
+        LinearLayout r = Ui.row(this);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        if (file != null && project.file(file).exists()) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try { iv.setImageBitmap(thumb(project.file(file), 120)); } catch (Throwable ignored) {}
+            r.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44)));
+        }
+        TextView t = Ui.text(this, label + "\n" + status, 13, status.startsWith("▫") ? Ui.SUB : Ui.GREEN, false);
+        t.setPadding(Ui.dp(this, 6), 0, 0, 0);
+        r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(Ui.small(this, status.startsWith("▫") ? "📷 Add" : "📷 More", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { anglesFor(tgt, label); }
+        }));
+        card.addView(r);
     }
 
     /** The things the story names (keys, props, fruit, a kite…): their pictures from the library or from you, up to ten angles each (item 3). */
@@ -1177,6 +1306,7 @@ public class MainActivity extends Activity {
         r.addView(Ui.small(this, "🖼 Picture", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { choosePicture("char:" + keyFor(c), c.displayName + " " + c.description); }
         }));
+        if (Studio3DArt.realAngles(project, keyFor(c))) info.addView(Ui.text(this, "📷 " + countAngles(c.shown()) + " real pictures of " + c.shown() + " in the library (angles, poses) — no drawn view is used", 13, Ui.GREEN, false));
         r.addView(Ui.small(this, "🎙 Voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseVoice(c.displayName, st, c); }
         }));
@@ -1205,7 +1335,7 @@ public class MainActivity extends Activity {
                 });
             }
         }));
-        if (file != null && !views && Studio3DArt.viewProposals(project, key).isEmpty()) r3.addView(Ui.small(this, "📐 Views from this picture", Ui.PRIMARY_DARK, new View.OnClickListener() {
+        if (false && file != null && !views && !Studio3DArt.realAngles(project, key) && Studio3DArt.viewProposals(project, key).isEmpty()) r3.addView(Ui.small(this, "📐 Views from this picture", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is making the three-quarter, side and back views of " + c.shown() + " from the picture…", new Work() {
                     public Object run() throws Exception {
@@ -1234,8 +1364,8 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { Studio3DArt.removeViews(project, key); project.setSetting("rejected3d.view." + key, "1"); showStudio(); }
             }));
         }
-        if (file != null) {
-            // the plain-English guide: a front picture does not show the back — the user's own back or side picture is the best view
+        if (false && file != null) {
+            // v26: one upload button does it all (up to 10 pictures, 10 angles or poses each); the separate back/side pickers are gone
             r3.addView(Ui.small(this, "📷 Back", Ui.BLUE, new View.OnClickListener() {
                 public void onClick(View v) { choosePicture("view:" + key + ":180", c.displayName + " back view"); }
             }));
@@ -1243,10 +1373,10 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { choosePicture("view:" + key + ":-90", c.displayName + " side view"); }
             }));
         }
-        r3.addView(Ui.small(this, "📷 10 angles", Ui.PRIMARY, new View.OnClickListener() {
+        r3.addView(Ui.small(this, "📷 Pictures (10 × 10 angles)", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { anglesFor("angles:char:" + key + ":" + c.shown(), c.shown()); }
         }));
-        if (file == null) r3.addView(Ui.small(this, "📐 Doll sheet", Ui.BLUE, new View.OnClickListener() {
+        if (false && file == null) r3.addView(Ui.small(this, "📐 Doll sheet", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is drawing the master sheet of " + c.shown() + "…", new Work() {
                     public Object run() throws Exception { return Studio3DArt.masterSheet(project, c); }
@@ -3171,6 +3301,20 @@ public class MainActivity extends Activity {
         outer.addView(hint);
         final FaceTapView fv = new FaceTapView(this);
         outer.addView(fv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        // v26: every picture there is of this character (the front, the angle views, the library's) — step through
+        // them to find the one facing the camera; "Save" makes that one the front picture with its mouth and eyes
+        LinearLayout nav = Ui.row(this);
+        nav.setPadding(Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 8), 0);
+        nav.setBackgroundColor(Ui.BG);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
+        final Button prev = Ui.small(this, "◀", Ui.BLUE, null);
+        final Button next = Ui.small(this, "▶", Ui.BLUE, null);
+        final TextView which = Ui.text(this, "", 13, Ui.SUB, false);
+        which.setGravity(Gravity.CENTER);
+        nav.addView(prev);
+        nav.addView(which, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        nav.addView(next);
+        outer.addView(nav);
         LinearLayout r = Ui.row(this);
         r.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
         r.setBackgroundColor(Ui.BG);
@@ -3191,44 +3335,95 @@ public class MainActivity extends Activity {
         String line = project.manifestLine("char", charName);
         if (line == null) { showStudio(); return; }
         final String[] f = line.split("\\|");
-        new Thread(new Runnable() {
+        // the candidates: {label, project file or null, library item or null}
+        final List<Object[]> cands = new ArrayList<Object[]>();
+        cands.add(new Object[]{"The front picture now", f[2], null});
+        String shown = charName;
+        try { Story.CharacterDef c = ScriptParser.resolve(castStory != null ? castStory : loadStory(), charName); if (c != null) shown = c.shown(); } catch (Throwable ignored) {}
+        final String[] vf = Studio3DArt.viewFiles(project, charName);
+        final String[] vn = {"three-quarter view", "side view", "back view"};
+        for (int i = 0; i < vf.length; i++) if (vf[i] != null) cands.add(new Object[]{"The " + vn[Math.min(i, vn.length - 1)] + (Studio3DArt.realView(project, charName, com.tarun.kahani.core.Figure3D.VIEW_ANGLES[i]) ? " (your picture)" : " (drawn)"), vf[i], null});
+        for (Library.Item it : library.find(Library.PIC, null, null)) {
+            if (it.builtIn) continue;
+            boolean mine = it.name.equals(shown) || it.name.startsWith(shown + " (") || shown.equals(it.meta("ofName"));
+            if (!mine) continue;
+            cands.add(new Object[]{"Library: " + it.label(), null, it});
+            if (cands.size() >= 120) break;
+        }
+        final int[] cur = {0};
+        final Bitmap[] shownBmp = {null};
+        final Runnable[] load = new Runnable[1];
+        load[0] = new Runnable() {
             public void run() {
-                final Art.Sprite sp;
-                try {
-                    sp = Art.makeSprite(project.loader(), f[2], 1100);
-                } catch (Throwable e) {
-                    ui.post(new Runnable() { public void run() { toast("Could not open the picture"); showStudio(); } });
-                    return;
-                }
-                ui.post(new Runnable() {
+                final int i = cur[0];
+                final Object[] cd = cands.get(i);
+                which.setText((i + 1) + " / " + cands.size() + " — " + cd[0]);
+                hint.setText("Opening the picture…");
+                new Thread(new Runnable() {
                     public void run() {
-                        if (screen != S_FACE) return;
-                        if (sp == null) { toast("Could not open the picture"); showStudio(); return; }
-                        float[] init = null;
-                        if (f.length >= 11) {
-                            try {
-                                init = new float[]{Float.parseFloat(f[3]), Float.parseFloat(f[4]), Float.parseFloat(f[6]), Float.parseFloat(f[7]), Float.parseFloat(f[8]), Float.parseFloat(f[9])};
-                            } catch (NumberFormatException ignored) {}
-                        } else if (sp.faceKnown) {
-                            init = new float[]{sp.mouthX, sp.mouthY, sp.eyeLX, sp.eyeLY, sp.eyeRX, sp.eyeRY};
-                        }
-                        fv.set((Bitmap) sp.img, init);
-                        hint.setText(fv.step >= 3 ? "Are the marks right? If not, tap \"Redo\" and tap the mouth and eyes" : steps[0]);
+                        Art.Sprite sp0 = null;
+                        Bitmap bm = null;
+                        try {
+                            if (cd[1] != null) { sp0 = Art.makeSprite(project.loader(), (String) cd[1], 1100); if (sp0 != null) bm = (Bitmap) sp0.img; }
+                            else bm = decodeSmall(Project.readAll(library.open((Library.Item) cd[2])), 1100);
+                        } catch (Throwable e) { bm = null; }
+                        final Art.Sprite sp = sp0;
+                        final Bitmap fb = bm;
+                        ui.post(new Runnable() {
+                            public void run() {
+                                if (screen != S_FACE || cur[0] != i) return;
+                                if (fb == null) { toast("Could not open the picture"); return; }
+                                shownBmp[0] = fb;
+                                float[] init = null;
+                                if (i == 0 && f.length >= 11) {
+                                    try { init = new float[]{Float.parseFloat(f[3]), Float.parseFloat(f[4]), Float.parseFloat(f[6]), Float.parseFloat(f[7]), Float.parseFloat(f[8]), Float.parseFloat(f[9])}; } catch (NumberFormatException ignored) {}
+                                } else if (sp != null && sp.faceKnown) {
+                                    init = new float[]{sp.mouthX, sp.mouthY, sp.eyeLX, sp.eyeLY, sp.eyeRX, sp.eyeRY};
+                                }
+                                fv.set(fb, init);
+                                hint.setText(fv.step >= 3 ? "Are the marks right? If not, tap \"Redo\" and tap the mouth and eyes" + (i > 0 ? " — \"Save\" makes this the front picture" : "") : steps[0] + (i > 0 ? " (this picture becomes the front)" : ""));
+                            }
+                        });
                     }
-                });
+                }).start();
             }
-        }).start();
+        };
+        prev.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { cur[0] = (cur[0] + cands.size() - 1) % cands.size(); load[0].run(); } });
+        next.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { cur[0] = (cur[0] + 1) % cands.size(); load[0].run(); } });
+        fv.swipe = new FaceTapView.Swipe() {
+            public void swiped(int direction) { if (cands.size() > 1) { cur[0] = (cur[0] + cands.size() + direction) % cands.size(); load[0].run(); } }
+        };
+        if (cands.size() <= 1) { prev.setVisibility(View.GONE); next.setVisibility(View.GONE); which.setText("Only one picture of " + shown + " — add pictures (10 × 10 angles) from the Studio, then swipe here to pick the front"); }
+        load[0].run();
         save.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 if (fv.step < 3) { toast("First tap the mouth and both eyes"); return; }
-                float[] p = fv.pts;
-                float eyeDist = Math.abs(p[4] - p[2]);
-                float mouthHW = eyeDist * 0.42f, eyeR = eyeDist * 0.24f;
-                String nl = String.format(Locale.US, "char|%s|%s|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%s",
-                        f[1], f[2], p[0], p[1], mouthHW, p[2], p[3], p[4], p[5], eyeR, f.length >= 12 ? f[11] : "0");
-                project.setManifest("char", f[1], nl);
-                toast("Saved — the lips will now move with the voice");
-                showStudio();
+                final float[] p = fv.pts.clone();
+                final Object[] cd = cands.get(cur[0]);
+                final boolean other = cur[0] != 0;
+                background(other ? "Making this the front picture…" : null, new Work() {
+                    public Object run() throws Exception {
+                        String file = f[2];
+                        if (other) {
+                            byte[] data = cd[1] != null ? AudioIO.readFile(project.file((String) cd[1])) : Project.readAll(library.open((Library.Item) cd[2]));
+                            file = project.savePicture(data, "char");
+                            if (cd[2] != null) project.setSetting("pic.char:" + f[1], ((Library.Item) cd[2]).id);
+                            project.setSetting("realview." + f[1] + ".0", "1");
+                        }
+                        float eyeDist = Math.abs(p[4] - p[2]);
+                        float mouthHW = eyeDist * 0.42f, eyeR = eyeDist * 0.24f;
+                        String nl = String.format(Locale.US, "char|%s|%s|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%s",
+                                f[1], file, p[0], p[1], mouthHW, p[2], p[3], p[4], p[5], eyeR, f.length >= 12 ? f[11] : "0");
+                        project.setManifest("char", f[1], nl);
+                        return file;
+                    }
+                }, new Done() {
+                    public void done(Object r, Exception e) {
+                        if (e != null) { toast("Could not save: " + e.getMessage()); return; }
+                        toast(other ? "Saved — this is the front picture now; the lips will move with the voice" : "Saved — the lips will now move with the voice");
+                        showStudio();
+                    }
+                });
             }
         });
     }
@@ -3301,6 +3496,10 @@ public class MainActivity extends Activity {
                 if (shown++ < 10) m.append(m.length() > 0 ? ", " : "").append(t[1]);
             }
             if (shown > 10) m.append(" and ").append(shown - 10).append(" more");
+            List<com.tarun.kahani.core.ScenePlan.Extra> extras = com.tarun.kahani.core.ScenePlan.extras(st);
+            StringBuilder xs = new StringBuilder();
+            for (com.tarun.kahani.core.ScenePlan.Extra x : extras) if (project.manifestLine("scene", x.key) == null) xs.append(xs.length() > 0 ? "; " : "").append(x.label);
+            if (xs.length() > 0) body.addView(Ui.text(this, "\n🎬 The director adds " + extras.size() + " scene(s) of its own and asks for their pictures (up to 10 each, 10 angles in each): " + xs + ". Without one it shows the place itself.", 14, Ui.PRIMARY_DARK, false));
             if (shown > 0) {
                 body.addView(Ui.text(this, "\nNo picture yet: " + m + ". The director looks in your library first — or tap \"Pictures first\" below to add up to 10 angles of any of them now.", 14, Ui.SUB, false));
                 ai.setText("Make the rest with free AI in 3D animated style (made natively in the film's shape)");
@@ -3334,6 +3533,10 @@ public class MainActivity extends Activity {
                         boolean dup = false;
                         for (String[] u : all) if (u[0].startsWith("angles:scene:" + sc.number + ":")) dup = true;
                         if (!dup && seen.add(t)) all.add(new String[]{t, "Part " + sc.number + ": " + nm + " (background)"});
+                    }
+                    for (com.tarun.kahani.core.ScenePlan.Extra x : com.tarun.kahani.core.ScenePlan.extras(st)) {
+                        String t = "angles:scene:" + x.key + ":" + x.label;
+                        if (seen.add(t)) all.add(new String[]{t, "🎬 " + x.label + (project.manifestLine("scene", x.key) != null ? " ✅" : "")});
                     }
                 } catch (Exception ignored) {}
                 String[] names = new String[all.size() + 1];
@@ -3721,6 +3924,7 @@ public class MainActivity extends Activity {
         c.addView(stop);
         body.addView(c);
         missingCard(body);
+        try { picturesCard(body, loadStory()); } catch (Throwable ignored) { /* the progress itself matters more */ }
         ui.post(new Runnable() {
             public void run() {
                 if (screen != S_PROGRESS) return;

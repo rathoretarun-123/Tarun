@@ -412,6 +412,142 @@ public class AppTest {
 
     static byte[] wav16(float[] x, int sr) { return com.tarun.kahani.core.Wav.encode16(x, sr); }
 
+    /** The user's own character and place sheets (tools/testdata/sheets): 60 sheets of 10 angles, poses or views each. */
+    static File[] userSheets() {
+        File dir = new File(ASSETS, "../../../../tools/testdata/sheets");
+        File[] fs = dir.listFiles();
+        if (fs == null) return new File[0];
+        java.util.Arrays.sort(fs);
+        return fs;
+    }
+
+    /** The upload's closing toast (✅ … or Could not …) has shown: the background work and its done() ran. */
+    static boolean uploadDone() {
+        String t = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+        return t != null && (t.startsWith("✅") || t.startsWith("Could not") || t.startsWith("No picture") || t.startsWith("These pictures"));
+    }
+
+    static int[] pixelsOf(File f, int[] wh) {
+        Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getAbsolutePath());
+        assertNotNull(f.getName(), b);
+        wh[0] = b.getWidth(); wh[1] = b.getHeight();
+        int[] px = new int[wh[0] * wh[1]];
+        b.getPixels(px, 0, wh[0], 0, 0, wh[0], wh[1]);
+        return px;
+    }
+
+    /**
+     * v26: every one of the user's 60 sheets (characters in angles, poses and emotions; places in views) splits
+     * into its figures or panels — at least 9 of 10 on each — and the pieces are whole (as tall as the tallest).
+     */
+    @Test
+    public void userSheetsSplitIntoTheirFigures() throws Exception {
+        File[] sheets = userSheets();
+        assertTrue("no sheets at " + new File(ASSETS, "../../../../tools/testdata/sheets"), sheets.length >= 40);
+        int perfect = 0, total = 0;
+        StringBuilder report = new StringBuilder();
+        for (File f : sheets) {
+            if (!f.getName().endsWith(".jpg")) continue;
+            int[] wh = new int[2];
+            int[] px = pixelsOf(f, wh);
+            boolean place = f.getName().matches("sheet(3[4-9]|40|41|42|43)\\.jpg");
+            List<com.tarun.kahani.core.Angles.Piece> all = com.tarun.kahani.core.Angles.split(px, wh[0], wh[1], !place);
+            List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(all, wh[0], wh[1]);
+            int tallest = 0;
+            for (com.tarun.kahani.core.Angles.Piece pc : figs) tallest = Math.max(tallest, pc.h);
+            int whole = 0;
+            for (com.tarun.kahani.core.Angles.Piece pc : figs) if (pc.h >= 0.45f * tallest || pc.w >= 0.6f * tallest) whole++;   // a lying or sitting pose is wide, not tall
+            report.append(f.getName()).append('=').append(figs.size()).append(' ');
+            total++;
+            if (figs.size() == 10) perfect++;
+            assertTrue(f.getName() + ": " + figs.size() + " figures", figs.size() >= 9);
+            assertTrue(f.getName() + ": " + whole + " of " + figs.size() + " whole", whole >= figs.size() - 1);
+        }
+        System.out.println("SHEETS: " + perfect + " of " + total + " split 10/10 — " + report);
+        assertTrue(perfect + " of " + total + " perfect", perfect >= total * 0.9f);
+    }
+
+    /**
+     * v26: a sheet given for a character becomes its front picture, its real views and up to 100 library pictures;
+     * a thing named by the user gets its insert; a sheet of a place's views becomes the wide view, the reverse
+     * angle and the rest in the library — all through the app's own upload path (saveAngles), no drawn view made.
+     */
+    @Test
+    public void sheetsUploadedForCharacterThingAndPlaceAreSplitAndSaved() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File[] sheets = userSheets();
+        assertTrue(sheets.length >= 40);
+        File girl = new File(sheets[0].getParentFile(), "sheet02.jpg"), cave = new File(sheets[0].getParentFile(), "sheet39.jpg"), monkey = new File(sheets[0].getParentFile(), "sheet01.jpg");
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        Story.CharacterDef girlDef = null;
+        for (Story.CharacterDef c : st.cast()) if (c.look != null && c.look.kind == com.tarun.kahani.core.Look.GIRL) { girlDef = c; break; }
+        if (girlDef == null) girlDef = st.cast().get(0);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        String key = (String) keyFor.invoke(a, girlDef);
+        Method save = MainActivity.class.getDeclaredMethod("saveAngles", String.class, List.class);
+        save.setAccessible(true);
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);     // the activity's own instance (what the upload writes to)
+        int libBefore = lib.find("pic", null, null).size();
+        // 1. the character: one sheet of ten
+        List<byte[]> one = new ArrayList<byte[]>();
+        one.add(Files.readAllBytes(girl.toPath()));
+        save.invoke(a, "angles:char:" + key + ":" + girlDef.shown(), one);
+        for (int i = 0; i < 1200 && !uploadDone(); i++) { idle(); Thread.sleep(100); }
+        idle();
+        String cast = p.read("cast.txt");
+        System.out.println("SHEET UPLOAD cast:\n" + cast + "\nSHEET TOAST: " + org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+        assertTrue("real angles not noted", "1".equals(p.setting("realangles." + key, "")));
+        assertTrue("no front picture: " + cast, cast.contains("char|" + key + "|"));
+        assertTrue("no view line: " + cast, cast.contains("view|" + key + "|"));
+        int ofGirl = 0;
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) if (girlDef.shown().equals(it.meta("ofName")) || it.name.equals(girlDef.shown())) ofGirl++;
+        assertTrue("library pictures of the character: " + ofGirl, ofGirl >= 8);
+        // no drawn view is ever made for her now
+        assertTrue("1".equals(p.setting("realangles." + key, "")));
+        // 2. a thing named by the user: its insert from one figure of the monkey sheet
+        int[] wh = new int[2];
+        int[] px = pixelsOf(monkey, wh);
+        List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, wh[0], wh[1]), wh[0], wh[1]);
+        assertTrue(figs.size() >= 9);
+        com.tarun.kahani.core.Angles.Piece pc = figs.get(0);
+        Bitmap pb = Bitmap.createBitmap(pc.px, pc.w, pc.h, Bitmap.Config.ARGB_8888);
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        pb.compress(Bitmap.CompressFormat.PNG, 100, bo);
+        List<byte[]> thing = new ArrayList<byte[]>();
+        thing.add(bo.toByteArray());
+        save.invoke(a, "angles:obj:पगड़ी:पगड़ी", thing);
+        org.robolectric.shadows.ShadowToast.reset();
+        for (int i = 0; i < 600 && !uploadDone(); i++) { idle(); Thread.sleep(100); }
+        idle();
+        assertTrue("thing not saved: " + p.read("cast.txt"), p.read("cast.txt").contains("shot||पगड़ी|"));
+        // 3. a place: a sheet of ten views of the cave for part 1 — the wide view, the reverse angle, the rest in the library
+        List<byte[]> place = new ArrayList<byte[]>();
+        place.add(Files.readAllBytes(cave.toPath()));
+        save.invoke(a, "angles:scene:1:गुफा", place);
+        org.robolectric.shadows.ShadowToast.reset();
+        for (int i = 0; i < 1200 && !uploadDone(); i++) { idle(); Thread.sleep(100); }
+        idle();
+        System.out.println("SHEET TOAST 3: " + org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+        assertTrue("wide view missing: " + p.read("cast.txt"), p.manifestLine("scene", "1") != null);
+        assertTrue("reverse angle missing: " + p.read("cast.txt"), p.manifestLine("scene", "1r") != null);
+        int ofCave = 0;
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) if ("गुफा".equals(it.meta("ofName")) || it.name.equals("गुफा")) ofCave++;
+        System.out.println("SHEET UPLOAD: character pictures " + ofGirl + ", cave pictures " + ofCave + ", library " + libBefore + " → " + lib.find("pic", null, null).size());
+        assertTrue("library pictures of the cave: " + ofCave, ofCave >= 8);
+        ac.pause().stop().destroy();
+    }
+
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
     @Test
     public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {

@@ -14,6 +14,10 @@ import android.view.View;
  */
 final class FaceTapView extends View {
     interface Listener { void changed(int step); }
+    /** v26: a horizontal swipe over the picture (to the next or the previous picture of the character). */
+    interface Swipe { void swiped(int direction); }
+    Swipe swipe;
+    private float downX, downY;
 
     Bitmap bmp;
     final float[] pts = new float[6]; // mouth x,y, left eye x,y, right eye x,y (fractions)
@@ -69,6 +73,15 @@ final class FaceTapView extends View {
 
     public boolean onTouchEvent(MotionEvent e) {
         if (bmp == null) return false;
+        if (e.getAction() == MotionEvent.ACTION_DOWN) { downX = e.getX(); downY = e.getY(); }
+        if (e.getAction() == MotionEvent.ACTION_UP) {
+            float dx = e.getX() - downX, dy = e.getY() - downY;
+            if (Math.abs(dx) > Ui.dp(getContext(), 60) && Math.abs(dx) > 2 * Math.abs(dy)) {
+                if (swipe != null) swipe.swiped(dx < 0 ? 1 : -1);
+                return true;
+            }
+            if (Math.abs(dx) > Ui.dp(getContext(), 12) || Math.abs(dy) > Ui.dp(getContext(), 12)) return true;   // a drag, not a tap
+        }
         if (e.getAction() == MotionEvent.ACTION_UP && step < 3) {
             layoutDst();
             float fx = (e.getX() - dst.left) / dst.width(), fy = (e.getY() - dst.top) / dst.height();

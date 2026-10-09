@@ -34,8 +34,8 @@ public final class ShotPlanner {
     public static final int ESTABLISH = 0, INTRODUCE = 1, DEVELOP = 2, ESCALATE = 3, PEAK = 4, RELEASE = 5;
     public static final String[] STAGE_NAME = {"Establish", "Introduce", "Develop", "Escalate", "Peak", "Release"};
 
-    public static final int SINGLE = 0, TWO_SHOT = 1, OTS = 2;
-    public static final String[] TYPE_NAME = {"Single", "Two-shot", "Over the shoulder"};
+    public static final int SINGLE = 0, TWO_SHOT = 1, OTS = 2, POV = 3;
+    public static final String[] TYPE_NAME = {"Single", "Two-shot", "Over the shoulder", "Point of view"};
 
     public static final int STATIC = 0, PUSH_IN = 1, PULL_BACK = 2, DRIFT = 3;
     public static final String[] MOVE_NAME = {"Static", "Slow push-in", "Pull-back", "Gentle drift"};
@@ -71,6 +71,8 @@ public final class ShotPlanner {
             case Pose.HAPPY: i = 0.3f; break;
             case Pose.LAUGH: i = 0.38f; break;
             case Pose.CURIOUS: case Pose.PROUD: i = 0.35f; break;
+            case Pose.RELIEVED: i = 0.3f; break;
+            case Pose.SUSPICIOUS: i = 0.45f; break;
             case Pose.DETERMINED: i = 0.5f; break;
             case Pose.SURPRISED: i = 0.6f; break;
             case Pose.EVIL: i = 0.6f; break;

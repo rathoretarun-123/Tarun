@@ -1305,6 +1305,8 @@ public final class Puppet {
             float inner = 0, outer = 0;
             switch (em) {
                 case Pose.ANGRY: case Pose.DETERMINED: case Pose.EVIL: inner = r * 0.1f; outer = -r * 0.05f; break;
+                case Pose.SUSPICIOUS: inner = r * 0.06f; outer = r * 0.02f; break;
+                case Pose.RELIEVED: inner = -r * 0.02f; outer = -r * 0.02f; break;
                 case Pose.SAD: case Pose.SCARED: case Pose.PAIN: inner = -r * 0.09f; outer = r * 0.04f; break;
                 case Pose.SURPRISED: case Pose.CURIOUS: inner = -r * 0.08f; outer = -r * 0.08f; break;
                 case Pose.HAPPY: case Pose.LAUGH: inner = -r * 0.03f; outer = -r * 0.03f; break;
@@ -1356,6 +1358,8 @@ public final class Puppet {
             case Pose.ANGRY: smile = -0.5f; break;
             case Pose.SURPRISED: open = Math.max(open, 0.4f); break;
             case Pose.CURIOUS: smile = 0.3f; break;
+            case Pose.RELIEVED: smile = 0.6f; break;
+            case Pose.SUSPICIOUS: smile = -0.3f; break;
             default:
         }
         if (open < 0.08f) {

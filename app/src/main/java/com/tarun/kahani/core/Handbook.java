@@ -256,6 +256,8 @@ public final class Handbook {
         public boolean spine;
         public float faceFill;
         public int durationsDistinct;
+        /** The director's manual: point-of-view shots for looks, reactions to loud sounds. */
+        public int pov, loudReactions, estabHeld, estabTotal;
     }
 
     public static final class Card {

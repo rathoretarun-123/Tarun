@@ -29,6 +29,8 @@ public final class Bible {
             case Pose.PROUD: return hindi ? "गर्व से" : "proud";
             case Pose.CURIOUS: return hindi ? "जिज्ञासा से" : "curious";
             case Pose.PAIN: return hindi ? "दर्द में" : "in pain";
+            case Pose.SUSPICIOUS: return hindi ? "शक से" : "suspicious";
+            case Pose.RELIEVED: return hindi ? "राहत से" : "relieved";
             default: return hindi ? "सामान्य" : "calm";
         }
     }

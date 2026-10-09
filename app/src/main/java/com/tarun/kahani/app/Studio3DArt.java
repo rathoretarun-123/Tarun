@@ -560,6 +560,87 @@ final class Studio3DArt {
         return b.toString();
     }
 
+    /**
+     * The facial identity specification of every cast member (the director's manual 2.3): the cut-out's found
+     * eye, mouth and chin points, the picture's traits and the description, in the manual's template.
+     */
+    static String facialSpecs(Project project, Story story, boolean humanReview) {
+        StringBuilder b = new StringBuilder();
+        java.util.Map<Story.CharacterDef, String> ids = com.tarun.kahani.core.DirectorsManual.charIds(story);
+        for (Story.CharacterDef c : story.cast()) {
+            String key = keyFor(project, story, c);
+            String file = charFile(project, story, c);
+            Cutout.Result cut = null;
+            com.tarun.kahani.core.PicSense.Traits tr = null;
+            if (file != null) {
+                try {
+                    boolean beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
+                    int[] d = project.loader().decode(file, 420);
+                    if (d != null) {
+                        int[] px = new int[d[0] * d[1]];
+                        System.arraycopy(d, 2, px, 0, px.length);
+                        cut = Cutout.process(px, d[0], d[1], beast);
+                        tr = com.tarun.kahani.core.PicSense.traits(cut);
+                    }
+                } catch (Throwable ignored) {
+                    cut = null;
+                }
+            }
+            String approval;
+            if (file == null) approval = "no picture — the studio's puppet (approve by adding a picture, or let the studio make a doll)";
+            else if ("1".equals(project.setting("accepted3d.char." + key, "0"))) approval = file + " — a studio doll you accepted (✔ Use)";
+            else if (project.setting("model3d." + key, "").length() > 0) approval = file + " — a free model you accepted (" + project.setting("credit3d." + key, "") + ")";
+            else approval = file + " — your own picture (approved by choosing it)";
+            b.append(com.tarun.kahani.core.DirectorsManual.facialSpec(ids.get(c), c, file, cut, tr, facePoints(project, story, c) != null, viewFiles(project, key), approval, humanReview)).append('\n');
+        }
+        return b.toString();
+    }
+
+    /**
+     * The project asset inventory (the director's manual 1.1): every character, view, place, object picture,
+     * voice and background sound of this story, with its persistent ID, file, source and status — each file
+     * checked to exist, a picture never trusted by its name alone.
+     */
+    static java.util.List<String[]> inventory(Project project, Story story, Library lib) {
+        java.util.List<String[]> rows = new java.util.ArrayList<String[]>();
+        java.util.Map<Story.CharacterDef, String> ids = com.tarun.kahani.core.DirectorsManual.charIds(story);
+        for (Story.CharacterDef c : story.cast()) {
+            String key = keyFor(project, story, c);
+            String file = charFile(project, story, c);
+            String id = ids.get(c);
+            String source;
+            if (file == null) source = "no picture: the studio's puppet from the description";
+            else if ("1".equals(project.setting("accepted3d.char." + key, "0"))) source = "studio doll (3D, accepted)";
+            else if (project.setting("model3d." + key, "").length() > 0) source = "free model: " + project.setting("credit3d." + key, "");
+            else if (project.setting("auto.pic.char:" + key, "").length() > 0 || project.setting("pic.char:" + key, "").length() > 0) source = "your library (tarunkahani)";
+            else source = "your picture";
+            rows.add(new String[]{id, "character", c.shown(), file == null ? "—" : file, file == null ? "puppet" : project.has(file) ? "inspected" : "MISSING FILE", source});
+            String[] views = viewFiles(project, key);
+            if (views != null) for (int i = 0; i < views.length; i++) if (views[i] != null)
+                rows.add(new String[]{id + "_V" + i, "view", c.shown() + " (" + com.tarun.kahani.core.Figure3D.VIEW_NAMES[i] + ")", views[i], project.has(views[i]) ? "inspected" : "MISSING FILE",
+                        "1".equals(project.setting("accepted3d.view." + key, "0")) ? "made from the picture, accepted" : "given by you or the library"});
+            Library.Item vs = lib == null ? null : lib.byId(project.setting("vsample." + c.displayName, ""));
+            rows.add(new String[]{com.tarun.kahani.core.DirectorsManual.voiceId(id), "voice", c.shown(), vs != null ? vs.name : "—", vs != null ? "your voice sample" : "studio voice (matched to the description)", ""});
+        }
+        int loc = 0;
+        for (String l : project.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 3 && f[0].equals("scene")) {
+                rows.add(new String[]{String.format(java.util.Locale.US, "LOC_PIC_%02d", ++loc), "place picture", "scene " + f[1], f[2], project.has(f[2]) ? "inspected" : "MISSING FILE",
+                        "1".equals(project.setting("accepted3d.scene." + f[1], "0")) ? "studio 3D place, accepted" : "your picture or library"});
+            } else if (f.length >= 4 && f[0].equals("shot")) {
+                rows.add(new String[]{"INSERT_" + f[1], "insert picture", f[2], f[3], project.has(f[3]) ? "inspected" : "MISSING FILE", "a cinematic picture of this moment / the thing itself"});
+            } else if (f.length >= 4 && f[0].equals("propose")) {
+                rows.add(new String[]{"PROPOSAL", "proposal (3D " + f[1] + ")", f[2], f[1].equals("view") ? (f.length > 4 ? f[4] : "") : f[3], "waiting for your ✔ Use / ✖ Reject", "not used until you decide"});
+            }
+        }
+        for (Story.Scene sc : story.scenes) {
+            Library.Item amb = lib == null ? null : lib.byId(project.setting("amb." + sc.number, ""));
+            if (amb != null) rows.add(new String[]{"AMB_" + sc.number, "background sound", "scene " + sc.number, amb.name, "your recording", ""});
+        }
+        return rows;
+    }
+
     /** ARGB pixels to PNG (with transparency) or JPEG bytes. */
     static byte[] encode(int[] px, int w, int h, boolean png) {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);

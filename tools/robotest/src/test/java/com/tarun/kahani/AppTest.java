@@ -478,6 +478,11 @@ public class AppTest {
             Thread.sleep(50);
         }
         assertTrue("the job did not stop for the shot check: " + job.error, job.qcWaiting);
+        // the director's manual (3.7): the animatic is the first card of the check, made with the real mix before the film
+        boolean animatic = false;
+        for (String[] it : job.qcItems) if (it[2].equals("animatic")) animatic = true;
+        assertTrue("the animatic card", animatic);
+        assertTrue("animatic.mp4 " + p.file("animatic.mp4").length(), p.file("animatic.mp4").length() > 1000);
         assertTrue("the director asked before using the 3D dolls", asked);
         assertTrue("the accepted doll is the character's picture", p.manifestLine("char", "मीना") != null);
         int shots = 0;
@@ -494,6 +499,11 @@ public class AppTest {
         assertTrue("job failed: " + job.error, job.done);
         assertTrue(p.film().exists());
         assertTrue("recorded line not used: " + job.voicedLines, job.voicedLines == 1);
+        // the manual's records and checks are kept with the film
+        String qc = p.read("qc.txt");
+        for (String must : new String[]{"PROJECT ASSET INVENTORY", "FACIAL IDENTITY SPECIFICATION", "AUDIO CHECK", "EXPORT CHECK", "THREE-LEVEL REVIEW",
+                "Gate 3 — Animatic: passed", "QA CHECKLIST", "ANIMATIC (the director's manual 3.7): made before the film"})
+            assertTrue("qc.txt lacks: " + must, qc.contains(must));
     }
 
     @Test
@@ -1063,6 +1073,66 @@ public class AppTest {
      * there, the command box understands the new formats, the story spine and the Braintrust are in every film and
      * the descriptions package, and the thumbnail and poster are made natively in their own formats.
      */
+    /**
+     * The AI Director's Production Manual (v2.0), trained and hardcoded — its own final acceptance test: a short story
+     * with two recurring characters, two locations, dialogue, physical interaction, a loud sound, a look and an
+     * emotional change; the records it asks for; the facial identity specification and the inventory of the sample.
+     */
+    @Test
+    public void directorsManualIsTrainedRecordsAndAnimatic() throws Exception {
+        String manual = new String(Files.readAllBytes(new File(ASSETS, "ai_film_maker_directors_manual.md").toPath()), "UTF-8");
+        assertTrue(manual.contains("Gate 5") && manual.contains("Final acceptance test") && manual.contains("Step 2.3"));
+        assertTrue(com.tarun.kahani.core.DirectorsManual.SUMMARY.contains("Gate 5 — Film") && com.tarun.kahani.core.DirectorsManual.ENFORCEMENT.length >= 25
+                && com.tarun.kahani.core.DirectorsManual.PRECEDENCE.length >= 6 && com.tarun.kahani.core.DirectorsManual.QA.length == 11);
+        // 2.6: suspicion and relief read from the manners
+        assertTrue(Director.emotionOf("शक से", "", null) == Pose.SUSPICIOUS);
+        assertTrue(Director.emotionOf("राहत की साँस लेकर", "", null) == Pose.RELIEVED);
+        assertTrue(Director.emotionOf("relieved", "", null) == Pose.RELIEVED);
+        assertTrue(com.tarun.kahani.core.DirectorsManual.loud("अचानक ज़ोर का धमाका होता है।") && !com.tarun.kahani.core.DirectorsManual.loud("मीना मुस्कुराती है।"));
+        assertTrue(com.tarun.kahani.core.DirectorsManual.looksAt("मीना दरवाज़े की ओर देखती है।") && !com.tarun.kahani.core.DirectorsManual.looksAt("मीना दौड़ती है।"));
+        // the acceptance story (Part VII)
+        File f = new File(ASSETS, "../../../../tools/testdata/manual_test.txt");
+        Story story = ScriptParser.parse(new String(Files.readAllBytes(f.toPath()), "UTF-8"));
+        assertTrue("cast " + story.cast().size() + " scenes " + story.scenes.size(), story.cast().size() == 2 && story.scenes.size() == 2);
+        Director.Options opt = new Director.Options();
+        opt.aspect = "16:9";
+        Director d = new Director(story, opt);
+        d.prepare();
+        Film film = d.direct(new Art());
+        String q = film.shotList;
+        int pov = 0, loud = 0, estab = 0;
+        for (Film.Shot sh : film.shots) {
+            assertTrue("shot over 4 s: " + sh.dur, sh.dur <= 4.05f);
+            if (sh.type == com.tarun.kahani.core.ShotPlanner.POV) pov++;
+            if (sh.purpose.startsWith("Reaction to the sound")) loud++;
+            if (sh.stage == com.tarun.kahani.core.ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) estab++;
+        }
+        assertTrue("a point-of-view shot for the look: " + pov, pov >= 1);
+        assertTrue("a reaction to the loud sound: " + loud, loud >= 1);
+        assertTrue("an establishing shot per place: " + estab, estab >= 2);
+        for (String must : new String[]{"ASSETS: CHAR_001", "LOC_001", "LOC_002", "TRANSITION IN: establishing cut", "TRANSITION IN: reaction cut", "STATE AT START:", "STATE AT END:",
+                "VOICE / MUSIC: VOICE_001", "NARRATIVE BEAT SHEET", "SCENE RECORDS", "SC_01", "SC_02", "SCENE-COVERAGE REPORT", "PROP LEDGER", "LOCATION RECORDS",
+                "One brow down", "Tension gone", "Director's manual (v2.0)", "Point of view: what मीना sees", "CONTINUITY LEDGER"})
+            assertTrue("the shot list lacks: " + must, q.contains(must));
+        // 2.3 and 1.1: the facial identity specification and the inventory of the sample cast (real pictures, real back views)
+        Project p = sampleProject();
+        Story sample = ScriptParser.parse(p.read("script.txt"));
+        String specs = (String) s3d("facialSpecs", p, sample, true);
+        for (String must : new String[]{"FACIAL IDENTITY SPECIFICATION", "Character ID: CHAR_001", "read from the picture", "IDENTITY CONSTRAINTS", "Uncertain features", "Human review status"})
+            assertTrue("specs lack: " + must, specs.contains(must));
+        @SuppressWarnings("unchecked")
+        List<String[]> inv = (List<String[]>) s3d("inventory", p, sample, null);
+        int chars = 0, views = 0;
+        for (String[] r : inv) {
+            if (r[1].equals("character")) { chars++; assertTrue(r[0] + " " + r[4], !r[4].equals("MISSING FILE")); }
+            if (r[1].equals("view")) { views++; assertTrue(r[0] + " " + r[4], r[4].equals("inspected")); }
+        }
+        assertTrue("characters " + chars + " views " + views, chars == sample.cast().size() && views >= 11);
+        String invText = com.tarun.kahani.core.DirectorsManual.inventory(inv);
+        assertTrue(invText.contains("PROJECT ASSET INVENTORY") && invText.contains("CHAR_001_V2") && invText.contains("VOICE_001"));
+        System.out.println("MANUAL: shots " + film.shots.size() + " pov " + pov + " loud " + loud + " establishing " + estab + "; inventory rows " + inv.size());
+    }
+
     @Test
     public void pixarLeadFormatsSpineBraintrustAndStillPages() throws Exception {
         // formats: the output size always has the format's exact shape (never a stretched frame)

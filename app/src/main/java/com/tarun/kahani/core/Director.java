@@ -135,6 +135,9 @@ public final class Director {
         if (Txt.has(m, "रोते", "रोकर", "रो रहे", "रोती", "फूट-फूट", "cry", "sob")) return Pose.SAD;
         if (Txt.has(m, "हँस", "हंस", "खिलखिला", "laugh") || Txt.has(text, "हा हा", "ही ही", "ही-ही")) return villain ? Pose.EVIL : Pose.LAUGH;
         if (Txt.has(m, "डर", "घबरा", "सहम", "काँप", "कांप", "झिझक", "scared", "afraid")) return Pose.SCARED;
+        // the director's manual (2.6): suspicion and relief are directing cues of their own
+        if (Txt.has(m, "शक", "संदेह", "शंका", "suspicious", "suspicion", "doubtful", "warily", "wary")) return Pose.SUSPICIOUS;
+        if (Txt.has(m, "राहत", "चैन की साँस", "चैन की सांस", "सुकून", "relieved", "relief", "sigh of relief")) return Pose.RELIEVED;
         if (Txt.has(m, "खाँस", "खांस", "चक्कर", "dizzy")) return Pose.DIZZY;
         if (Txt.has(m, "फुसफुसा", "whisper")) return Pose.WHISPER;
         if (Txt.has(m, "गर्व", "सीना", "proud")) return Pose.PROUD;
@@ -182,7 +185,7 @@ public final class Director {
         Story.CharacterDef heroDef = PixarLead.hero(story);
         film.hero = heroDef == null ? "" : heroDef.shown();
         maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0; framedFace = 0; faceFillSum = 0; faceFillN = 0;
-        thoughtBeats = 0; dutchCount = 0; dutchUsed = 0; usedInserts.clear();
+        thoughtBeats = 0; dutchCount = 0; dutchUsed = 0; usedInserts.clear(); povShots = 0; loudReactions = 0;
 
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
@@ -265,6 +268,8 @@ public final class Director {
         film.shotList += "\n" + film.braintrust.text;
         // the handbook's continuity ledger (ch. 12)
         film.shotList += "\n" + Handbook.ledger(film, story);
+        // the director's manual: the beat sheet (3.1), the scene records (3.3), the coverage report (3.2), the prop ledger and the location records (1.6)
+        film.shotList += DirectorsManual.records(film, story, film.stats);
         return film;
     }
 
@@ -486,7 +491,11 @@ public final class Director {
         b.append("Planned with the Pixar-style directing guide: emotion → performance → composition → camera → light → sound → cut.\n\n");
         int n = 0, cus = 0, reactions = 0, statics = 0, twos = 0;
         int part = -2;
+        Film.Shot prevShot = null;
+        Map<Story.CharacterDef, String> cids = DirectorsManual.charIds(story);
+        Map<Integer, String> lids = DirectorsManual.locIds(film);
         for (Film.Shot sh : film.shots) {
+            boolean newPart = sh.part != part;
             if (sh.part != part) {
                 part = sh.part;
                 Film.Seg sg = film.segAt(sh.t + 0.01f);
@@ -526,7 +535,14 @@ public final class Director {
             if (sh.view.length() > 0) b.append("PICTURES USED: ").append(sh.view).append('\n');
             b.append("FIVE QUESTIONS: see — ").append(sh.action).append(" | feel — ").append(sh.emotionalPurpose).append(" | attention first — ").append(sh.attention)
                     .append(" | reveals — ").append(sh.purpose).append(" | why this camera — ").append(Handbook.purposeOf(sh.size, sh.type)).append('\n');
-            b.append("GAZE: ").append(sh.gaze).append("\n\n");
+            b.append("GAZE: ").append(sh.gaze).append('\n');
+            // the director's manual (3.5, 1.7, 3.8, 3.9): the reference package, the transition, the state at both ends, the audio
+            b.append("ASSETS: ").append(DirectorsManual.assets(film, story, sh, cids, lids)).append('\n');
+            b.append("TRANSITION IN: ").append(DirectorsManual.transition(film, prevShot, sh, newPart)).append('\n');
+            b.append("STATE AT START: ").append(DirectorsManual.state(film, sh.t + 0.05f)).append('\n');
+            b.append("STATE AT END: ").append(DirectorsManual.state(film, sh.t + Math.max(0.1f, sh.dur - 0.05f))).append('\n');
+            b.append("VOICE / MUSIC: ").append(DirectorsManual.voiceMusic(film, story, sh, cids)).append("\n\n");
+            prevShot = sh;
         }
         b.append("QUALITY CHECK\n");
         b.append("• Every part opens on a readable wide shot: ").append(estab == 0 ? "yes" : "fixed " + estab).append('\n');
@@ -570,6 +586,12 @@ public final class Director {
             hs.estabFixed = estab; hs.passed = passed; hs.corrected = corrected; hs.stillWrong = stillWrong.size(); hs.reactions = reactions;
             hs.thoughtBeats = thoughtBeats; hs.dutch = dutchCount; hs.calmedRuns = calmed; hs.spine = film.hero.length() > 0; hs.faceFill = faceFillN == 0 ? 0 : faceFillSum / faceFillN;
             hs.durationsDistinct = durs.size();
+            hs.pov = povShots; hs.loudReactions = loudReactions;
+            for (Film.Shot sh : film.shots) if (sh.stage == ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) { hs.estabTotal++; if (sh.dur >= 3.8f) hs.estabHeld++; }
+            b.append(String.format(java.util.Locale.US, "• Director's manual (v2.0): establishing shots held for the top of the 4-s cap (3.9 s): %d of %d (the rest are cut sooner by the "
+                    + "protocol's motion rule — someone enters or moves during them, and the move is seen wide); point-of-view shots for looks: %d; "
+                    + "reactions staged for loud sounds: %d; suspicion and relief read from the manners; every shot carries its ASSETS, TRANSITION IN, STATE AT START / END and "
+                    + "VOICE / MUSIC lines; the beat sheet, scene records, coverage report, prop ledger and location records follow the ledger%n", hs.estabHeld, hs.estabTotal, povShots, loudReactions));
             film.stats = hs;
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
@@ -595,6 +617,8 @@ public final class Director {
             case Pose.SAD: return Film.M_SAD;
             case Pose.LAUGH: case Pose.HAPPY: return base == Film.M_CELEBRATE ? base : base == Film.M_HAPPY ? Film.M_HAPPY : Film.M_PLAYFUL;
             case Pose.DETERMINED: case Pose.PROUD: return base == Film.M_TENSE || base == Film.M_VILLAIN ? Film.M_ACTION : base;
+            case Pose.SUSPICIOUS: return base == Film.M_CELEBRATE ? base : Film.M_TENSE;
+            case Pose.RELIEVED: return base == Film.M_TENSE || base == Film.M_VILLAIN || base == Film.M_ACTION ? Film.M_HAPPY : base;
             default: return villain && base != Film.M_CELEBRATE ? Film.M_TENSE : base;
         }
     }
@@ -1736,6 +1760,8 @@ public final class Director {
     private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet, framedFace;
     /** The handbook's beats: thought before action (ch. 6), Dutch angles used (ch. 5: sparingly, at most one per scene). */
     private int thoughtBeats, dutchCount, dutchUsed;
+    /** The director's manual: point-of-view shots made for looks (3.4), reactions staged for loud sounds (3.2). */
+    private int povShots, loudReactions;
     /** The face fill of the lip-sync shots (section 8.3), summed, and how many were measured. */
     private float faceFillSum;
     private int faceFillN;
@@ -2059,6 +2085,8 @@ public final class Director {
             case Pose.EVIL: return to.look.hero ? Pose.SCARED : Pose.EVIL;
             case Pose.ANGRY: return !sp.look.hero && to.look.hero ? Pose.SCARED : to.look.hero ? Pose.SAD : Pose.ANGRY;
             case Pose.DETERMINED: return to.look.hero ? Pose.DETERMINED : Pose.NEUTRAL;
+            case Pose.SUSPICIOUS: return to.look.hero ? Pose.CURIOUS : Pose.NEUTRAL;
+            case Pose.RELIEVED: return Pose.HAPPY;
             default: return Pose.NEUTRAL;
         }
     }
@@ -2220,8 +2248,15 @@ public final class Director {
             tc += d;
         }
         estab = false;
-        float minDur = establishing ? 3.2f : 2.2f;
+        // the director's manual (3.6): an establishing shot wants 4-10 s; the protocol caps every shot at 4 s — so it is
+        // held for the top of the cap (3.9 s) before anything comes closer
+        float minDur = establishing ? 3.9f : 2.2f;
         if (tc - t0 < minDur) tc = t0 + minDur;
+        if (establishing) {
+            // nothing cuts closer before the establishing shot has been held: a cut planned inside it (an entrance, a
+            // first action) waits until the hold is over — the action itself is seen wide, as the manual's table wants
+            for (Film.Cam c : seg.cams) if (c.ease == 0 && c.t > t0 + 0.15f && c.t < t0 + 3.9f) c.t = t0 + 3.9f;
+        }
         if (li >= 0) { // narrator speaks the direction
             Film.Line l = film.lines.get(li);
             l.start = t0 + 0.2f;
@@ -2658,6 +2693,11 @@ public final class Director {
             for (Film.Fx f : seg.fx) if (f.type == Film.FX_LIGHTS_OFF && f.t1 > t) f.t1 = t + 0.6f;
             lightsOff = false;
         }
+        d = Math.max(d, loudReaction(s, t, subj, d));
+        if (!focusSet && !establishing && subj != null && subj.stateAt(t).visible && DirectorsManual.looksAt(s) && !Txt.has(s, "देखो", "look!", "look,")) {
+            d = Math.max(d, pointOfView(s, t, subj, target));
+            focusSet = true;
+        }
 
         if (!focusSet && !establishing) {
             List<Film.Actor> vis = new ArrayList<Film.Actor>();
@@ -2667,6 +2707,90 @@ public final class Director {
             else cam(t, 640, 360, 1.0f, 0.6f);
         }
         return d;
+    }
+
+    // ------------------------------------------------------------------ the director's manual: reactions and looks
+
+    /**
+     * The manual (3.2): a dramatic sound has a visible reaction. Everyone on stage startles a beat after it (the
+     * head turns, the face changes) and the nearest face is shown in a reaction shot. Returns the time it needs.
+     */
+    private float loudReaction(String s, float t, Film.Actor subj, float d) {
+        if (!DirectorsManual.loud(s)) return 0;
+        Film.Actor react = null;
+        float best = 1e9f, sx = subj != null ? xAt(subj, t) : 640;
+        boolean danger = DirectorsManual.dangerous(s);
+        for (Film.Actor a : seg.actors) {
+            Film.Key k = a.stateAt(t + 0.4f);
+            if (!k.visible || k.anchor == Film.A_HIDDEN) continue;
+            // the subject of a "hears a sound" sentence already has its thought beat; the others react now
+            if (a != subj || !Handbook.stimulus(s)) {
+                a.acts.add(new Film.Act(t + 0.3f, t + 1.1f, Film.G_LISTEN));
+                Film.Key kk = a.at(t + 0.45f);
+                if (kk.emotion == Pose.NEUTRAL || kk.emotion == Pose.HAPPY || kk.emotion == Pose.CURIOUS) {
+                    kk.emotion = danger ? Pose.SCARED : Pose.SURPRISED;
+                    a.at(t + 2.8f).emotion = Pose.NEUTRAL;
+                }
+            }
+            float dd = Math.abs(xAt(a, t) - sx) + (a == subj ? 300 : 0);
+            if (dd < best) { best = dd; react = a; }
+        }
+        if (react == null) return 0;
+        float rt = t + Math.max(1.0f, d * 0.5f);
+        camOn(react, rt, 1.7f);
+        Film.Shot sh = shot(rt, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, react, null, ShotPlanner.ESCALATE);
+        sh.reaction = true;
+        sh.purpose = "Reaction to the sound (director's manual 3.2): " + react.c.shown() + " startles — the sound is seen on a face";
+        sh.action = react.c.shown() + " turns toward the sound, a beat late";
+        sh.face = faceOf(react.stateAt(rt + 0.1f).emotion);
+        sh.body = bodyOf(react.stateAt(rt + 0.1f).emotion, react.look);
+        sh.cutWhen = "the startle has landed";
+        sh.emotionalPurpose = "A dramatic sound has a visible reaction (never a sound without a face)";
+        sh.light = danger ? 0.75f : 0.5f;
+        loudReactions++;
+        return rt - t + 1.3f;
+    }
+
+    /**
+     * The manual (3.4): a point-of-view shot shows what a character sees. The look first (the eyes go to the
+     * thing, the head a moment later), then the thing seen from where they stand: the other character framed
+     * medium, or the place ahead of them. Returns the time it needs.
+     */
+    private float pointOfView(String s, float t, Film.Actor subj, Film.Actor target) {
+        camOn(subj, t, 1.7f);
+        Film.Shot a = shot(t, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, subj, target, ShotPlanner.DEVELOP);
+        a.purpose = "The look (director's manual 3.4): " + subj.c.shown() + "'s eyes go to " + (target != null ? target.c.shown() : "what the sentence names");
+        a.action = subj.c.shown() + " looks" + (target != null ? " at " + target.c.shown() : " — " + clip(Txt.withoutParens(s), 50));
+        a.face = "Eyes on the thing first, the head a moment later";
+        a.body = "Still, turned toward it";
+        a.cutWhen = "the eyes have settled";
+        a.emotionalPurpose = "We know where the character looks before we see it";
+        float pt = t + 1.2f;
+        Film.Shot p;
+        if (target != null && target.stateAt(pt).visible && target.stateAt(pt).anchor != Film.A_HIDDEN) {
+            float tx = xAt(target, pt), ht = heightOf(target);
+            Film.Key kt = target.stateAt(pt);
+            cam(pt, tx, kt.body == Pose.LIE ? ground - 60 : ground - ht * 0.62f, 1.35f, 0);
+            p = shot(pt, ShotPlanner.MEDIUM, ShotPlanner.POV, 0, ShotPlanner.STATIC, target, subj, ShotPlanner.DEVELOP);
+            p.purpose = "Point of view: what " + subj.c.shown() + " sees — " + target.c.shown();
+            p.action = target.c.shown() + " as " + subj.c.shown() + " sees them, from where " + subj.c.shown() + " stands";
+            p.face = faceOf(kt.emotion);
+            p.body = bodyOf(kt.emotion, target.look);
+        } else {
+            float facing = subj.stateAt(t).facing;
+            float cx = Math.max(240, Math.min(1040, xAt(subj, t) + facing * 420));
+            cam(pt, cx, 372, 1.15f, 0);
+            p = shot(pt, ShotPlanner.WIDE, ShotPlanner.POV, 0, ShotPlanner.STATIC, null, subj, ShotPlanner.DEVELOP);
+            p.subject = "what " + subj.c.shown() + " sees";
+            p.purpose = "Point of view: what " + subj.c.shown() + " sees — " + clip(Txt.withoutParens(s), 50);
+            p.action = "The place ahead of " + subj.c.shown() + ", from where they stand";
+            p.face = "—";
+            p.body = "—";
+        }
+        p.cutWhen = "the thing seen has registered";
+        p.emotionalPurpose = "The audience sees with the character";
+        povShots++;
+        return 2.8f;
     }
 
     // ------------------------------------------------------------------ the cues of any script
@@ -3284,6 +3408,8 @@ public final class Director {
             case Pose.PROUD: return "Chin up, a small smile";
             case Pose.CURIOUS: return "One brow raised";
             case Pose.PAIN: return "Squeezed eyes, a frown";
+            case Pose.SUSPICIOUS: return "One brow down, eyes narrowed, the head turned a little (asymmetrical brows)";
+            case Pose.RELIEVED: return "Tension gone, a soft smile, the gaze softened";
             default: return "Calm, listening";
         }
     }
@@ -3296,6 +3422,8 @@ public final class Director {
             case Pose.SCARED: return "Leans back, arms in" + p;
             case Pose.ANGRY: return "Leans in, arms out, " + e + p;
             case Pose.HAPPY: case Pose.LAUGH: return "Open posture, " + e + p;
+            case Pose.SUSPICIOUS: return "Head angled, held back a little, arms in" + p;
+            case Pose.RELIEVED: return "Shoulders drop, a breath out, the posture released" + p;
             default: return e.substring(0, 1).toUpperCase() + e.substring(1) + p;
         }
     }

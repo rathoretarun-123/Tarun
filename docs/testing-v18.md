@@ -94,3 +94,5 @@ The films pass every gate of the protocol the app carries (story, performance, v
 with no boiling, shake or floating in the finished frames, lip-sync measured against the voice, two-light
 shading with contact shadows, the filmic finish, and the user's own pictures kept intact in every shot. They are
 still pictures bent through meshes and drawn puppets, not a 3D-animated feature: see "Honest limits" in the README.
+
+With the v20 code (the director's manual: a 17th test `directorsManualIsTrainedRecordsAndAnimatic`, and `filmJobFinishesEndToEnd` extended with the animatic, the audio and export checks and Gate 3): see `docs/directors-manual.md` for the run.

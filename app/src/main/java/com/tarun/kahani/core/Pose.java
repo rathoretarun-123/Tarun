@@ -6,7 +6,8 @@ public final class Pose {
     public static final int STAND = 0, SIT = 1, LIE = 2, KNEEL = 3, HANG = 4, CROUCH = 5;
     // emotions
     public static final int NEUTRAL = 0, HAPPY = 1, LAUGH = 2, ANGRY = 3, SAD = 4, SCARED = 5, SURPRISED = 6,
-            EVIL = 7, DETERMINED = 8, DIZZY = 9, WHISPER = 10, PROUD = 11, CURIOUS = 12, PAIN = 13;
+            EVIL = 7, DETERMINED = 8, DIZZY = 9, WHISPER = 10, PROUD = 11, CURIOUS = 12, PAIN = 13,
+            SUSPICIOUS = 14, RELIEVED = 15;   // the director's manual (2.6): suspicion and relief
     // held items
     public static final int I_NONE = 0, I_RIBBON = 1, I_BANANA = 2, I_MIRROR = 3, I_WOOD_SWORD = 4, I_BASKET = 5,
             I_FLOWER = 6, I_SWORD = 7, I_BOTTLE = 8, I_TURBAN = 9;

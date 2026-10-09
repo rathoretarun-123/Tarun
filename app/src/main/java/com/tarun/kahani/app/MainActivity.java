@@ -1093,7 +1093,9 @@ public class MainActivity extends Activity {
                 // the production file, then the full Technical Director package (lock sheets, plates, objects,
                 // sounds, voices and every shot with ready prompts)
                 String qc = project.read("qc.txt");
-                return Bible.write(st, sl, pics, voices) + "\n\n" + Studio3DArt.bibles(project, st) + "\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect)
+                return Bible.write(st, sl, pics, voices) + "\n\n" + Studio3DArt.bibles(project, st) + "\n"
+                        + com.tarun.kahani.core.DirectorsManual.inventory(Studio3DArt.inventory(project, st, library)) + "\n" + Studio3DArt.facialSpecs(project, st, Prefs.humanQc(MainActivity.this))
+                        + "\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect)
                         + (qc.trim().isEmpty() ? "" : "\n\nTHE LAST FILM MADE — the director's shot list and every check (validation, Human QC, final QC)\n"
                         + "============================================================\n" + qc);
             }
@@ -2887,7 +2889,11 @@ public class MainActivity extends Activity {
                     Bitmap b = android.graphics.BitmapFactory.decodeFile(it[0]);
                     if (b != null) iv.setImageBitmap(b);
                     cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(MainActivity.this, it[2].equals("char") ? 150 : 100)));
+                    if (it[2].equals("animatic")) cell.addView(Ui.text(MainActivity.this, "▶ ANIMATIC — tap to play", 12, Ui.BLUE, true));
                     final int shotIdx = j.qcShotIndex.get(i);
+                    if (it[2].equals("animatic")) cell.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) { showAnimatic(j.project.file("animatic.mp4"), true); }
+                    });
                     Integer fx = shotIdx >= 0 ? j.qcFixes.get(shotIdx) : null;
                     TextView t = Ui.text(MainActivity.this, (fx != null && fx != Director.FIX_NONE ? "✎ " + Director.FIX_NAMES[fx].split(" —")[0] + "\n" : "") + it[1], 11,
                             fx != null && fx != Director.FIX_NONE ? Ui.BLUE : Ui.TEXT, false);
@@ -2930,6 +2936,36 @@ public class MainActivity extends Activity {
             public void onClick(View v) { j.cancel(); j.approve(); showStory(); }
         }));
         body.addView(c);
+    }
+
+    /** The animatic (the director's manual 3.7): the first frames with the real sound, played before the film is made. */
+    private void showAnimatic(final File file, final boolean fromQc) {
+        if (file == null || !file.exists()) { toast("No animatic yet — it is made with the film"); return; }
+        LinearLayout outer = Ui.column(this);
+        outer.setBackgroundColor(0xFF000000);
+        FrameLayout fl = new FrameLayout(this);
+        final VideoView vv = new VideoView(this);
+        fl.addView(vv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+        outer.addView(fl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout panel = Ui.column(this);
+        panel.setBackgroundColor(Ui.BG);
+        panel.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
+        panel.addView(Ui.text(this, "The animatic: every shot's first frame held for its length, with the real voices, music and sounds. Ask the manual's questions — can a viewer "
+                + "understand the story, are the objectives clear, does every event have coverage, do reactions have time, are the place changes clear, is the pacing rushed, "
+                + "are there unnecessary shots, does the ending feel earned? Fix shots on the check screen, then approve.", 13, Ui.SUB, false));
+        panel.addView(Ui.button(this, fromQc ? "◀  Back to the check" : "◀  Back", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { vv.stopPlayback(); if (fromQc && FilmJob.current != null) showQc(FilmJob.current); else showPlayer(); }
+        }));
+        outer.addView(panel);
+        setScreen(S_QC, outer);
+        MediaController mc = new MediaController(this);
+        mc.setAnchorView(vv);
+        vv.setMediaController(mc);
+        vv.setVideoPath(file.getAbsolutePath());
+        vv.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener() {
+            public boolean onError(android.media.MediaPlayer mp, int what, int extra) { toast("The animatic could not play here"); return true; }
+        });
+        vv.start();
     }
 
     /** One picture per shot (the keyframes of the film), as a grid, named by shot ID. */
@@ -2976,6 +3012,9 @@ public class MainActivity extends Activity {
         try { plain = new String(Project.readAll(getAssets().open("image_to_3d_plain_guide.md")), "UTF-8"); } catch (Exception e) { plain = ""; }
         try { training = new String(Project.readAll(getAssets().open("director_training_guide.md")), "UTF-8"); } catch (Exception e) { training = ""; }
         handbook += "\n\n" + plain + "\n\n" + training + "\n\n" + com.tarun.kahani.core.FreeModels.SOURCES;
+        String manual;
+        try { manual = new String(Project.readAll(getAssets().open("ai_film_maker_directors_manual.md")), "UTF-8"); } catch (Exception e) { manual = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.DirectorsManual.SUMMARY + "\n\n" + manual;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -2995,7 +3034,12 @@ public class MainActivity extends Activity {
                 + "first-frame checks (head and feet inside), and a thumbnail and poster made separately.\n"
                 + "• The AI Animation Director handbook: the five questions, a shot ID and a lens for every shot; thought before action (a pause and a look "
                 + "before a reaction); a Dutch angle at most once per scene; the scene objective and the continuity ledger in the descriptions; the four approval "
-                + "gates and ten scores in the film's quality check; where it disagrees with the protocols, the table in the handbook's summary says what the studio does.\n\n";
+                + "gates and ten scores in the film's quality check; where it disagrees with the protocols, the table in the handbook's summary says what the studio does.\n"
+                + "• The AI Director's Production Manual (v2.0): the asset inventory and a facial identity specification per character written with every film; "
+                + "CHAR_ / LOC_ / VOICE_ IDs; every shot's ASSETS, TRANSITION IN, STATE AT START / END and VOICE / MUSIC lines; establishing shots held 3.9 s; a point-of-view "
+                + "shot when someone looks at something; a reaction on every face after a loud sound; suspicion and relief as feelings; the beat sheet, scene records, "
+                + "scene-coverage report, prop ledger and location records; the animatic approved in Human QC before the film is made; the audio check of the mix and the "
+                + "export check of the file; the three-level review, the five gates and the eleven-point QA checklist at the end of every film's quality check.\n\n";
         TextView tv = Ui.text(this, how + given + "\n\n" + lead + "\n\n" + handbook, 13, Ui.TEXT, false);
         tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         tv.setTextIsSelectable(true);
@@ -3133,6 +3177,10 @@ public class MainActivity extends Activity {
         final String[] shotFiles = shotsDir.isDirectory() ? shotsDir.list() : null;
         if (shotFiles != null && shotFiles.length > 0) panel.addView(Ui.button(this, "🎞  One picture per shot (" + shotFiles.length + ")", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { showShotPictures(shotsDir); }
+        }));
+        final File animatic = project.file("animatic.mp4");
+        if (animatic.exists()) panel.addView(Ui.button(this, "🎬  Animatic (the first frames with the real sound)", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { vv.stopPlayback(); showAnimatic(animatic, false); }
         }));
         if (thumb.exists() || poster.exists()) {
             LinearLayout r2 = Ui.row(this);

@@ -405,15 +405,12 @@ public final class FilmJob implements Runnable {
             // pipeline steps 1-2: the Character Lock Sheet of every character and the Location Lock Plate of every
             // place, saved with the film (and shown first in Human QC)
             lockSheets(film, art, dir, ed);
-            // Human QC (protocol pipeline step 4): the first frame of every shot, checked by the user before the film
-            // is made; their fixes are applied, then the film is made
-            if (Prefs.humanQc(ctx)) humanQc(film, art, dir, ed, tmp);
-            // pipeline step 6: every shot played frame by frame at check size (the frames seen one by one at 0.25x
-            // speed); a shot that boils or shakes has its motion cut by 80% and is played again from the same first frame
-            finalCheck(film, art, ed);
-            // the scene maker guide (9.3): a keyframe for every shot — one picture per shot, saved with the story
-            shotPictures(film, art, ed);
-            step("Mixing music and sounds…", 0.30f);
+            // the director's manual (1.1, 2.3): the project asset inventory and the facial identity specification of
+            // every character, written with the film
+            step("Writing the asset inventory and the facial identity specifications…", 0.294f);
+            film.shotList += "\n" + com.tarun.kahani.core.DirectorsManual.inventory(Studio3DArt.inventory(project, story, lib)) + "\n" + Studio3DArt.facialSpecs(project, story, Prefs.humanQc(ctx));
+            // the mix comes before Human QC now: the animatic (the manual 3.7) plays the real voices, music and sounds
+            step("Mixing music and sounds…", 0.295f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
             final byte[] mb = new byte[Synth.SR * 8 * 2 * Mixer.CHANNELS];
@@ -430,6 +427,16 @@ public final class FilmJob implements Runnable {
             });
             mo.close();
             check();
+            // the director's manual (V): the mix checked for missing dialogue, gaps and clipping
+            audioCheck(film, mix, lineFiles);
+            // Human QC (protocol pipeline step 4): the animatic and the first frame of every shot, checked by the user
+            // before the film is made; their fixes are applied, then the film is made
+            if (Prefs.humanQc(ctx)) humanQc(film, art, dir, ed, tmp, mix);
+            // pipeline step 6: every shot played frame by frame at check size (the frames seen one by one at 0.25x
+            // speed); a shot that boils or shakes has its motion cut by 80% and is played again from the same first frame
+            finalCheck(film, art, ed);
+            // the scene maker guide (9.3): a keyframe for every shot — one picture per shot, saved with the story
+            shotPictures(film, art, ed);
 
             // ---------------- video
             int[] want = ed.size();
@@ -466,6 +473,10 @@ public final class FilmJob implements Runnable {
             if (!out.renameTo(fin)) throw new IllegalStateException("The film could not be saved");
             project.setSetting("filmSeconds", String.valueOf((int) film.duration));
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
+            // the director's manual (IV stage 9, 3.10, V): the exported file verified, then the three-level review, the
+            // five gates and the QA checklist from everything that was checked — never a finished claim before this
+            film.shotList += "\n" + exportCheck(fin, film);
+            film.shotList += "\n" + review(film);
             // the director's shot list with every check (validation, Human QC, the final QC of steps 6 and 8), kept with the film
             project.write("qc.txt", film.shotList);
             project.setSetting("saved", "0");
@@ -614,6 +625,7 @@ public final class FilmJob implements Runnable {
         // sheets of a bigger cast or more places from an earlier film of this story
         for (int i = n; project.has("lock_char_" + i + ".jpg"); i++) project.file("lock_char_" + i + ".jpg").delete();
         for (int i = m; project.has("lock_place_" + i + ".jpg"); i++) project.file("lock_place_" + i + ".jpg").delete();
+        lockSheetsMade = n; platesMade = m;
         film.shotList += String.format(java.util.Locale.US, "%nLOCK SHEETS (pipeline steps 1-2): %d Character Lock Sheets and %d Location Lock Plates made before any shot, saved with the film (lock_char_N.jpg, lock_place_N.jpg)%n", n, m);
         if (notes3d > 0) film.shotList += String.format(java.util.Locale.US, "STUDIO 3D: %d picture(s) made in three dimensions on the phone (dolls for characters without a picture, places with their floor line, the views of every character from its own picture), each accepted by you%n", notes3d);
         java.util.List<String> credits = film.story == null ? new java.util.ArrayList<String>() : Studio3DArt.credits(project, film.story);
@@ -640,6 +652,7 @@ public final class FilmJob implements Runnable {
                 public boolean cancelled() { return cancelled; }
             });
             film.shotList += "\n" + r.text();
+            qcBoiling = r.boilingLeft; qcShaking = r.shakingLeft; qcFloating = r.floating;
             // the handbook's approval gates and scores (ch. 13) and the delivery checklist (ch. 16), from what was checked
             if (film.stats != null) {
                 com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, r.boilingLeft, r.shakingLeft, r.floating);
@@ -651,7 +664,7 @@ public final class FilmJob implements Runnable {
         }
     }
 
-    private void humanQc(Film film, Art art, Director dir, Edits ed, File tmp) throws IOException {
+    private void humanQc(Film film, Art art, Director dir, Edits ed, File tmp, File mix) throws IOException {
         File qd = new File(tmp, "qc");
         qd.mkdirs();
         qcItems.clear();
@@ -696,8 +709,19 @@ public final class FilmJob implements Runnable {
             g.release();
             bmp.recycle();
         }
-        // 3. wait for the user (the notification says so); then their fixes
-        stage = "Waiting for you: check the first frame of every shot";
+        // 3. the animatic (the director's manual 3.7): the whole film as its first frames with the real sound, to be
+        // approved before the expensive render — the first card of the check
+        File an = animatic(film, qd, mix, ed);
+        animaticMade = an != null;
+        if (an != null && !qcShotIndex.isEmpty()) {
+            int first = -1;
+            for (int i = 0; i < qcShotIndex.size(); i++) if (qcShotIndex.get(i) >= 0) { first = i; break; }
+            qcItems.add(0, new String[]{first >= 0 ? qcItems.get(first)[0] : "", "ANIMATIC (the director's manual 3.7): the whole film as the first frame of every shot held for its length, "
+                    + "with the real voices, music and sounds — " + fmt((long) film.duration) + ". Tap to play it; approve below when the story reads, the pacing breathes and every event is covered.", "animatic"});
+            qcShotIndex.add(0, -1);
+        } else if (an == null) film.shotList += "\nANIMATIC: could not be made on this phone (" + animaticNote + "); the first frames stand in for it.\n";
+        // 4. wait for the user (the notification says so); then their fixes
+        stage = "Waiting for you: check the animatic and the first frame of every shot";
         qcWaiting = true;
         while (qcWaiting && !cancelled) {
             try { Thread.sleep(300); } catch (InterruptedException e) { break; }
@@ -709,8 +733,171 @@ public final class FilmJob implements Runnable {
             String done = dir.fixShot(e.getKey(), e.getValue());
             if (done.length() > 0) { fixed++; note.append(String.format(java.util.Locale.US, "\n• Shot %03d: %s", e.getKey() + 1, done)); }
         }
+        animaticApproved = animaticMade && !cancelled;
+        fixesApplied = fixed > 0;
         if (fixed > 0) film.shotList += "\nHUMAN QC (your check of every first frame)\n" + fixed + " shot(s) fixed:" + note + "\n";
         else film.shotList += "\nHUMAN QC: every first frame approved as it was.\n";
+        if (animaticMade) film.shotList += "ANIMATIC (the director's manual 3.7): made before the film (animatic.mp4, " + fmt((long) film.duration) + ") and approved by you with the first frames — Gate 3.\n";
+    }
+
+    // ------------------------------------------------------------------ the director's manual: animatic, audio, export, review
+
+    /** What the checks found, for the manual's gates (-1 = the check did not run). */
+    private int qcBoiling = -1, qcShaking = -1, qcFloating = -1, lockSheetsMade, platesMade, linesTotal, voicedTotal, missingVoices;
+    private boolean animaticMade, animaticApproved, fixesApplied, audioChecked, exportExists, exportKnown, exportOk;
+    private float longestGap;
+    private String animaticNote = "";
+
+    /**
+     * The animatic (the director's manual 3.7): the first complete editorial version — every shot's first frame
+     * held for the shot's length, the title and end cards, with the real voices, music and sounds — made before
+     * the film and approved in Human QC. Small (320 px wide, 12 fps), saved with the story as animatic.mp4.
+     */
+    private File animatic(Film film, File qd, File mix, Edits ed) {
+        File out = project.file("animatic.mp4");
+        int fps = 12;
+        int[] size = ed.size();
+        int[] sz = VideoWriter.supportedSize(320, Math.max(120, Math.round(320f * size[1] / size[0])) & ~1);
+        final int w = sz[0], h = sz[1];
+        Bitmap frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(frame);
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(0xFFFFFFFF);
+        paint.setTextSize(h / 12f);
+        paint.setTextAlign(android.graphics.Paint.Align.CENTER);
+        int[] px = new int[w * h];
+        VideoWriter vw = new VideoWriter(w, h, fps);
+        try {
+            vw.start(out, new VideoWriter.FileSource(mix), Synth.SR, 0.08f);
+            int frames = Math.max(1, Math.round(film.duration * fps));
+            int shown = Integer.MIN_VALUE;
+            for (int f = 0; f < frames; f++) {
+                float t = f / (float) fps;
+                int cur = Integer.MIN_VALUE;
+                for (int i = 0; i < film.shots.size(); i++) { Film.Shot sh = film.shots.get(i); if (t >= sh.t && t < sh.t + sh.dur + 0.04f) { cur = i; break; } }
+                Film.Seg sg = film.segAt(t);
+                if (cur == Integer.MIN_VALUE) cur = -1 - (sg == null ? 0 : film.segs.indexOf(sg));
+                if (cur != shown) {
+                    Bitmap b = cur >= 0 ? android.graphics.BitmapFactory.decodeFile(new File(qd, "s" + cur + ".jpg").getAbsolutePath()) : null;
+                    cv.drawColor(0xFF101010);
+                    if (b != null) { cv.drawBitmap(b, null, new android.graphics.Rect(0, 0, w, h), null); b.recycle(); }
+                    else if (sg != null) {
+                        String t1 = sg.text1 == null ? "" : sg.text1, t2 = sg.text2 == null ? "" : sg.text2;
+                        if (t1.length() > 0) cv.drawText(t1.length() > 40 ? t1.substring(0, 40) + "…" : t1, w / 2f, h / 2f, paint);
+                        if (t2.length() > 0) cv.drawText(t2.length() > 50 ? t2.substring(0, 50) + "…" : t2, w / 2f, h / 2f + h / 9f, paint);
+                    }
+                    frame.getPixels(px, 0, w, 0, 0, w, h);
+                    shown = cur;
+                }
+                vw.frame(px);
+                if ((f & 31) == 0) { check(); step("Making the animatic for you to check (" + (f * 100 / frames) + "%)…", 0.3f); }
+            }
+            vw.finish();
+            return out;
+        } catch (CancelledException e) {
+            vw.release();
+            out.delete();
+            throw e;
+        } catch (Throwable e) {
+            vw.release();
+            out.delete();
+            animaticNote = String.valueOf(e.getMessage());
+            return null;
+        } finally {
+            frame.recycle();
+        }
+    }
+
+    /** The director's manual (V, audio): lines without a voice, the longest silence inside the scenes, clipping — read from the mix. */
+    private void audioCheck(Film film, File mix, File[] lineFiles) {
+        int lines = film.lines.size(), voiced = 0;
+        StringBuilder missing = new StringBuilder();
+        for (int i = 0; i < lines; i++) {
+            if (i < lineFiles.length && lineFiles[i] != null) { voiced++; continue; }
+            Film.Line l = film.lines.get(i);
+            if (missing.length() < 200) missing.append(missing.length() > 0 ? ", " : "").append(l.who == null ? "narrator" : l.who.shown()).append(" \"").append(l.text.length() > 30 ? l.text.substring(0, 30) + "…" : l.text).append('"');
+        }
+        missingVoices = lines - voiced;
+        linesTotal = lines; voicedTotal = voiced;
+        float longest = 0, gapAt = 0;
+        int clipped = 0;
+        long samples = 0;
+        boolean checked = false;
+        try {
+            java.io.InputStream in = new java.io.BufferedInputStream(new java.io.FileInputStream(mix), 1 << 16);
+            java.util.List<float[]> scenes = new java.util.ArrayList<float[]>();
+            for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) scenes.add(new float[]{sg.t0, sg.t1});
+            byte[] buf = new byte[Synth.SR / 10 * Mixer.CHANNELS * 2];     // 100 ms of the interleaved mix
+            float t = 0, silentFrom = -1;
+            while (true) {
+                int n = 0;
+                while (n < buf.length) { int r = in.read(buf, n, buf.length - n); if (r < 0) break; n += r; }
+                if (n < 4) break;
+                double sum = 0;
+                int cnt = n / 2;
+                for (int i = 0; i + 1 < n; i += 2) { int v = (short) ((buf[i] & 255) | (buf[i + 1] << 8)); sum += (double) v * v; if (v >= 32700 || v <= -32700) clipped++; }
+                samples += cnt;
+                double rms = Math.sqrt(sum / Math.max(1, cnt));
+                boolean inScene = false;
+                for (float[] sc : scenes) if (t >= sc[0] && t < sc[1]) { inScene = true; break; }
+                if (inScene && rms < 60) { if (silentFrom < 0) silentFrom = t; }
+                else { if (silentFrom >= 0 && t - silentFrom > longest) { longest = t - silentFrom; gapAt = silentFrom; } silentFrom = -1; }
+                t += 0.1f;
+                if (n < buf.length) break;
+            }
+            if (silentFrom >= 0 && t - silentFrom > longest) { longest = t - silentFrom; gapAt = silentFrom; }
+            in.close();
+            checked = true;
+        } catch (Throwable e) {
+            checked = false;
+        }
+        audioChecked = checked;
+        longestGap = longest;
+        film.shotList += "\n" + com.tarun.kahani.core.DirectorsManual.audioReport(lines, voiced, missing.toString(), longest, gapAt, clipped, samples, checked);
+    }
+
+    /** The director's manual (IV stage 9): the exported file decodes, its length matches the plan, audio is present. */
+    private String exportCheck(File fin, Film film) {
+        boolean readable = false;
+        float secs = 0;
+        int hasAudio = -1, w = 0, h = 0;
+        android.media.MediaMetadataRetriever mr = null;
+        try {
+            mr = new android.media.MediaMetadataRetriever();
+            mr.setDataSource(fin.getAbsolutePath());
+            String d = mr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
+            String a = mr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO);
+            String ws = mr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            String hs = mr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            if (d != null) { secs = Long.parseLong(d.trim()) / 1000f; readable = true; }
+            if (a != null) hasAudio = "yes".equalsIgnoreCase(a.trim()) ? 1 : 0;
+            if (ws != null && hs != null) { w = Integer.parseInt(ws.trim()); h = Integer.parseInt(hs.trim()); }
+        } catch (Throwable e) {
+            readable = false;
+        } finally {
+            if (mr != null) try { mr.release(); } catch (Throwable ignored) { /* nothing to free */ }
+        }
+        exportExists = fin.exists() && fin.length() > 0;
+        exportKnown = readable;
+        exportOk = com.tarun.kahani.core.DirectorsManual.exportOk(exportExists, secs, film.duration, hasAudio, readable);
+        return com.tarun.kahani.core.DirectorsManual.exportReport(exportExists, fin.length(), secs, film.duration, hasAudio, w, h, readable);
+    }
+
+    /** The three-level review, the five gates and the QA checklist (the director's manual 3.10, IV, V) from what was checked. */
+    private String review(Film film) {
+        com.tarun.kahani.core.DirectorsManual.Checks ck = new com.tarun.kahani.core.DirectorsManual.Checks();
+        ck.stats = film.stats;
+        ck.boiling = qcBoiling; ck.shaking = qcShaking; ck.floating = qcFloating;
+        ck.humanQc = Prefs.humanQc(ctx); ck.animaticMade = animaticMade; ck.animaticApproved = animaticApproved; ck.fixesApplied = fixesApplied;
+        ck.lines = linesTotal; ck.voiced = voicedTotal; ck.missingVoices = missingVoices; ck.longestGap = longestGap; ck.audioChecked = audioChecked;
+        ck.lockSheets = lockSheetsMade; ck.plates = platesMade;
+        if (film.story != null) {
+            ck.cast = film.story.cast().size();
+            for (Story.CharacterDef c : film.story.cast()) if (Studio3DArt.charFile(project, film.story, c) != null) ck.charsWithPicture++;
+        }
+        ck.proposalsOpen = Studio3DArt.proposals(project).size();
+        ck.exportExists = exportExists; ck.exportKnown = exportKnown; ck.exportOk = exportOk;
+        return com.tarun.kahani.core.DirectorsManual.review(film, film.story, ck);
     }
 
     /** One picture per shot: the first frame of every shot, saved as shots/<shot id>.jpg (reverse shots, movements, everything). */

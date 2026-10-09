@@ -1540,6 +1540,9 @@ public final class Renderer {
             case Pose.CURIOUS: f.browUpR += 0.8f * w; f.wide += 0.2f * w; break;
             case Pose.PAIN: f.frown += 0.6f * w; f.squint += 0.9f * w; f.anger += 0.3f * w; break;
             case Pose.DIZZY: f.squint += 0.4f * w; break;
+            // the director's manual (2.6): suspicion = asymmetrical brows, narrowed gaze; relief = tension gone, softened gaze
+            case Pose.SUSPICIOUS: f.anger += 0.35f * w; f.squint += 0.6f * w; f.browUpR += 0.5f * w; break;
+            case Pose.RELIEVED: f.smile += 0.45f * w; f.squint += 0.15f * w; f.innerUp += 0.2f * w; break;
             default: f.smile += 0.1f * w;
         }
     }
@@ -1561,6 +1564,8 @@ public final class Renderer {
             case Pose.PAIN: st.nod += 0.5f * w; st.lean += 3 * w; break;
             case Pose.DIZZY: st.headRot += (float) Math.sin(t * 3) * 8 * w; break;
             case Pose.EVIL: st.nod += 0.3f * w; st.headRot -= 3 * w; break;
+            case Pose.SUSPICIOUS: st.headRot += 5 * w; st.nod += 0.2f * w; st.lean -= 1 * w; break;                 // the head angled, held back
+            case Pose.RELIEVED: st.nod += 0.3f * w; st.lean -= 1.5f * w; st.breathe += 1.2f * w; st.armL -= 2 * w; st.armR -= 2 * w; break;   // the posture released, a breath out
             default:
         }
     }
@@ -1669,6 +1674,8 @@ public final class Renderer {
             case Pose.ANGRY: case Pose.EVIL: amp = 4; freq = 14; droop = -16; ears = 1; break;
             case Pose.PAIN: amp = 2; freq = 1; droop = 20; ears = 0.7f; break;
             case Pose.DETERMINED: amp = 4; freq = 3; droop = -6; ears = 0.3f; break;
+            case Pose.SUSPICIOUS: amp = 3; freq = 5; droop = -4; ears = 0.6f; break;
+            case Pose.RELIEVED: amp = 14; freq = 6; droop = 4; break;
             default:
         }
         if (p.walkAmt > 0) amp = Math.max(amp, 9);

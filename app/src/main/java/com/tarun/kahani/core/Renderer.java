@@ -59,15 +59,15 @@ public final class Renderer {
                 // new one comes up out of it
                 float u = (t - s.t0) / DISSOLVE;
                 int col = s.transition == 1 ? 0xFF000000 : 0xFFFFF8F0;
-                if (u < 0.5f) { drawScene(g, prev, t); g.color(Puppet.alpha(col, Math.min(1, u * 2))); }
-                else { drawScene(g, s, t); g.color(Puppet.alpha(col, Math.min(1, (1 - u) * 2))); }
+                if (u < 0.5f) { drawScene(g, prev, t); g.color(Puppet.alpha(col, ease01(Math.min(1, u * 2)))); }
+                else { drawScene(g, s, t); g.color(Puppet.alpha(col, ease01(Math.min(1, (1 - u) * 2)))); }
                 g.rect(0, 0, vw, vh);
             } else if (dissolveIn) {
                 // a plain scene change: a quick dip through black (the last scene goes down, the new one comes up) —
                 // never two scenes drawn over each other
                 float u = (t - s.t0) / DISSOLVE;
-                if (u < 0.5f) { float keepFollow = followX; drawScene(g, prev, t); followX = keepFollow; g.color(Puppet.alpha(0xFF000000, Math.min(1, u * 2))); }
-                else { drawScene(g, s, t); g.color(Puppet.alpha(0xFF000000, Math.min(1, (1 - u) * 2))); }
+                if (u < 0.5f) { float keepFollow = followX; drawScene(g, prev, t); followX = keepFollow; g.color(Puppet.alpha(0xFF000000, ease01(Math.min(1, u * 2)))); }
+                else { drawScene(g, s, t); g.color(Puppet.alpha(0xFF000000, ease01(Math.min(1, (1 - u) * 2)))); }
                 g.rect(0, 0, vw, vh);
             } else {
                 switch (s.type) {
@@ -85,7 +85,7 @@ public final class Renderer {
         g.restore();
     }
 
-    static final float DISSOLVE = 0.6f;
+    static final float DISSOLVE = 1.0f;     // v33: a full second, eased (0.6 s read as a blink)
 
     /** Renders one part on its own, outside the film's timeline (the thumbnail and the poster pages). */
     public void renderSeg(Gfx g, Film.Seg s, float t) {
@@ -642,6 +642,9 @@ public final class Renderer {
         // v32: a picture of the place (the user's own) already carries its light and mood: the grade over it is
         // lighter (a dark cave picture stayed readable in the picture, it must stay readable in the film)
         boolean own = bd(s) != null && bd(s).picture;
+        // v33: "scene 2 brighter" / "the cave is too dark": a veil of light or shade over the part alone
+        if (s.bright > 0.01f) { g.color(Puppet.alpha(0xFFFFFFFF, Math.min(0.6f, s.bright * 0.6f))); g.rect(0, 0, vw, vh); }
+        else if (s.bright < -0.01f) { g.color(Puppet.alpha(0xFF000000, Math.min(0.7f, -s.bright * 0.7f))); g.rect(0, 0, vw, vh); }
         if (tint != 0) { g.color(own ? Puppet.alpha(tint, ((tint >>> 24) & 255) / 255f * 0.6f) : tint); g.rect(0, 0, vw, vh); }
         // light follows the moment (§19): hard, directional light and deeper shadows for conflict and fear,
         // soft warm light for warmth and safety
@@ -1163,7 +1166,18 @@ public final class Renderer {
             mo.sy = 1 + (float) Math.sin(tp * 2.1f + a.order) * 0.004f; mo.sx = 1;
             float facing = p.facing;
             if (Math.abs(chosen.angle) > 1 && Math.abs(chosen.angle) < 179) p.facing = facing;      // a side or three-quarter picture faces the way of the picture; mirrored when the character faces the other way
-            drawSprite(g, real, a.look, p, hReal, 0, a);
+            // v33: a step's picture fades in over the first third of the step (no flip between two pictures)
+            float phase = p.walk / (float) Math.PI;
+            float fade = phase - (float) Math.floor(phase);
+            Art.PoseSprite before = stepping && fade < 0.33f ? previousStep(sp, a, t, p) : null;
+            if (before != null && before != chosen && before.sprite() != null) {
+                float u = fade / 0.33f;
+                g.setAlpha(1 - u);
+                drawSprite(g, before.sprite(), a.look, p, h * before.hRatio, 0, a);
+                g.setAlpha(u);
+                drawSprite(g, real, a.look, p, hReal, 0, a);
+                g.setAlpha(1);
+            } else drawSprite(g, real, a.look, p, hReal, 0, a);
             g.restore();
             g.restore();
             return;
@@ -1791,6 +1805,21 @@ public final class Renderer {
             if (i >= 0 && i < sp.poses.size()) idx = i;
         }
         return sp.poses.get(idx);
+    }
+
+    /** Smoothstep: no snap at either end of a fade. */
+    static float ease01(float u) { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); }
+
+    /** v33: while the character steps through its pictures, the picture before the current one in the cycle (for the cross-fade), or null. */
+    private Art.PoseSprite previousStep(Art.Sprite sp, Film.Actor a, float t, Pose p) {
+        if (sp == null || sp.poses == null || p == null || p.walkAmt <= 0.35f) return null;
+        Film.Shot sh = shotAt(t);
+        if (sh == null) return null;
+        int[] cyc = sh.cycles.get(a.c.id);
+        if (cyc == null || cyc.length < 2) return null;
+        int step = (int) Math.floor(p.walk / Math.PI) - 1;
+        int i = cyc[((step % cyc.length) + cyc.length) % cyc.length];
+        return i >= 0 && i < sp.poses.size() ? sp.poses.get(i) : null;
     }
 
     /** The shot playing at t (the shots are in order; the last one found is tried first). */

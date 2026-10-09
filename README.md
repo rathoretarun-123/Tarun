@@ -1,4 +1,4 @@
-# Kahani Film — v32
+# Kahani Film — v33
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,19 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v33
+
+* **Several pictures at once, everywhere** — one "📷 Pictures (up to 10)" button on every character and place card (the old chooser's internet search and AI are inside its dialog); the picker that allows several pictures is chosen for the phone (Android 13's own, the Google one on older phones, else the documents picker); every upload path opens it (test `uploadButtonsOpenThePickerEverywhere`: Studio character, place and thing, the story screen's plan rows, the make-film popup's "Pictures first", the progress rows).
+* **New pictures replace the old main picture** — a character's newly given front becomes its picture (the earlier one stays in the library), a place's new wide view and reverse angle replace the old ones, a thing's first new picture is its insert. The card's thumbnail changes at once.
+* **Monsters and monkeys read as beasts** when their sheets are split (no more "back" for every dark-furred figure), and a beast is never bent through the rig: its front picture is drawn as it is.
+* **The user's pictures first** — the rig keeps a small edge only while the character speaks; otherwise the user's picture of the moment wins whenever it fits as well. A walk's step pictures cross-fade into each other (no flip).
+* **Scene changes eased**: the dip between scenes is a full second with an eased curve (0.6 s read as a blink). **Dark frames sharper**: the video bitrate is 1.7× higher (never below 2 Mbps) with a key frame every second.
+* **Post-production understands more and keeps everything** — "make the monkey bigger", "scene 2 brighter", "the cave is too dark", "shorter shots", "more cuts" and the earlier music, voice, colour and shape instructions all work offline (test: 28 of 28 understood); a remake after an instruction keeps every picture and every approval — no library search, no proposals, no shot check again (`FilmJob.remake`, keyed on the story and the cast file).
+* **Naming once**: in "What do these pictures show?" a row can take the name above with one tap, and pictures that look alike are prefilled with the same name and kind.
+* **The mouth/eye page** shows every picture of the character in a strip to tap, beside the ◀ ▶ buttons.
+* **The library survives updates**: it lives in the app's own files (`files/library`), untouched by a new version; only uninstalling removes it.
+* **Twenty-story soak**: `twentyStoriesSoak` (run with `-Dkahani.soak=1`) makes twenty stories — ten short, ten long, Hindi, English and Hinglish, cast from the user's sheets — end to end; the report is in `docs/testing-v33.md`.
 
 ## New in v32
 

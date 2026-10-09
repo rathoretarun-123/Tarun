@@ -40,6 +40,14 @@ public final class Casting {
                 if (sp == null || sp.poses == null || sp.poses.isEmpty()) continue;
                 Want w = want(film, s, sh, a, mid);
                 int best = choose(sp, w);
+                // v33: a beast (fur, four legs, a monster) is never bent through the rig: its front picture is drawn as it is
+                boolean beast = a.c.look != null && (a.c.look.kind == Look.ANIMAL || a.c.look.kind == Look.BIRD || a.c.look.kind == Look.MONSTER || a.c.look.kind == Look.MONKEY);
+                if (best == MAIN && beast) {
+                    for (int i = 0; i < sp.poses.size(); i++) {
+                        Art.PoseSprite p = sp.poses.get(i);
+                        if (isFrontish(p.angle) && p.pose == PoseSense.STAND && (p.emotion == PoseSense.NEUTRAL || p.emotion == w.emotion)) { best = i; if (sameAngle(p.angle, Angles.FRONT)) break; }
+                    }
+                }
                 sh.pictures.put(a.c.id, best);
                 if (best >= 0 && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN)) {
                     int[] cyc = stepCycle(sp, best, w);
@@ -126,8 +134,10 @@ public final class Casting {
         if (ps == null || ps.isEmpty()) return MAIN;
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
-        float mainScore = score(Angles.FRONT, PoseSense.STAND, PoseSense.NEUTRAL, sp.faceKnown, w) + 0.5f;
-        int best = MAIN; float bestScore = mainScore + 0.3f;
+        // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the
+        // user's own picture of the moment wins whenever it fits as well
+        float mainScore = score(Angles.FRONT, PoseSense.STAND, PoseSense.NEUTRAL, sp.faceKnown, w) + (w.speaking && sp.faceKnown ? 0.3f : 0f);
+        int best = MAIN; float bestScore = mainScore;
         for (int i = 0; i < ps.size(); i++) {
             Art.PoseSprite p = ps.get(i);
             float sc = score(p.angle, p.pose, p.emotion, p.faceKnown(), w);

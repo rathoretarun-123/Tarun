@@ -85,6 +85,8 @@ public final class Film {
         public float ground = Sets.GROUND; // y of the floor line in stage coordinates
         public boolean festive;           // celebration lights
         public int mood = -1;
+        /** v33: the user's instruction for this part's light (-1 much darker .. 1 much brighter; 0 = as planned). */
+        public float bright = 0f;
         /** How this part begins: 0 a soft dissolve, 1 a dip to black (time passes), 2 a dip to white (magic, dreams, memories). */
         public int transition;
         /** The act of the story this part belongs to (1 setup, 2 the turn, 3 escalation, 4 climax, 5 resolution): the colour script follows it. */

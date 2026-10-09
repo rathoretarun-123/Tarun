@@ -25,6 +25,12 @@ public final class Edits {
     public final Map<String, Float> voiceRate = new LinkedHashMap<String, Float>();
     /** Voice effects asked for in the edit box, per character: "raspy,booming" ("-raspy" = switched off). */
     public final Map<String, String> voiceStyle = new LinkedHashMap<String, String>();
+    /** v33: how much bigger or smaller a character is drawn (1 = as the description says). */
+    public final Map<String, Float> charScale = new LinkedHashMap<String, Float>();
+    /** v33: a part's light, by its number ("1") or its place's words: -1 (much darker) .. 1 (much brighter). */
+    public final Map<String, Float> sceneBright = new LinkedHashMap<String, Float>();
+    /** v33: the length of shots against the director's cut (1 = as planned; 0.7 = shorter shots, more cuts). */
+    public float shotLength = 1f;
 
     public String styleFor(String who) {
         if (who == null) return "";
@@ -69,7 +75,7 @@ public final class Edits {
         return new int[]{w - w % 16, h};
     }
 
-    public float bitrateFactor() { return quality == 1 ? 0.07f : quality == 3 ? 0.2f : 0.12f; }
+    public float bitrateFactor() { return quality == 1 ? 0.12f : quality == 3 ? 0.32f : 0.2f; }     // v33: more bits — dark frames stayed blocky at the old rate
 
     // ---------------------------------------------------------------- persistence
 
@@ -80,6 +86,7 @@ public final class Edits {
         m.put("voices", (double) voices); m.put("narrator", (double) narrator); m.put("speed", (double) speed);
         m.put("subtitles", subtitles); m.put("height", (long) height); m.put("aspect", aspect); m.put("quality", (long) quality);
         m.put("voiceGain", toObj(voiceGain)); m.put("voicePitch", toObj(voicePitch)); m.put("voiceRate", toObj(voiceRate));
+        m.put("charScale", toObj(charScale)); m.put("sceneBright", toObj(sceneBright)); m.put("shotLength", (double) shotLength);
         Map<String, Object> vs = new LinkedHashMap<String, Object>();
         vs.putAll(voiceStyle);
         m.put("voiceStyle", vs);
@@ -102,6 +109,11 @@ public final class Edits {
         e.voices = (float) Json.num(o, "voices", 1); e.narrator = (float) Json.num(o, "narrator", 1); e.speed = (float) Json.num(o, "speed", 1);
         e.subtitles = Json.bool(o, "subtitles", false); e.height = (int) Json.num(o, "height", 1080);
         e.aspect = Json.str(o, "aspect", "16:9"); e.quality = (int) Json.num(o, "quality", 2);
+        e.shotLength = (float) Json.num(o, "shotLength", 1);
+        Map<String, Object> cs = Json.obj(o, "charScale");
+        if (cs != null) for (Map.Entry<String, Object> x : cs.entrySet()) if (x.getValue() instanceof Number) e.charScale.put(x.getKey(), ((Number) x.getValue()).floatValue());
+        Map<String, Object> sb = Json.obj(o, "sceneBright");
+        if (sb != null) for (Map.Entry<String, Object> x : sb.entrySet()) if (x.getValue() instanceof Number) e.sceneBright.put(x.getKey(), ((Number) x.getValue()).floatValue());
         readMap(Json.obj(o, "voiceGain"), e.voiceGain);
         readMap(Json.obj(o, "voicePitch"), e.voicePitch);
         readMap(Json.obj(o, "voiceRate"), e.voiceRate);
@@ -163,6 +175,23 @@ public final class Edits {
                 return who + " voice: " + (on ? st : "not " + st);
             }
             case "speed": speed = clamp(Float.isNaN(v) ? speed * f : v, 0.6f, 1.5f); return "Film pace: " + fmt(speed);
+            case "size": {
+                String whom = Json.str(c, "who", "");
+                if (whom.length() == 0) return null;
+                Float cur = charScale.get(whom);
+                float nv = clamp(Float.isNaN(v) ? (cur == null ? 1f : cur) * f : v, 0.5f, 1.8f);
+                charScale.put(whom, nv);
+                return whom + " drawn " + pct1(nv) + " of the usual size";
+            }
+            case "scene_brightness": {
+                String which = Json.str(c, "scene", "");
+                if (which.length() == 0) return null;
+                Float cur = sceneBright.get(which);
+                float nv = clamp((cur == null ? 0f : cur) + (Float.isNaN(v) ? (f - 1) : v), -0.8f, 0.8f);
+                sceneBright.put(which, nv);
+                return "Light of " + which + ": " + pct(nv);
+            }
+            case "shot_length": shotLength = clamp(Float.isNaN(v) ? shotLength * f : v, 0.5f, 1.6f); return "Shot length: " + pct1(shotLength) + " of the director's cut";
             case "subtitles": subtitles = Json.bool(c, "on", !subtitles); return subtitles ? "Subtitles: on" : "Subtitles: off";
             case "file_size": quality = (int) clamp(Float.isNaN(v) ? quality + (f > 1 ? 1 : -1) : v, 1, 3);
                 return "File size: " + (quality == 1 ? "small" : quality == 2 ? "normal" : "large (sharpest)");
@@ -176,7 +205,7 @@ public final class Edits {
     private void copyFrom(Edits d) {
         brightness = d.brightness; contrast = d.contrast; saturation = d.saturation; warmth = d.warmth; music = d.music; sfx = d.sfx;
         ambience = d.ambience; voices = d.voices; narrator = d.narrator; speed = d.speed; subtitles = d.subtitles;
-        voiceGain.clear(); voicePitch.clear(); voiceRate.clear(); voiceStyle.clear();
+        voiceGain.clear(); voicePitch.clear(); voiceRate.clear(); voiceStyle.clear(); charScale.clear(); sceneBright.clear(); shotLength = 1f;
     }
 
     private static String pct(float v) { return (v >= 0 ? "+" : "") + Math.round(v * 100) + "%"; }

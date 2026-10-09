@@ -16,6 +16,7 @@ test {
     systemProperty 'robolectric.graphicsMode', 'NATIVE'
     systemProperty 'robolectric.offline', 'false'
     systemProperty 'kahani.assets', file('../../app/src/main/assets').absolutePath
+    systemProperty 'kahani.soak', System.getProperty('kahani.soak', '0')
     systemProperty 'kahani.out', file("${buildDir}/frames").absolutePath
     maxHeapSize = '3g'
     testLogging { events 'passed', 'failed', 'skipped'; showStandardStreams = true; exceptionFormat 'full' }

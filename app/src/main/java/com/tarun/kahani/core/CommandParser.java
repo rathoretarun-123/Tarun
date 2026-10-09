@@ -177,6 +177,25 @@ public final class CommandParser {
         return much ? 0.45f : little ? 0.85f : 0.7f;
     }
 
+    /** The character the request names (its name, or a word like "monkey" / "बंदर" matching a name), or null. */
+    static String subject(String t, List<String> names) {
+        if (names == null) return null;
+        String best = null;
+        for (String n : names) {
+            if (n == null || n.length() < 2) continue;
+            if (Txt.norm(t).contains(Txt.norm(n)) && (best == null || n.length() > best.length())) best = n;
+            else {
+                String first = n.split("\\s+")[0];
+                if (first.length() >= 2 && Txt.norm(t).contains(Txt.norm(first)) && best == null) best = n;
+            }
+        }
+        if (best == null) {
+            String[][] kinds = {{"monkey", "बंदर", "राजू"}, {"monster", "राक्षस", "beast", "दानव"}, {"bull", "बैल"}, {"witch", "चुड़ैल"}, {"king", "राजा"}, {"queen", "रानी"}};
+            for (String[] k : kinds) if (has(t, k)) for (String n : names) for (String w : k) if (Txt.norm(n).contains(Txt.norm(w))) return n;
+        }
+        return best;
+    }
+
     private static Map<String, Object> cmd(String op) {
         Map<String, Object> m = new LinkedHashMap<String, Object>();
         m.put("op", op);
@@ -194,6 +213,41 @@ public final class CommandParser {
                 || lt.matches(".*\\b(can'?t|cannot|can not|hard to|barely) (hear|see)\\b.*") || lt.matches(".*\\bnot (loud|bright|clear) enough\\b.*")) { up = true; down = false; }
         // ---------- reset
         if (has(t, "reset", "पहले जैसा", "पहले जैसी", "undo all", "सब हटा", "original")) return cmd("reset");
+        // ---------- v33: the size of a character ("make the monkey bigger", "Khan is too small")
+        if (has(t, "bigger", "larger", "taller", "huge", "giant", "smaller", "tiny", "shorter", "too big", "too large", "too small", "बड़ा", "बड़ी", "छोटा", "छोटी", "लंबा", "लंबी")
+                && !has(t, "font", "subtitle", "text", "file", "resolution", "music", "voice", "sound")) {
+            String who = subject(t, names);
+            if (who != null) {
+                Map<String, Object> c = cmd("size");
+                c.put("who", who);
+                boolean smaller = has(t, "smaller", "tiny", "shorter", "too big", "too large", "छोटा", "छोटी") && !has(t, "too small");
+                c.put("factor", (double) (smaller ? (has(t, "much", "बहुत") ? 0.7f : 0.85f) : (has(t, "much", "बहुत", "huge", "giant") ? 1.4f : 1.2f)));
+                return c;
+            }
+        }
+        // ---------- v33: the light of one part ("scene 2 brighter", "the cave is too dark", "part 1 darker")
+        if (has(t, "bright", "lighter", "dark", "dim", "light", "रोशनी", "उजाला", "अँधेरा", "अंधेरा", "काला") && !has(t, "subtitle", "music", "voice")) {
+            java.util.regex.Matcher sm = java.util.regex.Pattern.compile("(?i)\\b(scene|part|दृश्य|भाग)\\s*(\\d+)").matcher(t);
+            String which = sm.find() ? sm.group(2) : null;
+            if (which == null) {
+                for (String place : new String[]{"cave", "गुफा", "garden", "बगीचा", "forest", "जंगल", "palace", "महल", "room", "कमरा", "village", "गाँव", "night", "रात"})
+                    if (has(t, place)) { which = place; break; }
+            }
+            if (which != null) {
+                Map<String, Object> c = cmd("scene_brightness");
+                c.put("scene", which);
+                boolean darker = (has(t, "dark", "dim", "अँधेरा", "अंधेरा", "काला") && !has(t, "too dark", "less dark", "not so dark", "बहुत अँधेरा", "बहुत अंधेरा")) || has(t, "too bright", "less bright");
+                float a = has(t, "much", "बहुत", "very", "lot") ? 0.45f : 0.25f;
+                c.put("factor", (double) (1 + (darker ? -a : a)));
+                return c;
+            }
+        }
+        // ---------- v33: the length of shots ("shorter shots", "more cuts", "longer shots", "fewer cuts", "cuts too fast")
+        if (has(t, "shots", "shot", "cuts", "cut ", "शॉट", "कट")) {
+            boolean shorter = has(t, "shorter", "short", "more cuts", "faster cuts", "quicker", "छोटे", "ज़्यादा कट", "ज्यादा कट") && !has(t, "too many", "too fast", "too quick", "too short");
+            boolean longer = has(t, "longer", "long", "fewer", "less cuts", "too many", "too fast", "too quick", "too short", "slower cuts", "लंबे", "कम कट");
+            if (shorter || longer) { Map<String, Object> c = cmd("shot_length"); c.put("factor", (double) (shorter ? 0.75f : 1.3f)); return c; }
+        }
         // ---------- platform / aspect
         if (has(t, "4:5", "4 by 5", "insta portrait", "instagram portrait", "feed portrait", "पोर्ट्रेट")) { Map<String, Object> c = cmd("aspect"); c.put("value", "4:5"); return c; }
         if (has(t, "2.39", "cinemascope", "cinema scope", "anamorphic", "widescreen", "सिनेमास्कोप", "theatre", "theater", "cinema")) { Map<String, Object> c = cmd("aspect"); c.put("value", "2.39:1"); return c; }

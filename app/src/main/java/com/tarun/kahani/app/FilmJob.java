@@ -184,6 +184,17 @@ public final class FilmJob implements Runnable {
             if (story.dialogueCount() == 0 && story.scenes.size() <= 1)
                 throw new IllegalStateException("No dialogue found in the story. Write lines like  Name: \"dialogue\"  — or tap \"Read with AI\".");
             Edits ed = Edits.fromJson(project.read("edits.json"));
+            // v33: a remake after an instruction (the story and the pictures unchanged) keeps every picture and every
+            // approval: no library search, no proposals, no shot check again — only the change is applied
+            String sig = hash(script) + "|" + hash(project.read("cast.txt"));
+            remake = sig.equals(project.setting("made.sig", ""));
+            if (remake) info = "Made again with your change — the pictures and approvals of the last film kept";
+            com.tarun.kahani.core.TechnicalDirector.CUT_SECONDS = com.tarun.kahani.core.TechnicalDirector.CUT_SECONDS_DEFAULT * ed.shotLength;
+            for (Story.CharacterDef c : story.cast()) {
+                Float sc = ed.charScale.get(c.displayName);
+                if (sc == null) for (java.util.Map.Entry<String, Float> e : ed.charScale.entrySet()) if (c.displayName.contains(e.getKey()) || c.aliases.contains(e.getKey())) sc = e.getValue();
+                if (sc != null && c.look != null) c.look.height *= sc;
+            }
             // the AI reads the story once more for nature and physics, also what is only implied (kept per script)
             String cueFile = "cues_" + hash(script) + ".json";
             if (project.has(cueFile)) ScriptAI.applyCues(story, project.read(cueFile));
@@ -200,10 +211,10 @@ public final class FilmJob implements Runnable {
 
             // the phone's library first: pictures and voices that clearly fit, no button needed
             step("Director is looking through your library…", 0.025f);
-            String fromLib = AutoLibrary.fill(ctx, project, story);
+            String fromLib = remake ? "" : AutoLibrary.fill(ctx, project, story);
             if (fromLib.length() > 0) info = "Taken from your library: " + fromLib;
             check();
-            if (Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
+            if (!remake && Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
             // free pictures of the story's important objects (Fluent Emoji 3D on GitHub, MIT), for inserts
             if (Prefs.online(ctx) && Prefs.freeObjects(ctx)) {
                 check();
@@ -214,7 +225,7 @@ public final class FilmJob implements Runnable {
             }
             // Studio 3D: whatever still has no picture (AI off, offline, or the service down) is built in three
             // dimensions on the phone — characters with their face points, places with their floor line
-            if (Prefs.studio3d(ctx)) {
+            if (Prefs.studio3d(ctx) && !remake) {
                 check();
                 step("Reading the style of your pictures…", 0.024f);
                 final com.tarun.kahani.core.StyleCue cue = Studio3DArt.styleCue(project, story);
@@ -261,6 +272,17 @@ public final class FilmJob implements Runnable {
             opt.onTwos = Prefs.onTwos(ctx);              // Spider-Verse stepping, only when the user asks for it
             Director dir = new Director(story, opt);
             Film film = dir.prepare();
+            // v33: "scene 2 brighter", "the cave darker": the instruction's light on that part alone
+            for (Film.Seg sg : film.segs) {
+                if (sg.scene < 0 || sg.scene >= story.scenes.size()) continue;
+                Story.Scene sc = story.scenes.get(sg.scene);
+                for (java.util.Map.Entry<String, Float> e : ed.sceneBright.entrySet()) {
+                    String k = e.getKey();
+                    boolean byNumber = k.matches("\\d+") && String.valueOf(sc.number).equals(k);
+                    boolean byPlace = !k.matches("\\d+") && (com.tarun.kahani.core.Txt.has(sc.setting, k) || com.tarun.kahani.core.Txt.has(sc.title, k) || com.tarun.kahani.core.Txt.has(com.tarun.kahani.core.Sets.label(sg.set), k));
+                    if (byNumber || byPlace) sg.bright = e.getValue();
+                }
+            }
 
             // ---------------- voices
             step("Preparing voices…", 0.06f);
@@ -474,7 +496,8 @@ public final class FilmJob implements Runnable {
             audioCheck(film, mix, lineFiles);
             // Human QC (protocol pipeline step 4): the animatic and the first frame of every shot, checked by the user
             // before the film is made; their fixes are applied, then the film is made
-            if (Prefs.humanQc(ctx)) humanQc(film, art, dir, ed, tmp, mix);
+            if (Prefs.humanQc(ctx) && !remake) humanQc(film, art, dir, ed, tmp, mix);
+            else if (remake) film.shotList += "\nHUMAN QC: a remake with your change — the first frames approved with the last film stand.\n";
             // pipeline step 6: every shot played frame by frame at check size (the frames seen one by one at 0.25x
             // speed); a shot that boils or shakes has its motion cut by 80% and is played again from the same first frame
             finalCheck(film, art, ed);
@@ -516,6 +539,7 @@ public final class FilmJob implements Runnable {
             if (!out.renameTo(fin)) throw new IllegalStateException("The film could not be saved");
             project.setSetting("filmSeconds", String.valueOf((int) film.duration));
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
+            project.setSetting("made.sig", hash(script) + "|" + hash(project.read("cast.txt")));     // v33: a remake with the same story and pictures keeps everything
             // the director's manual (IV stage 9, 3.10, V): the exported file verified, then the three-level review, the
             // five gates and the QA checklist from everything that was checked — never a finished claim before this
             film.shotList += "\n" + exportCheck(fin, film);
@@ -549,6 +573,8 @@ public final class FilmJob implements Runnable {
     public final java.util.List<String[]> qcItems = new java.util.ArrayList<String[]>();
     /** True while the job waits for the user to check the shots. */
     public volatile boolean qcWaiting;
+    /** v33: true when this run only applies an instruction to the last film (story and pictures unchanged). */
+    public boolean remake;
     /** The job waits for the user's decision on the pictures the studio made in 3D (proposals in the manifest). */
     public volatile boolean proposalsWaiting;
     public void proposalsDone() { proposalsWaiting = false; }

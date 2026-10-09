@@ -222,7 +222,7 @@ final class SheetSaver {
         final String kind = p.length > 1 ? p[1] : "char", key = p.length > 2 ? p[2] : "", shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
         final List<String> newPoses = newPosesIn != null ? newPosesIn : new ArrayList<String>();
         Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, key) : null;
-        boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER);   // v32: fur reads like a beast
+        boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER || c.look.kind == Look.MONKEY);   // v32/v33: fur reads like a beast
         // 1. every picture; a sheet of several figures split into them
         List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
         int split = 0;
@@ -315,11 +315,21 @@ final class SheetSaver {
                 if (best >= 0) angles[best] = sa;
             }
             String have = c == null ? null : Studio3DArt.charFile(project, st, c);
-            boolean frontReal = "1".equals(project.setting("realview." + key + ".0", ""));
-            // a drawn front (a doll, a 3D-made picture) gives way to the first real front
             boolean haveFront = false;
             for (float a : angles) if (a == com.tarun.kahani.core.Angles.FRONT) haveFront = true;
-            if (have != null && haveFront && !frontReal && have.startsWith("3d_")) { project.setManifest("char", key, null); have = null; }
+            // v33: the newly given front is the character's picture from now on (what the user uploads last is what
+            // they want to see); the earlier front stays in the library as a picture of the same character
+            if (have != null && haveFront) {
+                try {
+                    byte[] old = com.tarun.kahani.app.AudioIO.readFile(project.file(have));
+                    if (old != null && old.length > 0 && !"1".equals(project.setting("fromlib." + key, ""))) {
+                        Library.Item prev = library.addBytes(Library.PIC, "person", shown + " (earlier front)", "front", old, have.endsWith(".png") ? ".png" : ".jpg", "angles");
+                        prev.setMeta("ofName", shown);
+                    }
+                } catch (Exception ignored) { /* the old front is still in the story's own folder */ }
+                project.setManifest("char", key, null);
+                have = null;
+            }
             // the drawn views (made from the picture) go: real angles replace them, slot by slot or entirely
             for (float sa : slotAngles) {
                 if (sa == com.tarun.kahani.core.Angles.FRONT) continue;
@@ -390,7 +400,17 @@ final class SheetSaver {
             if (posesMade > 0) done.append(posesMade).append(" pose pictures for the shots; ");
             Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
         } else if (kind.equals("scene")) {
-            boolean haveMain = project.manifestLine("scene", key) != null, haveRev = project.manifestLine("scene", key + "r") != null;
+            // v33: new pictures of a place replace its wide view and reverse angle (the earlier ones stay in the library)
+            boolean haveMain = false, haveRev = false;
+            for (String old : new String[]{project.manifestLine("scene", key), project.manifestLine("scene", key + "r")}) {
+                if (old == null) continue;
+                String[] of = old.split("\\|");
+                if (of.length < 3 || !project.has(of[2].trim())) continue;
+                try {
+                    byte[] ob = com.tarun.kahani.app.AudioIO.readFile(project.file(of[2].trim()));
+                    if (ob != null && ob.length > 0) { Library.Item prev = library.addBytes(Library.PIC, "place", shown + " (earlier)", "", ob, ".jpg", "angles"); prev.setMeta("ofName", shown); }
+                } catch (Exception ignored) { }
+            }
             for (int i = 0; i < pics.size(); i++) {
                 Object[] o = pics.get(i);
                 byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], false);
@@ -417,7 +437,7 @@ final class SheetSaver {
             }
         } else {
             // a thing: its first picture is the insert of the thing itself; every angle goes to the library
-            boolean haveObj = project.read("cast.txt").contains("|" + key + "|");
+            boolean haveObj = false;                                                  // v33: the first new picture is the thing's insert from now on
             for (int i = 0; i < pics.size(); i++) {
                 Object[] o = pics.get(i);
                 boolean cut = (Boolean) o[3];

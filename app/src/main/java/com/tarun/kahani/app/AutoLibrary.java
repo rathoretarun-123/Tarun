@@ -39,6 +39,15 @@ final class AutoLibrary {
     }
 
     /** A file name a camera or a messenger gives (IMG_2024…, PXL_…, DSC…, Screenshot…, WhatsApp Image…): no name at all. */
+    /** v33: two pictures that look like the same person or thing (the same colour mix and skin share). */
+    static boolean alike(PicSense.Info a, PicSense.Info b) {
+        if (a == null || b == null) return false;
+        float dot = 0, na = 0, nb = 0;
+        for (int i = 0; i < a.hue.length && i < b.hue.length; i++) { dot += a.hue[i] * b.hue[i]; na += a.hue[i] * a.hue[i]; nb += b.hue[i] * b.hue[i]; }
+        float cos = na > 0 && nb > 0 ? dot / (float) Math.sqrt(na * nb) : 0;
+        return cos >= 0.9f && Math.abs(a.skin - b.skin) < 0.12f && a.figure == b.figure;
+    }
+
     static boolean cameraName(String name) {
         String n = name == null ? "" : name.trim();
         return n.length() == 0 || n.matches("(?i)^(img|pxl|dsc|dcim|image|photo|pic|screenshot|signal|whatsapp image|snapchat|camera|vid|mvimg|panorama)[-_ ]?.*")
@@ -159,7 +168,7 @@ final class AutoLibrary {
                 s = Math.max(s, byText);
                 if (byName != null && byName.equals(targets.get(t)[1])) s = 1f;
                 if ((tg.equals("title") || tg.equals("end")) && byName == null) s = Math.min(s, 0.5f);   // only when named so
-                if (tg.startsWith("shot:") && "person".equals(it.kind)) s = 0;                          // a character is not an object
+                if (tg.startsWith("shot:") && ("person".equals(it.kind) || "place".equals(it.kind) || "view".equals(it.kind))) s = 0;   // a character, a place or a view is not an object (v33)
                 // v25: a picture with no name and no words fitting the target is placed by its look only when very sure
                 if (byName == null && byText < 0.5f && cameraName(it.name) && s < LOOKS_ONLY_SURE) s = 0;
                 // v25: what the user said about this picture in any story wins over every guess

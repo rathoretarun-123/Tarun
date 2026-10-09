@@ -60,9 +60,9 @@ public final class VideoWriter {
         encodeAudio(pcm, sr);
         MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h);
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
-        f.setInteger(MediaFormat.KEY_BIT_RATE, Math.max(1000000, (int) (w * (long) h * fps * bitsPerPixel)));
+        f.setInteger(MediaFormat.KEY_BIT_RATE, Math.max(2000000, (int) (w * (long) h * fps * bitsPerPixel)));     // v33: dark frames need the bits
         f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
+        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
         video = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
         video.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         video.start();

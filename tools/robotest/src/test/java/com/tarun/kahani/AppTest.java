@@ -4,10 +4,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.tarun.kahani.app.AndroidGfx;
@@ -56,6 +60,14 @@ public class AppTest {
     static final File OUT = new File(System.getProperty("kahani.out"));
 
     /** Makes a project folder with the sample story and pictures (like the "उदाहरण" button). */
+    /** Every test starts with a fresh library: the shared one would carry the pictures of an earlier test into the next. */
+    @org.junit.Before
+    public void freshLibrary() throws Exception {
+        java.lang.reflect.Field f = com.tarun.kahani.app.Library.class.getDeclaredField("shared");
+        f.setAccessible(true);
+        f.set(null, null);
+    }
+
     static Project sampleProject() throws Exception {
         Project p = Project.create(RuntimeEnvironment.getApplication());
         Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
@@ -1039,6 +1051,7 @@ public class AppTest {
         OUT.mkdirs();
         int storiesDone = 0;
         List<String> problems = new ArrayList<String>();
+        final Project[] lastProject = {null};
         for (int si = 0; si < scripts.length; si++) {
             long t0 = System.currentTimeMillis();
             Project p = Project.create(ctx);
@@ -1122,6 +1135,32 @@ public class AppTest {
                 rep.append(String.format(java.util.Locale.US, "  frame story%d_shot%02d.png at %.1f s: %s — %s%n", si + 1, i + 1, sh.t, com.tarun.kahani.core.ShotPlanner.SIZE_NAME[Math.max(0, Math.min(6, sh.size))], sh.view.length() > 0 ? sh.view : "drawn"));
             }
             storiesDone++;
+            lastProject[0] = p;
+        }
+        // v33: an instruction after the film — made again with the pictures and approvals kept (no proposals, no shot check)
+        {
+            long t0 = System.currentTimeMillis();
+            Project p = lastProject[0];
+            String castBefore = p.read("cast.txt");
+            com.tarun.kahani.core.Edits ed = com.tarun.kahani.core.Edits.fromJson(p.read("edits.json"));
+            for (java.util.Map<String, Object> c : com.tarun.kahani.core.CommandParser.parse("make Vrinda bigger, scene 1 brighter, shorter shots, music softer", java.util.Arrays.asList("Vrinda", "Bull")).commands) ed.apply(c);
+            p.write("edits.json", ed.toJson());
+            final com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(ctx, p);
+            Thread runner = new Thread(new Runnable() { public void run() { job.run(); } });
+            runner.start();
+            boolean stopped = false;
+            long wait = System.currentTimeMillis();
+            while (runner.isAlive() && System.currentTimeMillis() - wait < 900000) {
+                if (job.qcWaiting || job.proposalsWaiting) { stopped = true; if (job.proposalsWaiting) s3d("decideAll", p, null, ctx, true); if (job.qcWaiting) job.approve(); }
+                Thread.sleep(50);
+            }
+            runner.join(900000);
+            rep.append(String.format(java.util.Locale.US, "%nremake with an instruction: remake=%b done=%b stopped for a decision=%b pictures unchanged=%b took=%d s%n", job.remake, job.done, stopped, castBefore.equals(p.read("cast.txt")), (System.currentTimeMillis() - t0) / 1000));
+            if (!job.remake) problems.add("remake: not recognised as a remake");
+            if (!job.done) problems.add("remake: failed " + job.error);
+            if (stopped) problems.add("remake: stopped for proposals or the shot check again");
+            if (!castBefore.equals(p.read("cast.txt"))) problems.add("remake: the pictures changed");
+            if (!p.read("qc.txt").contains("HUMAN QC: a remake")) problems.add("remake: not noted in the shot list");
         }
         rep.append("\nstories finished: ").append(storiesDone).append(" of 3\n");
         for (String pr : problems) rep.append("PROBLEM: ").append(pr).append('\n');
@@ -1129,6 +1168,263 @@ public class AppTest {
         System.out.println(rep);
         ac.pause().stop().destroy();
         assertTrue("problems: " + problems, problems.isEmpty() && storiesDone == 3);
+    }
+
+    /** The first view whose text starts with the prefix (the n-th such view when skip > 0), or null. */
+    static View byText(View v, String prefix, int[] skip) {
+        if (v instanceof TextView && ((TextView) v).getText().toString().startsWith(prefix)) { if (skip[0] <= 0) return v; skip[0]--; }
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) { View r = byText(((ViewGroup) v).getChildAt(i), prefix, skip); if (r != null) return r; }
+        return null;
+    }
+
+    /** Chooses the first item of the latest list dialog (the "Photos / gallery" line of the upload dialog). */
+    static void firstDialogItem() {
+        android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull("a dialog", dlg);
+        assertNotNull("a list dialog", dlg.getListView());
+        dlg.getListView().performItemClick(dlg.getListView(), 0, 0);
+        idle();
+    }
+
+    /** The picker intent the app started last, which must be one that opens pictures. */
+    static String pickerStarted(MainActivity a) {
+        Intent i = shadowOf(a).getNextStartedActivity();
+        assertNotNull("a picker was opened", i);
+        String act = i.getAction() == null ? "" : i.getAction();
+        if (Intent.ACTION_CHOOSER.equals(act)) { Intent in = i.getParcelableExtra(Intent.EXTRA_INTENT); act = in != null && in.getAction() != null ? in.getAction() : act; }
+        assertTrue("a picture picker: " + act, act.contains("PICK_IMAGES") || act.equals(Intent.ACTION_OPEN_DOCUMENT) || act.equals(Intent.ACTION_GET_CONTENT) || act.equals(Intent.ACTION_PICK));
+        return act;
+    }
+
+    /**
+     * v33: pictures can be given everywhere, several at once — the Studio cards of a character, a place and a thing,
+     * the story screen's missing-pictures card with the director's added scenes, the make-film popup's "Pictures
+     * first", the progress screen's rows — every button opens the multi-picture picker.
+     */
+    @Test
+    public void uploadButtonsOpenThePickerEverywhere() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        set(a, "project", p);
+        StringBuilder rep = new StringBuilder();
+        // 1. the Studio: a character's one upload button, then a place's
+        call(a, "showStudio", new Class<?>[0]);
+        idle();
+        View root = a.findViewById(android.R.id.content);
+        View b = byText(root, "📷 Pictures (up to 10)", new int[]{0});
+        assertNotNull("the character's upload button", b);
+        b.performClick(); idle();
+        firstDialogItem();
+        rep.append("studio character: ").append(pickerStarted(a)).append('\n');
+        int chars = story.cast().size();
+        View pb = byText(root, "📷 Pictures (up to 10)", new int[]{chars});
+        assertNotNull("the place's upload button", pb);
+        pb.performClick(); idle();
+        firstDialogItem();
+        rep.append("studio place: ").append(pickerStarted(a)).append('\n');
+        // a thing, named on the spot
+        View tb = byText(root, "➕ Another thing of the story", new int[]{0});
+        if (tb == null) tb = byText(root, "➕ A thing of the story", new int[]{0});
+        assertNotNull("the thing button", tb);
+        tb.performClick(); idle();
+        android.app.AlertDialog nd = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull(nd);
+        EditText q = (EditText) byTextClass(nd.getWindow().getDecorView(), EditText.class);
+        assertNotNull("the name box", q);
+        q.setText("पगड़ी");
+        nd.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick(); idle();
+        firstDialogItem();
+        rep.append("studio thing: ").append(pickerStarted(a)).append('\n');
+        // 2. the story screen: the director's plan — a missing picture or an added scene, and a thing
+        call(a, "showStory", new Class<?>[0]);
+        idle();
+        root = a.findViewById(android.R.id.content);
+        View mb = byText(root, "📷 ", new int[]{0});
+        View xb = byText(root, "🎬 ", new int[]{0});
+        if (xb == null) xb = byText(root, "✅ ", new int[]{0});
+        assertTrue("a plan row to upload for (missing: " + (mb != null) + ", added scene: " + (xb != null) + ")", mb != null || xb != null);
+        (xb != null ? xb : mb).performClick(); idle();
+        firstDialogItem();
+        rep.append("story plan row: ").append(pickerStarted(a)).append('\n');
+        // 3. the make-film popup: "Pictures first"
+        call(a, "makeFilm", new Class<?>[0]);
+        idle();
+        android.app.AlertDialog mk = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull("the make-film dialog", mk);
+        Button neutral = mk.getButton(android.content.DialogInterface.BUTTON_NEUTRAL);
+        assertNotNull("Pictures first", neutral);
+        neutral.performClick(); idle();
+        android.app.AlertDialog list = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull(list);
+        if (list.getListView() != null && list.getListView().getCount() > 0) {
+            list.getListView().performItemClick(list.getListView(), 0, 0); idle();
+            android.app.AlertDialog nxt = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            if (nxt != null && nxt.getListView() != null && nxt != list) { nxt.getListView().performItemClick(nxt.getListView(), 0, 0); idle(); }
+            else if (nxt != null && byTextClass(nxt.getWindow().getDecorView(), EditText.class) != null) {
+                ((EditText) byTextClass(nxt.getWindow().getDecorView(), EditText.class)).setText("तलवार");
+                nxt.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick(); idle();
+                firstDialogItem();
+            }
+            rep.append("popup pictures first: ").append(pickerStarted(a)).append('\n');
+        } else rep.append("popup pictures first: no list (nothing missing)\n");
+        // 4. the progress screen's rows ("Pictures in this film")
+        LinearLayout card = new LinearLayout(a);
+        call(a, "picturesCard", new Class<?>[]{LinearLayout.class, Story.class}, card, story);
+        idle();
+        View add = byText(card, "📷 ", new int[]{0});
+        assertNotNull("a row's add/more button", add);
+        add.performClick(); idle();
+        firstDialogItem();
+        rep.append("progress row: ").append(pickerStarted(a)).append('\n');
+        System.out.println("UPLOAD BUTTONS:\n" + rep);
+        ac.pause().stop().destroy();
+    }
+
+    static View byTextClass(View v, Class<?> k) {
+        if (k.isInstance(v)) return v;
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) { View r = byTextClass(((ViewGroup) v).getChildAt(i), k); if (r != null) return r; }
+        return null;
+    }
+
+    /**
+     * v33: the post-production box understands plain instructions (size of a character, the light of a part, the
+     * length of shots, music, voices, brightness, the shape…) without the internet, and keeps them in the edits.
+     */
+    @Test
+    public void postProductionInstructionsAreUnderstood() throws Exception {
+        List<String> names = java.util.Arrays.asList("वृंदा", "वानुषा", "राजू", "खान राक्षस", "Asha", "Khan", "Vrinda");
+        String[][] asks = {
+                {"make the monkey bigger", "size"}, {"Khan is too small", "size"}, {"make Asha a little smaller", "size"}, {"make Vrinda much bigger", "size"},
+                {"scene 2 brighter", "scene_brightness"}, {"the cave is too dark", "scene_brightness"}, {"part 1 darker", "scene_brightness"}, {"make the garden scene much brighter", "scene_brightness"},
+                {"shorter shots", "shot_length"}, {"more cuts", "shot_length"}, {"the cuts are too fast", "shot_length"}, {"longer shots please", "shot_length"},
+                {"music softer", "music"}, {"the music is too loud", "music"}, {"remove the music", "music"}, {"make all voices louder", "voices"},
+                {"Khan's voice deeper", "voice_pitch"}, {"Vrinda speaks slower", "voice_rate"}, {"brighter", "brightness"}, {"warmer colours", "warmth"},
+                {"make it vertical for instagram", "aspect"}, {"720p", "resolution"}, {"subtitles on", "subtitles"}, {"faster pace", "speed"},
+                {"black and white", "saturation"}, {"less contrast", "contrast"}, {"the background sounds are too loud", "ambience"}, {"reset everything", "reset"}};
+        StringBuilder rep = new StringBuilder();
+        int ok = 0;
+        com.tarun.kahani.core.Edits ed = new com.tarun.kahani.core.Edits();
+        for (String[] ask : asks) {
+            com.tarun.kahani.core.CommandParser.Result r = com.tarun.kahani.core.CommandParser.parse(ask[0], names);
+            String ops = "";
+            for (java.util.Map<String, Object> c : r.commands) ops += (ops.length() > 0 ? "," : "") + c.get("op");
+            boolean good = r.unknown.isEmpty() && ops.contains(ask[1]);
+            if (good) ok++;
+            rep.append(good ? "  ✔ " : "  ✖ ").append(ask[0]).append(" → ").append(ops).append(r.unknown.isEmpty() ? "" : " (not understood: " + r.unknown + ")").append('\n');
+            for (java.util.Map<String, Object> c : r.commands) ed.apply(c);
+        }
+        System.out.println("POST-PRODUCTION:\n" + rep + ok + " of " + asks.length + " understood");
+        assertTrue("every instruction understood: " + ok + " of " + asks.length + "\n" + rep, ok == asks.length);
+        // the edits keep them, and survive the file
+        com.tarun.kahani.core.Edits ed2 = new com.tarun.kahani.core.Edits();
+        for (String[] ask : new String[][]{{"make the monkey bigger"}, {"scene 2 brighter"}, {"shorter shots"}, {"music softer"}})
+            for (java.util.Map<String, Object> c : com.tarun.kahani.core.CommandParser.parse(ask[0], names).commands) ed2.apply(c);
+        com.tarun.kahani.core.Edits back = com.tarun.kahani.core.Edits.fromJson(ed2.toJson());
+        assertTrue("the monkey's size kept: " + back.charScale, back.charScale.get("राजू") != null && back.charScale.get("राजू") > 1.1f);
+        assertTrue("scene 2's light kept: " + back.sceneBright, back.sceneBright.get("2") != null && back.sceneBright.get("2") > 0.1f);
+        assertTrue("shorter shots kept: " + back.shotLength, back.shotLength < 0.9f);
+        assertTrue("music kept: " + back.music, back.music < 0.9f);
+    }
+
+    /**
+     * v33: twenty stories, short and long, in three languages, with the user's sheets — made end to end at 240p.
+     * Run only when asked (-Dkahani.soak=1): it takes the better part of an hour. The report goes to
+     * build/frames/soak.txt.
+     */
+    @Test
+    public void twentyStoriesSoak() throws Exception {
+        org.junit.Assume.assumeTrue("the soak runs with -Dkahani.soak=1", "1".equals(System.getProperty("kahani.soak")));
+        org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec copy = new org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec() {
+            public void process(java.nio.ByteBuffer in, java.nio.ByteBuffer out) {
+                int n = Math.min(in.remaining(), out.remaining());
+                for (int i = 0; i < Math.min(n, 64); i++) out.put(in.get());
+                in.position(in.limit());
+            }
+        };
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("video/avc", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(1280 * 720 * 2, 4096, copy));
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("audio/mp4a-latm", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(16384, 4096, copy));
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File[] sheets = userSheets();
+        File dir = sheets[0].getParentFile();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        Class<?> ss = Class.forName("com.tarun.kahani.app.SheetSaver");
+        Method save = ss.getDeclaredMethod("saveToLibrary", com.tarun.kahani.app.Library.class, String.class, String.class, byte[].class, String.class);
+        save.setAccessible(true);
+        Class<?> al = Class.forName("com.tarun.kahani.app.AutoLibrary");
+        Method fill = al.getDeclaredMethod("fill", android.content.Context.class, Project.class, Story.class);
+        fill.setAccessible(true);
+        // the library: the user's sheets under the names the stories use (an upload per character and place)
+        String[][] sheetFor = {{"मीना", "sheet15.jpg", "person"}, {"राजू", "sheet01.jpg", "person"}, {"Asha", "sheet04.jpg", "person"}, {"Khan", "sheet11.jpg", "person"},
+                {"Vrinda", "sheet02.jpg", "person"}, {"Bull", "sheet09.jpg", "person"}, {"गुफा", "sheet39.jpg", "place"}, {"the cave", "sheet34.jpg", "place"}, {"gufa", "sheet36.jpg", "place"}};
+        for (String[] sf : sheetFor) save.invoke(null, lib, sf[0], sf[2], Files.readAllBytes(new File(dir, sf[1]).toPath()), "soak");
+        lib.addBytes("pic", "place", "महल का बगीचा", "", Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath()), ".jpg", "soak");
+        lib.addBytes("pic", "place", "the garden", "", Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath()), ".jpg", "soak");
+        lib.addBytes("pic", "place", "bagicha", "", Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath()), ".jpg", "soak");
+        String[] scripts = SoakStories.all();
+        StringBuilder rep = new StringBuilder("TWENTY STORIES — soak (Robolectric, 240p)\n");
+        List<String> problems = new ArrayList<String>();
+        OUT.mkdirs();
+        long tAll = System.currentTimeMillis();
+        for (int si = 0; si < scripts.length; si++) {
+            long t0 = System.currentTimeMillis();
+            Project p = Project.create(ctx);
+            p.write("script.txt", scripts[si]);
+            p.write("edits.json", "{\"height\":240,\"aspect\":\"" + (si % 3 == 1 ? "9:16" : "16:9") + "\",\"brightness\":0.1,\"music\":0.7}");
+            Story st = ScriptParser.parse(scripts[si]);
+            String title = scripts[si].split("\n")[0];
+            rep.append(String.format(java.util.Locale.US, "%n=== %2d. %s — %d lines, %d scenes, cast %d%n", si + 1, SoakStories.title(si), scripts[si].split("\n").length, st.scenes.size(), st.cast().size()));
+            if (st.cast().size() < 1) { problems.add((si + 1) + ": no character read"); continue; }
+            try { fill.invoke(null, ctx, p, st); } catch (Exception e) { problems.add((si + 1) + ": placement failed: " + e); }
+            String cast = p.read("cast.txt");
+            int chars = 0, poses = 0;
+            for (String l : cast.split("\n")) { if (l.startsWith("char|")) chars++; if (l.startsWith("pose|")) poses++; }
+            rep.append(String.format(java.util.Locale.US, "placed: %d character pictures, %d pose pictures%n", chars, poses));
+            final com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(ctx, p);
+            Thread runner = new Thread(new Runnable() { public void run() { job.run(); } });
+            runner.start();
+            long wait = System.currentTimeMillis();
+            boolean asked = false;
+            while (!job.qcWaiting && runner.isAlive() && System.currentTimeMillis() - wait < 900000) {
+                if (job.proposalsWaiting && !asked) { s3d("decideAll", p, null, ctx, true); asked = true; }
+                Thread.sleep(50);
+            }
+            if (job.qcWaiting) job.approve();
+            runner.join(900000);
+            String qc = job.done ? p.read("qc.txt") : "";
+            int shotsN = 0, real = 0;
+            for (String l : qc.split("\n")) { if (l.startsWith("SHOT ID:")) shotsN++; if (l.startsWith("PICTURES USED:") && l.contains("your picture")) real++; }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("QC SCORE[^:]*: (\\d+)/100").matcher(qc);
+            int score = -1;
+            while (m.find()) score = Integer.parseInt(m.group(1));
+            java.util.regex.Matcher miss = java.util.regex.Pattern.compile("Critical-defect override: ([^\n]*)").matcher(qc);
+            String crit = "?";
+            while (miss.find()) crit = miss.group(1);
+            rep.append(String.format(java.util.Locale.US, "film: done=%b error=%s seconds=%.0f shots=%d real-picture shots=%d score=%d critical=%s took=%d s%n",
+                    job.done, job.error, job.filmSeconds, shotsN, real, score, crit.length() > 40 ? crit.substring(0, 40) : crit, (System.currentTimeMillis() - t0) / 1000));
+            if (!job.done) problems.add((si + 1) + ": failed: " + job.error);
+            else {
+                if (shotsN < 4) problems.add((si + 1) + ": only " + shotsN + " shots");
+                if (score >= 0 && score < 70) problems.add((si + 1) + ": score " + score);
+                if (!crit.startsWith("none")) problems.add((si + 1) + ": critical — " + crit);
+                if (poses > 0 && real == 0) problems.add((si + 1) + ": pose pictures present but none used");
+            }
+            Files.write(new File(OUT, "soak.txt").toPath(), rep.toString().getBytes("UTF-8"));
+        }
+        rep.append(String.format(java.util.Locale.US, "%nall %d stories in %d min; problems: %d%n", scripts.length, (System.currentTimeMillis() - tAll) / 60000, problems.size()));
+        for (String pr : problems) rep.append("PROBLEM: ").append(pr).append('\n');
+        Files.write(new File(OUT, "soak.txt").toPath(), rep.toString().getBytes("UTF-8"));
+        System.out.println(rep);
+        ac.pause().stop().destroy();
+        assertTrue("problems: " + problems, problems.isEmpty());
     }
 
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */

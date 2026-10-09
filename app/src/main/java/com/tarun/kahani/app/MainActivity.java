@@ -34,6 +34,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -473,7 +474,9 @@ public class MainActivity extends Activity {
         Prefs.put(this, "angles.target", tgt);
         Prefs.put(this, "angles.from", from == null ? "" : from);
         Prefs.put(this, "angles.project", project == null ? "" : project.dir.getAbsolutePath());
-        final String[] opts = {"🖼  Photos / gallery — up to 10 at once", "📁  Files (Downloads, WhatsApp…) — up to 10", "📷  Camera — one at a time", "📚  From the tarunkahani library"};
+        final boolean more = tgt.startsWith("angles:char:") || tgt.startsWith("angles:scene:");
+        final String[] optsAll = {"🖼  Photos / gallery — up to 10 at once", "📁  Files (Downloads, WhatsApp…) — up to 10", "📷  Camera — one at a time", "📚  From the tarunkahani library", "🌐  Search the internet / ✨ make with AI (the old chooser)"};
+        final String[] opts = more ? optsAll : java.util.Arrays.copyOf(optsAll, optsAll.length - 1);
         new AlertDialog.Builder(this).setTitle("📷 Angles of " + what)
                 .setMessage("Front, three-quarter, side and back for a character; a wide view and its reverse for a place; front, side and rear for a thing. "
                         + "A picture that holds several angles side by side is split by the director into separate pictures. Every picture is saved in the library as " + what + ".")
@@ -483,6 +486,11 @@ public class MainActivity extends Activity {
                         if (w == 0) pickPhotos(REQ_ANGLES, 10);
                         else if (w == 1) pick("image/*", REQ_ANGLES, true);
                         else if (w == 2) camera();
+                        else if (w == 4) {
+                            // v33: the old chooser (a free picture from the internet, one made with AI) for a character or a place
+                            String[] q = tgt.split(":", 4);
+                            choosePicture((q[1].equals("char") ? "char:" : "scene:") + q[2], q.length > 3 ? q[3] : q[2]);
+                        }
                         else {
                             Picker pk = new Picker(MainActivity.this, library);
                             pk.show("An angle of " + what, Library.PIC, what, new String[]{}, new Picker.Listener() {
@@ -1253,8 +1261,8 @@ public class MainActivity extends Activity {
         top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(top);
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🖼 Picture", Ui.PRIMARY, new View.OnClickListener() {
-            public void onClick(View v) { choosePicture("char:" + keyFor(c), c.displayName + " " + c.description); }
+        r.addView(Ui.small(this, "📷 Pictures (up to 10)", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { anglesFor("angles:char:" + keyFor(c) + ":" + c.shown(), c.shown()); }          // v33: one button, several pictures at once, split and saved
         }));
         if (Studio3DArt.realAngles(project, keyFor(c))) info.addView(Ui.text(this, "📷 " + countAngles(c.shown()) + " real pictures of " + c.shown() + " in the library (angles, poses) — no drawn view is used", 13, Ui.GREEN, false));
         r.addView(Ui.small(this, "🎙 Voice", Ui.GREEN, new View.OnClickListener() {
@@ -1323,7 +1331,7 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { choosePicture("view:" + key + ":-90", c.displayName + " side view"); }
             }));
         }
-        r3.addView(Ui.small(this, "📷 Pictures (10 × 10 angles)", Ui.PRIMARY, new View.OnClickListener() {
+        if (false) r3.addView(Ui.small(this, "📷 Pictures (10 × 10 angles)", Ui.PRIMARY, new View.OnClickListener() {   // v33: the one button is in the first row
             public void onClick(View v) { anglesFor("angles:char:" + key + ":" + c.shown(), c.shown()); }
         }));
         if (false && file == null) r3.addView(Ui.small(this, "📐 Doll sheet", Ui.BLUE, new View.OnClickListener() {
@@ -1410,13 +1418,13 @@ public class MainActivity extends Activity {
         card.addView(Ui.text(this, "🔊 Background sound: " + (amb != null ? amb.label() + " (your choice)"
                 : auto != null ? auto.title + (auto.user ? " (yours — it fits the description)" : " (automatic)") : "Automatic"), 13, amb != null || (auto != null && auto.user) ? Ui.GREEN : Ui.SUB, false));
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "🖼 Background", Ui.PRIMARY, new View.OnClickListener() {
-            public void onClick(View v) { choosePicture("scene:" + key, sc.setting); }
+        r.addView(Ui.small(this, "📷 Pictures (up to 10)", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { anglesFor("angles:scene:" + key + ":" + (sc.title.length() > 0 ? sc.title : "part " + key), sc.title.length() > 0 ? sc.title : "part " + key); }   // v33
         }));
         r.addView(Ui.small(this, "🔊 Sound", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseSound("amb:" + key, sc.setting + " " + sc.title); }
         }));
-        r.addView(Ui.small(this, "📷 Angles", Ui.PRIMARY, new View.OnClickListener() {
+        if (false) r.addView(Ui.small(this, "📷 Angles", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { anglesFor("angles:scene:" + key + ":" + (sc.title.length() > 0 ? sc.title : "part " + key), sc.title.length() > 0 ? sc.title : "part " + key); }
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
@@ -2682,6 +2690,19 @@ public class MainActivity extends Activity {
             lp.leftMargin = Ui.dp(this, 6);
             r.addView(q, lp);
             kindOf[i] = "place".equals(it.kind) ? 1 : "object".equals(it.kind) ? 2 : 0;
+            // v33: ten sheets of one person need one name: "same as above" copies the row above; alike pictures are prefilled
+            if (i > 0) {
+                final EditText above = names[i - 1];
+                if (it.name.length() == 0 || AutoLibrary.cameraName(it.name)) {
+                    try {
+                        com.tarun.kahani.core.PicSense.Info a = library.info(items.get(i - 1)), b = library.info(it);
+                        if (a != null && b != null && AutoLibrary.alike(a, b)) { q.setText(above.getText()); kindOf[i] = kindOf[i - 1]; }
+                    } catch (Throwable ignored) { }
+                }
+                r.addView(Ui.small(this, "⤴ same", Ui.SUB, new View.OnClickListener() {
+                    public void onClick(View v) { q.setText(above.getText()); kindOf[idx] = kindOf[idx - 1]; }
+                }));
+            }
             final TextView kb = Ui.small(this, kindLabels[kindOf[i]], Ui.BLUE, null);
             kb.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { kindOf[idx] = (kindOf[idx] + 1) % 3; kb.setText(kindLabels[kindOf[idx]]); }
@@ -2745,12 +2766,26 @@ public class MainActivity extends Activity {
      * permission needed, several at once), else the gallery chooser.
      */
     private void pickPhotos(int code, int max) {
-        if (Build.VERSION.SDK_INT >= 33) {
+        // v33: the photo picker that lets several pictures be chosen at once — Android 13's own, the Google one
+        // on older phones, else the documents picker (which always allows several); the gallery chooser last
+        String[] actions = Build.VERSION.SDK_INT >= 33 ? new String[]{"android.provider.action.PICK_IMAGES", "com.google.android.gms.provider.action.PICK_IMAGES"}
+                : new String[]{"com.google.android.gms.provider.action.PICK_IMAGES"};
+        for (String act : actions) {
             try {
-                Intent i = new Intent("android.provider.action.PICK_IMAGES");
+                Intent i = new Intent(act);
                 i.setType("image/*");
                 i.putExtra("android.provider.extra.PICK_IMAGES_MAX", Math.max(2, Math.min(max, 100)));
                 if (i.resolveActivity(getPackageManager()) != null) { startActivityForResult(i, code); return; }
+            } catch (Exception ignored) { /* the next one */ }
+        }
+        if (max > 1) {
+            try {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.setType("image/*");
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                startActivityForResult(i, code);
+                return;
             } catch (Exception ignored) { /* the chooser then */ }
         }
         pick("image/*", code, max > 1);
@@ -3318,6 +3353,13 @@ public class MainActivity extends Activity {
         nav.addView(which, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         nav.addView(next);
         outer.addView(nav);
+        // v33: every picture of the character in a strip — tap one to open it (no swipe needed)
+        final HorizontalScrollView strip = new HorizontalScrollView(this);
+        final LinearLayout stripRow = Ui.row(this);
+        stripRow.setPadding(Ui.dp(this, 6), Ui.dp(this, 2), Ui.dp(this, 6), Ui.dp(this, 2));
+        strip.addView(stripRow);
+        strip.setBackgroundColor(Ui.BG);
+        outer.addView(strip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 64)));
         LinearLayout r = Ui.row(this);
         r.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
         r.setBackgroundColor(Ui.BG);
@@ -3356,6 +3398,16 @@ public class MainActivity extends Activity {
         final int[] cur = {0};
         final Bitmap[] shownBmp = {null};
         final Runnable[] load = new Runnable[1];
+        for (int i = 0; i < cands.size(); i++) {
+            final int idx = i;
+            final Object[] cd = cands.get(i);
+            ImageView tv = new ImageView(this);
+            tv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            tv.setPadding(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2));
+            try { tv.setImageBitmap(cd[1] != null ? thumb(project.file((String) cd[1]), 120) : Picker.thumb(this, (Library.Item) cd[2], 120)); } catch (Throwable ignored) { }
+            tv.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { cur[0] = idx; load[0].run(); } });
+            stripRow.addView(tv, new LinearLayout.LayoutParams(Ui.dp(this, 56), Ui.dp(this, 56)));
+        }
         load[0] = new Runnable() {
             public void run() {
                 final int i = cur[0];
@@ -4113,7 +4165,7 @@ public class MainActivity extends Activity {
         saveEdits(ed);
         if (res.unknown.isEmpty() || !Prefs.online(this)) {
             if (!res.unknown.isEmpty()) done.append("? Not understood: ").append(res.unknown).append('\n');
-            status.setText(done + (done.length() > 0 ? "Tap \"🔁 Make again\" to see the changes." : ""));
+            status.setText(done + (done.length() > 0 ? "Tap \"🔁 Make again\" — your pictures and approvals are kept; only this change is applied." : ""));
             box.setText("");
             return;
         }
@@ -4130,7 +4182,7 @@ public class MainActivity extends Activity {
                 }
                 else done.append("? Not understood: ").append(rest).append('\n');
                 saveEdits(ed2);
-                status.setText(done + "Tap \"🔁 Make again\" to see the changes.");
+                status.setText(done + "Tap \"🔁 Make again\" — your pictures and approvals are kept; only this change is applied.");
                 box.setText("");
             }
         });

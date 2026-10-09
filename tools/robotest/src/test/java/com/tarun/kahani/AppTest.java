@@ -735,6 +735,77 @@ public class AppTest {
         fo.close();
     }
 
+    /**
+     * v29: a sheet of several figures is split whichever way it reaches a character — placed by the director's own
+     * library placement (a library picture named as the character), or chosen through the character's picture
+     * picker — never saved whole as the front picture.
+     */
+    @Test
+    public void sheetChosenAnywhereIsSplit() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File[] sheets = userSheets();
+        File girl = new File(sheets[0].getParentFile(), "sheet02.jpg"), girl2 = new File(sheets[0].getParentFile(), "sheet15.jpg");
+        byte[] sheet = Files.readAllBytes(girl.toPath());
+        Class<?> ss = Class.forName("com.tarun.kahani.app.SheetSaver");
+        Method isSheet = ss.getDeclaredMethod("isSheet", byte[].class, boolean.class);
+        isSheet.setAccessible(true);
+        assertTrue("a sheet is a sheet", (Boolean) isSheet.invoke(null, sheet, false));
+        assertTrue("a single picture is not", !(Boolean) isSheet.invoke(null, Files.readAllBytes(new File(ASSETS, "sample/char_vrinda.jpg").toPath()), false));
+        // 1. the director's own placement from the library: the sheet named as the character
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        Story.CharacterDef vrinda = null;
+        for (Story.CharacterDef c : st.cast()) if (c.displayName.contains("वृंदा")) vrinda = c;
+        assertNotNull(vrinda);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        String key = (String) keyFor.invoke(a, vrinda);
+        lib.addBytes("pic", "", vrinda.displayName, "", sheet, ".jpg", "test");
+        Class<?> al = Class.forName("com.tarun.kahani.app.AutoLibrary");
+        Method fill = al.getDeclaredMethod("fill", android.content.Context.class, Project.class, Story.class);
+        fill.setAccessible(true);
+        String notes = (String) fill.invoke(null, ctx, p, st);
+        String cast = p.read("cast.txt");
+        System.out.println("SHEET AUTO: " + notes + "\nCAST: " + cast);
+        int poses = 0;
+        for (String l : cast.split("\n")) if (l.startsWith("pose|" + key + "|")) poses++;
+        assertTrue("the director split the sheet it placed: " + poses + " pose pictures", poses >= 8);
+        assertTrue("a front picture from the sheet", cast.contains("char|" + key + "|"));
+        String front = p.manifestLine("char", key).split("\\|")[2];
+        Bitmap fb = android.graphics.BitmapFactory.decodeFile(p.file(front).getAbsolutePath());
+        assertTrue("the front is one figure, not the sheet: " + fb.getWidth() + "x" + fb.getHeight(), fb.getHeight() > fb.getWidth());
+        // 2. the picker: a second sheet chosen for the character through "Picture: …"
+        com.tarun.kahani.app.Library.Item it2 = lib.addBytes("pic", "", "sheet two", "", Files.readAllBytes(girl2.toPath()), ".jpg", "test");
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("target");
+        tf.setAccessible(true);
+        tf.set(a, "char:" + key);
+        Method use = MainActivity.class.getDeclaredMethod("usePicture", com.tarun.kahani.app.Library.Item.class);
+        use.setAccessible(true);
+        org.robolectric.shadows.ShadowToast.reset();
+        use.invoke(a, it2);
+        for (int i = 0; i < 1200 && !uploadDone(); i++) { idle(); Thread.sleep(100); }
+        idle();
+        cast = p.read("cast.txt");
+        int poses2 = 0;
+        for (String l : cast.split("\n")) if (l.startsWith("pose|" + key + "|")) poses2++;
+        System.out.println("SHEET PICKER toast: " + org.robolectric.shadows.ShadowToast.getTextOfLatestToast() + " — pose pictures " + poses + " → " + poses2);
+        assertTrue("the picker split the second sheet too: " + poses2, poses2 >= poses + 8);
+        front = p.manifestLine("char", key).split("\\|")[2];
+        fb = android.graphics.BitmapFactory.decodeFile(p.file(front).getAbsolutePath());
+        assertTrue("the front is still one figure: " + fb.getWidth() + "x" + fb.getHeight(), fb.getHeight() > fb.getWidth());
+        ac.pause().stop().destroy();
+    }
+
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
     @Test
     public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {

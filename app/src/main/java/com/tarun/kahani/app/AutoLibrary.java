@@ -229,7 +229,20 @@ final class AutoLibrary {
             if (best[i] < 0 || score[i][best[i]] < PICTURE_SURE) continue;
             String[] t = targets.get(best[i]);
             Library.Item it = pics.get(i);
-            String f = project.savePicture(Project.readAll(lib.open(it)), t[0].startsWith("char:") ? "char" : "pic");
+            byte[] data = Project.readAll(lib.open(it));
+            if (t[0].startsWith("char:") && SheetSaver.isSheet(data, false)) {
+                // v29: a sheet of the character in the library is split into its figures, never used whole
+                String key = t[0].substring(5);
+                List<byte[]> one = new ArrayList<byte[]>();
+                one.add(data);
+                try {
+                    SheetSaver.save(project, lib, st, SheetSaver.target("char", key, key), one, null);
+                    notes.add(key + " ← the sheet \"" + it.label() + "\" split into its figures");
+                } catch (Exception ignored) {
+                }
+                continue;
+            }
+            String f = project.savePicture(data, t[0].startsWith("char:") ? "char" : "pic");
             if (t[0].startsWith("char:")) {
                 String key = t[0].substring(5);
                 project.setManifest("char", key, "char|" + key + "|" + f);

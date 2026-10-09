@@ -113,6 +113,8 @@ public final class Art {
         public Nature.Scan scan;
         /** The average colour of the picture's lower part (the ground): the colour of the bounce light (0 = unknown). */
         public int avgLow;
+        /** v32: a picture (the user's own, or one made for the place) rather than a painted set: it carries its own light and mood. */
+        public boolean picture;
     }
 
     public static final class Shot {
@@ -315,6 +317,7 @@ public final class Art {
         if (img == null) return null;
         Backdrop b = new Backdrop();
         b.img = img;
+        b.picture = true;
         b.w = L.width(img);
         b.h = L.height(img);
         fitCrop(b);

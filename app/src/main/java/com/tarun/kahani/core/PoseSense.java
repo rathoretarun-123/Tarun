@@ -224,7 +224,7 @@ public final class PoseSense {
         t.m = m;
         // ---- the pose, from the silhouette
         boolean sideways = t.angle == Angles.SIDE || t.angle == Angles.THREE_QUARTER;
-        boolean low = (m.hRatio > 0 ? m.hRatio < 0.86f && m.lowMass >= 0.32f : m.lowMass > 0.5f) && m.feet < 0.3f;   // spread feet: a run, not a seat
+        boolean low = m.hRatio > 0 ? m.hRatio < 0.86f && m.lowMass >= 0.32f : m.lowMass > 0.5f;   // a low, bottom-heavy figure sits or crouches (crossed legs spread the "feet": still a seat)
         float reach = Math.max(m.reachL, m.reachR);
         if (m.aspect > 1.25f && (m.hRatio == 0 || m.hRatio < 0.8f)) t.pose = LIE;
         else if (low) t.pose = m.lean > 0.1f || m.aspect < 0.62f ? CROUCH : SIT;

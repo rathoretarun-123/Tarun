@@ -606,7 +606,9 @@ public class AppTest {
         t = read.get("sheet01.jpg").get(5);
         assertTrue("sheet01 #6: " + t, t.pose == com.tarun.kahani.core.PoseSense.RUN && t.angle == com.tarun.kahani.core.Angles.SIDE);
         t = read.get("sheet15.jpg").get(9);
-        assertTrue("sheet15 #10: " + t, t.pose == com.tarun.kahani.core.PoseSense.RUN && t.angle == com.tarun.kahani.core.Angles.SIDE);
+        assertTrue("sheet15 #10 (the girl sitting cross-legged, chin on her hand): " + t, t.pose == com.tarun.kahani.core.PoseSense.SIT);
+        t = read.get("sheet15.jpg").get(4);
+        assertTrue("sheet15 #5 (waving): " + t, t.pose == com.tarun.kahani.core.PoseSense.WAVE || t.pose == com.tarun.kahani.core.PoseSense.ARMS_UP || t.pose == com.tarun.kahani.core.PoseSense.STAND);
         // every figure of every sheet is tagged standing-front at least somewhere, and more than one angle is seen
         for (String nm : names) {
             java.util.Set<Float> angles = new java.util.HashSet<Float>();
@@ -951,6 +953,182 @@ public class AppTest {
         }
         assertTrue("a whole panel with content in its corners (" + dark + "/4), " + pb.getWidth() + "x" + pb.getHeight(), dark >= 3 && pb.getWidth() > 200);
         ac.pause().stop().destroy();
+    }
+
+    /**
+     * v31: three simple stories (Hindi, English, Hinglish) made end to end the way the phone makes them — the user's
+     * sheets added to the library and split, the director placing them by name, the film job with its animatic,
+     * the shot check and the final QC — and the result measured: shots, pictures used, the QC score, missing
+     * characters, frames rendered for a look. The numbers go to build/frames/three_stories.txt.
+     */
+    @Test
+    public void threeSimpleStoriesEndToEnd() throws Exception {
+        org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec copy = new org.robolectric.shadows.ShadowMediaCodec.CodecConfig.Codec() {
+            public void process(java.nio.ByteBuffer in, java.nio.ByteBuffer out) {
+                int n = Math.min(in.remaining(), out.remaining());
+                for (int i = 0; i < Math.min(n, 64); i++) out.put(in.get());
+                in.position(in.limit());
+            }
+        };
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("video/avc", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(1280 * 720 * 2, 4096, copy));
+        org.robolectric.shadows.ShadowMediaCodec.addEncoder("audio/mp4a-latm", new org.robolectric.shadows.ShadowMediaCodec.CodecConfig(16384, 4096, copy));
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File[] sheets = userSheets();
+        File dir = sheets[0].getParentFile();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        Class<?> ss = Class.forName("com.tarun.kahani.app.SheetSaver");
+        Method save = ss.getDeclaredMethod("saveToLibrary", com.tarun.kahani.app.Library.class, String.class, String.class, byte[].class, String.class);
+        save.setAccessible(true);
+        Class<?> al = Class.forName("com.tarun.kahani.app.AutoLibrary");
+        Method fill = al.getDeclaredMethod("fill", android.content.Context.class, Project.class, Story.class);
+        fill.setAccessible(true);
+        // the library, as the user would fill it: sheets named as the story names them, a garden from the sample
+        String[][] sheetFor = {{"मीना", "sheet15.jpg", "person"}, {"राजू", "sheet01.jpg", "person"}, {"Asha", "sheet04.jpg", "person"}, {"Khan", "sheet11.jpg", "person"},
+                {"Vrinda", "sheet02.jpg", "person"}, {"Bull", "sheet09.jpg", "person"}, {"गुफा", "sheet39.jpg", "place"}, {"the cave", "sheet34.jpg", "place"}, {"gufa", "sheet36.jpg", "place"}};
+        StringBuilder rep = new StringBuilder("THREE SIMPLE STORIES — v31 end to end (Robolectric, 360p)\n\n");
+        for (String[] sf : sheetFor) {
+            List<?> fam = (List<?>) save.invoke(null, lib, sf[0], sf[2], Files.readAllBytes(new File(dir, sf[1]).toPath()), "test");
+            rep.append(String.format(java.util.Locale.US, "library: %-9s ← %s split into %d pictures%n", sf[0], sf[1], fam.size()));
+            assertTrue(sf[0] + " split: " + fam.size(), fam.size() >= 8);
+        }
+        lib.addBytes("pic", "place", "महल का बगीचा", "", Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath()), ".jpg", "test");
+        String[] titles = {"मीना और राजू की तितली (Hindi)", "Asha and the Beast (English)", "Vrinda aur Bull (Hinglish)"};
+        String[] scripts = {
+                "पात्र:\n1. मीना (8 वर्ष): लड़की, सफ़ेद-नीला कुर्ता, दो चोटियाँ, कंधे पर झोला\n2. राजू बंदर: लाल-भूरे बालों वाला छोटा बंदर, लाल बंडी\n"
+                + "स्थान:\n1. महल का बगीचा: फूलों और तितलियों वाला बड़ा बगीचा\n2. गुफा: पहाड़ की गुफा, दरवाज़े पर पीतल का घंटा\n"
+                + "मीना और राजू की तितली\n"
+                + "दृश्य 1: बगीचे में सुबह\n(स्थान: महल का बगीचा। सुबह का समय है। मीना फूलों के पास खड़ी है।)\n"
+                + "(राजू बंदर दौड़ता हुआ आता है।)\n"
+                + "राजू (हँसते हुए): \"मीना, मेरे साथ गुफा चलो!\"\n"
+                + "मीना (रोते हुए): \"मुझे गुफा से डर लगता है।\"\n"
+                + "राजू (प्यार से): \"डरो मत, मैं तुम्हारे साथ हूँ।\"\n"
+                + "(मीना मुस्कुराती है और दोनों चल पड़ते हैं।)\n"
+                + "दृश्य 2: गुफा के दरवाज़े पर\n(स्थान: गुफा। दोपहर। मीना और राजू गुफा के दरवाज़े पर आते हैं।)\n"
+                + "मीना (हैरानी से): \"देखो, कितना बड़ा घंटा!\"\n"
+                + "(राजू घंटा बजाता है। \"टन-टन\" की आवाज़ गूँजती है।)\n"
+                + "राजू (खिलखिलाकर): \"अब गुफा का दरवाज़ा खुलेगा!\"\n"
+                + "(मीना पत्थर पर बैठ जाती है और हँसती है।)\n",
+                "Characters:\n1. Asha (10 years): a brave girl, turquoise lehenga-choli, a long braid, a sword on her belt\n2. Khan: a huge black-furred horned monster (राक्षस) with chains and bones\n"
+                + "Places:\n1. the cave: a dark cave with green crystals and bones\n"
+                + "Asha and the Beast\n"
+                + "Scene 1: At the cave\n(Place: the cave. Evening. Asha walks into the cave with her sword.)\n"
+                + "(Khan comes out of the dark, roaring.)\n"
+                + "Khan (angrily): \"Who dares to enter my cave?\"\n"
+                + "Asha (bravely): \"I am Asha. Give back the village bell!\"\n"
+                + "(Khan laughs and raises his arms.)\n"
+                + "Khan (laughing): \"Take it, if you can!\"\n"
+                + "(Asha runs at him and points her sword. Khan sits down, surprised.)\n"
+                + "Asha (kindly): \"Let us be friends instead.\"\n"
+                + "Khan (happily): \"Friends. I like that.\"\n",
+                "Characters:\n1. Vrinda (11 saal): bahadur ladki, firozi ghaghra-choli, lambi choti\n2. Bull: ek bada kala bull (बैल), seengon wala\n"
+                + "Places:\n1. gufa: pahad ki gufa, darwaze par ghanta\n"
+                + "Vrinda aur Bull\n"
+                + "Scene 1: gufa ke bahar\n(Sthan: gufa. Subah. Vrinda gufa ke bahar khadi hai.)\n"
+                + "(Bull daudta hua aata hai.)\n"
+                + "Bull (gusse se): \"Meri gufa se door raho!\"\n"
+                + "Vrinda (haste hue): \"Main sirf ghanta dekhne aayi hoon.\"\n"
+                + "(Bull ruk jata hai aur baith jata hai.)\n"
+                + "Bull (udaas hokar): \"Mujhe koi dost nahi hai.\"\n"
+                + "Vrinda (pyar se): \"Main tumhari dost banungi.\"\n"
+                + "(Dono haste hain. Ghanta \"tan-tan\" bajta hai.)\n"};
+        OUT.mkdirs();
+        int storiesDone = 0;
+        List<String> problems = new ArrayList<String>();
+        for (int si = 0; si < scripts.length; si++) {
+            long t0 = System.currentTimeMillis();
+            Project p = Project.create(ctx);
+            p.write("script.txt", scripts[si]);
+            p.write("edits.json", "{\"height\":360,\"aspect\":\"16:9\",\"brightness\":0.2,\"music\":0.7}");
+            Story st = ScriptParser.parse(scripts[si]);
+            rep.append("\n=== Story ").append(si + 1).append(": ").append(titles[si]).append('\n');
+            rep.append("cast read: ");
+            for (Story.CharacterDef c : st.cast()) rep.append(c.shown()).append(" (kind ").append(c.look == null ? "?" : String.valueOf(c.look.kind)).append(c.look != null && c.look.kind == com.tarun.kahani.core.Look.MONSTER ? " monster" : c.look != null && c.look.kind == com.tarun.kahani.core.Look.ANIMAL ? " animal" : c.look != null && c.look.kind == com.tarun.kahani.core.Look.MONKEY ? " monkey" : c.look != null && c.look.kind == com.tarun.kahani.core.Look.GIRL ? " girl" : "").append(") ");
+            rep.append("; scenes: ").append(st.scenes.size()).append('\n');
+            if (!(st.cast().size() >= 2)) problems.add("story " + (si + 1) + ": fewer than two characters read");
+            String notes = (String) fill.invoke(null, ctx, p, st);
+            rep.append("director's placement: ").append(notes.replace("\n", " | ")).append('\n');
+            String cast = p.read("cast.txt");
+            int chars = 0, poses = 0, scenes = 0;
+            for (String l : cast.split("\n")) { if (l.startsWith("char|")) chars++; if (l.startsWith("pose|")) poses++; if (l.startsWith("scene|")) scenes++; }
+            rep.append(String.format(java.util.Locale.US, "cast.txt: %d character pictures, %d pose pictures, %d place pictures%n", chars, poses, scenes));
+            if (!(chars >= 2)) problems.add("story " + (si + 1) + ": not both characters placed from the library");
+            if (!(poses >= 10)) problems.add("story " + (si + 1) + ": pose pictures did not follow (" + poses + ")");
+            // the film job, as on the phone: proposals accepted, the shot check approved
+            final com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(ctx, p);
+            Thread runner = new Thread(new Runnable() { public void run() { job.run(); } });
+            runner.start();
+            long wait = System.currentTimeMillis();
+            boolean asked = false;
+            while (!job.qcWaiting && runner.isAlive() && System.currentTimeMillis() - wait < 900000) {
+                if (job.proposalsWaiting && !asked) { s3d("decideAll", p, null, ctx, true); asked = true; }
+                Thread.sleep(50);
+            }
+            assertTrue("story " + (si + 1) + " did not reach the shot check: " + job.error, job.qcWaiting);
+            int stills = 0;
+            for (Integer i : job.qcShotIndex) if (i >= 0) stills++;
+            job.approve();
+            runner.join(900000);
+            rep.append(String.format(java.util.Locale.US, "film job: done=%b error=%s seconds=%.1f stills checked=%d proposals asked=%b took=%d s%n", job.done, job.error, job.filmSeconds, stills, asked, (System.currentTimeMillis() - t0) / 1000));
+            assertTrue("story " + (si + 1) + " failed: " + job.error, job.done);
+            assertTrue(p.film().exists());
+            // the shot list: pictures used, the score
+            String qc = p.read("qc.txt");
+            int shotsN = 0, used = 0, real = 0, cycles = 0;
+            for (String l : qc.split("\n")) {
+                if (l.startsWith("SHOT ID:")) shotsN++;
+                if (l.startsWith("PICTURES USED:")) { used++; if (l.contains("your picture")) real++; if (l.contains("stepping through")) cycles++; }
+            }
+            java.util.Map<String, Integer> usedLines = new java.util.TreeMap<String, Integer>();
+            for (String l : qc.split("\n")) if (l.startsWith("PICTURES USED:")) { Integer c = usedLines.get(l); usedLines.put(l, c == null ? 1 : c + 1); }
+            for (java.util.Map.Entry<String, Integer> e : usedLines.entrySet()) rep.append("  ").append(e.getValue()).append("× ").append(e.getKey()).append('\n');
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("QC SCORE[^:]*: (\\d+)/100 — ([^\n]*)").matcher(qc);
+            String score = "?", status = "?";
+            int scoreN = -1;
+            while (m.find()) { score = m.group(1); status = m.group(2); scoreN = Integer.parseInt(score); }
+            java.util.regex.Matcher miss = java.util.regex.Pattern.compile("Critical-defect override: ([^\n]*)").matcher(qc);
+            String crit = "?";
+            while (miss.find()) crit = miss.group(1);
+            rep.append(String.format(java.util.Locale.US, "shots: %d; shots with a PICTURES USED line: %d, of them drawn from the user's own pictures: %d, walking through step pictures: %d%n", shotsN, used, real, cycles));
+            rep.append("QC SCORE: ").append(score).append("/100 — ").append(status).append("; override: ").append(crit).append('\n');
+            System.out.println("STORY " + (si + 1) + " so far:\n" + rep);
+            Files.write(new File(OUT, "three_stories.txt").toPath(), rep.toString().getBytes("UTF-8"));
+            if (!(shotsN >= 6)) problems.add("story " + (si + 1) + ": only " + shotsN + " shots");
+            if (!(real >= 2)) problems.add("story " + (si + 1) + ": the user's pictures drawn in only " + real + " shots");
+            if (!(scoreN >= 70)) problems.add("story " + (si + 1) + ": score " + score);
+            if (!crit.startsWith("none")) problems.add("story " + (si + 1) + ": critical defect — " + crit);
+            // frames for a look: the director's shots rendered at 1280x720
+            Art art = Art.fromManifest(p.read("cast.txt"), st, p.loader());
+            Director d = new Director(st, new Director.Options());
+            Film film = d.prepare();
+            film = d.direct(art);
+            Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            Renderer rd = new Renderer(film, art);
+            int step = Math.max(1, film.shots.size() / 6), fn = 0;
+            for (int i = 0; i < film.shots.size() && fn < 8; i += step) {
+                Film.Shot sh = film.shots.get(i);
+                rd.render(g, sh.t + Math.min(0.6f, sh.dur * 0.5f));
+                FileOutputStream fo = new FileOutputStream(new File(OUT, String.format(java.util.Locale.US, "story%d_shot%02d.png", si + 1, i + 1)));
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, fo);
+                fo.close();
+                fn++;
+                Integer idx = null;
+                for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) if (sh.pictures.get(ac2.c.id) != null && idx == null) idx = sh.pictures.get(ac2.c.id);
+                rep.append(String.format(java.util.Locale.US, "  frame story%d_shot%02d.png at %.1f s: %s — %s%n", si + 1, i + 1, sh.t, com.tarun.kahani.core.ShotPlanner.SIZE_NAME[Math.max(0, Math.min(6, sh.size))], sh.view.length() > 0 ? sh.view : "drawn"));
+            }
+            storiesDone++;
+        }
+        rep.append("\nstories finished: ").append(storiesDone).append(" of 3\n");
+        for (String pr : problems) rep.append("PROBLEM: ").append(pr).append('\n');
+        Files.write(new File(OUT, "three_stories.txt").toPath(), rep.toString().getBytes("UTF-8"));
+        System.out.println(rep);
+        ac.pause().stop().destroy();
+        assertTrue("problems: " + problems, problems.isEmpty() && storiesDone == 3);
     }
 
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */

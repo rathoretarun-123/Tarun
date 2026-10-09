@@ -639,13 +639,16 @@ public final class Renderer {
             case Film.M_ACTION: tint = 0x14FF5A2A; break;
             default: tint = 0;
         }
-        if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
+        // v32: a picture of the place (the user's own) already carries its light and mood: the grade over it is
+        // lighter (a dark cave picture stayed readable in the picture, it must stay readable in the film)
+        boolean own = bd(s) != null && bd(s).picture;
+        if (tint != 0) { g.color(own ? Puppet.alpha(tint, ((tint >>> 24) & 255) / 255f * 0.6f) : tint); g.rect(0, 0, vw, vh); }
         // light follows the moment (§19): hard, directional light and deeper shadows for conflict and fear,
         // soft warm light for warmth and safety
         float hard = Math.max(0, Math.min(1, camLight));
         if (hard > 0.55f) {
             float k = (hard - 0.55f) / 0.45f;
-            g.linear(0, 0, vw, 0, Puppet.alpha(0xFF000000, 0.0f), Puppet.alpha(0xFF000000, 0.28f * k));
+            g.linear(0, 0, vw, 0, Puppet.alpha(0xFF000000, 0.0f), Puppet.alpha(0xFF000000, (own ? 0.14f : 0.28f) * k));
             g.rect(0, 0, vw, vh);
         } else if (hard < 0.3f) {
             // a soft moment: a warm veil over the whole frame (not a third light — two lights only)
@@ -654,7 +657,7 @@ public final class Renderer {
             g.rect(0, 0, vw, vh);
         }
         float r = Math.max(vw, vh) * (0.78f - 0.12f * Math.max(0, hard - 0.5f));
-        g.radial(vw / 2, vh / 2, r, 0x00000000, Puppet.alpha(0xFF000000, 0.44f + 0.2f * Math.max(0, hard - 0.5f)));
+        g.radial(vw / 2, vh / 2, r, 0x00000000, Puppet.alpha(0xFF000000, (own ? 0.30f : 0.44f) + (own ? 0.1f : 0.2f) * Math.max(0, hard - 0.5f)));
         g.rect(0, 0, vw, vh);
     }
 

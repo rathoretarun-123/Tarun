@@ -165,6 +165,7 @@ final class AutoLibrary {
                 // v25: what the user said about this picture in any story wins over every guess
                 String lk = labelKey(targets.get(t)[1]);
                 if ("1".equals(it.meta("is:" + lk))) s = 1f;
+                if (it.meta("sheet") != null && s > 0) s *= 0.9f;                                       // v32: a figure of a split sheet follows its main picture, never replaces it
                 if ("1".equals(it.meta("not:" + lk))) s = 0;
                 score[i][t] = s;
             }

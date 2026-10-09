@@ -122,13 +122,27 @@ final class SheetSaver {
             try { cuts[i] = com.tarun.kahani.core.Cutout.process(pc.px.clone(), pc.w, pc.h, false); } catch (Throwable e) { cuts[i] = null; }
             if (cuts[i] != null && cuts[i].w > 0 && cuts[i].h > 0 && cuts[i].w < cuts[i].h * 1.25f) standH = Math.max(standH, cuts[i].h);
         }
-        for (int i = 0; i < parts.size() && !thing; i++) {
-            if (cuts[i] == null) continue;
-            try {
-                tags[i] = com.tarun.kahani.core.PoseSense.tag(cuts[i], standH, false);
-                angles[i] = tags[i].angle;
-                hRatios[i] = standH > 0 ? Math.max(0.2f, Math.min(1.5f, cuts[i].h / (float) standH)) : 1f;
-            } catch (Throwable e) { tags[i] = null; }
+        boolean beast = false;
+        for (int pass = 0; pass < 2 && !thing; pass++) {
+            int little = 0, n = 0;
+            for (int i = 0; i < parts.size(); i++) {
+                if (cuts[i] == null) continue;
+                try {
+                    tags[i] = com.tarun.kahani.core.PoseSense.tag(cuts[i], standH, beast);
+                    angles[i] = tags[i].angle;
+                    hRatios[i] = standH > 0 ? Math.max(0.2f, Math.min(1.5f, cuts[i].h / (float) standH)) : 1f;
+                    n++;
+                    if (tags[i].m != null && tags[i].m.skin < 0.35f) little++;
+                } catch (Throwable e) { tags[i] = null; }
+            }
+            // v32: a furred creature (a monster, an animal) shows little skin on most figures: read it as a beast,
+            // where "no skin" is not "the back"
+            if (pass == 0 && n > 0 && little * 10 >= n * 6) {
+                beast = true;
+                for (int i = 0; i < parts.size(); i++) {
+                    try { cuts[i] = com.tarun.kahani.core.Cutout.process(parts.get(i).px.clone(), parts.get(i).w, parts.get(i).h, true); } catch (Throwable e) { cuts[i] = null; }
+                }
+            } else break;
         }
         // the main picture: the largest front; the best of each other angle its view
         int main = -1; long mainArea = -1;
@@ -208,7 +222,7 @@ final class SheetSaver {
         final String kind = p.length > 1 ? p[1] : "char", key = p.length > 2 ? p[2] : "", shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
         final List<String> newPoses = newPosesIn != null ? newPosesIn : new ArrayList<String>();
         Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, key) : null;
-        boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
+        boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER);   // v32: fur reads like a beast
         // 1. every picture; a sheet of several figures split into them
         List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
         int split = 0;

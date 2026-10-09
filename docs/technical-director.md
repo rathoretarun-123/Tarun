@@ -29,8 +29,8 @@ with 23 % of the frame's cells changing; drawn characters stayed under 3.8 and 4
 50 % of the frame — 1.5× and 2× the largest honest values. The camera shakes the story asks for (an earthquake,
 thunder, a blast) and whole-frame story effects (a flash, lightning, a blackout, a glitch, flickering light,
 fireworks) are counted apart, not as faults. On the four test films the check found 0 boiling shots, 0 shakes and
-0 floating feet out of 13,940 feet positions; it costs about 40–450 ms per shot on the build computer (drawn
-characters are cheap, photographed meshes dear).
+0 floating feet out of 22,664 feet positions (296 + 75 + 45 + 116 shots); it costs about 40–450 ms per shot on
+the build computer (drawn characters are cheap, photographed meshes dear).
 
 A side find of the audit: a scene described as a "small living room" was staged in a dark mall basement, because
 "mall" was matched inside "small". Place names in English are now matched as whole words (`Txt.hasWord`).

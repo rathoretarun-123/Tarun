@@ -1,4 +1,4 @@
-# Kahani Film — v21
+# Kahani Film — v22
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,16 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v22
+
+* **Lips:** the painted mouth opening is gone; only the dark inside between the *parted real lips* is drawn, once they are clearly apart — never a mouth shape of its own, no teeth bar (the meshes already bend every picture at one cell per screen pixel, up to 512 cells across a face).
+* **Steadier pictures:** in a locked shot every picture lands on whole screen pixels (sub-pixel drift re-sampled the mesh differently each frame and read as a shake); the idle head sway and the weight shift are halved.
+* **Close-ups:** the whole head with its hair takes at most 74 % of the frame with a margin of its own, so no hair is cut; lip-sync shots are close-ups and medium close-ups, never extreme close-ups; the place behind a close-up is softened, not melted (a half-size layer at most two thirds in).
+* **Headwear:** when a turban or cap is taken, the bare head keeps nothing of it — a tail, a feather or a band's end beside the head goes too; an insert picture of the very moment the headwear is snatched (which shows it still worn) is left out and the staged action tells it.
+* **More shots:** a reaction shot from a moderate feeling on; a two-shot is held over two lines only in calm talk.
+* **The story screen:** the director's plan card (every character, place and thing without a picture, with the 10-angle upload and a library search right there; each new place gets an establishing moment of its own) sits above *Make film*.
+* The auto-placement's "two alike matches" rule now applies to identities only — two good pictures of one place are both right.
 
 ## New in v21
 

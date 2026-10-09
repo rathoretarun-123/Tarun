@@ -648,8 +648,12 @@ public class MainActivity extends Activity {
         if (st == null || st.scenes.isEmpty()) return;
         List<String[]> miss = AutoLibrary.missingTargets(project, st);
         LinearLayout m = Ui.card(this);
-        m.addView(Ui.text(this, "📷 Pictures from different angles — add them here, up to 10 of each (phone, camera or library); a sheet of several angles is split by the director. "
+        m.addView(Ui.text(this, "📷 The director's plan: every character, place and thing below gets a picture of its own (up to 10 angles each from the phone, "
+                + "the camera or the library; a sheet of several angles is split). Each new place also gets an establishing moment of its own. "
                 + "Pictures added while a film is being made are used from the next make.", 13, Ui.SUB, false));
+        m.addView(Ui.small(this, "📚 Search my library for this story", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) { libraryMatches(false); }
+        }));
         int n = 0;
         for (final String[] t : miss) {
             if (t[0].equals("title") || t[0].equals("end")) continue;
@@ -821,6 +825,7 @@ public class MainActivity extends Activity {
 
         LinearLayout c4 = Ui.card(this);
         c4.addView(Ui.title(this, "3. Film"));
+        missingCard(body);
         c4.addView(Ui.button(this, "🎬  Make film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { makeFilm(); }
         }));

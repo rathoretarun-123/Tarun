@@ -152,7 +152,8 @@ public final class ShotPlanner {
             else if (raw[i] >= 0.55f || q.stage == PEAK) q.move = STATIC;
             else q.move = DRIFT;
             // the reaction is often more important than the line itself
-            q.reaction = raw[i] >= 0.6f || q.realise;
+            // more coverage (v22): a reaction shot from a moderate feeling on, not only from strong ones
+            q.reaction = raw[i] >= 0.45f || q.realise;
             q.breathe = q.reaction ? 0.5f + 0.6f * raw[i] + (q.stage == PEAK ? 0.4f : 0) : 0;
         }
         // close-ups are precious: about a third of the lines at most; the weakest give theirs up first
@@ -170,8 +171,9 @@ public final class ShotPlanner {
             Plan q = p[i];
             q.type = q.size >= CU ? SINGLE : (q.relation || q.intensity < 0.35f) ? TWO_SHOT : OTS;
             if (q.stage == RELEASE) q.type = TWO_SHOT;
+            // a shot is held over two lines only in calm talk (v22: more shots, a smoother flow)
             q.hold = !action && i > 0 && q.type == TWO_SHOT && p[i - 1].type == TWO_SHOT && p[i - 1].size == q.size
-                    && Math.abs(q.intensity - p[i - 1].intensity) < 0.15f && q.move != PULL_BACK;
+                    && Math.abs(q.intensity - p[i - 1].intensity) < 0.15f && q.intensity < 0.3f && q.move != PULL_BACK;
             q.purpose = purpose(q);
         }
         return p;

@@ -39,6 +39,7 @@ public final class Renderer {
 
     public void render(Gfx g, float t) {
         curT = t;
+        curGw = g.width();
         if (feetLog != null) feetLog.clear();
         vh = H;
         vw = H * g.width() / (float) g.height();
@@ -319,6 +320,9 @@ public final class Renderer {
     /** -1 high angle .. +1 low angle, and how hard the light is (0 soft .. 1 hard), for the shot on screen now. */
     private float camAngle, camLight = 0.4f;
     private boolean camStill;
+    /** One output pixel in stage units for the shot on screen (0 = unknown), so still shots can land pictures on whole pixels. */
+    private float pixelStep;
+    private int curGw;
     /** The shot on screen is a reverse shot (the listener's face): the place's reverse angle is drawn when the user gave one. */
     private boolean camReverse;
 
@@ -680,6 +684,7 @@ public final class Renderer {
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         curSeg = s;
         camera(s, t);
+        pixelStep = curGw > 0 ? vw / curGw / Math.max(0.1f, camZ) : 0;
         // a narrow frame follows the speaker only when the camera is free; a locked shot (Technical Director)
         // was framed for this shape by the director and never moves
         if (vw < W * 0.9f && !camStill) followSpeaker(s, t);
@@ -710,11 +715,13 @@ public final class Renderer {
                 g.imageMesh(b.img, ms[0], ms[1], mesh);
                 if (sc != null) Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
             }
-            float dof = Math.max(0, Math.min(1, (camZ - 1.35f) / 0.45f));
+            // a close-up softens the place behind the face, never melts it: a half-size layer, at most two thirds in,
+            // only once the shot is a real close-up
+            float dof = Math.max(0, Math.min(0.66f, (camZ - 1.6f) / 0.7f));
             if (dof > 0.02f) {
                 g.save();
                 g.setAlpha(dof);
-                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.25f, bp);
+                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.5f, bp);
                 g.restore();
             }
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
@@ -1115,7 +1122,11 @@ public final class Renderer {
         // the final QC's floating check: where the feet are drawn against the ground line (FinalQc)
         if (feetLog != null && k.anchor == Film.A_GROUND)
             feetLog.add(new float[]{y + mo.dy, y, h, mv != null || acting(a, t) || (p.sit > 0 && p.sit < 1) ? 1 : 0});
-        g.translate(x + mo.dx, y + mo.dy);
+        // a locked shot never shimmers: the picture lands on whole screen pixels (sub-pixel drift re-samples the
+        // mesh differently every frame and reads as a shake)
+        float px = x + mo.dx, py = y + mo.dy;
+        if (camStill && pixelStep > 0) { px = Math.round(px / pixelStep) * pixelStep; py = Math.round(py / pixelStep) * pixelStep; }
+        g.translate(px, py);
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
@@ -1342,8 +1353,8 @@ public final class Renderer {
                     break;
                 }
                 case Film.G_WEIGHT_SHIFT: {
-                    mo.dx += (float) Math.sin(u * 1.5f) * 3;
-                    mo.rot += (float) Math.sin(u * 1.5f) * 0.6f;
+                    mo.dx += (float) Math.sin(u * 1.5f) * 1.2f;
+                    mo.rot += (float) Math.sin(u * 1.5f) * 0.25f;
                     break;
                 }
                 case Film.G_SHIELD_EYES: {
@@ -1601,7 +1612,7 @@ public final class Renderer {
         float en = a != null ? a.look.energy : 1f, poise = a != null ? a.look.poise : 0f;
         st.armL = armSwing(8 + (p.armL - 8) * en);
         st.armR = armSwing(8 + (p.armR - 8) * en);
-        st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f * en + p.seed) * 1.2f * en;
+        st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f * en + p.seed) * 0.6f * en;
         st.lean = p.tilt;
         st.breathe = (float) Math.sin(t * 2.1f + p.seed);
         if (p.mouth > 0.02f) {
@@ -1815,7 +1826,13 @@ public final class Renderer {
             g.oval(fx, fy + fw * 0.12f, fw * 0.98f, fw * 0.68f);
             g.color(Puppet.alpha(0xFFFFFFFF, 0.35f));
             g.oval(fx - fw * 0.3f, fy - fw * 0.3f, fw * 0.3f, fw * 0.1f);
-            g.imageRect(sp.img, 0, cut * sp.h, sp.w, sp.h * (1 - cut), left, top + cut * h, w, h * (1 - cut));
+            // the face column from the cut line down; the sides only from the shoulders down — a turban's tail, a
+            // feather or a cap's brim beside the bare head would otherwise still show (v22)
+            float eyeYf = (sp.eyeLY + sp.eyeRY) / 2f;
+            float neck = Math.max(cut, Math.min(1f, sp.mouthY + Math.max(0.02f, sp.mouthY - eyeYf) * 0.9f));
+            float colL = Math.max(left, fx - fw * 0.75f), colR = Math.min(left + w, fx + fw * 0.75f);
+            g.imageRect(sp.img, (colL - left) / w * sp.w, cut * sp.h, (colR - colL) / w * sp.w, sp.h * (neck - cut), colL, top + cut * h, colR - colL, h * (neck - cut));
+            g.imageRect(sp.img, 0, neck * sp.h, sp.w, sp.h * (1 - neck), left, top + neck * h, w, h * (1 - neck));
         } else if (rigged) {
             // sitting / kneeling: the legs fold, so the picture comes down to keep the feet on the ground
             float rise = rig.feetRise(st, h);
@@ -1906,28 +1923,14 @@ public final class Renderer {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
                 float gap = Rig.jawDrop(hw) * st.jaw;
-                float ow = hw * (0.78f + 0.22f * st.lipWide - 0.32f * st.lipRound), cy = my + gap * 0.5f + hw * 0.02f;
-                float oh = gap * 0.5f + hw * 0.03f;
-                g.color(0xC8401016);
-                g.oval(mx, cy, ow * 1.04f, oh * 1.1f);
-                g.color(0xF0200608);
-                g.oval(mx, cy, ow * 0.9f, oh * 0.92f);
-                if (gap > hw * 0.12f) {
-                    // upper teeth: a faint, rounded hint under the upper lip (a bright bar looks pasted on)
-                    float th = Math.min(oh * 0.42f, hw * 0.11f);
-                    g.color(0x80E6DDD2);
-                    g.oval(mx, cy - oh * 0.88f + th * 0.5f, ow * 0.5f, th * 0.5f);
+                // only the dark inside between the parted real lips, and only once they are clearly apart: never a
+                // painted mouth shape of its own (it reads as a second pair of lips), no teeth bar
+                if (gap > hw * 0.10f) {
+                    float ow = hw * (0.62f + 0.18f * st.lipWide - 0.28f * st.lipRound), cy = my + gap * 0.5f;
+                    float oh = Math.max(0.5f, gap * 0.40f);
+                    g.color(0xB0200608);
+                    g.oval(mx, cy, ow, oh);
                 }
-            } else if (m > 0.12f && !(rigged && rig.animal) && sp.faceKnown) {
-                // a picture that cannot be meshed here (lying down, head cut for a lost turban): no painted lips over
-                // the real ones, only a soft dark opening between them that grows with the voice
-                float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;
-                float hw = sp.mouthHW * w;
-                float oh = hw * 0.32f * (m - 0.12f), ow = hw * 0.62f;
-                g.color(0x88300A0E);
-                g.oval(mx, my + oh * 0.5f, ow, oh + hw * 0.04f);
-                g.color(0xB01C0507);
-                g.oval(mx, my + oh * 0.5f, ow * 0.8f, oh * 0.8f + hw * 0.02f);
             }
             if (p.wearsTurban && !drawRealHat(g, sp, p, left, top, w, h)) {
                 float tx = left + sp.mouthX * w;

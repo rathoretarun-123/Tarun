@@ -52,3 +52,15 @@ The user gave two documents with "Train your director with these and hardcode th
 * Robolectric: `phoneGuideAnglesSplitBridgeAndReverse` (the guide hardcoded, the split, the angle guess on real
   fronts and backs, the bridge, the reverse backdrop and reverse cams, the dip frame, the reference-conditioned
   look, the home-screen button) plus the whole suite — see the README.
+
+## v22 follow-up (the user's notes on the v21 film)
+
+| Note | Done |
+|---|---|
+| Meshing finer; lip-sync creates additional lips | Meshes are at one cell per screen pixel already (`Rig.CELL_PX = 1`, up to 512 cells across a face). The "additional lips" were the painted opening: only the dark inside between the parted real lips is drawn now, once they are clearly apart; no teeth bar, no fallback mouth. Checked on a laughing close-up of the sample. |
+| Movement still shaky | Pictures land on whole screen pixels in locked shots (`Renderer.pixelStep`); idle head sway and weight shift halved. |
+| Scene diffusion wrong | The close-up's background is softened (half-size layer, at most two thirds in, from a real close-up on), not melted. |
+| Monkey has the pagdi, Ratanlal still wears one | The bare head keeps nothing of the turban beside it (`Art.takeOffHeadwear`: a tail, a feather, a band's end); the sample's own insert picture of the snatch — artwork that shows the turban still on while the monkey holds it — is left out at that moment. Checked on the frame at 2:17.7. |
+| More shots | A reaction shot from a moderate feeling (0.45); a two-shot held over two lines only in calm talk. |
+| Director defines scenes and asks for pictures; upload on the film-making page | The plan card above *Make film* (and on the progress and check screens): every character, place and thing without a picture, the 10-angle upload and the library search; each new place gets its establishing bridge. |
+| Faces cut in close-ups | The head with its hair takes at most 74 % of the frame with a margin; lip-sync at CU / MCU, never XCU. Checked on the frame at 1:08.5 (hair was cut at v21, whole at v22). |

@@ -194,6 +194,7 @@ final class AutoLibrary {
             }
         }
         for (int t = 0; t < targets.size(); t++) {
+            if (!targets.get(t)[0].startsWith("char:")) continue;      // two good pictures of one place: either is right
             float b1 = 0, b2 = 0;
             for (int i = 0; i < pics.size(); i++) { float v = score[i][t]; if (v > b1) { b2 = b1; b1 = v; } else if (v > b2) b2 = v; }
             if (b1 >= PICTURE_SURE && b1 < 0.95f && b1 - b2 < 0.08f) {

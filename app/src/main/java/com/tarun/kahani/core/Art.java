@@ -139,14 +139,80 @@ public final class Art {
         if (r == null || !s.faceKnown) return;
         try {
             Headwear hw = Headwear.strip(r.px, r.w, r.h, s.eyeLX * r.w, s.eyeLY * r.h, s.eyeRX * r.w, s.eyeRY * r.h, s.skin);
-            if (hw == null) return;
-            s.bareImg = L.create(hw.bare, r.w, r.h);
-            s.hatImg = L.create(hw.hat, hw.hx1 - hw.hx0 + 1, hw.hy1 - hw.hy0 + 1);
-            s.hatW = hw.hx1 - hw.hx0 + 1; s.hatH = hw.hy1 - hw.hy0 + 1;
-            s.hatX0 = hw.relX0; s.hatY0 = hw.relY0; s.hatX1 = hw.relX1; s.hatY1 = hw.relY1;
-            if (s.rig != null) s.rig.faceBareImg = s.rig.faceFrom(hw.bare, r.w, r.h, L);
+            int[] bare;
+            int hatColor;
+            if (hw != null) {
+                bare = hw.bare;
+                hatColor = averageOpaque(hw.hat, 0);
+                s.hatImg = L.create(hw.hat, hw.hx1 - hw.hx0 + 1, hw.hy1 - hw.hy0 + 1);
+                s.hatW = hw.hx1 - hw.hx0 + 1; s.hatH = hw.hy1 - hw.hy0 + 1;
+                s.hatX0 = hw.relX0; s.hatY0 = hw.relY0; s.hatX1 = hw.relX1; s.hatY1 = hw.relY1;
+            } else if (s.turbanY > 0) {
+                // the headwear could not be cut out as a piece: the picture's top is taken off along the cut line and a
+                // bald head painted, so the bare head is drawn through the mesh like everyone else (v22)
+                bare = simpleBare(r, s);
+                hatColor = averageNonSkin(r.px, r.w, 0, Math.round(s.turbanY * r.h), r.w);
+            } else return;
+            // what the headwear leaves beside the bare head (a turban's tail, a feather, a band's end): pixels of the
+            // headwear's own colour above the shoulders and outside the face go too (v22)
+            clearHeadwearLeftovers(bare, r, s, hatColor);
+            s.bareImg = L.create(bare, r.w, r.h);
+            if (s.rig != null) s.rig.faceBareImg = s.rig.faceFrom(bare, r.w, r.h, L);
         } catch (RuntimeException e) {
             s.bareImg = null; s.hatImg = null;
+        }
+    }
+
+    static int averageOpaque(int[] px, int fallback) {
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        if (px != null) for (int c : px) { if ((c >>> 24) < 128) continue; sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++; }
+        if (n == 0) return fallback;
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    static int averageNonSkin(int[] px, int w, int y0, int y1, int h) {
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        for (int y = Math.max(0, y0); y < Math.min(y1, h); y++) for (int x = 0; x < w; x++) {
+            int c = px[y * w + x];
+            if ((c >>> 24) < 128 || Cutout.isSkin(c)) continue;
+            sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+        }
+        if (n == 0) return 0;
+        return 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
+
+    /** The picture without its top (above the cut line), a bald head painted in its place. */
+    static int[] simpleBare(Cutout.Result r, Sprite s) {
+        int[] out = r.px.clone();
+        int cutRow = Math.round(s.turbanY * r.h);
+        float faceCx = (s.eyeLX + s.eyeRX) / 2f * r.w, faceW = Math.max(0.1f, s.eyeRX - s.eyeLX) * r.w * 1.3f;
+        for (int y = 0; y < Math.min(cutRow, r.h); y++) for (int x = 0; x < r.w; x++) if (!Cutout.isSkin(out[y * r.w + x])) out[y * r.w + x] = 0;
+        int skin = s.skin, shade = Puppet.shade(s.skin, 0.9f);
+        float cy = cutRow + faceW * 0.12f, rx = faceW * 0.5f, ry = faceW * 0.36f;
+        for (int y = Math.max(0, Math.round(cy - ry)); y < Math.min(r.h, cutRow + 1); y++) for (int x = Math.max(0, Math.round(faceCx - rx)); x < Math.min(r.w, Math.round(faceCx + rx)); x++) {
+            float dx = (x - faceCx) / rx, dy = (y - cy) / ry;
+            float d = dx * dx + dy * dy;
+            if (d > 1) continue;
+            if ((out[y * r.w + x] >>> 24) > 200 && Cutout.isSkin(out[y * r.w + x])) continue;
+            out[y * r.w + x] = d > 0.8f ? shade : skin;
+        }
+        return out;
+    }
+
+    static void clearHeadwearLeftovers(int[] bare, Cutout.Result r, Sprite s, int hatColor) {
+        int faceCx = Math.round((s.eyeLX + s.eyeRX) / 2f * r.w), faceHalf = Math.round(Math.max(0.1f, s.eyeRX - s.eyeLX) * r.w * 0.8f);
+        float eyeY = (s.eyeLY + s.eyeRY) / 2f;
+        int neck = Math.round(Math.min(r.h - 1, (s.mouthY + Math.max(0.02f, s.mouthY - eyeY) * 1.0f) * r.h));
+        for (int y = 0; y < neck; y++) {
+            for (int x = 0; x < r.w; x++) {
+                int c = bare[y * r.w + x];
+                if ((c >>> 24) < 20 || Cutout.isSkin(c)) continue;
+                boolean beside = Math.abs(x - faceCx) > faceHalf;
+                if (!beside) continue;
+                // beside the bare head and above the shoulders only the headwear's leftovers remain (its tail, its band,
+                // its highlights): everything that is not skin goes
+                bare[y * r.w + x] = 0;
+            }
         }
     }
 

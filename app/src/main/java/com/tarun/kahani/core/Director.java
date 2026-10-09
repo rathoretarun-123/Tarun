@@ -1450,10 +1450,12 @@ public final class Director {
                 sh.face = faceOf(empathy(line.emotion, sp, to));
                 sh.speech = false;
             } else {
-                Film.Cam c = faceCam(sp, tk, light, k % 2 == 1 ? 1.18f : 1f);
+                // v22: never an extreme close-up for lip-sync (it cuts the hair); the second group of words is framed a
+                // little wider instead, so the two shots still differ
+                Film.Cam c = faceCam(sp, tk, light, k % 2 == 1 ? 0.75f : 1f);
                 c.keep = true;
                 seg.cams.add(c);
-                sh = shot(tk, k % 2 == 1 ? ShotPlanner.XCU : ShotPlanner.CU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, sp, to, stage);
+                sh = shot(tk, k % 2 == 1 ? ShotPlanner.MCU : ShotPlanner.CU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, sp, to, stage);
                 sh.line = line.index;
                 sh.speech = true;
                 sh.words = upto - from;
@@ -1646,13 +1648,15 @@ public final class Director {
         // the whole head stays in the frame: hair, a turban or a cap (from its top to the chin) fills at most
         // 85% of the frame height, with headroom above it
         // (with room for the small moves of the shot: a bounce, a nod, a gesture lifts the head a little)
-        float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 18;
-        zoom = Math.min(zoom, 0.85f * 720f / Math.max(1, chin - headTop));
+        // (v22: the whole head with its hair and headwear takes at most 74% of the frame height, and the top of the
+        // picture gets a margin of its own — a nod, a bounce or a lifted brow never pushes the hair out of the frame)
+        float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 0.05f * heightOf(a) - 18;
+        zoom = Math.min(zoom, 0.74f * 720f / Math.max(1, chin - headTop));
         zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], zoom));
         if (tight > 1) {
             // the next group of words gets a visibly different framing (never a jump cut): closer if the picture
             // allows it, otherwise a little wider
-            float base = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], Math.min(fill / 1.1f * 720f / fb[2], 0.85f * 720f / Math.max(1, fb[1] + fb[2] * 0.5f - fb[4]))));
+            float base = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], Math.min(fill / 1.1f * 720f / fb[2], 0.74f * 720f / Math.max(1, chin - headTop))));
             if (zoom < base * 1.12f) zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], base / 1.2f);
         }
         float fh = 720f / zoom;
@@ -2265,6 +2269,12 @@ public final class Director {
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
         // an object's picture is an insert of the thing itself, once — when the story first brings it in
         if (shot != null && shot.object && !usedInserts.add(shot)) shot = null;
+        // a picture of the moment headwear changes hands shows the old state (the owner still wearing it): the
+        // staged action is the truth here, the insert is left out (v22, the continuity rule)
+        if (shot != null && !shot.object && Txt.has(text, "पगड़ी", "टोपी", "साफ़ा", "turban", "cap", "pagdi") && Txt.has(text, "छीन", "झपट", "उड़ा", "उतार", "snatch", "grab", "takes")) {
+            film.notes.add("Insert left out: the picture of the moment the headwear is taken would show it still worn");
+            shot = null;
+        }
         estab = establishing || leading;      // descriptions before anyone speaks set how things are from the start
         String cue = newCues(b.cue, text);
         if (cue.length() > 0) {

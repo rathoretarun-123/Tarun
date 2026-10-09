@@ -15,6 +15,8 @@ public final class Casting {
 
     /** Index meaning "the front picture (rigged)". */
     public static final int MAIN = -1;
+    /** v33: index meaning "the front picture drawn as it is" (a beast is never bent through the rig). */
+    public static final int MAIN_STILL = -2;
 
     /** What a shot asks of a character's picture. */
     public static final class Want {
@@ -47,6 +49,7 @@ public final class Casting {
                         Art.PoseSprite p = sp.poses.get(i);
                         if (isFrontish(p.angle) && p.pose == PoseSense.STAND && (p.emotion == PoseSense.NEUTRAL || p.emotion == w.emotion)) { best = i; if (sameAngle(p.angle, Angles.FRONT)) break; }
                     }
+                    if (best == MAIN) best = MAIN_STILL;                       // no such picture: the front itself, drawn as it is
                 }
                 sh.pictures.put(a.c.id, best);
                 if (best >= 0 && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN)) {
@@ -186,7 +189,8 @@ public final class Casting {
             if (idx == null) continue;
             Art.Sprite sp = art.sprites.get(a.c.id);
             String what;
-            if (idx < 0 || sp == null || sp.poses == null || idx >= sp.poses.size()) what = "the front picture (rigged)";
+            if (idx == MAIN_STILL) what = "the front picture, drawn as it is (a beast is never bent)";
+            else if (idx < 0 || sp == null || sp.poses == null || idx >= sp.poses.size()) what = "the front picture (rigged)";
             else {
                 Art.PoseSprite p = sp.poses.get(idx);
                 what = "your picture " + (idx + 1) + " (" + Angles.name(p.angle) + ", " + PoseSense.poseName(p.pose) + ", " + PoseSense.emotionName(p.emotion) + ")";

@@ -1797,6 +1797,15 @@ public final class Renderer {
         Film.Shot sh = shotAt(t);
         if (sh == null) return null;
         Integer idx = sh.pictures.get(a.c.id);
+        if (idx != null && idx == Casting.MAIN_STILL) {
+            // v33: the front picture itself, drawn as it is (a beast is never bent through the rig)
+            if (sp.mainStill == null) {
+                Art.PoseSprite ms = new Art.PoseSprite();
+                ms.sprite = sp; ms.main = sp; ms.hRatio = 1f; ms.angle = Angles.FRONT; ms.pose = PoseSense.STAND; ms.emotion = PoseSense.NEUTRAL; ms.beast = true;
+                sp.mainStill = ms;
+            }
+            return sp.mainStill;
+        }
         if (idx == null || idx < 0 || idx >= sp.poses.size()) return null;
         int[] cyc = sh.cycles.get(a.c.id);
         if (cyc != null && cyc.length >= 2 && p != null && p.walkAmt > 0.35f) {

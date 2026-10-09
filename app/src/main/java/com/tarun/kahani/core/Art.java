@@ -53,6 +53,8 @@ public final class Art {
         public Sprite view(int i) { return views == null || i < 0 || i >= views.length ? null : views[i]; }
         /** v27: the user's own pictures of this character from a sheet — angles, poses, expressions (null = none). */
         public java.util.List<PoseSprite> poses;
+        /** v33: this front picture as a still pose picture (a beast drawn as it is), made on first use. */
+        PoseSprite mainStill;
     }
 
     /**

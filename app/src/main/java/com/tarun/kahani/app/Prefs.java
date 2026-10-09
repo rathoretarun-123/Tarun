@@ -34,6 +34,10 @@ public final class Prefs {
     public static boolean ask3d(Context c) { return !"0".equals(get(c, "ask3d", "1")); }
     /** An image-to-3D model service key (Meshy), entered by the user, kept only on the phone. */
     public static String meshyKey(Context c) { return get(c, "meshyKey", "").trim(); }
+    /** Free 3D character models from GitHub (CC0 / CC-BY) for characters without a picture, when online. */
+    public static boolean freeModels(Context c) { return !"0".equals(get(c, "freeModels", "1")); }
+    /** The free image-to-3D demos on Hugging Face Spaces (no key, slow, may be asleep) for the views of a picture, when online. */
+    public static boolean freeSpaces(Context c) { return !"0".equals(get(c, "freeSpaces", "1")); }
     /** Human QC (protocol step 4): the director shows the first frame of every shot and waits for the user's check. */
     public static boolean humanQc(Context c) { return !"0".equals(get(c, "humanQc", "1")); }
     public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }

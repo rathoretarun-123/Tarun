@@ -698,7 +698,7 @@ public class AppTest {
         assertTrue("place drawn", distinct > 60);
         // saved into a story through the phone's picture path, the face points travel with the picture
         Story.CharacterDef c0 = story.cast().get(0);
-        String file = (String) s3d("makeCharacter", p, story, c0, null, RuntimeEnvironment.getApplication(), null, false);
+        String file = (String) s3d("makeCharacter", p, story, c0, null, RuntimeEnvironment.getApplication(), null, false, null, false);
         assertTrue(p.has(file));
         String line = p.manifestLine("char", c0.displayName);
         assertNotNull(line);
@@ -828,7 +828,7 @@ public class AppTest {
         assertTrue("the real back view of the sample", own[2] != null && own[2].contains("_back") && own[0] == null && own[1] == null);
         // ---- the other views, as proposals (the director asks): only the three-quarter and the side are made
         long t0 = System.currentTimeMillis();
-        int made = (Integer) s3d("makeViews", p, story, vanusha, null, ctx, null, true, "", null, null);
+        int made = (Integer) s3d("makeViews", p, story, vanusha, null, ctx, null, true, "", null, null, false);
         System.out.println("views of " + vanusha.shown() + " made in " + (System.currentTimeMillis() - t0) + " ms");
         assertTrue("two views proposed beside the real back: " + made, made == 2);
         java.util.List<String[]> props = (java.util.List<String[]>) s3d("viewProposals", p, key);
@@ -864,7 +864,7 @@ public class AppTest {
         assertTrue("the side view has a rig", sp.view(1).rig != null);
         assertTrue("the three-quarter view keeps the face points", sp.view(0).faceKnown);
         // ---- the dolls of the characters without a picture (the monster, the witch) are proposed with their views
-        int dolls = (Integer) s3d("makeMissing", p, story, new com.tarun.kahani.core.Edits(), null, ctx, null, true, null);
+        int dolls = (Integer) s3d("makeMissing", p, story, new com.tarun.kahani.core.Edits(), null, ctx, null, true, null, null, false);
         java.util.List<String[]> all = (java.util.List<String[]>) s3d("proposals", p);
         int chars = 0;
         String[] rejectMe = null;
@@ -934,6 +934,96 @@ public class AppTest {
     }
 
     /** A GLB with one textured cube: 8 vertices, 12 triangles, a 2x2 PNG. */
+    @Test
+    public void freeGithubSourcesGuidesAndDescriptionDetails() throws Exception {
+        // ---- the free model catalogue: words of a description choose a model, the kind keeps it honest, props follow the words
+        com.tarun.kahani.core.Look man = new com.tarun.kahani.core.Look();
+        man.kind = com.tarun.kahani.core.Look.MAN;
+        java.util.List<com.tarun.kahani.core.FreeModels.Entry> knights = com.tarun.kahani.core.FreeModels.matches("रत्नगढ़ का बहादुर सैनिक, हाथ में तलवार और ढाल", man);
+        assertTrue("a soldier gets the knight", !knights.isEmpty() && knights.get(0).name.startsWith("Knight"));
+        assertTrue("CC0", knights.get(0).free() && knights.get(0).url.startsWith("https://raw.githubusercontent.com/"));
+        String[] props = com.tarun.kahani.core.FreeModels.propsFor(knights.get(0), man, "हाथ में तलवार और ढाल");
+        boolean sword = false, shield = false;
+        for (String pr : props) { if (pr.toLowerCase().contains("sword")) sword = true; if (pr.toLowerCase().contains("shield")) shield = true; }
+        assertTrue("the sword and a shield are kept: " + java.util.Arrays.toString(props), sword && shield);
+        com.tarun.kahani.core.Look girl = new com.tarun.kahani.core.Look();
+        girl.kind = com.tarun.kahani.core.Look.GIRL;
+        assertTrue("a girl described as a knight stays a girl", com.tarun.kahani.core.FreeModels.matches("knight", girl).isEmpty());
+        assertTrue("nothing without a fitting word", com.tarun.kahani.core.FreeModels.matches("एक दयालु दादी", man).isEmpty());
+        for (com.tarun.kahani.core.FreeModels.Entry e : com.tarun.kahani.core.FreeModels.ALL) assertTrue(e.name + " has a licence", e.licence.length() > 3 && e.credit.length() > 5);
+        assertTrue(com.tarun.kahani.core.FreeModels.SOURCES.contains("CC0") && com.tarun.kahani.core.FreeModels.SOURCES.contains("TripoSR"));
+        // ---- the free image-to-3D demos: the request is built from the demo's own description, the reply read from its event stream (no network)
+        String info = "{\"named_endpoints\":{\"/generate\":{\"parameters\":[{\"parameter_name\":\"mc_resolution\",\"component\":\"Slider\",\"parameter_default\":256},"
+                + "{\"parameter_name\":\"image\",\"component\":\"Image\",\"python_type\":{\"type\":\"filepath\"}},{\"parameter_name\":\"caption\",\"component\":\"Textbox\",\"parameter_default\":\"\"}]}}}";
+        java.util.List<Object> data = com.tarun.kahani.core.ImageTo3D.stepInputs(com.tarun.kahani.core.Json.parseLoose(info), "generate",
+                fileData("/tmp/gradio/x/picture.png"), "a brave knight");
+        assertTrue("three inputs in the demo's order", data.size() == 3);
+        assertTrue("the default is kept", ((Number) data.get(0)).intValue() == 256);
+        assertTrue("the picture goes to the image input", data.get(1) instanceof java.util.Map);
+        assertTrue("the description goes to the caption", String.valueOf(data.get(2)).contains("knight"));
+        java.util.List<Object> unknown = com.tarun.kahani.core.ImageTo3D.stepInputs(null, "preprocess", fileData("p"), "x");
+        assertTrue("without a description of the step the picture alone is sent", unknown.size() == 1);
+        java.util.List<Object> done = com.tarun.kahani.core.ImageTo3D.complete("event: heartbeat\ndata: null\n\nevent: complete\ndata: [{\"path\":\"/tmp/gradio/a/model.obj\"},{\"path\":\"/tmp/gradio/a/model.glb\",\"url\":\"https://x.hf.space/gradio_api/file=/tmp/gradio/a/model.glb\"}]\n\n", "generate");
+        assertTrue("the GLB is found among the outputs", com.tarun.kahani.core.ImageTo3D.glbUrl(done, "https://x.hf.space").endsWith("model.glb"));
+        boolean failed = false;
+        try { com.tarun.kahani.core.ImageTo3D.complete("event: error\ndata: \"GPU quota exceeded\"\n", "generate"); } catch (java.io.IOException e) { failed = e.getMessage().contains("quota"); }
+        assertTrue("an error event is a failure", failed);
+        assertTrue(com.tarun.kahani.core.ImageTo3D.SPACES.length >= 3 && com.tarun.kahani.core.ImageTo3D.SPACES[0].base.endsWith(".hf.space"));
+        // ---- the glTF reader poses a rigged model from its idle animation and keeps a prop only when asked for
+        com.tarun.kahani.core.Glb.Model plainModel = com.tarun.kahani.core.Glb.load(tinyGlb(), null);
+        assertTrue(plainModel.triangles == 12 && plainModel.joints == 0);
+        // ---- the training documents are bundled
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        for (String a : new String[]{"image_to_3d_plain_guide.md", "director_training_guide.md", "ai_3d_scene_maker_guide.md", "ai_animation_director_handbook.md"}) {
+            java.io.InputStream in = ctx.getAssets().open(a);
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            for (int n; (n = in.read(buf)) > 0; ) bo.write(buf, 0, n);
+            in.close();
+            String text = new String(bo.toByteArray(), "UTF-8");
+            assertTrue(a + " is bundled", text.length() > 1000);
+        }
+        // ---- the description's details on the back of a figure made from a picture: a braid adds geometry, a plain look does not
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Story.CharacterDef vanusha = null;
+        for (Story.CharacterDef c : story.cast()) if (c.displayName.contains("वानुषा")) vanusha = c;
+        String front = (String) s3d("charFile", p, story, vanusha);
+        int[] d = p.loader().decode(front, 900);
+        int[] px = new int[d[0] * d[1]];
+        System.arraycopy(d, 2, px, 0, px.length);
+        com.tarun.kahani.core.Cutout.Result cut = com.tarun.kahani.core.Cutout.process(px, d[0], d[1], false);
+        com.tarun.kahani.core.Look plain = new com.tarun.kahani.core.Look();
+        plain.kind = com.tarun.kahani.core.Look.GIRL; plain.female = true; plain.hair = com.tarun.kahani.core.Look.H_SHORT;
+        com.tarun.kahani.core.Look braided = new com.tarun.kahani.core.Look();
+        braided.kind = com.tarun.kahani.core.Look.GIRL; braided.female = true; braided.hair = com.tarun.kahani.core.Look.H_BRAID; braided.ribbon1 = 0xFFC62828; braided.wings = true;
+        System.setProperty("kahani.force3d", "1");
+        try {
+            com.tarun.kahani.core.Figure3D.Model a = com.tarun.kahani.core.Figure3D.build(cut.px, cut.w, cut.h, null, plain);
+            com.tarun.kahani.core.Figure3D.Model b = com.tarun.kahani.core.Figure3D.build(cut.px, cut.w, cut.h, null, braided);
+            com.tarun.kahani.core.Studio3D.Scene sa = new com.tarun.kahani.core.Studio3D.Scene(), sb = new com.tarun.kahani.core.Studio3D.Scene();
+            call("com.tarun.kahani.core.Figure3D", "mesh", sa, a, 0f);
+            call("com.tarun.kahani.core.Figure3D", "mesh", sb, b, 0f);
+            int ta = triangles(sa.mesh), tb = triangles(sb.mesh);
+            assertTrue("the braid, its ribbon and the wings add geometry behind the figure: " + ta + " -> " + tb, tb > ta + 200);
+            assertTrue("the hair colour is read from the picture", b.hairColor != 0);
+        } finally {
+            System.clearProperty("kahani.force3d");
+        }
+    }
+
+    private static java.util.Map<String, Object> fileData(String path) {
+        java.util.Map<String, Object> m = new java.util.HashMap<String, Object>();
+        m.put("path", path);
+        return m;
+    }
+
+    private static int triangles(Object mesh) throws Exception {
+        java.lang.reflect.Field f = mesh.getClass().getDeclaredField("nt");
+        f.setAccessible(true);
+        return f.getInt(mesh);
+    }
+
     private static byte[] tinyGlb() throws Exception {
         float[] pos = {-1,0,-1, 1,0,-1, 1,2,-1, -1,2,-1, -1,0,1, 1,0,1, 1,2,1, -1,2,1};
         float[] uv = {0,0, 1,0, 1,1, 0,1, 0,0, 1,0, 1,1, 0,1};

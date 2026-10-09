@@ -29,9 +29,24 @@ finished frames as they are written (step 8). "Boiling" is two frames in a row d
 cell on average; "shake" is more than 50 % of the frame changing between two frames; "floating" is a standing
 character's feet drawn above the ground line.
 
-<!-- MATRIX TABLE -->
+| Run | Story | Format | Options | Shots checked | Boiling / shake (step 6) | Calmed / still lively | Floating (feet above the ground line) | Gates | Step 8 (the finished film) | Render speed (width) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| sample_169 (rc=0) | The Two Princesses of Ratnagarh (sample, 15 pictures + 11 real back views + 15 inserts) | 16:9 | defaults | 315 of 316 shots | 0 / 0 | 0 / 0 | 0 of 15179 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 9.4 fps at 640 px |
+| story5_169 (rc=0) | Mithu aur Billi ki Diwali (Hinglish, 5 characters, no pictures) | 16:9 | defaults | 47 of 47 shots | 0 / 0 | 0 / 0 | 0 of 2340 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 40.1 fps at 640 px |
+| story2_169 (rc=0) | The fisherman (story 2) | 16:9 | animation on twos | 75 of 75 shots | 0 / 0 | 0 / 0 | 0 of 2820 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 40.8 fps at 640 px |
+| story3_11 (rc=0) | The kite (story 3) | 1:1 | speed 1.2 | 45 of 45 shots | 0 / 0 | 0 / 0 | 0 of 1968 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 41.2 fps at 480 px |
+| story4_239 (rc=0) | Neo-Mumbai (story 4) | 2.39:1 | speed 0.85 | 114 of 114 shots | 0 / 0 | 0 / 0 | 0 of 3940 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 48.1 fps at 720 px |
+| sample_916 (rc=0) | The Two Princesses of Ratnagarh (sample) | 9:16 | subtitles, brightness +0.1 | 323 of 326 shots | 0 / 0 | 0 / 0 | 0 of 15288 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 5.7 fps at 360 px |
+| story5_45 (rc=0) | Mithu aur Billi ki Diwali | 4:5 | subtitles | 47 of 47 shots | 0 / 0 | 0 / 0 | 0 of 2004 | 4/4 pass | boiling 0 shots, camera shake 0 shots | 33.5 fps at 480 px |
 
-## The Robolectric suite (15 tests, real Android drawing)
+
+Every run passes all four approval gates with no boiling, no shake and no floating, in the shots checked before the
+film and in the finished frames. The sample at 9:16 had 8 boiling close-ups in the first run (a speaker's body
+bobbing with a sword swing while the face filled the narrow frame); the close-speaker rule fixed them (0 in the
+run above). Render speed is the desktop harness at the width shown (the phone draws at its own size with the
+pixel mesh; see "Faster drawing" in Settings).
+
+## The Robolectric suite (16 tests, real Android drawing)
 
 1. `hinglishStoryIsReadAndShownInUsersSpelling` — a Hinglish script is read, the lines are shown as typed.
 2. `loginDashboardStoryStudioLibrarySettingsOpenWithoutCrashing` — every screen opens; the home screen is English
@@ -52,8 +67,12 @@ character's feet drawn above the ground line.
 13. `pixarLeadFormatsSpineBraintrustAndStillPages` — formats, safe zones, the story spine, the Braintrust notes.
 14. `anyScriptIsStagedByTheProtocol` — a generic script is staged by the technical protocol.
 15. `modernFreeFormScriptIsReadStagedAndCued` — a free-form modern script with its cues.
+16. `freeGithubSourcesGuidesAndDescriptionDetails` (v19) — the free model catalogue chooses by the description's words
+    and keeps the props it names; the free demos' requests are built from a demo's own description and their event
+    stream is read (no network); the glTF reader; the four bundled training documents; the description's braid,
+    ribbon and wings add geometry behind a figure made from a picture.
 
-Result with the final v18 code: **15 of 15 pass** (`gradle cleanTest test --offline`, Robolectric with native Android
+Result with the final v18 code: **15 of 15 pass**; with the v19 code **16 of 16 pass** (see the end of this page) (`gradle cleanTest test --offline`, Robolectric with native Android
 graphics). The longest are the end-to-end film job (86 s) and the final check of 40 shots (54 s); the views test
 takes 13 s (the three-quarter and side views of Vanusha from her picture in 4.3 s).
 

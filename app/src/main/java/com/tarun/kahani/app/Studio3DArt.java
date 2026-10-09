@@ -245,6 +245,12 @@ final class Studio3DArt {
         String kind = f[1], key = f[2];
         dropProposals(project, kind, key, kind.equals(P_VIEW) ? f[3] : null, true);
         if (kind.equals(P_CHAR)) dropProposals(project, P_VIEW, key, null, true);
+        if (kind.equals(P_CHAR) && f[f.length - 1].contains("free model")) {
+            // the free model is turned down: the studio's own doll is proposed the next time instead
+            project.setSetting("rejected3d.model." + key, "1");
+            project.setSetting("credit3d." + key, "");
+            return;
+        }
         project.setSetting("rejected3d." + kind + "." + key, "1");
     }
 
@@ -268,10 +274,15 @@ final class Studio3DArt {
      * The picture of a character without one: a doll built from its description, on the line of the user's
      * pictures, with its three views; a proposal when ask is set, else used at once. Returns the file name.
      */
-    static String makeCharacter(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask) throws IOException {
+    static String makeCharacter(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, Cloud cloud, boolean freeModels) throws IOException {
         Look look = c.look != null ? c.look : new Look();
         int seed = Math.abs(c.displayName.hashCode()) % 1000;
         String key = keyFor(project, story, c);
+        // a free model from GitHub that the description fits (a knight, a mage, a fox…) before the studio's own doll
+        if (freeModels && cloud != null && !rejected(project, "model", key)) {
+            try { if (freeModel(project, story, c, lib, ctx, cue, ask, cloud, null)) return proposalFor(project, P_CHAR, key) != null ? proposalFor(project, P_CHAR, key)[3] : charFile(project, story, c); }
+            catch (Throwable e) { android.util.Log.w("Kahani", "free 3D model: " + e); }
+        }
         Doll3D.Result r = Doll3D.make(look, 1100, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue);
         String file = project.savePicture(encode(r.px, r.w, r.h, true), "3d_char");
         int[] ratings = SceneMaker.ratings(false, r.faceKnown, true, cue != null && cue.pictures > 0, 0.8f, true);
@@ -299,11 +310,84 @@ final class Studio3DArt {
     }
 
     /**
+     * A free model from GitHub whose words the description uses (FreeModels), fetched without a key, posed from
+     * its idle animation with the props the description names, graded to the pictures' line and offered as the
+     * character's picture with its three views — proposals like every other 3D-made picture. The model stays with
+     * the story; the credit line goes into the production file. Returns false when no model fits.
+     */
+    static boolean freeModel(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, Cloud cloud, Progress p) throws IOException {
+        Look look = c.look != null ? c.look : new Look();
+        java.util.List<com.tarun.kahani.core.FreeModels.Entry> fits = com.tarun.kahani.core.FreeModels.matches(c.description, look);
+        if (fits.isEmpty()) return false;
+        String key = keyFor(project, story, c);
+        com.tarun.kahani.core.FreeModels.Entry e = fits.get(0);
+        if (p != null) p.at("Free 3D model from GitHub for " + c.shown() + ": " + e.name);
+        byte[] glb = cloud.download(e.url);
+        Glb.Options opt = new Glb.Options();
+        opt.pose = com.tarun.kahani.core.FreeModels.POSES;
+        opt.props = com.tarun.kahani.core.FreeModels.propsFor(e, look, c.description);
+        Glb.Model m = Glb.load(glb, decoder(), null, opt);
+        try {
+            java.io.FileOutputStream o = new java.io.FileOutputStream(project.file("model_" + Math.abs(key.hashCode()) + ".glb"));
+            o.write(glb);
+            o.close();
+        } catch (IOException ignored) {
+            // the rendered views are what the film needs; the model file is a keepsake
+        }
+        Doll3D.Result front = Glb.render(m, 1100, 0);
+        if (cue != null) cue.grade(front.px, front.w, front.h);
+        String file = project.savePicture(encode(front.px, front.w, front.h, true), "3d_char");
+        int[] ratings = SceneMaker.ratings(false, false, true, cue != null && cue.pictures > 0, 0.85f, true);
+        String verdict = SceneMaker.verdict(ratings, "") + " — free model: " + e.name + " (" + e.licence + "; " + m.note + ")";
+        dropProposals(project, P_CHAR, key, null, true);
+        dropProposals(project, P_VIEW, key, null, true);
+        addProposal(project, "propose|char|" + key + "|" + file + "|0|0|0|0|0|0|0|0|0|" + SceneMaker.score(ratings) + "|" + verdict);
+        String[] own = viewFiles(project, key);
+        for (int i = 0; i < Figure3D.VIEW_ANGLES.length; i++) {
+            if (own[i] != null) continue;
+            Doll3D.Result v = Glb.render(m, 1100, Figure3D.VIEW_ANGLES[i]);
+            if (cue != null) cue.grade(v.px, v.w, v.h);
+            String vf = project.savePicture(encode(v.px, v.w, v.h, true), "view");
+            addProposal(project, "propose|view|" + key + "|" + (int) Figure3D.VIEW_ANGLES[i] + "|" + vf + "|0|0|0|0|0|0|0|0|" + SceneMaker.score(ratings) + "|" + verdict);
+        }
+        project.setSetting("credit3d." + key, com.tarun.kahani.core.FreeModels.credit(e));
+        project.setSetting("model3d." + key, e.name);
+        if (!ask) accept(project, lib, ctx, proposalFor(project, P_CHAR, key));
+        return true;
+    }
+
+    /** Decodes a model's embedded picture with the phone's own decoder. */
+    static Glb.ImageDecoder decoder() {
+        return new Glb.ImageDecoder() {
+            public int[] decode(byte[] bytes) {
+                Bitmap b = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                if (b == null) return null;
+                int w = b.getWidth(), h = b.getHeight();
+                int[] out = new int[w * h + 2];
+                out[0] = w; out[1] = h;
+                b.getPixels(out, 2, w, 0, 0, w, h);
+                b.recycle();
+                return out;
+            }
+        };
+    }
+
+    /** The credit lines of the free models and services this story's pictures came from, for the production file. */
+    static java.util.List<String> credits(Project project, Story story) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        for (Story.CharacterDef c : story.cast()) {
+            String cr = project.setting("credit3d." + keyFor(project, story, c), "");
+            if (cr.length() > 0 && !out.contains(c.shown() + ": " + cr)) out.add(c.shown() + ": " + cr);
+        }
+        return out;
+    }
+
+    /**
      * The views of a character made from its own picture: the figure model (Figure3D), or — with the user's
      * image-to-3D key — a 3D model the service builds from the picture, rendered by the studio. Proposals when
      * ask is set. Returns how many views were made (0 for an animal's side-on picture or a missing picture).
      */
-    static int makeViews(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p) throws IOException {
+    static int makeViews(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p, boolean freeSpace) throws IOException {
         String file = charFile(project, story, c);
         if (file == null) return 0;
         Look look = c.look != null ? c.look : new Look();
@@ -319,28 +403,24 @@ final class Studio3DArt {
         if (face == null && cut.faceFound) face = new float[]{cut.mouthX, cut.mouthY, cut.mouthW, cut.eyeLX, cut.eyeY, cut.eyeRX, cut.eyeY, cut.eyeR, 0};
         Doll3D.Result[] views = null;
         String source = "the figure model";
-        if (meshyKey != null && meshyKey.length() >= 8 && cloud != null) {
+        boolean keyed = meshyKey != null && meshyKey.length() >= 8;
+        if (cloud != null && (keyed || freeSpace)) {
             try {
-                if (p != null) p.at("3D model service: " + c.shown());
+                if (p != null) p.at((keyed ? "3D model service: " : "Free 3D service: ") + c.shown());
                 final Progress pp = p;
-                ImageTo3D.Result r = ImageTo3D.meshy(cloud, meshyKey, encode(cut.px, cut.w, cut.h, true), c.description, new ImageTo3D.Progress() {
+                ImageTo3D.Progress ip = new ImageTo3D.Progress() {
                     public void at(String what) { if (pp != null) pp.at(what); }
-                });
-                Glb.Model m = Glb.load(r.glb, new Glb.ImageDecoder() {
-                    public int[] decode(byte[] bytes) {
-                        Bitmap b = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                        if (b == null) return null;
-                        int w = b.getWidth(), h = b.getHeight();
-                        int[] out = new int[w * h + 2];
-                        out[0] = w; out[1] = h;
-                        b.getPixels(out, 2, w, 0, 0, w, h);
-                        b.recycle();
-                        return out;
-                    }
-                });
+                };
+                byte[] png = encode(cut.px, cut.w, cut.h, true);
+                // the picture rules the shape, the description goes with it (the plain-English guide's 75 / 25)
+                ImageTo3D.Result r = keyed ? ImageTo3D.meshy(cloud, meshyKey, png, c.description, ip) : ImageTo3D.freeSpaces(cloud, png, c.description, ip);
+                Glb.Options opt = new Glb.Options();
+                opt.allProps = true;
+                Glb.Model m = Glb.load(r.glb, decoder(), null, opt);
                 views = new Doll3D.Result[Figure3D.VIEW_ANGLES.length];
                 for (int i = 0; i < views.length; i++) views[i] = Glb.render(m, 1100, Figure3D.VIEW_ANGLES[i]);
-                source = "the 3D model service (" + m.note + ")";
+                source = r.note + " (" + m.note + ")";
+                project.setSetting("credit3d." + key, r.credit);
             } catch (Throwable e) {
                 android.util.Log.w("Kahani", "image-to-3D service: " + e);
                 views = null;      // the figure model below
@@ -391,13 +471,13 @@ final class Studio3DArt {
     }
 
     /** Every character and place still without a picture (and not rejected before) gets a proposal. Returns how many were made. */
-    static int makeMissing(Project project, Story story, Edits ed, Library lib, Context ctx, StyleCue cue, boolean ask, Progress p) {
+    static int makeMissing(Project project, Story story, Edits ed, Library lib, Context ctx, StyleCue cue, boolean ask, Progress p, Cloud cloud, boolean freeModels) {
         int made = 0;
         for (Story.CharacterDef c : story.cast()) {
             String key = keyFor(project, story, c);
             if (charFile(project, story, c) != null || proposalFor(project, P_CHAR, key) != null || rejected(project, P_CHAR, key)) continue;
             if (p != null) p.at("Studio 3D: " + c.shown());
-            try { makeCharacter(project, story, c, lib, ctx, cue, ask); made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D character: " + e); }
+            try { makeCharacter(project, story, c, lib, ctx, cue, ask, cloud, freeModels); made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D character: " + e); }
         }
         java.util.Set<String> haveScene = new java.util.HashSet<String>();
         for (String line : project.read("cast.txt").split("\n")) {
@@ -414,12 +494,12 @@ final class Studio3DArt {
     }
 
     /** Every character with a picture but no views (and no rejected or pending view proposal) gets its views. Returns how many characters. */
-    static int makeAllViews(Project project, Story story, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p) {
+    static int makeAllViews(Project project, Story story, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p, boolean freeSpace) {
         int made = 0;
         for (Story.CharacterDef c : story.cast()) {
             String key = keyFor(project, story, c);
             if (charFile(project, story, c) == null || allViews(project, key) || !viewProposals(project, key).isEmpty() || rejected(project, P_VIEW, key)) continue;
-            try { if (makeViews(project, story, c, lib, ctx, cue, ask, meshyKey, cloud, p) > 0) made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D views: " + e); }
+            try { if (makeViews(project, story, c, lib, ctx, cue, ask, meshyKey, cloud, p, freeSpace) > 0) made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D views: " + e); }
         }
         return made;
     }

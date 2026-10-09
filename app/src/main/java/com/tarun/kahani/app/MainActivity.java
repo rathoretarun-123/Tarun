@@ -640,7 +640,7 @@ public class MainActivity extends Activity {
         if (noPic + noBg > 0) sum.addView(Ui.small(this, "🧊 Build all " + (noPic + noBg) + " missing pictures in 3D now (on the phone)", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building the missing pictures…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), null); }
+                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build them: " + e.getMessage()); else toast("Studio 3D made " + res + " picture(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
                 });
@@ -652,7 +652,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 background("Studio 3D is making the views from the pictures…", new Work() {
                     public Object run() throws Exception {
-                        return Studio3DArt.makeAllViews(project, st, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null);
+                        return Studio3DArt.makeAllViews(project, st, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
                     }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not make them: " + e.getMessage()); else toast("Views made for " + res + " character(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
@@ -817,7 +817,7 @@ public class MainActivity extends Activity {
         if (file == null) r3.addView(Ui.small(this, "🧊 3D doll", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building " + c.shown() + " from the description…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this)); }
+                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
                 });
@@ -827,7 +827,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 background("Studio 3D is making the three-quarter, side and back views of " + c.shown() + " from the picture…", new Work() {
                     public Object run() throws Exception {
-                        return Studio3DArt.makeViews(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null);
+                        return Studio3DArt.makeViews(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
                     }
                 }, new Done() {
                     public void done(Object res, Exception e) {
@@ -2972,6 +2972,10 @@ public class MainActivity extends Activity {
         try { maker = new String(Project.readAll(getAssets().open("ai_3d_scene_maker_guide.md")), "UTF-8"); }
         catch (Exception e) { maker = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.SceneMaker.SUMMARY + "\n\n" + maker;
+        String plain, training;
+        try { plain = new String(Project.readAll(getAssets().open("image_to_3d_plain_guide.md")), "UTF-8"); } catch (Exception e) { plain = ""; }
+        try { training = new String(Project.readAll(getAssets().open("director_training_guide.md")), "UTF-8"); } catch (Exception e) { training = ""; }
+        handbook += "\n\n" + plain + "\n\n" + training + "\n\n" + com.tarun.kahani.core.FreeModels.SOURCES;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -3473,6 +3477,8 @@ public class MainActivity extends Activity {
         dir.addView(toggle("Free pictures of the story's objects for inserts (Fluent Emoji 3D on GitHub, MIT)", "freeObjects", true));
         dir.addView(toggle("Human QC: show me every shot's first frame before the film is made", "humanQc", true));
         dir.addView(toggle("Faster drawing: a mesh cell of 2 pixels instead of 1 (about twice as fast, a little less smooth)", "fastMesh", false));
+        dir.addView(toggle("Free 3D models from GitHub (CC0 / CC-BY, e.g. KayKit's knight, mage, rogue, barbarian; the Khronos fox) for a character without a picture, when its description fits one — always a proposal you accept or reject; the credit goes into the production file", "freeModels", true));
+        dir.addView(toggle("Free image-to-3D demos (TripoSR, InstantMesh, Hunyuan3D-2 on Hugging Face Spaces, no key) for the views of a character's picture — slow, may be asleep or over quota; then the studio's own figure model does it", "freeSpaces", true));
         dir.addView(toggle("Natural voices (Microsoft neural, no key)", "naturalVoices", true));
         dir.addView(toggle("Expressive AI voices (needs a key; small free limit)", "aiVoices", false));
         dir.addView(toggle("Animate on twos (Spider-Verse: learners 12 fps, rebels 8 fps)", "onTwos", false));

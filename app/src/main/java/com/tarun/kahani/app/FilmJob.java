@@ -187,9 +187,11 @@ public final class FilmJob implements Runnable {
                 Studio3DArt.Progress sp = new Studio3DArt.Progress() {
                     public void at(String what) { check(); step(what + "…", 0.025f); }
                 };
-                int made = Studio3DArt.makeMissing(project, story, ed, Library.get(ctx), ctx, cue, ask, sp);
+                boolean online = Prefs.online(ctx);
+                com.tarun.kahani.core.ImageTo3D.forgetFailures();
+                int made = Studio3DArt.makeMissing(project, story, ed, Library.get(ctx), ctx, cue, ask, sp, online && Prefs.freeModels(ctx) ? Prefs.cloud(ctx) : null, online && Prefs.freeModels(ctx));
                 // every character with a picture gets its views from that picture (three-quarter, side, back)
-                made += Studio3DArt.makeAllViews(project, story, Library.get(ctx), ctx, cue, ask, Prefs.meshyKey(ctx), Prefs.cloud(ctx), sp);
+                made += Studio3DArt.makeAllViews(project, story, Library.get(ctx), ctx, cue, ask, Prefs.meshyKey(ctx), online ? Prefs.cloud(ctx) : null, sp, online && Prefs.freeSpaces(ctx));
                 if (made > 0) notes3d = made;
                 // the director asks: every picture the studio made is a proposal until the user accepts it (in the
                 // Studio, where pictures are chosen, or on the progress screen); a rejected one is deleted and never used
@@ -614,6 +616,8 @@ public final class FilmJob implements Runnable {
         for (int i = m; project.has("lock_place_" + i + ".jpg"); i++) project.file("lock_place_" + i + ".jpg").delete();
         film.shotList += String.format(java.util.Locale.US, "%nLOCK SHEETS (pipeline steps 1-2): %d Character Lock Sheets and %d Location Lock Plates made before any shot, saved with the film (lock_char_N.jpg, lock_place_N.jpg)%n", n, m);
         if (notes3d > 0) film.shotList += String.format(java.util.Locale.US, "STUDIO 3D: %d picture(s) made in three dimensions on the phone (dolls for characters without a picture, places with their floor line, the views of every character from its own picture), each accepted by you%n", notes3d);
+        java.util.List<String> credits = film.story == null ? new java.util.ArrayList<String>() : Studio3DArt.credits(project, film.story);
+        if (!credits.isEmpty()) { film.shotList += "FREE 3D MODELS AND SERVICES USED (with thanks; CC-BY needs this credit):\n"; for (String cr : credits) film.shotList += "  • " + cr + "\n"; }
         if (styleNote.length() > 0) film.shotList += styleNote + "\n";
         if (objectNotes != null) film.shotList += "FREE OBJECT PICTURES (inserts, each shown once when the story first brings the thing in): " + objectNotes + "\n";
     }

@@ -325,6 +325,7 @@ public final class LookDesigner {
         // ---- hair
         String hairS = sentenceWith(face, "बाल", "चोटी", "चोटि", "hair", "braid", "जूड़ा", "ponytail", "पोनीटेल", "bun");
         l.curly = Txt.has(hairS, "घुंघराले", "घुँघराले", "curly");
+        l.wings = Txt.has(c.description == null ? "" : c.description, "पंख", "परी", "fairy", "wings", "winged", "angel", "फ़रिश्ता", "फरिश्ता");
         if (Txt.has(hairS, "दो चोटि", "दो साधारण चोटि", "two braids", "pigtail")) l.hair = Look.H_PIGTAILS;
         else if (Txt.has(hairS, "ponytail", "पोनीटेल", "पोनी")) l.hair = Look.H_PONYTAIL;
         else if (Txt.has(hairS, "चोटी", "braid")) l.hair = Look.H_BRAID;

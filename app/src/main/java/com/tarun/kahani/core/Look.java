@@ -37,6 +37,8 @@ public final class Look {
     public int headwear = HW_NONE;
     public int headColor = 0xFFC62828, headBand = 0;
     public boolean kalgi;
+    /** Wings on the back (a fairy, an angel, a butterfly child): drawn behind the figure in its views. */
+    public boolean wings;
     public int mustache = 0;         // 0 none, 1 soldier, 2 big curled
     public boolean beard;
     public int bindi = 0, tilak = 0;

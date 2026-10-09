@@ -79,6 +79,34 @@ at morning, day, evening or night (sky, key light, fog and practicals follow the
   user chose it). `makeViews` then fills only the angles that are missing (`viewFiles`), `makeAllViews` runs for a
   character until `allViews` is true, and `makeCharacter` never proposes a doll view at an angle the user has given.
   The sample story ships eleven real back views (`char_<name>_back.jpg`, `view|<name>|180|…` lines in `sample/cast.txt`).
+* **Free models from GitHub (v19).** `core/FreeModels.java` is the hardcoded catalogue: KayKit's Adventurers
+  (CC0: Knight, Mage, Rogue, Rogue_Hooded, Barbarian) and the Khronos glTF samples (CC BY 4.0: Fox, RiggedFigure),
+  each with the words of a description that fit it (Hindi and English), the character kinds it may stand in for, the
+  props it carries and its licence and credit line. `Studio3DArt.freeModel` fetches the GLB (raw.githubusercontent.com,
+  no key), `Glb.load` poses it from its idle animation and keeps only the props the description names
+  (`FreeModels.propsFor`), the style cue grades it, and the front and three views become proposals; the GLB stays
+  with the story (`model_<hash>.glb`), the credit goes into the production file ("FREE 3D MODELS AND SERVICES USED").
+  A rejected model sets `rejected3d.model.<key>` so the studio's own doll is proposed next time.
+* **The glTF reader (v19).** `core/Glb.java` reads binary and JSON glTF 2.0 (a `Fetcher` brings the .bin and
+  pictures named beside a .gltf; data URIs are decoded), the node hierarchy with TRS or matrices, skins (joints,
+  inverse bind matrices, JOINTS_0 / WEIGHTS_0) and animations: the first keyframe of the first animation named in
+  `Options.pose` ("Idle", "Unarmed_Idle"…) poses the model, so a free character stands naturally instead of in a
+  T-pose; meshes under a hand slot (KayKit's `handslot.l/r`, or nodes named weapon/prop/socket/attach) are dropped
+  unless `Options.props` names them or `allProps` is set. Verified on the desktop with the KayKit Knight and Mage
+  (41 joints, "Idle") and the Khronos Fox and CesiumMan (`tools/jvm GlbSheet`).
+* **Free image-to-3D demos (v19).** `ImageTo3D.freeSpaces` tries the free demos of TripoSR, InstantMesh and
+  Hunyuan3D-2 on Hugging Face Spaces in turn through Gradio's HTTP API (`/gradio_api/upload`, `/gradio_api/call/<step>`,
+  the event stream's `complete` event, the GLB's `url`); the steps are each project's own demo app's functions
+  (`preprocess` → `generate`; `preprocess` → `generate_mvs` → `make3d`; `shape_generation`), the inputs are filled from
+  the demo's `/gradio_api/info` (the picture to the first image input, the description to a caption box, the demo's
+  defaults for the rest). Five minutes at most per demo, a failed demo is not asked again in the film
+  (`forgetFailures` at the film's start), then the figure model. Not run against the live demos from the build
+  machine (its network does not reach hf.space); the request building and the reply reading are unit-tested.
+* **The description on the back (v19).** `Figure3D.details` adds what the front picture cannot show, from the
+  description's `Look`, in the picture's own colours (`Model.hairColor`, `Model.bodyColor`): a braid or a ponytail
+  down the back with its ribbon, long hair over the shoulder blades, a monkey's or an animal's tail, a fairy's wings —
+  unless the front picture already shows the hair hanging (a braid over the shoulder is on the back by the mirror;
+  `frontShowsLongHair`).
 * **Views in the library.** A back or side picture is a library item of kind `view` (built-in ones carry
   `meta of=<the front picture's id>`, uploaded ones `meta view=<angle>;ofName=<character>`); `AutoLibrary.pictures`
   never offers a view as a front picture, and `AutoLibrary.views` gives a character the views kept with the library

@@ -35,6 +35,10 @@ public final class Figure3D {
         /** The band of rows above the hairline that the back of the head is painted with (its height, pixels). */
         public int bandH;
         public boolean faceKnown, legs, animal;
+        /** The description's look (what the picture cannot show is drawn from it: a braid down the back, a tail, wings). */
+        public Look look;
+        /** The hair and the body colours read from the picture (0 = unknown), so added parts stay on its line. */
+        public int hairColor, bodyColor;
         public float eyeLX, eyeLY, eyeRX, eyeRY, eyeR, mouthX, mouthY, mouthHW, turbanY;
         /** Half the face width (pixels). */
         public float headHalf;
@@ -163,7 +167,7 @@ public final class Figure3D {
                 else if (i != main) p = (a + b) / 2 < cxPx ? (byte) P_ARM_L : (byte) P_ARM_R;
                 if (m.animal) f = p == P_BODY ? 0.6f : 0.85f;
                 else if (p == P_LEG_L || p == P_LEG_R) f = 0.9f;
-                else if (p == P_ARM_L || p == P_ARM_R) f = 0.9f;
+                else if (p == P_ARM_L || p == P_ARM_R) f = look != null && look.kind == Look.MONKEY ? 0.5f : 0.9f;   // a monkey's tail beside it is a thin flap, not a pole
                 else if (y < m.chinRow) f = 0.92f;                                   // the head is round
                 else if (y < m.chinRow + 0.06f * body) f = 0.9f;                     // the neck
                 else if (y < m.hipRow) f = 0.55f;                                    // the body is flatter
@@ -202,7 +206,158 @@ public final class Figure3D {
             }
         }
         smoothCores(m);
+        m.look = look;
+        m.hairColor = average(px, w, m, m.topRow, m.topRow + Math.max(2, m.bandH), cxPx);
+        m.bodyColor = average(px, w, m, Math.round(m.hipRow - 0.1f * body), Math.round(m.hipRow + 0.1f * body), cxPx);
         return m;
+    }
+
+    /** The average colour of the opaque pixels of the core run of the rows [y0, y1], or 0. */
+    static int average(int[] px, int w, Model m, int y0, int y1, int cxPx) {
+        long r = 0, g = 0, b = 0;
+        int n = 0;
+        for (int y = Math.max(0, y0); y <= y1 && y < m.h; y += 2) {
+            int[] run = m.runs[y] == null ? null : runAt(m.runs[y], cxPx);
+            if (run == null) continue;
+            for (int x = run[0]; x <= run[1]; x += 2) {
+                int c = px[y * w + x];
+                if ((c >>> 24) < 200) continue;
+                r += c >> 16 & 255; g += c >> 8 & 255; b += c & 255; n++;
+            }
+        }
+        return n < 8 ? 0 : 0xFF000000 | (int) (r / n) << 16 | (int) (g / n) << 8 | (int) (b / n);
+    }
+
+    /** The z of the back surface (negative, in the mesh's units) of the main run at a row, and its half-width. {z, half}. */
+    private static float[] backAt(Model m, int y, float cxPx, float unit) {
+        y = Math.max(m.topRow, Math.min(m.botRow, y));
+        for (int dy = 0; dy < 12; dy++) {
+            for (int s = -1; s <= 1; s += 2) {
+                int yy = y + s * dy;
+                if (yy < m.topRow || yy > m.botRow || m.runs[yy] == null) continue;
+                int i = mainRun(m.runs[yy], Math.round(cxPx));
+                if (i < 0) continue;
+                float ca = m.core[yy][i * 2], cb = m.core[yy][i * 2 + 1];
+                float cr = (cb - ca) / 2f + 0.5f, f = m.depth[yy][i];
+                return new float[]{-f * cr * unit, cr * unit};
+            }
+        }
+        return new float[]{-0.05f, 0.1f};
+    }
+
+    private static float rowY(Model m, float row, float unit) { return (m.botRow + 0.5f - (row + 0.5f)) * unit; }
+
+    /** Whether the picture already shows a tail: an extra run beside the body or the legs in most rows below the hips. */
+    static boolean pictureHasTail(Model m) {
+        int rows = 0, extra = 0;
+        for (int y = Math.round(m.hipRow + 0.05f * (m.botRow - m.hipRow)); y < m.botRow - 0.08f * (m.botRow - m.hipRow); y += 3) {
+            int[] r = m.runs[y];
+            if (r == null) continue;
+            rows++;
+            int body = m.legs ? 2 : 1;
+            if (r.length / 2 > body) extra++;
+        }
+        return rows > 10 && extra > rows * 0.3f;
+    }
+
+    /** Whether the front picture itself shows hair hanging below the shoulders (a braid over the shoulder, loose long hair). */
+    static boolean frontShowsLongHair(Model m, int hairC) {
+        if (hairC == 0) return false;
+        float body = m.botRow - m.chinRow;
+        int hr = hairC >> 16 & 255, hg = hairC >> 8 & 255, hb = hairC & 255;
+        int n = 0, like = 0, cxPx = Math.round(m.cx * m.w);
+        for (int y = Math.round(m.chinRow + 0.12f * body); y < m.chinRow + 0.5f * body && y < m.h; y += 3) {
+            int[] run = m.runs[y] == null ? null : runAt(m.runs[y], cxPx);
+            if (run == null) continue;
+            for (int x = run[0]; x <= run[1]; x += 3) {
+                int c = m.px[y * m.w + x];
+                if ((c >>> 24) < 200) continue;
+                n++;
+                int dr = (c >> 16 & 255) - hr, dg = (c >> 8 & 255) - hg, db = (c & 255) - hb;
+                if (dr * dr + dg * dg + db * db < 50 * 50 && !Cutout.isSkin(c)) like++;
+            }
+        }
+        return n > 50 && like > n * 0.07f;
+    }
+
+    /**
+     * What the picture cannot show, drawn from the description on the line of the picture's own colours: a braid
+     * or a ponytail down the back, long hair over the shoulder blades, the ribbon at its end, a tail, wings. The
+     * front view is never touched (the picture rules it); these parts sit behind the figure.
+     */
+    private static void details(Studio3D.Mesh mesh, Model m, float unit, float cxPx) {
+        Look l = m.look;
+        if (l == null) return;
+        float H = m.botRow - m.topRow + 1, body = m.botRow - m.chinRow;
+        int hairC = m.hairColor != 0 && l.headwear == Look.HW_NONE ? m.hairColor : l.hairColor;
+        int hair = mesh.mat(Studio3D.hair(Studio3D.shade(hairC, 0.6f)));      // the band's average is lit; the braid's shade is its dark side
+        boolean humanoid = !m.animal && (l.isHumanoid() || l.kind == Look.MONKEY);
+        // hair hanging in the front picture (a braid over the shoulder) is already on the back by the mirror: nothing added then
+        boolean hairShown = frontShowsLongHair(m, hairC) && System.getProperty("kahani.force3d") == null;
+        if (l.isHumanoid() && !m.animal && !hairShown && (l.hair == Look.H_BRAID || l.hair == Look.H_PONYTAIL || l.hair == Look.H_LONG)) {
+            float r0 = 0.028f * H * unit, r1 = 0.02f * H * unit;
+            if (l.hair == Look.H_LONG) {
+                // a sheet of hair over the shoulder blades
+                float yTop = rowY(m, m.chinRow - 0.08f * (m.chinRow - m.hairRow), unit), yEnd = rowY(m, m.chinRow + 0.33f * body, unit);
+                float[] b = backAt(m, Math.round(m.chinRow + 0.15f * body), cxPx, unit);
+                mesh.sphere(0, (yTop + yEnd) / 2, b[0] - 0.012f * H * unit, Math.min(b[1] * 1.05f, m.headHalf * 1.25f * unit), (yTop - yEnd) / 2, 0.028f * H * unit, 16, hair);
+            } else {
+                // the nape to the waist (a braid) or the back of the head to the shoulder blades (a ponytail)
+                float rowA = l.hair == Look.H_BRAID ? m.chinRow - 0.05f * (m.chinRow - m.hairRow) : m.eyeRow;
+                float rowB = l.hair == Look.H_BRAID ? m.chinRow + 0.5f * body : m.chinRow + 0.28f * body;
+                int n = l.hair == Look.H_BRAID ? 7 : 4;
+                float px0 = 0, pz0 = 0, py0 = 0;
+                for (int k = 0; k <= n; k++) {
+                    float t = k / (float) n;
+                    float row = rowA + (rowB - rowA) * t;
+                    float[] b = backAt(m, Math.round(row), cxPx, unit);
+                    float r = r0 + (r1 - r0) * t;
+                    float x = (l.hair == Look.H_BRAID ? (float) Math.sin(t * Math.PI * 3.5) * r * 0.35f : 0), y = rowY(m, row, unit), z = Math.min(-0.03f, b[0]) - r * 0.5f;
+                    if (k > 0) mesh.capsule(px0, py0, pz0, x, y, z, r0 + (r1 - r0) * (k - 1) / (float) n, r, 10, hair);
+                    if (l.hair == Look.H_BRAID) mesh.sphere(x, y, z, r * 1.05f, r * 1.2f, r, 10, hair);
+                    px0 = x; py0 = y; pz0 = z;
+                }
+                if (l.ribbon1 != 0) {
+                    int rib = mesh.mat(Studio3D.silk(l.ribbon1));
+                    mesh.sphere(px0, py0 + r1 * 0.3f, pz0, r1 * 1.6f, r1 * 0.9f, r1 * 1.1f, 10, rib);
+                    mesh.sphere(px0 - r1 * 1.3f, py0 - r1 * 0.6f, pz0, r1 * 0.9f, r1 * 0.5f, r1 * 0.35f, 8, rib);
+                    mesh.sphere(px0 + r1 * 1.3f, py0 - r1 * 0.6f, pz0, r1 * 0.9f, r1 * 0.5f, r1 * 0.35f, 8, rib);
+                }
+            }
+        }
+        // a tail for a standing monkey or a tailed animal shown from the front (an animal seen from the side shows its own)
+        boolean tailed = (l.kind == Look.MONKEY || (l.kind == Look.ANIMAL && !m.animal && l.species != Look.SP_RABBIT && l.species != Look.SP_BEAR && l.species != Look.SP_TORTOISE)) && !pictureHasTail(m);
+        if (tailed) {
+            int fur = mesh.mat(Studio3D.fur(m.bodyColor != 0 ? m.bodyColor : l.furColor));
+            float rowH = m.hipRow + 0.02f * body;
+            float[] b = backAt(m, Math.round(rowH), cxPx, unit);
+            float r0 = 0.03f * H * unit, len = 0.42f * H * unit;
+            float sx = 0, sy = rowY(m, rowH, unit), sz = Math.min(-0.03f, b[0]) - r0;
+            float px0 = sx, py0 = sy, pz0 = sz;
+            int n = 6;
+            for (int k = 1; k <= n; k++) {
+                float t = k / (float) n;
+                // out and up in a curl behind the body, from the root at the hips
+                float x = sx + (float) Math.sin(t * 1.2) * len * 0.35f, y = sy + (float) Math.sin(t * Math.PI * 0.9) * len * 0.75f - t * len * 0.1f;
+                float z = sz - (float) Math.sin(t * Math.PI) * len * 0.55f - t * r0;
+                float r = r0 * (1 - 0.35f * t);
+                mesh.capsule(px0, py0, pz0, x, y, z, r0 * (1 - 0.35f * (t - 1f / n)), r, 10, fur);
+                px0 = x; py0 = y; pz0 = z;
+            }
+            if (l.species == Look.SP_LION || l.species == Look.SP_FOX) mesh.sphere(px0, py0, pz0, r0 * 1.6f, r0 * 1.6f, r0 * 1.6f, 10, fur);
+        }
+        // wings behind the shoulders, in the description's accent colour, thin as paper
+        if (l.wings && humanoid) {
+            int wing = mesh.mat(Studio3D.silk(l.accent == 0xFFFFFFFF ? 0xFFDCEBFF : l.accent));
+            float rowS = m.chinRow + 0.12f * body;
+            float[] b = backAt(m, Math.round(rowS), cxPx, unit);
+            float span = Math.max(b[1] * 2.2f, 0.28f * H * unit), hgt = 0.3f * H * unit;
+            for (int side = -1; side <= 1; side += 2) {
+                float cx = side * span * 0.6f, cy = rowY(m, rowS, unit) + hgt * 0.1f, cz = b[0] - 0.015f * H * unit;
+                mesh.sphere(cx, cy, cz, span * 0.5f, hgt * 0.55f, 0.012f * H * unit, 16, wing);
+                mesh.sphere(cx * 0.75f, cy - hgt * 0.5f, cz, span * 0.3f, hgt * 0.35f, 0.01f * H * unit, 12, wing);
+            }
+        }
     }
 
     /**
@@ -498,6 +653,7 @@ public final class Figure3D {
             }
             prev = cur;
         }
+        details(mesh, m, unit, cxPx);
         return mat;
     }
 

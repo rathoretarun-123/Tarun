@@ -864,6 +864,95 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * v31: a sheet added to the library itself (Home, the library screen, the bulk picker) is split at once: the
+     * library holds its figures — the front named as the sheet, the best of each angle a view, every figure with
+     * its reading — and the director takes them all when it places that character; a place sheet becomes its
+     * panels (wide view, reverse angle, the rest).
+     */
+    @Test
+    public void sheetAddedToTheLibraryIsSplitAndFollowsTheCharacter() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File[] sheets = userSheets();
+        byte[] girl = Files.readAllBytes(new File(sheets[0].getParentFile(), "sheet02.jpg").toPath());
+        byte[] cave = Files.readAllBytes(new File(sheets[0].getParentFile(), "sheet39.jpg").toPath());
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        Class<?> ss = Class.forName("com.tarun.kahani.app.SheetSaver");
+        Method save = ss.getDeclaredMethod("saveToLibrary", com.tarun.kahani.app.Library.class, String.class, String.class, byte[].class, String.class);
+        save.setAccessible(true);
+        // 1. the girl's sheet, kind left to the picture: figures
+        List<com.tarun.kahani.app.Library.Item> fam = (List<com.tarun.kahani.app.Library.Item>) save.invoke(null, lib, "IMG_20261009", "", girl, "test");
+        assertTrue("split into figures: " + fam.size(), fam.size() >= 10);
+        com.tarun.kahani.app.Library.Item main = fam.get(0);
+        assertTrue("the main is the front, a person: " + main.kind + " " + main.name, "person".equals(main.kind) && "1".equals(main.meta("sheetMain")));
+        int children = 0, tagged = 0, views = 0;
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) {
+            if (main.id.equals(it.meta("sheet"))) children++;
+            if (it.meta("posetag") != null && (main.id.equals(it.meta("sheet")) || it == main)) tagged++;
+            if (main.id.equals(it.meta("sheet")) && "view".equals(it.kind) && it.name.contains(" view)")) views++;
+        }
+        System.out.println("LIBRARY SHEET: " + fam.size() + " items, " + children + " children, " + tagged + " with readings, " + views + " views; main " + main.name);
+        assertTrue("the figures belong to the main: " + children, children >= 9);
+        assertTrue("readings kept: " + tagged, tagged >= 8);
+        assertTrue("views among them: " + views, views >= 2);
+        // the user names it: the whole family follows the name
+        Method rename = ss.getDeclaredMethod("rename", com.tarun.kahani.app.Library.class, com.tarun.kahani.app.Library.Item.class, String.class, String.class, String.class);
+        rename.setAccessible(true);
+        String old = main.name;
+        main.name = "वृंदा"; main.kind = "person";
+        rename.invoke(null, lib, main, old, "वृंदा", "person");
+        lib.save();
+        int named = 0;
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) if ("वृंदा".equals(it.meta("ofName")) && it.name.startsWith("वृंदा (")) named++;
+        assertTrue("renamed family: " + named, named >= 9);
+        // 2. the director places her from the library: the front, the views and the pose pictures follow
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        Story.CharacterDef vrinda = null;
+        for (Story.CharacterDef c : st.cast()) if (c.displayName.contains("वृंदा")) vrinda = c;
+        assertNotNull(vrinda);
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        String key = (String) keyFor.invoke(a, vrinda);
+        Class<?> al = Class.forName("com.tarun.kahani.app.AutoLibrary");
+        Method fill = al.getDeclaredMethod("fill", android.content.Context.class, Project.class, Story.class);
+        fill.setAccessible(true);
+        String notes = (String) fill.invoke(null, ctx, p, st);
+        String cast = p.read("cast.txt");
+        int poses = 0, viewLines = 0;
+        for (String l : cast.split("\n")) { if (l.startsWith("pose|" + key + "|")) poses++; if (l.startsWith("view|" + key + "|")) viewLines++; }
+        System.out.println("LIBRARY SHEET → film: " + notes + "\npose lines " + poses + ", view lines " + viewLines);
+        assertTrue("her front from the library", cast.contains("char|" + key + "|"));
+        String front = p.manifestLine("char", key).split("\\|")[2];
+        Bitmap fb = android.graphics.BitmapFactory.decodeFile(p.file(front).getAbsolutePath());
+        assertTrue("the front is one figure: " + fb.getWidth() + "x" + fb.getHeight(), fb.getHeight() > fb.getWidth());
+        assertTrue("her pose pictures followed: " + poses, poses >= 8);
+        assertTrue("her views followed: " + viewLines, viewLines >= 1);
+        // 3. a place sheet, kind left to the picture: panels
+        List<com.tarun.kahani.app.Library.Item> place = (List<com.tarun.kahani.app.Library.Item>) save.invoke(null, lib, "गुफा", "", cave, "test");
+        assertTrue("split into panels: " + place.size(), place.size() >= 8);
+        assertTrue("the wide view is a place: " + place.get(0).kind, "place".equals(place.get(0).kind) && "गुफा".equals(place.get(0).name));
+        assertTrue("the reverse angle", "reverse".equals(place.get(1).meta("view")) && place.get(1).name.contains("reverse"));
+        Bitmap pb = android.graphics.BitmapFactory.decodeStream(lib.open(place.get(0)));
+        // a whole panel (the sheet's panels are portrait, five to a row): picture content in every corner, not the sheet's white
+        int dark = 0;
+        for (int cy = 0; cy < 2; cy++) for (int cx = 0; cx < 2; cx++) {
+            int c = pb.getPixel(cx == 0 ? pb.getWidth() / 10 : pb.getWidth() * 9 / 10, cy == 0 ? pb.getHeight() / 10 : pb.getHeight() * 9 / 10);
+            if (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255) < 690) dark++;
+        }
+        assertTrue("a whole panel with content in its corners (" + dark + "/4), " + pb.getWidth() + "x" + pb.getHeight(), dark >= 3 && pb.getWidth() > 200);
+        ac.pause().stop().destroy();
+    }
+
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
     @Test
     public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {

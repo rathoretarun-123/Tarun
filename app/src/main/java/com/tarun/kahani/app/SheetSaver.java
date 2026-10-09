@@ -34,6 +34,168 @@ final class SheetSaver {
         }
     }
 
+    /**
+     * True when the pieces are whole panels (a sheet of place views): the corners of a panel's box hold picture
+     * content, the corners of a figure's box hold the sheet's background (the figure never fills its corners).
+     */
+    static boolean panelsLike(int[] px, int w, int h, List<com.tarun.kahani.core.Angles.Piece> parts) {
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int x = 0; x < w; x += 3) { for (int y : new int[]{0, h - 1}) { int c = px[y * w + x]; r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255; n++; } }
+        for (int y = 0; y < h; y += 3) { for (int x : new int[]{0, w - 1}) { int c = px[y * w + x]; r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255; n++; } }
+        if (n == 0) return false;
+        int br = (int) (r / n), bg = (int) (g / n), bb = (int) (b / n);
+        int panels = 0;
+        for (com.tarun.kahani.core.Angles.Piece pc : parts) {
+            int inset = Math.max(2, Math.min(pc.w, pc.h) / 40), block = Math.max(3, Math.min(pc.w, pc.h) / 12);
+            int contentCorners = 0;
+            for (int cy = 0; cy < 2; cy++) for (int cx = 0; cx < 2; cx++) {
+                int x0 = pc.x0 + (cx == 0 ? inset : pc.w - inset - block), y0 = pc.y0 + (cy == 0 ? inset : pc.h - inset - block);
+                int content = 0, total = 0;
+                for (int y = y0; y < y0 + block; y++) for (int x = x0; x < x0 + block; x++) {
+                    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                    int c = px[y * w + x];
+                    int d = Math.abs(((c >> 16) & 255) - br) + Math.abs(((c >> 8) & 255) - bg) + Math.abs((c & 255) - bb);
+                    total++;
+                    if (d > 60) content++;
+                }
+                if (total > 0 && content * 10 >= total * 6) contentCorners++;
+            }
+            if (contentCorners >= 3) panels++;
+        }
+        return panels * 2 > parts.size();
+    }
+
+    /**
+     * v31: a sheet added to the library — from Home, the library screen, the bulk picker — is split at once and kept
+     * as its figures (or its panels for a place), so the library holds the pictures themselves, whichever way they
+     * came. kind: "person", "place", "object", or "" to let the picture decide (cut-out figures = a person or thing,
+     * whole panels = a place). Returns the items added, the main one (the front, or the wide view) first; empty when
+     * the picture is not a sheet.
+     */
+    static List<Library.Item> saveToLibrary(Library library, String name, String kind, byte[] data, String source) throws Exception {
+        List<Library.Item> out = new ArrayList<Library.Item>();
+        int[] dec = MainActivity.decodeBytes(data, Project.bigSide());
+        if (dec == null) return out;
+        int w = dec[0], h = dec[1];
+        int[] px = new int[w * h];
+        System.arraycopy(dec, 2, px, 0, px.length);
+        boolean panels = "place".equals(kind);
+        List<com.tarun.kahani.core.Angles.Piece> parts;
+        try {
+            parts = panels ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h, false), w, h)
+                    : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h), w, h);
+            if (!panels && kind.length() == 0 && parts.size() >= 2 && panelsLike(px, w, h, parts)) {
+                panels = true;
+                parts = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h, false), w, h);
+            }
+        } catch (Throwable e) { return out; }
+        if (parts.size() < 2) return out;
+        if (parts.size() > 100) parts = parts.subList(0, 100);
+        String base = name == null || name.trim().length() == 0 ? "picture" : name.trim();
+        if (panels) {
+            for (int i = 0; i < parts.size(); i++) {
+                com.tarun.kahani.core.Angles.Piece pc = parts.get(i);
+                byte[] b = Studio3DArt.encode(pc.px, pc.w, pc.h, false);
+                Library.Item it = i == 0 ? library.addBytes(Library.PIC, "place", base, "wide view", b, ".jpg", source)
+                        : i == 1 ? library.addBytes(Library.PIC, "place", base + " (reverse angle)", "reverse angle", b, ".jpg", source)
+                        : library.addBytes(Library.PIC, "place", base + " (angle " + (i + 1) + ")", "", b, ".jpg", source);
+                if (i == 0) it.setMeta("sheetMain", "1");
+                else { it.setMeta("ofName", base); it.setMeta("sheet", out.get(0).id); it.setMeta("of", out.get(0).id); it.setMeta("suffix", it.name.substring(base.length())); }
+                if (i == 1) it.setMeta("view", "reverse");
+                out.add(it);
+            }
+            library.save();
+            return out;
+        }
+        boolean thing = "object".equals(kind);
+        // the reading of every figure: angle, pose, feeling (a person); the tallest upright one stands
+        com.tarun.kahani.core.Cutout.Result[] cuts = new com.tarun.kahani.core.Cutout.Result[parts.size()];
+        com.tarun.kahani.core.PoseSense.Tag[] tags = new com.tarun.kahani.core.PoseSense.Tag[parts.size()];
+        float[] angles = new float[parts.size()], hRatios = new float[parts.size()];
+        byte[][] bytes = new byte[parts.size()][];
+        int standH = 0;
+        for (int i = 0; i < parts.size(); i++) {
+            com.tarun.kahani.core.Angles.Piece pc = parts.get(i);
+            bytes[i] = Studio3DArt.encode(pc.px, pc.w, pc.h, true);
+            angles[i] = com.tarun.kahani.core.Angles.FRONT;
+            if (thing) continue;
+            try { cuts[i] = com.tarun.kahani.core.Cutout.process(pc.px.clone(), pc.w, pc.h, false); } catch (Throwable e) { cuts[i] = null; }
+            if (cuts[i] != null && cuts[i].w > 0 && cuts[i].h > 0 && cuts[i].w < cuts[i].h * 1.25f) standH = Math.max(standH, cuts[i].h);
+        }
+        for (int i = 0; i < parts.size() && !thing; i++) {
+            if (cuts[i] == null) continue;
+            try {
+                tags[i] = com.tarun.kahani.core.PoseSense.tag(cuts[i], standH, false);
+                angles[i] = tags[i].angle;
+                hRatios[i] = standH > 0 ? Math.max(0.2f, Math.min(1.5f, cuts[i].h / (float) standH)) : 1f;
+            } catch (Throwable e) { tags[i] = null; }
+        }
+        // the main picture: the largest front; the best of each other angle its view
+        int main = -1; long mainArea = -1;
+        for (int i = 0; i < parts.size(); i++) {
+            long area = (long) parts.get(i).w * parts.get(i).h;
+            boolean front = Math.abs(angles[i]) < 1;
+            if (main < 0 || (front && !(Math.abs(angles[main]) < 1)) || (front == (Math.abs(angles[main]) < 1) && area > mainArea)) { main = i; mainArea = area; }
+        }
+        int[] bestOf = new int[4];
+        java.util.Arrays.fill(bestOf, -1);
+        float[] slot = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
+        for (int k = 1; k < 4 && !thing; k++) {
+            long best = -1;
+            for (int i = 0; i < parts.size(); i++) if (Math.abs(angles[i] - slot[k]) < 1 && (long) parts.get(i).w * parts.get(i).h > best) { best = (long) parts.get(i).w * parts.get(i).h; bestOf[k] = i; }
+        }
+        int[] order = new int[parts.size()];
+        order[0] = main;
+        for (int i = 0, j = 1; i < parts.size(); i++) if (i != main) order[j++] = i;
+        String mainKind = thing ? "object" : "person";
+        for (int oi = 0; oi < order.length; oi++) {
+            int i = order[oi];
+            String an = com.tarun.kahani.core.Angles.name(angles[i]);
+            Library.Item it;
+            if (i == main) {
+                it = library.addBytes(Library.PIC, mainKind, base, thing ? "" : "front", bytes[i], ".png", source);
+                it.setMeta("sheetMain", "1");
+            } else {
+                boolean view = false;
+                for (int k = 1; k < 4; k++) if (bestOf[k] == i) view = true;
+                if (thing) it = library.addBytes(Library.PIC, "object", base + " (angle " + (i + 1) + ")", "", bytes[i], ".png", source);
+                else if (view) it = library.addBytes(Library.PIC, "view", base + " (" + an + " view)", an, bytes[i], ".png", source);
+                else it = library.addBytes(Library.PIC, Math.abs(angles[i]) < 1 ? "person" : "view", base + " (" + an + ", picture " + (i + 1) + ")", an, bytes[i], ".png", source);
+                it.setMeta("ofName", base);
+                it.setMeta("sheet", out.get(0).id);
+                it.setMeta("of", out.get(0).id);
+                it.setMeta("suffix", it.name.substring(base.length()));
+                if (!thing && Math.abs(angles[i]) >= 1) it.setMeta("view", String.valueOf((int) angles[i]));
+            }
+            if (tags[i] != null) {
+                String face = cuts[i] != null && cuts[i].faceFound
+                        ? String.format(java.util.Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", cuts[i].mouthX, cuts[i].mouthY, cuts[i].mouthW / 2f, cuts[i].eyeLX, cuts[i].eyeY, cuts[i].eyeRX, cuts[i].eyeY, cuts[i].eyeR)
+                        : "0|0|0|0|0|0|0|0";
+                it.setMeta("posetag", (int) tags[i].angle + "|" + tags[i].pose + "|" + tags[i].emotion + "|" + String.format(java.util.Locale.US, "%.3f", hRatios[i]) + "|" + face);
+                it.setMeta("pose", com.tarun.kahani.core.PoseSense.poseName(tags[i].pose));
+                it.setMeta("emotion", com.tarun.kahani.core.PoseSense.emotionName(tags[i].emotion));
+            }
+            out.add(it);
+        }
+        library.save();
+        return out;
+    }
+
+    /** The user named (or re-kinded) the main picture of a split sheet: its figures follow it. */
+    static void rename(Library library, Library.Item main, String oldName, String newName, String kind) {
+        if (main == null || newName == null || newName.length() == 0) return;
+        for (Library.Item it : library.find(Library.PIC, null, null)) {
+            if (!main.id.equals(it.meta("sheet"))) continue;
+            String suffix = it.meta("suffix");
+            if (suffix == null) suffix = oldName != null && it.name.startsWith(oldName) ? it.name.substring(oldName.length()) : "";
+            it.name = newName + suffix;
+            it.setMeta("ofName", newName);
+            if ("place".equals(kind)) it.kind = "place";
+            else if ("object".equals(kind)) it.kind = "object";
+            else if ("person".equals(kind) && "object".equals(it.kind)) it.kind = "view";
+        }
+    }
+
     /** The target string of the split-and-save for a character key, a scene number or a thing. */
     static String target(String kind, String key, String shown) { return "angles:" + kind + ":" + key + ":" + shown; }
 

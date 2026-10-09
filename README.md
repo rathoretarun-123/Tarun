@@ -1,4 +1,4 @@
-# Kahani Film — v30
+# Kahani Film — v31
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,11 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v31
+
+* **A sheet is split the moment it is uploaded, whichever way.** v29 split a sheet when it reached a character; now the library itself never keeps a sheet whole: added from Home, from the library screen or through the bulk picker, a sheet of figures becomes its figures in the library (the front named as the sheet, the best of each angle a view, every figure with its reading of angle, pose and feeling), and a sheet of place views becomes its panels (wide view, reverse angle, the rest). The picture decides which (cut-out figures or whole panels). Naming the main picture renames the whole family, and when the director places that character from the library the front, the views and all the pose pictures follow it (`SheetSaver.saveToLibrary`, `SheetSaver.rename`).
+* Test: `sheetAddedToTheLibraryIsSplitAndFollowsTheCharacter`.
 
 ## New in v30
 

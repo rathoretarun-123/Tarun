@@ -1677,7 +1677,11 @@ public class MainActivity extends Activity {
     /** Puts a library picture into the project for the current target. */
     private void usePicture(final Library.Item it) {
         final String tgt = target;
-        if (tgt == null || project == null || tgt.startsWith("lib")) { if (screen == S_LIBRARY) showLibrary(); return; }
+        if (tgt == null || project == null || tgt.startsWith("lib")) {
+            if (screen == S_LIBRARY) showLibrary();
+            if ("1".equals(it.meta("sheetMain")) && it.meta("named") == null) { it.setMeta("named", "1"); List<Library.Item> one = new ArrayList<Library.Item>(); one.add(it); namePictures(one); }
+            return;
+        }
         final List<String> newPoses = new ArrayList<String>();
         final Story st = loadStory();
         background("Adding the picture…", new Work() {
@@ -1837,6 +1841,11 @@ public class MainActivity extends Activity {
     private void savePicture(final byte[] data, final String fileName, final String tgt, final boolean toon, final boolean person) {
         background(toon ? "Making the animated avatar…" : "Saving…", new Work() {
             public Object run() throws Exception {
+                if (!toon && tgt.startsWith("lib")) {
+                    // v31: a sheet added on the library screen is split at once
+                    List<Library.Item> fam = SheetSaver.saveToLibrary(library, fileName == null ? "" : fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), tgt.equals("lib:place") ? "place" : "", data, "phone");
+                    if (!fam.isEmpty()) return fam.get(0);
+                }
                 byte[] bytes = toon ? toonify(data, person) : data;
                 String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.startsWith("view:") ? "view" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
                 String name = targetName(tgt);
@@ -2599,6 +2608,10 @@ public class MainActivity extends Activity {
                         String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : "";
                         boolean image = mime.startsWith("image/") || ext.matches("\\.(jpe?g|png|webp|gif|bmp|heic)") || (ext.length() == 0 && decodable(b));
                         if (image) {
+                            // v31: a sheet of several figures or place views is split at once: the library keeps the pictures themselves
+                            List<Library.Item> fam = new ArrayList<Library.Item>();
+                            try { fam = SheetSaver.saveToLibrary(library, AutoLibrary.cameraName(base) ? "" : base, "", b, "phone"); } catch (Throwable ignored) { fam = new ArrayList<Library.Item>(); }
+                            if (!fam.isEmpty()) { added.add(fam.get(0)); pics += fam.size(); continue; }
                             // v25: a camera's file name is no name — the user names it next, so the director places it by name
                             Library.Item it = library.addBytes(Library.PIC, "", AutoLibrary.cameraName(base) ? "" : base, name, b, ".jpg", "phone");
                             added.add(it);
@@ -2685,10 +2698,12 @@ public class MainActivity extends Activity {
                         for (int i = 0; i < items.size(); i++) {
                             Library.Item it = items.get(i);
                             String n = names[i].getText().toString().trim().replace('|', ' ').replace(';', ' ').replace('=', ' ');
+                            String oldName = it.name;
                             if (n.length() > 0 && !n.equals(it.name)) { it.name = n; named++; }
                             else if (n.length() > 0) named++;
                             if (n.length() > 0) {
                                 it.kind = kinds[kindOf[i]];
+                                if ("1".equals(it.meta("sheetMain"))) SheetSaver.rename(library, it, oldName, n, it.kind);     // v31: the figures of the sheet follow the name
                                 if (!it.tags.contains(n)) it.tags = (it.tags + " " + n).trim();
                                 it.setMeta("is:" + AutoLibrary.labelKey(n), "1");
                             }
@@ -3100,7 +3115,10 @@ public class MainActivity extends Activity {
                     try { data = Project.readAll(getContentResolver().openInputStream(u)); } catch (Exception e) { continue; }
                     Placement p = new Placement();
                     p.fileName = displayName(u);
-                    p.item = library.addBytes(Library.PIC, "", p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), p.fileName, data, ".jpg", "phone");
+                    List<Library.Item> fam = new ArrayList<Library.Item>();
+                    try { fam = SheetSaver.saveToLibrary(library, p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), "", data, "phone"); } catch (Throwable ignored) { fam = new ArrayList<Library.Item>(); }
+                    p.item = !fam.isEmpty() ? fam.get(0)       // v31: a sheet is split at once; its front is what gets placed
+                            : library.addBytes(Library.PIC, "", p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), p.fileName, data, ".jpg", "phone");
                     ps.add(p);
                 }
                 identify(ps, st, true, false);

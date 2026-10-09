@@ -1,4 +1,4 @@
-# Kahani Film — v24
+# Kahani Film — v25
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,13 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v25
+
+* **Pictures can be added everywhere, reliably** — what was being uploaded (and for which story) is kept across Android dropping the screen behind the photo picker (common while a film is being drawn); Android's own photo picker on 13+ (several at once, no permission); a picture that does not fit in memory is read smaller, never dropped; the renderer leaves a fifth of the heap to the screen.
+* **Things of the user's own naming** — "➕ A thing of the story (name it)" on the Studio's things card, on the story screen and in the make-film popup: name it as the script does, add up to 10 angles; the director cuts to it and hands it to whoever holds it.
+* **📷 Pictures first always offered** in the make-film popup (characters, places, things, and "something else"), and the popup comes back after the pictures are saved.
+* **The director learns from corrections (item 4)** — the picture the user puts on a character or place is marked as that one by name (placed by name in every story, never guessed); the one the director had chosen by itself, when the user removes it with ✖, is marked as not that one and never offered for it again. After "Add pictures to the library" on Home, each picture is named with one tap (person / place / thing). A picture under a camera file name with nothing said about it is placed by its look only when very sure (0.82), else the user is asked.
 
 ## New in v24
 

@@ -30,6 +30,20 @@ final class AutoLibrary {
     private AutoLibrary() {}
 
     static final float PICTURE_SURE = 0.66f, VOICE_SURE = 0.8f;
+    /** v25: a picture without a name (a camera file name, nothing the user wrote) is placed only when its look fits this well — else the user is asked. */
+    static final float LOOKS_ONLY_SURE = 0.82f;
+
+    /** The key under which a picture remembers what the user said it is ("is:<key>") or is not ("not:<key>"), by the label's words. */
+    static String labelKey(String label) {
+        return Txt.norm(label == null ? "" : label).replace(';', ' ').replace('=', ' ').trim();
+    }
+
+    /** A file name a camera or a messenger gives (IMG_2024…, PXL_…, DSC…, Screenshot…, WhatsApp Image…): no name at all. */
+    static boolean cameraName(String name) {
+        String n = name == null ? "" : name.trim();
+        return n.length() == 0 || n.matches("(?i)^(img|pxl|dsc|dcim|image|photo|pic|screenshot|signal|whatsapp image|snapchat|camera|vid|mvimg|panorama)[-_ ]?.*")
+                || n.matches("^[0-9_\\-. ]+$") || n.matches("(?i)^[0-9a-f]{8,}$");
+    }
 
     /** Fills what is missing from the library; returns what was chosen ("" when nothing), for the job's notes. */
     static String fill(Context ctx, Project project, Story st) {
@@ -141,10 +155,17 @@ final class AutoLibrary {
                     } else if (tg.startsWith("place:") && !"person".equals(it.kind)) f = PicSense.matchPlace(in, targets.get(t)[2]);
                 }
                 float s = f * 0.75f;
-                s = Math.max(s, PicSense.textMatch(it.name + " " + it.tags, targets.get(t)[1], targets.get(t)[2]));
+                float byText = PicSense.textMatch(it.name + " " + it.tags, targets.get(t)[1], targets.get(t)[2]);
+                s = Math.max(s, byText);
                 if (byName != null && byName.equals(targets.get(t)[1])) s = 1f;
                 if ((tg.equals("title") || tg.equals("end")) && byName == null) s = Math.min(s, 0.5f);   // only when named so
                 if (tg.startsWith("shot:") && "person".equals(it.kind)) s = 0;                          // a character is not an object
+                // v25: a picture with no name and no words fitting the target is placed by its look only when very sure
+                if (byName == null && byText < 0.5f && cameraName(it.name) && s < LOOKS_ONLY_SURE) s = 0;
+                // v25: what the user said about this picture in any story wins over every guess
+                String lk = labelKey(targets.get(t)[1]);
+                if ("1".equals(it.meta("is:" + lk))) s = 1f;
+                if ("1".equals(it.meta("not:" + lk))) s = 0;
                 score[i][t] = s;
             }
         }

@@ -139,7 +139,9 @@ public final class FilmJob implements Runnable {
             android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
             if (am != null) { am.getMemoryInfo(mi); sysFree = Math.max(0, mi.availMem - mi.threshold) / 2; }
         } catch (Throwable ignored) { /* no activity manager here */ }
-        return Math.max(48L * 1024 * 1024, Math.min(heapFree * 3 / 4, sysFree));
+        // v25: the screen keeps room of its own (to open, cut out and save new pictures while the film is drawn)
+        long reserve = Math.max(96L * 1024 * 1024, rt.maxMemory() / 5);
+        return Math.max(48L * 1024 * 1024, Math.min((heapFree - reserve) * 3 / 4, sysFree));
     }
 
     static String hash(String s) {

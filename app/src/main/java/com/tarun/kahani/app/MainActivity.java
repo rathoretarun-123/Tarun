@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
             REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22, REQ_LIB_MANY = 23, REQ_ANGLES = 24;
     /** The thing whose angles are being uploaded: "angles:char:<key>:<name>", "angles:scene:<n>:<name>", "angles:obj:<keys>:<name>". */
     private String anglesTarget;
+    private String anglesFrom;       // "make" when the angles were asked for from the make-film dialog (v25: the user comes back to it)
     static final int S_HOME = 0, S_STORY = 1, S_STUDIO = 2, S_FACE = 3, S_PROGRESS = 4, S_PLAYER = 5, S_LIBRARY = 6,
             S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9, S_QC = 10;
 
@@ -128,9 +129,20 @@ public class MainActivity extends Activity {
             String pd = b.getString("project");
             if (pd != null && new File(pd).isDirectory()) project = new Project(new File(pd));
             target = b.getString("target");
+            anglesTarget = b.getString("anglesTarget");
+            anglesFrom = b.getString("anglesFrom");
+            if (b.getString("manyAudioAs") != null) manyAudioAs = b.getString("manyAudioAs");
             String cf = b.getString("camera");
             if (cf != null) cameraFile = new File(cf);
         }
+        // v25: the photo picker often runs while Android drops this screen for memory (a film being made takes most of
+        // it); what was being uploaded, and for which story, is kept in the preferences as well, so the pictures land
+        if (anglesTarget == null && Prefs.get(this, "angles.target", "").length() > 0) {
+            anglesTarget = Prefs.get(this, "angles.target", "");
+            anglesFrom = Prefs.get(this, "angles.from", "");
+            if (target == null) target = "angles";
+        }
+        if (project == null && Prefs.get(this, "angles.project", "").length() > 0 && new File(Prefs.get(this, "angles.project", "")).isDirectory()) project = new Project(new File(Prefs.get(this, "angles.project", "")));
         String crash = CrashLog.last(this);
         FilmJob job = FilmJob.current;
         if (Prefs.account(this).length() == 0 && !Prefs.skippedLogin(this)) showLogin();
@@ -158,6 +170,9 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(out);
         if (project != null) out.putString("project", project.dir.getAbsolutePath());
         if (target != null) out.putString("target", target);
+        if (anglesTarget != null) out.putString("anglesTarget", anglesTarget);
+        if (anglesFrom != null) out.putString("anglesFrom", anglesFrom);
+        out.putString("manyAudioAs", manyAudioAs);
         if (cameraFile != null) out.putString("camera", cameraFile.getAbsolutePath());
     }
 
@@ -448,16 +463,26 @@ public class MainActivity extends Activity {
      * without going back to the start.
      */
     private void anglesFor(final String tgt, final String what) {
+        anglesFor(tgt, what, null);
+    }
+
+    private void anglesFor(final String tgt, final String what, final String from) {
         anglesTarget = tgt;
-        final String[] opts = {"📂  From the phone / photos — up to 10 at once", "📷  Camera — one at a time", "📚  From the tarunkahani library"};
+        anglesFrom = from;
+        // kept outside this screen too: the picker may run while Android drops the screen for memory (v25)
+        Prefs.put(this, "angles.target", tgt);
+        Prefs.put(this, "angles.from", from == null ? "" : from);
+        Prefs.put(this, "angles.project", project == null ? "" : project.dir.getAbsolutePath());
+        final String[] opts = {"🖼  Photos / gallery — up to 10 at once", "📁  Files (Downloads, WhatsApp…) — up to 10", "📷  Camera — one at a time", "📚  From the tarunkahani library"};
         new AlertDialog.Builder(this).setTitle("📷 Angles of " + what)
                 .setMessage("Front, three-quarter, side and back for a character; a wide view and its reverse for a place; front, side and rear for a thing. "
                         + "A picture that holds several angles side by side is split by the director into separate pictures. Every picture is saved in the library as " + what + ".")
                 .setItems(opts, new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         target = "angles";
-                        if (w == 0) pick("image/*", REQ_ANGLES, true);
-                        else if (w == 1) camera();
+                        if (w == 0) pickPhotos(REQ_ANGLES, 10);
+                        else if (w == 1) pick("image/*", REQ_ANGLES, true);
+                        else if (w == 2) camera();
                         else {
                             Picker pk = new Picker(MainActivity.this, library);
                             pk.show("An angle of " + what, Library.PIC, what, new String[]{}, new Picker.Listener() {
@@ -477,6 +502,27 @@ public class MainActivity extends Activity {
 
     /** {w, h, pixels…} of a picture's bytes, shrunk to maxSide, upright; null when unreadable. */
     static int[] decodeBytes(byte[] data, int maxSide) {
+        // v25: while a film is being drawn the heap is busy — a picture that will not fit is read smaller, never dropped
+        for (int side = maxSide; side >= 320; side = side * 2 / 3) {
+            int[] r = decodeBytesOnce(data, side);
+            if (r != null) return r;
+            if (!decodable(data)) return null;
+        }
+        return null;
+    }
+
+    private static boolean decodable(byte[] data) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            return o.outWidth > 0 && o.outHeight > 0;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private static int[] decodeBytesOnce(byte[] data, int maxSide) {
         try {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
@@ -510,6 +556,10 @@ public class MainActivity extends Activity {
     private void saveAngles(final String tgt, final List<byte[]> datas) {
         final String[] p = tgt.split(":", 4);
         final String kind = p.length > 1 ? p[1] : "char", key = p.length > 2 ? p[2] : "", shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
+        if (project == null) {
+            String pd = Prefs.get(this, "angles.project", "");
+            if (pd.length() > 0 && new File(pd).isDirectory()) project = new Project(new File(pd));
+        }
         final Story st = project == null ? null : loadStory();
         if (project == null || st == null) { toast("Open a story first"); return; }
         background("The director is reading " + datas.size() + " picture(s) of " + shown + "…", new Work() {
@@ -519,19 +569,28 @@ public class MainActivity extends Activity {
                 // 1. every picture; a sheet of several figures split into them
                 List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
                 int split = 0;
+                int unreadable = 0;
                 for (byte[] d : datas) {
                     int[] dec = decodeBytes(d, 1400);
-                    if (dec == null) continue;
+                    if (dec == null) { unreadable++; continue; }
                     int w = dec[0], h = dec[1];
                     int[] px = new int[w * h];
                     System.arraycopy(dec, 2, px, 0, px.length);
                     boolean camera = Library.cameraPhoto(d);
-                    List<com.tarun.kahani.core.Angles.Piece> parts = kind.equals("scene") ? new ArrayList<com.tarun.kahani.core.Angles.Piece>() : com.tarun.kahani.core.Angles.split(px, w, h);
+                    List<com.tarun.kahani.core.Angles.Piece> parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+                    // a sheet of several figures: split; a photo with a real background is never split (v25: the split
+                    // only counts when every piece is figure-sized, else the picture stays whole)
+                    if (!kind.equals("scene") && !camera) {
+                        try { parts = com.tarun.kahani.core.Angles.split(px, w, h); } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
+                        boolean figures = parts.size() >= 2;
+                        for (com.tarun.kahani.core.Angles.Piece pc : parts) if (pc.h < h * 0.35f || pc.w < w * 0.06f) figures = false;
+                        if (!figures) parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+                    }
                     if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }
                     else pics.add(new Object[]{px, w, h, Boolean.FALSE, camera});
                     if (pics.size() >= 10) break;
                 }
-                if (pics.isEmpty()) return "No picture could be read";
+                if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG) or a smaller picture" : "No picture could be read";
                 if (pics.size() > 10) pics = pics.subList(0, 10);
                 StringBuilder done = new StringBuilder();
                 if (kind.equals("char")) {
@@ -542,8 +601,9 @@ public class MainActivity extends Activity {
                         Object[] o = pics.get(i);
                         int[] px = (int[]) o[0]; int w = (Integer) o[1], h = (Integer) o[2];
                         boolean cut = (Boolean) o[3], camera = (Boolean) o[4];
-                        com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(px, w, h, beast);
-                        guessed[i] = com.tarun.kahani.core.Angles.guess(r);
+                        com.tarun.kahani.core.Cutout.Result r = null;
+                        try { r = com.tarun.kahani.core.Cutout.process(px, w, h, beast); } catch (Throwable e) { /* the picture is kept as a front */ }
+                        guessed[i] = r == null ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.guess(r);
                         byte[] b = Studio3DArt.encode(px, w, h, cut);
                         if (camera && !cut) { try { b = toonify(b, true); } catch (Exception ignored) { /* the photo itself then */ } }
                         bytes[i] = b;
@@ -631,11 +691,31 @@ public class MainActivity extends Activity {
             public void done(Object r, Exception e) {
                 if (e != null) { toast("Could not add the pictures: " + e.getMessage()); return; }
                 toast(String.valueOf(r));
-                if (screen == S_PROGRESS) showProgress();
+                Prefs.put(MainActivity.this, "angles.target", "");
+                String from = anglesFrom;
+                anglesFrom = null;
+                // v25: back to where the pictures were asked for — the make-film dialog, the story, the progress or the Studio
+                if ("make".equals(from)) { showStory(); makeFilm(); }
+                else if (screen == S_PROGRESS) showProgress();
                 else if (screen == S_QC && FilmJob.current != null) showQc(FilmJob.current);
+                else if (screen == S_STORY) showStory();
                 else showStudio();
             }
         });
+    }
+
+    /** A thing of the user's own naming (v25): any object the story has, named by the user, then its angles. */
+    private void askThingName(final String from) {
+        final EditText q = new EditText(this);
+        q.setHint("Name of the thing (e.g. पगड़ी, लाल छाता, magic lamp)");
+        new AlertDialog.Builder(this).setTitle("➕ A thing of the story").setMessage("Name it as the script names it; the director cuts to its picture when the script mentions it and gives it to the character who holds it.")
+                .setView(q).setPositiveButton("Next: its pictures", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        String name = q.getText().toString().trim().replace(':', ' ').replace('|', ' ').replace(',', ' ').replace('\n', ' ').trim();
+                        if (name.length() == 0) { toast("Please name it"); return; }
+                        anglesFor("angles:obj:" + name + ":" + name, name, from);
+                    }
+                }).setNegativeButton("Cancel", null).show();
     }
 
     /**
@@ -674,6 +754,9 @@ public class MainActivity extends Activity {
             }));
         }
         if (n == 0) m.addView(Ui.text(this, "Every character and place has a picture. More angles can be added from the Studio cards.", 13, Ui.GREEN, false));
+        m.addView(Ui.small(this, "➕ A thing of the story (name it) — its pictures", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { askThingName(null); }
+        }));
         body.addView(m);
     }
 
@@ -683,7 +766,23 @@ public class MainActivity extends Activity {
         card.addView(Ui.text(this, "Things of the story — a real picture of each makes its insert and the hand props look real. Up to 10 angles (front, side, rear) from the phone, the camera or the library; the director keeps them all.", 13, Ui.SUB, false));
         String cast = project.read("cast.txt");
         int n = 0;
-        for (final String[] o : FreeArt.wanted(st)) {
+        // every thing the story names: the insert words, the free-picture words, and the things the user named (v25)
+        List<String[]> things = new ArrayList<String[]>(FreeArt.wanted(st));
+        Set<String> seenKeys = new HashSet<String>();
+        for (String[] o : things) seenKeys.add(o[0]);
+        for (String[] t : AutoLibrary.missingTargets(project, st)) {
+            if (!t[0].startsWith("shot:")) continue;
+            String[] sk = t[0].split(":", 3);
+            if (sk.length == 3 && seenKeys.add(sk[2])) things.add(new String[]{sk[2], sk[2]});
+        }
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 5 && f[0].equals("shot") && f[4].trim().equals("object") && seenKeys.add(f[2])) things.add(new String[]{f[2], f[2].replace(',', ' ')});
+        }
+        card.addView(Ui.small(this, "➕ Another thing of the story (name it)", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { askThingName(null); }
+        }));
+        for (final String[] o : things) {
             final boolean have = cast.contains("|" + o[0] + "|");
             final String name = o[1];
             LinearLayout r = Ui.row(this);
@@ -692,9 +791,9 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { anglesFor("angles:obj:" + o[0] + ":" + name, name); }
             }));
             card.addView(r);
-            if (++n >= 12) break;
+            if (++n >= 20) break;
         }
-        if (n == 0) card.addView(Ui.text(this, "No portable thing is named in this story yet (a key, a crown, a kite, a book…).", 13, Ui.SUB, false));
+        if (n == 0) card.addView(Ui.text(this, "No portable thing is named in this story yet (a key, a crown, a kite, a book…) — name one above.", 13, Ui.SUB, false));
         return card;
     }
 
@@ -1062,7 +1161,8 @@ public class MainActivity extends Activity {
         info.addView(Ui.text(this, c.shown(), 18, Ui.TEXT, true));
         info.addView(Ui.text(this, describe(c), 13, Ui.SUB, false));
         boolean mouthSet = line != null && line.split("\\|").length >= 11;
-        info.addView(Ui.text(this, file != null ? "🖼 Your picture" + (mouthSet ? " • 👄 mouth set" : " • 👄 automatic") : "🎨 Studio cartoon", 13, file != null ? Ui.GREEN : Ui.SUB, false));
+        final Library.Item autoPic = library.byId(project.setting("auto.pic.char:" + c.displayName, ""));
+        info.addView(Ui.text(this, file != null ? (autoPic != null ? "📚 From your library by the director: \"" + autoPic.label() + "\" — tap ✖ if that is not " + c.shown() : "🖼 Your picture") + (mouthSet ? " • 👄 mouth set" : " • 👄 automatic") : "🎨 Studio cartoon", 13, file != null ? Ui.GREEN : Ui.SUB, false));
         Library.Item vs = library.byId(project.setting("vsample." + c.displayName, ""));
         String vtxt = vs != null ? "🎙 Voice: your sample \"" + vs.label() + "\"" : (Prefs.geminiKey(this).length() > 20 && Prefs.aiVoices(this) ? "✨ Voice: AI (with feeling)"
                 : Prefs.online(this) && Prefs.naturalVoices(this) ? "🗣 Voice: " + presetLabel(project.setting("evoice." + c.displayName, ""), "natural (best match)") : "📱 Voice: phone voice");
@@ -1087,7 +1187,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) { showFace(keyFor(c)); }
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
-            public void onClick(View v) { project.setManifest("char", keyFor(c), null); project.setManifest("char", c.displayName, null); showStudio(); }
+            public void onClick(View v) { unlearnAuto("char:" + keyFor(c)); project.setManifest("char", keyFor(c), null); project.setManifest("char", c.displayName, null); showStudio(); }
         }));
         card.addView(r);
         // Studio 3D: the character built in three dimensions on the phone, the views made from its picture,
@@ -1240,7 +1340,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) { anglesFor("angles:scene:" + key + ":" + (sc.title.length() > 0 ? sc.title : "part " + key), sc.title.length() > 0 ? sc.title : "part " + key); }
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
-            public void onClick(View v) { project.setManifest("scene", key, null); project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null); showStudio(); }
+            public void onClick(View v) { unlearnAuto("scene:" + key); project.setManifest("scene", key, null); project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null); showStudio(); }
         }));
         r.addView(Ui.small(this, "🧊 3D place", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
@@ -1507,6 +1607,7 @@ public class MainActivity extends Activity {
             public void done(Object r, Exception e) {
                 if (e != null) { toast("Could not add the picture: " + e.getMessage()); return; }
                 String f = (String) r;
+                learnChoice(tgt, it);
                 if (tgt.startsWith("char:")) {
                     String name = tgt.substring(5);
                     project.setManifest("char", name, "char|" + name + "|" + f);
@@ -1532,12 +1633,77 @@ public class MainActivity extends Activity {
         });
     }
 
+    /**
+     * The director learns from the user's choice (v25, item 4): the picture the user puts on a character or place is
+     * marked as that one by name (placed by name from then on, in every story, never guessed), and the picture the
+     * director had chosen by itself for it, if another, is marked as not that one (never offered for it again).
+     */
+    private void learnChoice(String tgt, Library.Item chosen) {
+        try {
+            String label = autoLabel(tgt);
+            if (label == null) return;
+            String autoKey = autoTargetKey(tgt);
+            String before = autoKey == null ? "" : project.setting("auto.pic." + autoKey, "");
+            if (before.length() > 0 && !before.equals(chosen.id)) {
+                Library.Item wrong = library.byId(before);
+                if (wrong != null) wrong.setMeta("not:" + AutoLibrary.labelKey(label), "1");
+                project.setSetting("auto.pic." + autoKey, "");
+            }
+            chosen.setMeta("is:" + AutoLibrary.labelKey(label), "1");
+            chosen.setMeta("not:" + AutoLibrary.labelKey(label), "0");
+            library.save();
+        } catch (Exception ignored) { /* a learning note never stops the placing */ }
+    }
+
+    /** The director's own choice for this target was wrong (the user removed it): never that picture for that name again. */
+    private void unlearnAuto(String tgt) {
+        try {
+            String label = autoLabel(tgt), autoKey = autoTargetKey(tgt);
+            if (label == null || autoKey == null) return;
+            String before = project.setting("auto.pic." + autoKey, "");
+            if (before.length() == 0) return;
+            Library.Item wrong = library.byId(before);
+            if (wrong != null) { wrong.setMeta("not:" + AutoLibrary.labelKey(label), "1"); wrong.setMeta("is:" + AutoLibrary.labelKey(label), "0"); library.save(); }
+            project.setSetting("auto.pic." + autoKey, "");
+            toast("Noted: never that picture for " + label);
+        } catch (Exception ignored) {}
+    }
+
+    /** The label the library matching uses for a Studio target (a character's shown name, a place's name). */
+    private String autoLabel(String tgt) {
+        Story st = castStory != null ? castStory : loadStory();
+        if (st == null) return null;
+        if (tgt.startsWith("char:")) { Story.CharacterDef c = ScriptParser.resolve(st, tgt.substring(5)); return c == null ? tgt.substring(5) : c.shown(); }
+        if (tgt.startsWith("scene:")) {
+            String k = tgt.substring(6).replaceAll("[abc]$", "");
+            for (Story.Scene sc : st.scenes) {
+                if (!String.valueOf(sc.number).equals(k)) continue;
+                for (String[] pl : Bible.places(st)) if (AutoLibrary.placeOf(sc, pl[0])) return st.shown(pl[0]);
+                return sc.setting.length() > 0 ? Bible.firstClauseOf(sc.setting) : sc.title;
+            }
+        }
+        return null;
+    }
+
+    /** The AutoLibrary target key ("char:NAME", "place:NAME") behind a Studio target. */
+    private String autoTargetKey(String tgt) {
+        Story st = castStory != null ? castStory : loadStory();
+        if (st == null) return null;
+        if (tgt.startsWith("char:")) { Story.CharacterDef c = ScriptParser.resolve(st, tgt.substring(5)); return "char:" + (c == null ? tgt.substring(5) : c.displayName); }
+        if (tgt.startsWith("scene:")) {
+            String k = tgt.substring(6).replaceAll("[abc]$", "");
+            for (Story.Scene sc : st.scenes) if (String.valueOf(sc.number).equals(k)) for (String[] pl : Bible.places(st)) if (AutoLibrary.placeOf(sc, pl[0])) return "place:" + pl[0];
+        }
+        return null;
+    }
+
     /** A picture arrived from the phone or camera: offer the cartoon (avatar) look, save to library, use it. */
     /**
      * A picture arrived (phone, camera, download). Real camera photos become animated avatars automatically;
      * for other pictures the user decides with one tap. Everything is saved in the library for later stories.
      */
     private void incomingPicture(final byte[] data, final String fileName) {
+        if (anglesTarget == null && "angles".equals(target) && Prefs.get(this, "angles.target", "").length() > 0) anglesTarget = Prefs.get(this, "angles.target", "");
         if ("angles".equals(target) && anglesTarget != null) {
             List<byte[]> one = new ArrayList<byte[]>();
             one.add(data);
@@ -2317,6 +2483,7 @@ public class MainActivity extends Activity {
         background("Adding " + uris.size() + (uris.size() == 1 ? " file" : " files") + " to your library…", new Work() {
             public Object run() throws Exception {
                 int pics = 0, voices = 0, sounds = 0, bad = 0;
+                final List<Library.Item> added = new ArrayList<Library.Item>();
                 for (Uri u : uris) {
                     try {
                         String name = displayName(u);
@@ -2325,9 +2492,11 @@ public class MainActivity extends Activity {
                         byte[] b = Project.readAll(getContentResolver().openInputStream(u));
                         String base = name.replaceAll("\\.[A-Za-z0-9]+$", "");
                         String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : "";
-                        boolean image = mime.startsWith("image/") || ext.matches("\\.(jpe?g|png|webp|gif|bmp|heic)");
+                        boolean image = mime.startsWith("image/") || ext.matches("\\.(jpe?g|png|webp|gif|bmp|heic)") || (ext.length() == 0 && decodable(b));
                         if (image) {
-                            library.addBytes(Library.PIC, "", base, name, b, ".jpg", "phone");
+                            // v25: a camera's file name is no name — the user names it next, so the director places it by name
+                            Library.Item it = library.addBytes(Library.PIC, "", AutoLibrary.cameraName(base) ? "" : base, name, b, ".jpg", "phone");
+                            added.add(it);
                             pics++;
                             continue;
                         }
@@ -2348,15 +2517,82 @@ public class MainActivity extends Activity {
                 if (pics + voices + sounds == 0) m = new StringBuilder("Nothing could be added");
                 if (bad > 0) m.append(" (").append(bad).append(" could not be opened)");
                 m.append(". The director uses them by itself in every story.");
-                return m.toString();
+                return new Object[]{m.toString(), added};
             }
         }, new Done() {
+            @SuppressWarnings("unchecked")
             public void done(Object r, Exception e) {
                 if (e != null) { toast("Could not add them: " + e.getMessage()); return; }
-                toast((String) r);
+                toast((String) ((Object[]) r)[0]);
                 if (screen == S_LIBRARY) showLibrary();
+                List<Library.Item> added = (List<Library.Item>) ((Object[]) r)[1];
+                if (!added.isEmpty()) namePictures(added);
             }
         });
+    }
+
+    /**
+     * Who, where or what each new picture shows (v25, item 4): a named picture is placed by its name in every story,
+     * never guessed. Person / place / thing is chosen with one tap; a picture left unnamed stays in the library and is
+     * placed only when its look fits very well.
+     */
+    private void namePictures(final List<Library.Item> items) {
+        final LinearLayout body = Ui.column(this);
+        body.setPadding(Ui.dp(this, 12), Ui.dp(this, 4), Ui.dp(this, 12), Ui.dp(this, 4));
+        body.addView(Ui.text(this, "Name each picture as the story names it (रत्नलाल, महल का बगीचा, पगड़ी…). The director then places it by name — it never guesses with a named picture.", 13, Ui.SUB, false));
+        final String[] kinds = {"person", "place", "object"};
+        final String[] kindLabels = {"👤 Person", "🏞 Place", "🔑 Thing"};
+        final EditText[] names = new EditText[items.size()];
+        final int[] kindOf = new int[items.size()];
+        for (int i = 0; i < items.size(); i++) {
+            final Library.Item it = items.get(i);
+            final int idx = i;
+            LinearLayout r = Ui.row(this);
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            r.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 4));
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try { iv.setImageBitmap(Picker.thumb(this, it, 160)); } catch (Throwable ignored) {}
+            r.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, 56), Ui.dp(this, 56)));
+            EditText q = new EditText(this);
+            q.setHint("Who / where / what is this?");
+            q.setText(it.name);
+            q.setSingleLine(true);
+            q.setTextSize(14);
+            names[i] = q;
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            lp.leftMargin = Ui.dp(this, 6);
+            r.addView(q, lp);
+            kindOf[i] = "place".equals(it.kind) ? 1 : "object".equals(it.kind) ? 2 : 0;
+            final TextView kb = Ui.small(this, kindLabels[kindOf[i]], Ui.BLUE, null);
+            kb.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { kindOf[idx] = (kindOf[idx] + 1) % 3; kb.setText(kindLabels[kindOf[idx]]); }
+            });
+            r.addView(kb);
+            body.addView(r);
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body);
+        new AlertDialog.Builder(this).setTitle("🏷 What do these pictures show?").setView(sv)
+                .setPositiveButton("✔ Save names", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        int named = 0;
+                        for (int i = 0; i < items.size(); i++) {
+                            Library.Item it = items.get(i);
+                            String n = names[i].getText().toString().trim().replace('|', ' ').replace(';', ' ').replace('=', ' ');
+                            if (n.length() > 0 && !n.equals(it.name)) { it.name = n; named++; }
+                            else if (n.length() > 0) named++;
+                            if (n.length() > 0) {
+                                it.kind = kinds[kindOf[i]];
+                                if (!it.tags.contains(n)) it.tags = (it.tags + " " + n).trim();
+                                it.setMeta("is:" + AutoLibrary.labelKey(n), "1");
+                            }
+                        }
+                        try { library.save(); } catch (Exception ignored) {}
+                        toast(named > 0 ? "✅ " + named + " named — placed by name from now on" : "Left unnamed — the director places them only when very sure");
+                        if (screen == S_LIBRARY) showLibrary();
+                    }
+                }).setNegativeButton("Later", null).show();
     }
 
     /** A voice sample rather than a sound, from its file name ("voice", "आवाज़", "dialogue", "sample"…). */
@@ -2373,8 +2609,31 @@ public class MainActivity extends Activity {
             if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             startActivityForResult(Intent.createChooser(i, "Choose"), code);
         } catch (Exception e) {
-            toast("No file picker app found");
+            try {
+                // v25: a phone without a document chooser still has a gallery
+                Intent i = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                startActivityForResult(i, code);
+            } catch (Exception e2) {
+                toast("No picture picker app found on this phone");
+            }
         }
+    }
+
+    /**
+     * Up to 'max' pictures from the phone's photos (v25): Android's own photo picker where the phone has it (13+, no
+     * permission needed, several at once), else the gallery chooser.
+     */
+    private void pickPhotos(int code, int max) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                Intent i = new Intent("android.provider.action.PICK_IMAGES");
+                i.setType("image/*");
+                i.putExtra("android.provider.extra.PICK_IMAGES_MAX", Math.max(2, Math.min(max, 100)));
+                if (i.resolveActivity(getPackageManager()) != null) { startActivityForResult(i, code); return; }
+            } catch (Exception ignored) { /* the chooser then */ }
+        }
+        pick("image/*", code, max > 1);
     }
 
     private String displayName(Uri uri) {
@@ -2467,8 +2726,9 @@ public class MainActivity extends Activity {
             else if (data.getData() != null) uris.add(data.getData());
             if (uris.size() > 10) { toast("The first 10 pictures are used"); uris = new ArrayList<Uri>(uris.subList(0, 10)); }
             final List<Uri> us = uris;
-            final String tgt = anglesTarget;
-            if (tgt == null || us.isEmpty()) return;
+            final String tgt = anglesTarget != null ? anglesTarget : Prefs.get(this, "angles.target", "").length() > 0 ? Prefs.get(this, "angles.target", "") : null;
+            if (tgt == null) { toast("Please tap the angles button again and choose the pictures"); return; }
+            if (us.isEmpty()) { toast("No picture was chosen"); return; }
             background("Opening " + us.size() + " picture(s)…", new Work() {
                 public Object run() throws Exception {
                     List<byte[]> out = new ArrayList<byte[]>();
@@ -3059,12 +3319,31 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.addView(body);
         AlertDialog.Builder dlg = new AlertDialog.Builder(this).setTitle("🎬 Before the director makes your film").setView(sv);
-        if (!uploadable.isEmpty()) dlg.setNeutralButton("📷 Pictures first", new DialogInterface.OnClickListener() {
+        // v25: always there — a picture of anything (also of what already has one, or a thing named now); back to this dialog after
+        dlg.setNeutralButton("📷 Pictures first", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface d, int w) {
-                String[] names = new String[uploadable.size()];
-                for (int i = 0; i < names.length; i++) names[i] = uploadable.get(i)[1];
+                final List<String[]> all = new ArrayList<String[]>(uploadable);
+                try {
+                    Story st = ScriptParser.parse(FilmJob.scriptOf(project));
+                    Set<String> seen = new HashSet<String>();
+                    for (String[] u : all) seen.add(u[0]);
+                    for (Story.CharacterDef c : st.cast()) { String t = "angles:char:" + c.displayName + ":" + c.shown(); if (seen.add(t)) all.add(new String[]{t, c.shown() + " (more angles)"}); }
+                    for (Story.Scene sc : st.scenes) {
+                        String nm = sc.title.length() > 0 ? sc.title : "part " + sc.number;
+                        String t = "angles:scene:" + sc.number + ":" + nm;
+                        boolean dup = false;
+                        for (String[] u : all) if (u[0].startsWith("angles:scene:" + sc.number + ":")) dup = true;
+                        if (!dup && seen.add(t)) all.add(new String[]{t, "Part " + sc.number + ": " + nm + " (background)"});
+                    }
+                } catch (Exception ignored) {}
+                String[] names = new String[all.size() + 1];
+                for (int i = 0; i < all.size(); i++) names[i] = all.get(i)[1];
+                names[all.size()] = "➕ A thing of the story — name it";
                 new AlertDialog.Builder(MainActivity.this).setTitle("📷 Add pictures of…").setItems(names, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dd, int k) { anglesFor(uploadable.get(k)[0], uploadable.get(k)[1]); }
+                    public void onClick(DialogInterface dd, int k) {
+                        if (k == all.size()) askThingName("make");
+                        else anglesFor(all.get(k)[0], all.get(k)[1], "make");
+                    }
                 }).setNegativeButton("Cancel", null).show();
             }
         });

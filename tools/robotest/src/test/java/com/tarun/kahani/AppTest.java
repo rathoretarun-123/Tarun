@@ -385,6 +385,29 @@ public class AppTest {
         assertTrue(named);
         adopt.invoke(null, ctx, lib);
         assertTrue(lib.find("pic", null, null).size() == after);
+
+        // v25: the director learns from the user — a picture the user said is वृंदा (even under a camera file name) is
+        // placed by that word in a new story; the one the user said is not वृंदा is never offered for her again;
+        // a camera-named picture with nothing said about it is never guessed on its look alone
+        Method cam = al.getDeclaredMethod("cameraName", String.class);
+        cam.setAccessible(true);
+        assertTrue((Boolean) cam.invoke(null, "IMG_20240912_123456"));
+        assertTrue((Boolean) cam.invoke(null, "PXL_20250101_1"));
+        assertTrue((Boolean) cam.invoke(null, "Screenshot_2025-01-01"));
+        assertTrue(!(Boolean) cam.invoke(null, "वृंदा"));
+        assertTrue(!(Boolean) cam.invoke(null, "Ratanlal"));
+        Method lk = al.getDeclaredMethod("labelKey", String.class);
+        lk.setAccessible(true);
+        String key = (String) lk.invoke(null, "वृंदा");
+        com.tarun.kahani.app.Library.Item said = lib.addBytes("pic", "", "", "", Files.readAllBytes(new File(ASSETS, "sample/char_vrinda.jpg").toPath()), ".jpg", "phone");
+        said.setMeta("is:" + key, "1");
+        for (com.tarun.kahani.app.Library.Item it : lib.find("pic", null, null)) if (it.name.equals("वृंदा")) it.setMeta("not:" + key, "1");
+        lib.save();
+        Project p2 = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p2.dir, "script.txt").toPath());
+        String n2 = (String) fill.invoke(null, ctx, p2, st);
+        System.out.println("LEARNT: " + n2);
+        assertTrue("the picture the user said is वृंदा should be hers: " + p2.setting("auto.pic.char:वृंदा", "") + " vs " + said.id, said.id.equals(p2.setting("auto.pic.char:वृंदा", "")));
     }
 
     static byte[] wav16(float[] x, int sr) { return com.tarun.kahani.core.Wav.encode16(x, sr); }

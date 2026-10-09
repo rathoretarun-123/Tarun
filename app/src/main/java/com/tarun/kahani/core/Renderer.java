@@ -62,13 +62,12 @@ public final class Renderer {
                 else { drawScene(g, s, t); g.color(Puppet.alpha(col, Math.min(1, (1 - u) * 2))); }
                 g.rect(0, 0, vw, vh);
             } else if (dissolveIn) {
-                float keepFollow = followX;
-                drawScene(g, prev, t);
-                followX = keepFollow;
-                g.save();
-                g.setAlpha(Math.max(0, (t - s.t0) / DISSOLVE));
-                drawScene(g, s, t);
-                g.restore();
+                // a plain scene change: a quick dip through black (the last scene goes down, the new one comes up) —
+                // never two scenes drawn over each other
+                float u = (t - s.t0) / DISSOLVE;
+                if (u < 0.5f) { float keepFollow = followX; drawScene(g, prev, t); followX = keepFollow; g.color(Puppet.alpha(0xFF000000, Math.min(1, u * 2))); }
+                else { drawScene(g, s, t); g.color(Puppet.alpha(0xFF000000, Math.min(1, (1 - u) * 2))); }
+                g.rect(0, 0, vw, vh);
             } else {
                 switch (s.type) {
                     case Film.S_TITLE: drawTitle(g, s, t); break;
@@ -85,7 +84,7 @@ public final class Renderer {
         g.restore();
     }
 
-    static final float DISSOLVE = 0.9f;
+    static final float DISSOLVE = 0.6f;
 
     /** Renders one part on its own, outside the film's timeline (the thumbnail and the poster pages). */
     public void renderSeg(Gfx g, Film.Seg s, float t) {
@@ -198,6 +197,7 @@ public final class Renderer {
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
             g.restore();
         }
+        if (s.text1.length() == 0 && s.text2.length() == 0) return;     // an establishing bridge: the place alone
         g.color(0xB0000000);
         g.rect(0, 0, vw, vh);
         float a = Math.min(1, (t - s.t0) / 0.5f);
@@ -319,10 +319,16 @@ public final class Renderer {
     /** -1 high angle .. +1 low angle, and how hard the light is (0 soft .. 1 hard), for the shot on screen now. */
     private float camAngle, camLight = 0.4f;
     private boolean camStill;
+    /** The shot on screen is a reverse shot (the listener's face): the place's reverse angle is drawn when the user gave one. */
+    private boolean camReverse;
+
+    /** The place picture behind this moment: the reverse angle in a reverse shot when there is one, else the plate. */
+    private Art.Backdrop bd(Film.Seg s) { return camReverse && s.backdropReverse != null ? s.backdropReverse : s.backdrop; }
 
     private void camera(Film.Seg s, float t) {
         Film.Cam cur = null, prev = null;
         for (Film.Cam c : s.cams) { if (c.t <= t) { prev = cur; cur = c; } else break; }
+        camReverse = cur != null && cur.reverse;
         float moodLight = s.mood == Film.M_TENSE || s.mood == Film.M_VILLAIN || s.mood == Film.M_ACTION ? 0.75f
                 : s.mood == Film.M_HAPPY || s.mood == Film.M_CELEBRATE || s.mood == Film.M_PLAYFUL ? 0.2f : 0.4f;
         if (cur == null) { camX = 640; camY = 360; camZ = 1; camRoll = 0; camAngle = 0; camLight = moodLight; camStill = false; }
@@ -428,7 +434,7 @@ public final class Renderer {
             }
         }
         // 2. the bounce: from the ground, in its own colour (the picture's lower part, or the place's floor)
-        int bc = s.backdrop != null && s.backdrop.avgLow != 0 ? s.backdrop.avgLow : bounceColor(s.set, s.tod);
+        int bc = bd(s) != null && bd(s).avgLow != 0 ? bd(s).avgLow : bounceColor(s.set, s.tod);
         float ba = cave ? 0.3f : s.tod == Sets.NIGHT ? 0.12f : 0.17f;
         g.linear(0, vh * 0.5f, 0, vh, Puppet.alpha(bc, 0f), Puppet.alpha(bc, ba));
         g.rect(0, 0, vw, vh);
@@ -509,7 +515,7 @@ public final class Renderer {
 
     /** The boat the characters are in: its deck's y on the stage, its bob and its roll (degrees) at t. */
     private float[] deck(Film.Seg s, float t) {
-        float[] band = waterBand(s, s.backdrop == null ? null : s.backdrop.scan, s.backdrop);
+        float[] band = waterBand(s, bd(s) == null ? null : bd(s).scan, bd(s));
         if (band == null) band = new float[]{s.ground - 200, s.ground - 35};
         float waterY = band[0] + (band[1] - band[0]) * 0.55f, size = 2.4f, rough = rough(t);
         float bob = (float) Math.sin(t * 1.4) * 5 * size * (1 + 2 * rough);
@@ -687,8 +693,8 @@ public final class Renderer {
             g.rect(-W, -H, W * 3, H * 3);
             g.linear(0, s.ground - 40, 0, s.ground + 60, Puppet.alpha(0xFF000000, 0f), Puppet.alpha(0xFF000000, 0.25f));
             g.rect(-W, s.ground - 40, W * 3, H);
-        } else if (s.backdrop != null) {
-            final Art.Backdrop b = s.backdrop;
+        } else if (bd(s) != null) {
+            final Art.Backdrop b = bd(s);
             Gfx.Painter bp = new Gfx.Painter() {
                 public void paint(Gfx gg) {
                     gg.imageRect(b.img, b.x0 * b.w, b.y0 * b.h, (b.x1 - b.x0) * b.w, (b.y1 - b.y0) * b.h, 0, 0, W, H);
@@ -761,7 +767,7 @@ public final class Renderer {
             if (rain > 0 && Sets.outdoorSet(s.set)) Nature.rainSplashes(g, s.ground, t, rain);
             // night: the whole stage darkens; flames, fire and fireflies then shine on top of it
             if (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) {
-                boolean photo = s.backdrop != null;
+                boolean photo = bd(s) != null;
                 int dark = s.set == Sets.BASEMENT ? (photo ? 0x80061410 : 0x40061410) : s.tod == Sets.NIGHT ? (photo ? 0x8C081026 : 0x46081026) : (photo ? 0x30301030 : 0x18301030);
                 g.color(dark);
                 g.rect(-W, -H, W * 3, H * 3);
@@ -780,9 +786,9 @@ public final class Renderer {
                 Nature.drips(g, Director.xAt(a, t), s.ground - h, s.ground, h * 0.4f, t, wet, a.order);
             }
         }
-        if (s.backdrop == null && s.solid == 0) Sets.paintFront(g, s.set, s.tod);
+        if (bd(s) == null && s.solid == 0) Sets.paintFront(g, s.set, s.tod);
         g.restore();
-        if (s.backdrop == null && s.solid == 0) {
+        if (bd(s) == null && s.solid == 0) {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
@@ -1554,7 +1560,7 @@ public final class Renderer {
         switch (emotion) {
             case Pose.SAD: st.nod += 0.9f * w; st.armL -= 2 * w; st.armR -= 2 * w; st.lean += 1.5f * w; break;
             case Pose.ANGRY: st.lean += 3 * w; st.nod += 0.3f * w; st.armL += 4 * w; st.armR += 4 * w; break;
-            case Pose.SCARED: st.lean -= 4 * w; st.armL -= 3 * w; st.armR -= 3 * w; st.headRot += (float) Math.sin(t * 17) * 0.35f * w; break;
+            case Pose.SCARED: st.lean -= 4 * w; st.armL -= 3 * w; st.armR -= 3 * w; st.headRot += (float) Math.sin(t * 17) * 0.12f * w; break;
             case Pose.SURPRISED: st.nod -= 0.6f * w; st.armL += 6 * w; st.armR += 6 * w; st.lean -= 2 * w; break;
             case Pose.HAPPY: st.headRot += 3 * w; break;
             case Pose.LAUGH: st.nod -= 0.7f * w; st.headRot += (float) Math.sin(t * 3.5f) * 1.8f * w; st.armL += (float) Math.sin(t * 7) * 2 * w; st.armR += (float) Math.sin(t * 7) * 2 * w; break;
@@ -1600,8 +1606,8 @@ public final class Renderer {
         st.breathe = (float) Math.sin(t * 2.1f + p.seed);
         if (p.mouth > 0.02f) {
             // a speaker's head stays almost still: a slow, small accent of the phrase, never a shake with every syllable
-            st.headRot += (float) Math.sin(t * 1.3f + p.seed) * 0.9f * en;
-            st.nod += (float) Math.sin(t * 1.7f + p.seed) * 0.18f;
+            st.headRot += (float) Math.sin(t * 1.3f + p.seed) * 0.45f * en;
+            st.nod += (float) Math.sin(t * 1.7f + p.seed) * 0.08f;
         }
         if (p.walkAmt > 0) {
             float sw = (float) Math.sin(p.walk);
@@ -1896,7 +1902,7 @@ public final class Renderer {
             float m = p.mouth;
             if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
             if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.32f + 0.12f * (float) Math.sin(p.time * 9);
-            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f) {
+            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown) {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
                 float gap = Rig.jawDrop(hw) * st.jaw;
@@ -1912,8 +1918,7 @@ public final class Renderer {
                     g.color(0x80E6DDD2);
                     g.oval(mx, cy - oh * 0.88f + th * 0.5f, ow * 0.5f, th * 0.5f);
                 }
-                if (st.jaw > 0.38f) { g.color(0xD8C8545E); g.oval(mx, cy + oh * 0.5f, ow * 0.55f, oh * 0.35f); }
-            } else if (m > 0.12f && !(rigged && rig.animal)) {
+            } else if (m > 0.12f && !(rigged && rig.animal) && sp.faceKnown) {
                 // a picture that cannot be meshed here (lying down, head cut for a lost turban): no painted lips over
                 // the real ones, only a soft dark opening between them that grows with the voice
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h;

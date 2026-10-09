@@ -29,7 +29,7 @@ import java.util.Set;
 final class AutoLibrary {
     private AutoLibrary() {}
 
-    static final float PICTURE_SURE = 0.6f, VOICE_SURE = 0.8f;
+    static final float PICTURE_SURE = 0.66f, VOICE_SURE = 0.8f;
 
     /** Fills what is missing from the library; returns what was chosen ("" when nothing), for the job's notes. */
     static String fill(Context ctx, Project project, Story st) {
@@ -182,6 +182,26 @@ final class AutoLibrary {
             }
         }
         lib.save();
+        // the phone guide (§1.1, §14): never silently guess when two matches are plausible — a picture that fits two
+        // targets almost alike, or a target that two pictures fit almost alike, is left for the Studio and named
+        StringBuilder unsure = new StringBuilder();
+        for (int i = 0; i < pics.size(); i++) {
+            float b1 = 0, b2 = 0; int t1 = -1;
+            for (int t = 0; t < targets.size(); t++) { float v = score[i][t]; if (v > b1) { b2 = b1; b1 = v; t1 = t; } else if (v > b2) b2 = v; }
+            if (b1 >= PICTURE_SURE && b1 < 0.95f && b1 - b2 < 0.12f) {
+                if (unsure.length() < 200) unsure.append(unsure.length() > 0 ? "; " : "").append('"').append(pics.get(i).label()).append("\" fits ").append(labels.get(t1)).append(" and another alike");
+                for (int t = 0; t < targets.size(); t++) score[i][t] = 0;
+            }
+        }
+        for (int t = 0; t < targets.size(); t++) {
+            float b1 = 0, b2 = 0;
+            for (int i = 0; i < pics.size(); i++) { float v = score[i][t]; if (v > b1) { b2 = b1; b1 = v; } else if (v > b2) b2 = v; }
+            if (b1 >= PICTURE_SURE && b1 < 0.95f && b1 - b2 < 0.08f) {
+                if (unsure.length() < 200) unsure.append(unsure.length() > 0 ? "; " : "").append(labels.get(t)).append(": two pictures fit alike");
+                for (int i = 0; i < pics.size(); i++) score[i][t] = 0;
+            }
+        }
+        if (unsure.length() > 0) notes.add("not placed by itself (two matches alike — choose in the Studio): " + unsure);
         int[] best = PicSense.assign(score, PICTURE_SURE);
         for (int i = 0; i < pics.size(); i++) {
             if (best[i] < 0 || score[i][best[i]] < PICTURE_SURE) continue;

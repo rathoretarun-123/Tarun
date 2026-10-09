@@ -194,7 +194,7 @@ final class Studio3DArt {
     }
 
     /** Drops the proposal lines that match (kind, key[, angle]) and deletes their files when delete is set. */
-    private static void dropProposals(Project project, String kind, String key, String angle, boolean delete) {
+    static void dropProposals(Project project, String kind, String key, String angle, boolean delete) {
         StringBuilder sb = new StringBuilder();
         for (String l : project.read("cast.txt").split("\n")) {
             if (l.trim().length() == 0) continue;
@@ -283,10 +283,14 @@ final class Studio3DArt {
             try { if (freeModel(project, story, c, lib, ctx, cue, ask, cloud, null)) return proposalFor(project, P_CHAR, key) != null ? proposalFor(project, P_CHAR, key)[3] : charFile(project, story, c); }
             catch (Throwable e) { android.util.Log.w("Kahani", "free 3D model: " + e); }
         }
+        // the phone guide (§7.2) and item 6: the doll takes its reference from the user's pictures — the nearest
+        // uploaded picture that fits the description lends its clothing colours and hair; the style cue its light and skin
+        String[] refNote = {""};
+        look = referenceLook(look, c, lib, refNote);
         Doll3D.Result r = Doll3D.make(look, 1100, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue);
         String file = project.savePicture(encode(r.px, r.w, r.h, true), "3d_char");
         int[] ratings = SceneMaker.ratings(false, r.faceKnown, true, cue != null && cue.pictures > 0, 0.8f, true);
-        String verdict = SceneMaker.verdict(ratings, "");
+        String verdict = SceneMaker.verdict(ratings, refNote[0]);
         String points = String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthHW, r.eyeLX, r.eyeLY, r.eyeRX, r.eyeRY, r.eyeR, r.turbanY);
         dropProposals(project, P_CHAR, key, null, true);
         dropProposals(project, P_VIEW, key, null, true);
@@ -541,6 +545,51 @@ final class Studio3DArt {
         o.close();
         plate.recycle();
         return name;
+    }
+
+    /**
+     * A doll's look conditioned on the user's own pictures (the phone guide §7.2, item 6): the library picture that
+     * fits the character's description best (by its traits and worn colours, the name counting double) lends its
+     * two main clothing colours and its hair colour. The description still rules kind, outfit and props.
+     */
+    static Look referenceLook(Look look, Story.CharacterDef c, Library lib, String[] note) {
+        if (lib == null || c == null) return look;
+        Library.Item best = null;
+        float bestS = 0.45f;
+        int seen = 0;
+        try {
+            for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
+                if (seen++ > 200) break;
+                com.tarun.kahani.core.PicSense.Info in = lib.info(it);
+                if (in == null || !in.figure) continue;
+                float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta), c);
+                if (com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null) sc = Math.min(1f, sc + 0.3f);
+                if (sc > bestS) { bestS = sc; best = it; }
+            }
+        } catch (Throwable e) {
+            return look;
+        }
+        if (best == null) return look;
+        com.tarun.kahani.core.PicSense.Info in = lib.info(best);
+        Look out = look.copy();
+        int b1 = -1, b2 = -1;
+        for (int i = 0; i < 12 && i < in.hue.length; i++) {
+            if (b1 < 0 || in.hue[i] > in.hue[b1]) { b2 = b1; b1 = i; }
+            else if (b2 < 0 || in.hue[i] > in.hue[b2]) b2 = i;
+        }
+        if (b1 >= 0 && in.hue[b1] > 0.10f) out.primary = hueColour(b1);
+        if (b2 >= 0 && in.hue[b2] > 0.08f) out.secondary = hueColour(b2);
+        com.tarun.kahani.core.PicSense.Traits tr = com.tarun.kahani.core.PicSense.Traits.fromMeta(best.meta);
+        if (tr != null && tr.greyHair > 0) out.hairColor = 0xFFBDBDBD;
+        if (note != null && note.length > 0) note[0] = String.format(Locale.US, "reference: your picture \"%s\" (fit %.0f%%) lends its colours", best.label(), bestS * 100);
+        return out;
+    }
+
+    /** A worn colour for a hue bin (30-degree steps): the doll's cloth in that hue. */
+    static int hueColour(int bin) {
+        float[] hsv = {bin * 30f, 0.62f, 0.72f};
+        return android.graphics.Color.HSVToColor(hsv);
     }
 
     /** The character bibles of the cast (the scene maker guide, ch. 3) for the production file. */

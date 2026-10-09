@@ -76,6 +76,8 @@ public final class Film {
         public final List<Sub> subs = new ArrayList<Sub>();
         public float fadeIn = 0.5f, fadeOut = 0.5f;
         public Art.Backdrop backdrop;     // user picture for this set, or null for the painted set
+        /** The user's reverse angle of the place (the phone guide §5.2), drawn behind reverse shots; null = the same picture. */
+        public Art.Backdrop backdropReverse;
         public float ground = Sets.GROUND; // y of the floor line in stage coordinates
         public boolean festive;           // celebration lights
         public int mood = -1;
@@ -220,6 +222,8 @@ public final class Film {
         public int angle;                     // -1 high angle (vulnerable), 0 eye level, +1 low angle (power)
         public float light = -1;              // 0 soft and warm .. 1 hard and directional (-1 = from the scene's mood)
         public boolean keep;                  // a cut the protocol needs (a new group of at most six words): never dropped
+        /** A reverse shot (the listener's face, over the speaker's shoulder): the place's reverse angle is behind it when the user gave one. */
+        public boolean reverse;
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

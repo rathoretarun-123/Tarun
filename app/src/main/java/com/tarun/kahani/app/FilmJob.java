@@ -103,9 +103,43 @@ public final class FilmJob implements Runnable {
     public volatile long etaSeconds = -1;
 
     /** Rough time-left estimate for the whole job from the overall progress. */
+    /** The frames and the frame size of the film being made (known once the director has staged it), for the time left. */
+    private int plannedFrames, plannedW, plannedH;
+
+    /**
+     * The time left (item 9): the steps before the video from their own progress so far, plus the video from the
+     * speed this phone showed on its last film (milliseconds per frame per megapixel, measured and saved after
+     * every render) — never the overall percentage, which the video dominates.
+     */
     private void updateEta() {
-        long el = (System.currentTimeMillis() - startedAt) / 1000;
-        if (progress > 0.05f && el > 10) etaSeconds = (long) (el * (1 - progress) / progress);
+        long el = (System.currentTimeMillis() - startedAt - pausedMs) / 1000;
+        float pre = Math.min(progress, 0.36f) / 0.36f;
+        long preLeft = pre > 0.05f && el > 5 ? (long) (el * (1 - pre) / pre) : -1;
+        long video = estimatedRenderSeconds();
+        etaSeconds = preLeft < 0 || video < 0 ? -1 : preLeft + video;
+    }
+
+    /** Seconds the video will take at this phone's measured speed, or -1 before the first film ever made here. */
+    private long estimatedRenderSeconds() {
+        if (plannedFrames <= 0) return -1;
+        float ms;
+        try { ms = Float.parseFloat(Prefs.get(ctx, "renderMsPerMpFrame", "0")); } catch (NumberFormatException e) { ms = 0; }
+        if (ms <= 0) return -1;
+        float mp = plannedW * (float) plannedH / 1e6f;
+        return (long) (plannedFrames * ms * mp / 1000f) + 20;
+    }
+
+    /** How much memory the frames in flight may use: the heap's free room and half of what the phone has free, never under 48 MB. */
+    private long memoryBudget() {
+        Runtime rt = Runtime.getRuntime();
+        long heapFree = rt.maxMemory() - (rt.totalMemory() - rt.freeMemory());
+        long sysFree = Long.MAX_VALUE;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            if (am != null) { am.getMemoryInfo(mi); sysFree = Math.max(0, mi.availMem - mi.threshold) / 2; }
+        } catch (Throwable ignored) { /* no activity manager here */ }
+        return Math.max(48L * 1024 * 1024, Math.min(heapFree * 3 / 4, sysFree));
     }
 
     static String hash(String s) {
@@ -401,6 +435,8 @@ public final class FilmJob implements Runnable {
             if (film.duration > 30 * 60 + 30) warning = "The film is longer than 30 minutes (" + fmt((long) film.duration) + ") — it will take longer to make.";
             film.subtitles = ed.subtitles;
             filmSeconds = film.duration;
+            { int[] psz = ed.size(); plannedFrames = (int) Math.ceil(film.duration * 24); plannedW = psz[0]; plannedH = psz[1]; }
+            updateEta();
             check();
             // pipeline steps 1-2: the Character Lock Sheet of every character and the Location Lock Plate of every
             // place, saved with the film (and shown first in Human QC)
@@ -1021,7 +1057,14 @@ public final class FilmJob implements Runnable {
 
     private void renderVideo(final Film film, final Art art, File audio, final Grade grade, final int w, final int h, int fps, float bpp, File out) throws Exception {
         final int frames = (int) Math.ceil(film.duration * fps);
-        final int workers = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
+        // item 13 / the phone guide §9.4: as many drawing threads as the phone's cores and free memory allow (each
+        // worker holds its frame bitmap and two finished frames), never more than the cores, never a frozen phone
+        int cores = Runtime.getRuntime().availableProcessors();
+        long perWorker = (long) w * h * 4 * 3 + 40L * 1024 * 1024;
+        long budget = memoryBudget();
+        int byMem = (int) Math.max(1, Math.min(cores, budget / perWorker));
+        final int workers = Math.max(1, Math.min(Math.min(cores, 6), byMem));
+        film.shotList += String.format(java.util.Locale.US, "%nRENDER: %d drawing threads (%d cores, %d MB free for frames), %dx%d at %d fps%n", workers, cores, budget / (1024 * 1024), w, h, fps);
         final int[][] slots = new int[workers * 2][];
         final int[] slotFrame = new int[workers * 2];
         for (int i = 0; i < slotFrame.length; i++) slotFrame[i] = -1;
@@ -1113,6 +1156,9 @@ public final class FilmJob implements Runnable {
             step("Saving the film…", 0.995f);
             vw.finish();
             film.shotList += meter.report();
+            // this phone's speed, for the next film's time left
+            long tookMs = System.currentTimeMillis() - t0 - pausedMs;
+            if (frames > 30 && tookMs > 0) Prefs.put(ctx, "renderMsPerMpFrame", String.valueOf(tookMs / (float) frames / (w * (float) h / 1e6f)));
         } catch (Throwable e) {
             vw.release();
             synchronized (lock) { if (workerError[0] == null) workerError[0] = e; lock.notifyAll(); }

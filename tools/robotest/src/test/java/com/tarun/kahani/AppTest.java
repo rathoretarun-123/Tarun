@@ -147,6 +147,7 @@ public class AppTest {
         System.out.println("HOME: " + home);
         assertTrue(home.toString().contains("New film"));
         assertTrue(home.toString().contains("Library"));
+        assertTrue("the home screen's library upload button (v21)", home.toString().contains("Add pictures, voices or sounds to the library"));
 
         for (String t : home) assertTrue("Hindi left in the home screen: " + t, !hasDevanagari(t) || t.contains("Ratnagarh") || t.contains("रत्नगढ़"));
         // new empty film -> story screen (clear button, platforms) -> back
@@ -1131,6 +1132,93 @@ public class AppTest {
         String invText = com.tarun.kahani.core.DirectorsManual.inventory(inv);
         assertTrue(invText.contains("PROJECT ASSET INVENTORY") && invText.contains("CHAR_001_V2") && invText.contains("VOICE_001"));
         System.out.println("MANUAL: shots " + film.shots.size() + " pov " + pov + " loud " + loud + " establishing " + estab + "; inventory rows " + inv.size());
+    }
+
+    /**
+     * The Phone-Local AI 3D Animated Film Creator guide (v21): bundled and hardcoded; the angle of real fronts and
+     * backs read from the face; a sheet of two figures split; the establishing bridge; the reverse angle behind the
+     * reverse shots; the dip between scenes (never two scenes over each other); the reference-conditioned doll look.
+     */
+    @Test
+    public void phoneGuideAnglesSplitBridgeAndReverse() throws Exception {
+        String guide = new String(Files.readAllBytes(new File(ASSETS, "phone_local_film_creator_guide.md").toPath()), "UTF-8");
+        assertTrue(guide.contains("Appendix C") && guide.contains("Pixar-level"));
+        assertTrue(com.tarun.kahani.core.PhoneGuide.SUMMARY.contains("Offline core") && com.tarun.kahani.core.PhoneGuide.PRECEDENCE.length >= 6
+                && com.tarun.kahani.core.PhoneGuide.ENFORCEMENT.length >= 15 && com.tarun.kahani.core.PhoneGuide.FAILURES.length == 10);
+        // the angle of real pictures, read from the face
+        String[][] pics = {{"char_vrinda.jpg", "front"}, {"char_vrinda_back.jpg", "back"}, {"char_raju.jpg", "front"}, {"char_raju_back.jpg", "back"}, {"char_kripa.jpg", "front"}, {"char_kripa_back.jpg", "back"}};
+        int[][] px = new int[2][];
+        int[] ws = new int[2], hs = new int[2];
+        for (int i = 0; i < pics.length; i++) {
+            Bitmap b = android.graphics.BitmapFactory.decodeFile(new File(ASSETS, "sample/" + pics[i][0]).getAbsolutePath());
+            assertNotNull(pics[i][0], b);
+            int w = b.getWidth(), h = b.getHeight();
+            int[] p = new int[w * h];
+            b.getPixels(p, 0, w, 0, 0, w, h);
+            com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(p.clone(), w, h, false);
+            String got = com.tarun.kahani.core.Angles.name(com.tarun.kahani.core.Angles.guess(r));
+            assertTrue(pics[i][0] + " read as " + got, got.equals(pics[i][1]));
+            if (i < 2) { px[i] = p; ws[i] = w; hs[i] = h; }
+        }
+        // a sheet of two figures side by side becomes two pictures, left to right
+        int sh = Math.max(hs[0], hs[1]), sw = ws[0] + ws[1] + 40;
+        int[] sheet = new int[sw * sh];
+        java.util.Arrays.fill(sheet, 0xFFFFFFFF);
+        for (int k = 0; k < 2; k++) for (int y = 0; y < hs[k]; y++) for (int x = 0; x < ws[k]; x++) {
+            int c = px[k][y * ws[k] + x];
+            if ((c >>> 24) > 100) sheet[y * sw + x + (k == 0 ? 0 : ws[0] + 40)] = c | 0xFF000000;
+        }
+        List<com.tarun.kahani.core.Angles.Piece> pieces = com.tarun.kahani.core.Angles.split(sheet, sw, sh);
+        assertTrue("pieces " + pieces.size(), pieces.size() == 2 && pieces.get(0).x0 < pieces.get(1).x0 && pieces.get(1).w > 100);
+        float[] assigned = com.tarun.kahani.core.Angles.assign(new float[]{0, 0, 180, 0, 0});
+        assertTrue(assigned[0] == 0 && assigned[1] == -45 && assigned[2] == 180 && assigned[3] == -90 && Float.isNaN(assigned[4]));
+        // the sample with a reverse angle of scene 1: bridges, the reverse backdrop and reverse cams, the dip
+        Project p = sampleProject();
+        p.write("cast.txt", p.read("cast.txt") + "\nscene|1r|bg_practice_ground.jpg\n");
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director.Options opt = new Director.Options();
+        opt.aspect = "16:9";
+        opt.sceneCards = false;
+        Director d = new Director(story, opt);
+        d.prepare();
+        Film film = d.direct(art);
+        int bridges = 0;
+        for (String n : film.notes) if (n.startsWith("Bridge before")) bridges++;
+        assertTrue("bridges " + bridges, bridges >= 1);
+        Film.Seg first = null;
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) { first = sg; break; }
+        assertNotNull(first);
+        assertTrue("the reverse angle of scene 1", first.backdropReverse != null);
+        int reverse = 0;
+        for (Film.Seg sg : film.segs) for (Film.Cam c : sg.cams) if (c.reverse) reverse++;
+        assertTrue("reverse cams " + reverse, reverse >= 3);
+        assertTrue(film.shotList.contains("Phone-local guide (v1.0)"));
+        Film.Seg dip = null;
+        for (int i = 1; i < film.segs.size(); i++) if (film.segs.get(i).type == Film.S_SCENE && film.segs.get(i - 1).type == Film.S_SCENE && film.segs.get(i).transition == 0) { dip = film.segs.get(i); break; }
+        if (dip != null) {
+            Bitmap bmp = Bitmap.createBitmap(320, 180, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            new Renderer(film, art).render(g, dip.t0 + 0.28f);
+            int[] fp = new int[320 * 180];
+            bmp.getPixels(fp, 0, 320, 0, 0, 320, 180);
+            double lum = 0;
+            for (int c : fp) lum += 0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255);
+            lum /= fp.length;
+            assertTrue("the dip frame is dark, not two scenes blended: " + lum, lum < 45);
+            g.release();
+        }
+        // the doll takes its colours from the nearest uploaded picture (the sample's library pictures)
+        Story.CharacterDef c0 = story.cast().get(0);
+        String[] note = {""};
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(RuntimeEnvironment.getApplication());
+        byte[] vr = Files.readAllBytes(new File(ASSETS, "sample/char_vrinda.jpg").toPath());
+        com.tarun.kahani.app.Library.Item ref = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", c0.displayName, "", vr, ".jpg", "test");
+        lib.analysePicture(ref);
+        Look rl = (Look) call("com.tarun.kahani.app.Studio3DArt", "referenceLook", c0.look, c0, lib, note);
+        assertNotNull(rl);
+        assertTrue("reference note: " + note[0], note[0].contains("reference"));
+        System.out.println("PHONE GUIDE: bridges " + bridges + " reverse cams " + reverse + " pieces " + pieces.size() + " " + note[0]);
     }
 
     @Test

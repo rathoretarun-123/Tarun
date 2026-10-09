@@ -81,7 +81,9 @@ import java.util.Set;
 public class MainActivity extends Activity {
 
     static final int REQ_LOGIN = 11, REQ_SCRIPT = 12, REQ_IMAGE = 13, REQ_CAMERA = 14, REQ_AUDIO = 15, REQ_BULK = 16,
-            REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22, REQ_LIB_MANY = 23;
+            REQ_SAVE_TEXT = 17, REQ_RESTORE = 18, REQ_PERMS = 20, REQ_PERM_GALLERY = 21, REQ_PERM_ONE = 22, REQ_LIB_MANY = 23, REQ_ANGLES = 24;
+    /** The thing whose angles are being uploaded: "angles:char:<key>:<name>", "angles:scene:<n>:<name>", "angles:obj:<keys>:<name>". */
+    private String anglesTarget;
     static final int S_HOME = 0, S_STORY = 1, S_STUDIO = 2, S_FACE = 3, S_PROGRESS = 4, S_PLAYER = 5, S_LIBRARY = 6,
             S_SETTINGS = 7, S_LINES = 8, S_LOGIN = 9, S_QC = 10;
 
@@ -179,7 +181,8 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         switch (screen) {
             case S_STORY: saveScript(); showHome(); break;
-            case S_STUDIO: case S_PROGRESS: case S_PLAYER: case S_QC: showStory(); break;
+            case S_PROGRESS: showHome(); break;                // the film goes on in the service; the home screen brings you back
+            case S_STUDIO: case S_PLAYER: case S_QC: showStory(); break;
             case S_FACE: case S_LINES: showStudio(); break;
             case S_LIBRARY: case S_SETTINGS: if (project != null) showStory(); else showHome(); break;
             default: super.onBackPressed();
@@ -382,14 +385,19 @@ public class MainActivity extends Activity {
             public void onClick(View v) { showSettings(); }
         }));
         hero.addView(r);
+        // the library grows any time, film or no film (pictures, voices and sounds the director uses in every story)
+        hero.addView(Ui.button(this, "➕  Add pictures, voices or sounds to the library", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) { addToLibrary(); }
+        }));
         body.addView(hero);
 
         FilmJob job = FilmJob.current;
         if (job != null && !job.done && !job.failed && !job.cancelled) {
             LinearLayout c = Ui.card(this);
-            c.addView(Ui.text(this, "⏳ A film is being made: " + job.project.name(), 16, Ui.TEXT, true));
+            c.addView(Ui.text(this, "⏳ A film is being made: " + job.project.name() + (job.paused ? " (paused)" : ""), 16, Ui.TEXT, true));
+            c.addView(Ui.text(this, job.stage + (job.eta().length() > 0 ? " · " + job.eta() : ""), 13, Ui.SUB, false));
             final Project jp = job.project;
-            c.addView(Ui.button(this, "See progress", Ui.GREEN, new View.OnClickListener() {
+            c.addView(Ui.button(this, "🎬  Film being made — open", Ui.GREEN, new View.OnClickListener() {
                 public void onClick(View v) { project = jp; showProgress(); }
             }));
             body.addView(c);
@@ -417,6 +425,273 @@ public class MainActivity extends Activity {
             c.addView(rr);
             body.addView(c);
         }
+    }
+
+    /** Pictures, voices and sounds into the tarunkahani library from the home screen — no film needed (item 12). */
+    private void addToLibrary() {
+        final String[] opts = {"🖼  Pictures from the phone (many at once)", "📷  Camera", "🎙  Record a voice", "🔊  Sounds from files", "🎙  Voice samples from files"};
+        new AlertDialog.Builder(this).setTitle("➕ Add to the library").setItems(opts, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface d, int w) {
+                project = null;
+                if (w == 0) { target = "lib:pic"; pickMany("auto", "image/*"); }
+                else if (w == 1) { target = "lib:pic"; camera(); }
+                else if (w == 2) { target = "lib:voice"; record(Library.VOICE, ""); }
+                else if (w == 3) { target = "lib:sound"; pickMany("sound", "audio/*"); }
+                else { target = "lib:voice"; pickMany("voice", "audio/*"); }
+            }
+        }).setNegativeButton("Cancel", null).show();
+    }
+
+    /**
+     * Up to ten pictures of one thing from different angles (the phone guide §5.2, items 1-3, 11): from the phone's
+     * photos, the camera or the tarunkahani library — at the Studio card, the progress screen or the check screen,
+     * without going back to the start.
+     */
+    private void anglesFor(final String tgt, final String what) {
+        anglesTarget = tgt;
+        final String[] opts = {"📂  From the phone / photos — up to 10 at once", "📷  Camera — one at a time", "📚  From the tarunkahani library"};
+        new AlertDialog.Builder(this).setTitle("📷 Angles of " + what)
+                .setMessage("Front, three-quarter, side and back for a character; a wide view and its reverse for a place; front, side and rear for a thing. "
+                        + "A picture that holds several angles side by side is split by the director into separate pictures. Every picture is saved in the library as " + what + ".")
+                .setItems(opts, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        target = "angles";
+                        if (w == 0) pick("image/*", REQ_ANGLES, true);
+                        else if (w == 1) camera();
+                        else {
+                            Picker pk = new Picker(MainActivity.this, library);
+                            pk.show("An angle of " + what, Library.PIC, what, new String[]{}, new Picker.Listener() {
+                                public void picked(Library.Item it) {
+                                    try {
+                                        List<byte[]> one = new ArrayList<byte[]>();
+                                        one.add(Project.readAll(library.open(it)));
+                                        saveAngles(tgt, one);
+                                    } catch (Exception e) { toast("Could not open the picture"); }
+                                }
+                                public void action(String a) { }
+                            });
+                        }
+                    }
+                }).setNegativeButton("Cancel", null).show();
+    }
+
+    /** {w, h, pixels…} of a picture's bytes, shrunk to maxSide, upright; null when unreadable. */
+    static int[] decodeBytes(byte[] data, int maxSide) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            int sc = 1;
+            while (Math.max(o.outWidth, o.outHeight) / (sc * 2) >= maxSide) sc *= 2;
+            o = new BitmapFactory.Options();
+            o.inSampleSize = sc;
+            o.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            if (b == null) return null;
+            b = Project.upright(b, data);
+            int w = b.getWidth(), h = b.getHeight();
+            int[] out = new int[2 + w * h];
+            out[0] = w; out[1] = h;
+            b.getPixels(out, 2, w, 0, 0, w, h);
+            b.recycle();
+            return out;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * The pictures of one thing from several angles: a sheet holding several figures is split into them
+     * (Angles.split); a figure's angle is read from its face (Angles.guess); the front becomes the thing's picture
+     * when it has none, the other angles its views (a real angle always beats a made one), a place's second
+     * picture its reverse angle (drawn behind the reverse shots), a thing's first picture its insert; every
+     * picture goes into the tarunkahani library as the same thing. Real camera photos of people become avatars.
+     */
+    private void saveAngles(final String tgt, final List<byte[]> datas) {
+        final String[] p = tgt.split(":", 4);
+        final String kind = p.length > 1 ? p[1] : "char", key = p.length > 2 ? p[2] : "", shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
+        final Story st = project == null ? null : loadStory();
+        if (project == null || st == null) { toast("Open a story first"); return; }
+        background("The director is reading " + datas.size() + " picture(s) of " + shown + "…", new Work() {
+            public Object run() throws Exception {
+                Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, key) : null;
+                boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
+                // 1. every picture; a sheet of several figures split into them
+                List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
+                int split = 0;
+                for (byte[] d : datas) {
+                    int[] dec = decodeBytes(d, 1400);
+                    if (dec == null) continue;
+                    int w = dec[0], h = dec[1];
+                    int[] px = new int[w * h];
+                    System.arraycopy(dec, 2, px, 0, px.length);
+                    boolean camera = Library.cameraPhoto(d);
+                    List<com.tarun.kahani.core.Angles.Piece> parts = kind.equals("scene") ? new ArrayList<com.tarun.kahani.core.Angles.Piece>() : com.tarun.kahani.core.Angles.split(px, w, h);
+                    if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }
+                    else pics.add(new Object[]{px, w, h, Boolean.FALSE, camera});
+                    if (pics.size() >= 10) break;
+                }
+                if (pics.isEmpty()) return "No picture could be read";
+                if (pics.size() > 10) pics = pics.subList(0, 10);
+                StringBuilder done = new StringBuilder();
+                if (kind.equals("char")) {
+                    // 2. the angle of each figure from its face, then the front, the views, the extras
+                    float[] guessed = new float[pics.size()];
+                    byte[][] bytes = new byte[pics.size()][];
+                    for (int i = 0; i < pics.size(); i++) {
+                        Object[] o = pics.get(i);
+                        int[] px = (int[]) o[0]; int w = (Integer) o[1], h = (Integer) o[2];
+                        boolean cut = (Boolean) o[3], camera = (Boolean) o[4];
+                        com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(px, w, h, beast);
+                        guessed[i] = com.tarun.kahani.core.Angles.guess(r);
+                        byte[] b = Studio3DArt.encode(px, w, h, cut);
+                        if (camera && !cut) { try { b = toonify(b, true); } catch (Exception ignored) { /* the photo itself then */ } }
+                        bytes[i] = b;
+                    }
+                    float[] angles = com.tarun.kahani.core.Angles.assign(guessed);
+                    String have = c == null ? null : Studio3DArt.charFile(project, st, c);
+                    String libKey = project.setting("pic.char:" + key, "");
+                    for (int i = 0; i < pics.size(); i++) {
+                        float a = angles[i];
+                        boolean png = bytes[i].length > 8 && (bytes[i][1] & 255) == 'P';
+                        String ext = png ? ".png" : ".jpg";
+                        if (!Float.isNaN(a) && a == com.tarun.kahani.core.Angles.FRONT) {
+                            if (have == null) {
+                                String f = project.savePicture(bytes[i], "char");
+                                project.setManifest("char", key, "char|" + key + "|" + f);
+                                Library.Item it = library.addBytes(Library.PIC, "person", shown, "front", bytes[i], ext, "angles");
+                                project.setSetting("pic.char:" + key, it.id);
+                                libKey = it.id;
+                                have = f;
+                                done.append("front picture; ");
+                            } else {
+                                library.addBytes(Library.PIC, "person", shown + " (front, another)", "front", bytes[i], ext, "angles");
+                                done.append("another front (library); ");
+                            }
+                        } else if (!Float.isNaN(a)) {
+                            String f = project.savePicture(bytes[i], "view");
+                            Studio3DArt.setView(project, key, a, "view|" + key + "|" + (int) a + "|" + f);
+                            project.setSetting("rejected3d.view." + key, "0");
+                            Library.Item it = library.addBytes(Library.PIC, "view", shown + " (" + com.tarun.kahani.core.Angles.name(a) + " view)", com.tarun.kahani.core.Angles.name(a), bytes[i], ext, "angles");
+                            it.setMeta("view", String.valueOf((int) a));
+                            it.setMeta("ofName", shown);
+                            if (libKey.length() > 0) it.setMeta("of", libKey);
+                            done.append(com.tarun.kahani.core.Angles.name(a)).append(" view; ");
+                        } else {
+                            library.addBytes(Library.PIC, "person", shown + " (angle " + (i + 1) + ")", "", bytes[i], ext, "angles");
+                            done.append("angle ").append(i + 1).append(" (library); ");
+                        }
+                    }
+                    Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
+                } else if (kind.equals("scene")) {
+                    boolean haveMain = project.manifestLine("scene", key) != null, haveRev = project.manifestLine("scene", key + "r") != null;
+                    for (int i = 0; i < pics.size(); i++) {
+                        Object[] o = pics.get(i);
+                        byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], false);
+                        if ((Boolean) o[4]) { try { b = toonify(b, false); } catch (Exception ignored) { /* the photo itself then */ } }
+                        if (!haveMain) {
+                            String f = project.savePicture(b, "scene");
+                            project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null);
+                            project.setManifest("scene", key, "scene|" + key + "|" + f);
+                            library.addBytes(Library.PIC, "place", shown, "wide view", b, ".jpg", "angles");
+                            haveMain = true;
+                            done.append("the place (wide); ");
+                        } else if (!haveRev) {
+                            String f = project.savePicture(b, "scene");
+                            project.setManifest("scene", key + "r", "scene|" + key + "r|" + f);
+                            Library.Item it = library.addBytes(Library.PIC, "place", shown + " (reverse angle)", "reverse angle", b, ".jpg", "angles");
+                            it.setMeta("view", "reverse");
+                            haveRev = true;
+                            done.append("the reverse angle (behind the reverse shots); ");
+                        } else {
+                            library.addBytes(Library.PIC, "place", shown + " (angle " + (i + 1) + ")", "", b, ".jpg", "angles");
+                            done.append("angle ").append(i + 1).append(" (library); ");
+                        }
+                    }
+                } else {
+                    // a thing: its first picture is the insert of the thing itself; every angle goes to the library
+                    boolean haveObj = project.read("cast.txt").contains("|" + key + "|");
+                    for (int i = 0; i < pics.size(); i++) {
+                        Object[] o = pics.get(i);
+                        boolean cut = (Boolean) o[3];
+                        byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], cut);
+                        if (!haveObj) {
+                            String f = project.savePicture(b, "obj");
+                            project.setManifest("shot", ":" + key, "shot||" + key + "|" + f + "|object");
+                            haveObj = true;
+                            done.append("the insert picture; ");
+                        } else done.append("angle ").append(i + 1).append(" (library); ");
+                        library.addBytes(Library.PIC, "object", shown + (i == 0 ? "" : " (angle " + (i + 1) + ")"), key.replace(',', ' '), b, cut ? ".png" : ".jpg", "angles");
+                    }
+                }
+                library.save();
+                return "✅ " + shown + ": " + done + (split > 0 ? "(" + split + " figures split from a sheet) " : "") + "— all in the library";
+            }
+        }, new Done() {
+            public void done(Object r, Exception e) {
+                if (e != null) { toast("Could not add the pictures: " + e.getMessage()); return; }
+                toast(String.valueOf(r));
+                if (screen == S_PROGRESS) showProgress();
+                else if (screen == S_QC && FilmJob.current != null) showQc(FilmJob.current);
+                else showStudio();
+            }
+        });
+    }
+
+    /**
+     * The pictures the director has none for, with the ten-angle upload right here (the phone guide §1.1 and item
+     * 1: at the point of need, without going back). They are used from the next make.
+     */
+    private void missingCard(LinearLayout body) {
+        if (project == null) return;
+        final Story st = loadStory();
+        if (st == null || st.scenes.isEmpty()) return;
+        List<String[]> miss = AutoLibrary.missingTargets(project, st);
+        LinearLayout m = Ui.card(this);
+        m.addView(Ui.text(this, "📷 Pictures from different angles — add them here, up to 10 of each (phone, camera or library); a sheet of several angles is split by the director. "
+                + "Pictures added while a film is being made are used from the next make.", 13, Ui.SUB, false));
+        int n = 0;
+        for (final String[] t : miss) {
+            if (t[0].equals("title") || t[0].equals("end")) continue;
+            String tgt = null;
+            if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
+            else if (t[0].startsWith("place:")) {
+                String place = t[0].substring(6);
+                for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, place)) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; }
+            } else if (t[0].startsWith("shot:")) {
+                String[] sk = t[0].split(":", 3);
+                if (sk.length == 3) tgt = "angles:obj:" + sk[2] + ":" + t[1];
+            }
+            if (tgt == null) continue;
+            if (++n > 10) break;
+            final String ft = tgt;
+            m.addView(Ui.small(this, "📷 " + t[1] + " — no picture yet: add angles", Ui.PRIMARY, new View.OnClickListener() {
+                public void onClick(View v) { anglesFor(ft, t[1]); }
+            }));
+        }
+        if (n == 0) m.addView(Ui.text(this, "Every character and place has a picture. More angles can be added from the Studio cards.", 13, Ui.GREEN, false));
+        body.addView(m);
+    }
+
+    /** The things the story names (keys, props, fruit, a kite…): their pictures from the library or from you, up to ten angles each (item 3). */
+    private LinearLayout objectsCard(final Story st) {
+        LinearLayout card = Ui.card(this);
+        card.addView(Ui.text(this, "Things of the story — a real picture of each makes its insert and the hand props look real. Up to 10 angles (front, side, rear) from the phone, the camera or the library; the director keeps them all.", 13, Ui.SUB, false));
+        String cast = project.read("cast.txt");
+        int n = 0;
+        for (final String[] o : FreeArt.wanted(st)) {
+            final boolean have = cast.contains("|" + o[0] + "|");
+            final String name = o[1];
+            LinearLayout r = Ui.row(this);
+            r.addView(Ui.text(this, (have ? "✅ " : "▫ ") + name, 14, have ? Ui.GREEN : Ui.TEXT, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            r.addView(Ui.small(this, have ? "📷 More angles" : "📷 Angles", Ui.PRIMARY, new View.OnClickListener() {
+                public void onClick(View v) { anglesFor("angles:obj:" + o[0] + ":" + name, name); }
+            }));
+            card.addView(r);
+            if (++n >= 12) break;
+        }
+        if (n == 0) card.addView(Ui.text(this, "No portable thing is named in this story yet (a key, a crown, a kite, a book…).", 13, Ui.SUB, false));
+        return card;
     }
 
     private void openSample() {
@@ -692,6 +967,8 @@ public class MainActivity extends Activity {
         if (st.hasNarrator) body.addView(narratorCard());
 
         // ---- parts of the story
+        heading(body, "Things (pictures of the story's objects)");
+        body.addView(objectsCard(st));
         heading(body, "Places (backgrounds and sounds)");
         SoundLib sl = library.soundLib();
         for (Story.Scene sc : st.scenes) body.addView(sceneCard(sc, sl));
@@ -861,6 +1138,9 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { choosePicture("view:" + key + ":-90", c.displayName + " side view"); }
             }));
         }
+        r3.addView(Ui.small(this, "📷 10 angles", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { anglesFor("angles:char:" + key + ":" + c.shown(), c.shown()); }
+        }));
         if (file == null) r3.addView(Ui.small(this, "📐 Doll sheet", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is drawing the master sheet of " + c.shown() + "…", new Work() {
@@ -950,6 +1230,9 @@ public class MainActivity extends Activity {
         }));
         r.addView(Ui.small(this, "🔊 Sound", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseSound("amb:" + key, sc.setting + " " + sc.title); }
+        }));
+        r.addView(Ui.small(this, "📷 Angles", Ui.PRIMARY, new View.OnClickListener() {
+            public void onClick(View v) { anglesFor("angles:scene:" + key + ":" + (sc.title.length() > 0 ? sc.title : "part " + key), sc.title.length() > 0 ? sc.title : "part " + key); }
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) { project.setManifest("scene", key, null); project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null); showStudio(); }
@@ -1250,6 +1533,12 @@ public class MainActivity extends Activity {
      * for other pictures the user decides with one tap. Everything is saved in the library for later stories.
      */
     private void incomingPicture(final byte[] data, final String fileName) {
+        if ("angles".equals(target) && anglesTarget != null) {
+            List<byte[]> one = new ArrayList<byte[]>();
+            one.add(data);
+            saveAngles(anglesTarget, one);
+            return;
+        }
         final String tgt = target == null ? "lib:pic" : target;
         final boolean person = tgt.startsWith("char:") || tgt.startsWith("view:") || tgt.equals("lib:pic");
         boolean camera = "camera".equals(fileName) || Library.cameraPhoto(data);
@@ -2167,6 +2456,29 @@ public class MainActivity extends Activity {
             if (!uris.isEmpty()) addMany(uris, manyAudioAs);
             return;
         }
+        if (code == REQ_ANGLES) {
+            List<Uri> uris = new ArrayList<Uri>();
+            if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
+            else if (data.getData() != null) uris.add(data.getData());
+            if (uris.size() > 10) { toast("The first 10 pictures are used"); uris = new ArrayList<Uri>(uris.subList(0, 10)); }
+            final List<Uri> us = uris;
+            final String tgt = anglesTarget;
+            if (tgt == null || us.isEmpty()) return;
+            background("Opening " + us.size() + " picture(s)…", new Work() {
+                public Object run() throws Exception {
+                    List<byte[]> out = new ArrayList<byte[]>();
+                    for (Uri u : us) { try { out.add(Project.readAll(getContentResolver().openInputStream(u))); } catch (Exception ignored) { /* one bad file */ } }
+                    return out;
+                }
+            }, new Done() {
+                @SuppressWarnings("unchecked")
+                public void done(Object r, Exception e) {
+                    if (e != null || r == null) { toast("Could not open the pictures"); return; }
+                    saveAngles(tgt, (List<byte[]>) r);
+                }
+            });
+            return;
+        }
         if (code == REQ_BULK) {
             List<Uri> uris = new ArrayList<Uri>();
             if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
@@ -2677,8 +2989,8 @@ public class MainActivity extends Activity {
         body.addView(Ui.text(this, "Where will this film be shown? (decided once for the whole film — every picture is made natively in that shape, with its own safe zones and character size)", 15, Ui.TEXT, true));
         final android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
         final String[] ars = {"16:9", "9:16", "1:1", "4:5", "2.39:1"};
-        String[] labels = {"▭  YouTube / TV — landscape 16:9 (1920x1080)", "▯  Reels / Shorts / TikTok / WhatsApp status — vertical 9:16 (1080x1920)",
-                "▢  Instagram post — square 1:1 (1080x1080)", "▯  Instagram portrait 4:5 (1080x1350)", "▬  Cinema — 2.39:1 widescreen (1920x804)"};
+        String[] labels = {"▭  YouTube / Facebook video / TV — landscape 16:9 (1920x1080)", "▯  Reels / Shorts / TikTok / WhatsApp status / Facebook Stories — vertical 9:16 (1080x1920)",
+                "▢  Instagram / Facebook post — square 1:1 (1080x1080)", "▯  Instagram / Facebook feed — portrait 4:5 (1080x1350)", "▬  Cinema — 2.39:1 widescreen (1920x804)"};
         for (int i = 0; i < ars.length; i++) {
             android.widget.RadioButton rb = new android.widget.RadioButton(this);
             rb.setText(labels[i]);
@@ -2928,6 +3240,7 @@ public class MainActivity extends Activity {
         }));
         body.addView(nav);
         body.addView(info);
+        missingCard(body);
         LinearLayout c = Ui.card(this);
         c.addView(Ui.button(this, "✔  Approve and make the film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { j.approve(); showProgress(); }
@@ -3015,6 +3328,9 @@ public class MainActivity extends Activity {
         String manual;
         try { manual = new String(Project.readAll(getAssets().open("ai_film_maker_directors_manual.md")), "UTF-8"); } catch (Exception e) { manual = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.DirectorsManual.SUMMARY + "\n\n" + manual;
+        String phone;
+        try { phone = new String(Project.readAll(getAssets().open("phone_local_film_creator_guide.md")), "UTF-8"); } catch (Exception e) { phone = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.PhoneGuide.SUMMARY + "\n\n" + phone;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -3039,7 +3355,13 @@ public class MainActivity extends Activity {
                 + "CHAR_ / LOC_ / VOICE_ IDs; every shot's ASSETS, TRANSITION IN, STATE AT START / END and VOICE / MUSIC lines; establishing shots held 3.9 s; a point-of-view "
                 + "shot when someone looks at something; a reaction on every face after a loud sound; suspicion and relief as feelings; the beat sheet, scene records, "
                 + "scene-coverage report, prop ledger and location records; the animatic approved in Human QC before the film is made; the audio check of the mix and the "
-                + "export check of the file; the three-level review, the five gates and the eleven-point QA checklist at the end of every film's quality check.\n\n";
+                + "export check of the file; the three-level review, the five gates and the eleven-point QA checklist at the end of every film's quality check.\n"
+                + "• The Phone-Local AI 3D Animated Film Creator guide (v1.0): up to ten angles of every character, place and thing from the phone, the camera or the library "
+                + "(a sheet of angles split into its figures; the angle read from the face; real angles always beat made views; a place's reverse angle behind the reverse shots); "
+                + "pictures added at the point of need on the progress and check screens; an establishing bridge where the place changes; dolls that take their colours "
+                + "from the nearest uploaded picture; the auto-placement that never guesses between two alike matches; the mouth drawn only where a mouth was found; a quick "
+                + "dip between scenes instead of two scenes over each other; workers sized by free memory; the time left from this phone's measured speed; the honest "
+                + "quality target (feature-animation craft measured by the QC, never a studio-parity claim).\n\n";
         TextView tv = Ui.text(this, how + given + "\n\n" + lead + "\n\n" + handbook, 13, Ui.TEXT, false);
         tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         tv.setTextIsSelectable(true);
@@ -3097,6 +3419,7 @@ public class MainActivity extends Activity {
         c.addView(pause);
         c.addView(stop);
         body.addView(c);
+        missingCard(body);
         ui.post(new Runnable() {
             public void run() {
                 if (screen != S_PROGRESS) return;

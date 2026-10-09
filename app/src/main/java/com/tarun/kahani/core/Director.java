@@ -185,7 +185,7 @@ public final class Director {
         Story.CharacterDef heroDef = PixarLead.hero(story);
         film.hero = heroDef == null ? "" : heroDef.shown();
         maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0; framedFace = 0; faceFillSum = 0; faceFillN = 0;
-        thoughtBeats = 0; dutchCount = 0; dutchUsed = 0; usedInserts.clear(); povShots = 0; loudReactions = 0;
+        thoughtBeats = 0; dutchCount = 0; dutchUsed = 0; usedInserts.clear(); povShots = 0; loudReactions = 0; bridges = 0;
 
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
@@ -193,6 +193,28 @@ public final class Director {
             if (!opt.sceneCards) {
                 // no title cards: a soft "whoosh" transition into the next scene
                 if (si > 0) film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH_CARD, t - 0.3f, 1.0f, 0.35f));
+                // the phone guide (8.2) and the manual (3.2): a new place is established before anyone speaks in it — a
+                // bridge of the place alone (its picture, a slow push) when the place changes between two scenes
+                int newSet = Sets.detect(firstSentence(sc.setting.length() > 0 ? sc.setting : sc.title));
+                Film.Seg last = film.segs.isEmpty() ? null : film.segs.get(film.segs.size() - 1);
+                Art.Backdrop plate = this.art.sceneBackdrop(sc.number, 0);
+                if (si > 0 && last != null && last.type == Film.S_SCENE && last.set != newSet && plate != null) {
+                    Film.Seg bridge = new Film.Seg();
+                    bridge.type = Film.S_CARD;
+                    bridge.scene = si;
+                    bridge.t0 = t;
+                    bridge.t1 = t + 2.6f;
+                    bridge.text1 = "";
+                    bridge.text2 = "";
+                    bridge.set = newSet;
+                    bridge.tod = Sets.detectTime(sc.setting, Sets.DAY);
+                    bridge.backdrop = plate;
+                    bridge.fadeIn = 0.3f; bridge.fadeOut = 0.3f;
+                    film.segs.add(bridge);
+                    film.notes.add("Bridge before " + sc.heading + ": the new place established on its own (" + Sets.label(newSet) + ") before anyone speaks there");
+                    bridges++;
+                    t = bridge.t1;
+                }
             } else {
             Film.Seg card = new Film.Seg();
             card.type = Film.S_CARD;
@@ -592,6 +614,8 @@ public final class Director {
                     + "protocol's motion rule — someone enters or moves during them, and the move is seen wide); point-of-view shots for looks: %d; "
                     + "reactions staged for loud sounds: %d; suspicion and relief read from the manners; every shot carries its ASSETS, TRANSITION IN, STATE AT START / END and "
                     + "VOICE / MUSIC lines; the beat sheet, scene records, coverage report, prop ledger and location records follow the ledger%n", hs.estabHeld, hs.estabTotal, povShots, loudReactions));
+            b.append(String.format(java.util.Locale.US, "• Phone-local guide (v1.0): establishing bridges added where the place changes between scenes: %d; reverse shots use the place's reverse angle when you gave one; "
+                    + "real uploaded angles replace made views; no painted mouth where no mouth was found%n", bridges));
             film.stats = hs;
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
@@ -773,6 +797,7 @@ public final class Director {
                 && Txt.has(partWords, BOAT))) && !Txt.has(where, "किनारे", "shore", "beach", "तट");
         if (seg.festive && seg.set != Sets.CAVE_IN) seg.set = Sets.CELEBRATION;
         seg.backdrop = nParts > 1 ? art.sceneBackdrop(sc.number, pi) : art.sceneBackdrop(sc.number, 0);
+        seg.backdropReverse = art.reverseBackdrop(sc.number);      // the user's reverse angle of the place, for the reverse shots
         if (nParts == 1 && seg.backdrop == null) seg.backdrop = art.scenes.get(String.valueOf(sc.number));
         seg.ground = seg.backdrop != null ? seg.backdrop.ground * 720f : Sets.GROUND;
         ground = seg.ground;
@@ -1414,6 +1439,7 @@ public final class Director {
                 // shoulder when the speaker's back view exists (the scene maker guide, ch. 7: the listener's perspective)
                 Film.Cam c = faceCam(to, tk, light, 0.75f);
                 c.keep = true;
+                c.reverse = true;
                 seg.cams.add(c);
                 boolean ots = overShoulder(sp, to, tk);
                 sh = shot(tk, ShotPlanner.MCU, ots ? ShotPlanner.OTS : ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, to, sp, stage);
@@ -1762,6 +1788,8 @@ public final class Director {
     private int thoughtBeats, dutchCount, dutchUsed;
     /** The director's manual: point-of-view shots made for looks (3.4), reactions staged for loud sounds (3.2). */
     private int povShots, loudReactions;
+    /** Establishing bridges added between scenes whose place changes (the phone guide 8.2). */
+    private int bridges;
     /** The face fill of the lip-sync shots (section 8.3), summed, and how many were measured. */
     private float faceFillSum;
     private int faceFillN;
@@ -2102,6 +2130,7 @@ public final class Director {
         Film.Cam c = new Film.Cam(end + 0.05f, tx + tk.facing * (1280f / zoom) * 0.12f, cy, zoom, 0);
         c.still = true;
         c.light = plan.light;
+        c.reverse = true;                       // the listener's face: the place's reverse angle behind it when the user gave one
         seg.cams.add(c);
         boolean changed = false;
         Film.Key r = to.at(end + 0.3f);     // anticipation: a tiny pause, then the face changes (§23)
@@ -2771,6 +2800,7 @@ public final class Director {
             float tx = xAt(target, pt), ht = heightOf(target);
             Film.Key kt = target.stateAt(pt);
             cam(pt, tx, kt.body == Pose.LIE ? ground - 60 : ground - ht * 0.62f, 1.35f, 0);
+            seg.cams.get(seg.cams.size() - 1).reverse = true;
             p = shot(pt, ShotPlanner.MEDIUM, ShotPlanner.POV, 0, ShotPlanner.STATIC, target, subj, ShotPlanner.DEVELOP);
             p.purpose = "Point of view: what " + subj.c.shown() + " sees — " + target.c.shown();
             p.action = target.c.shown() + " as " + subj.c.shown() + " sees them, from where " + subj.c.shown() + " stands";

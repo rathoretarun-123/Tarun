@@ -87,6 +87,9 @@ public final class Art {
         return b;
     }
 
+    /** The user's reverse angle of a scene's place (manifest line scene|<number>r|file), or null. */
+    public Backdrop reverseBackdrop(int number) { return scenes.get(number + "r"); }
+
     public Shot shotFor(int scene, String text) {
         for (Shot s : shots) {
             if (s.scene.length() > 0 && !s.scene.equals(String.valueOf(scene))) continue;

@@ -1309,6 +1309,15 @@ public final class Renderer {
                     mo.sx *= Math.max(0.15f, Math.abs((float) Math.cos(Math.PI * k2)));
                     break;
                 }
+                case Film.G_LISTEN: {
+                    // thought before action (handbook ch. 6): the eyes go first, the head turns a little toward the
+                    // sound and holds, the arms settle, nothing else moves — then the action
+                    float k2 = Rig.smooth(0, 0.22f, u) * Rig.smooth(0, 0.25f, act.t1 - act.t0 - u);
+                    p.headTilt += 6 * k2 * (p.facing < 0 ? -1 : 1);
+                    p.nod -= 0.18f * k2;
+                    p.armL = p.armL + (8 - p.armL) * 0.5f * k2; p.armR = p.armR + (8 - p.armR) * 0.5f * k2;
+                    break;
+                }
                 case Film.G_HEAD_SCRATCH: {
                     // the comic beat (Russo / Gunn): a puzzled scratch of the head — the arm comes up, the fingers
                     // wiggle, the head tilts into the hand, a small shrug
@@ -2109,7 +2118,19 @@ public final class Renderer {
                 float a = Math.min(1, Math.min(u / 0.4f, (f.t1 - t) / 0.4f));
                 g.save();
                 g.setAlpha(Math.max(0, a));
-                cover(g, f.pic, 1.0f + 0.08f * (u / d), -20 * (u / d), 0);
+                if (f.pic.object) {
+                    // an insert of the important object: the place darkens and the thing itself comes up in the
+                    // middle, a little larger as it settles, with a soft shadow under it
+                    g.color(Puppet.alpha(0xFF000000, 0.5f));
+                    g.rect(0, 0, vw, vh);
+                    float grow = 0.92f + 0.08f * Math.min(1, u / 0.5f);
+                    float ih = vh * 0.6f * grow, iw = ih * f.pic.w / Math.max(1, f.pic.h);
+                    if (iw > vw * 0.7f) { iw = vw * 0.7f; ih = iw * f.pic.h / Math.max(1, f.pic.w); }
+                    float x = vw / 2 - iw / 2, y = vh * 0.5f - ih / 2 - 6 * (u / d);
+                    g.color(Puppet.alpha(0xFF000000, 0.3f));
+                    g.oval(vw / 2, y + ih + 10, iw * 0.42f, ih * 0.045f);
+                    g.image(f.pic.img, x, y, iw, ih);
+                } else cover(g, f.pic, 1.0f + 0.08f * (u / d), -20 * (u / d), 0);
                 g.restore();
             }
         }

@@ -39,11 +39,11 @@ public final class Rig {
      * BW x BH is also the grid of the hair weights.
      */
     public static final int BW = 80, BH = 160, FW = 96, FH = 96;
-    public static final int MAX_ROWS = 512, MAX_FACE = 256;
+    public static final int MAX_ROWS = 1024, MAX_FACE = 512;
     /** The shape of the mesh: tall for people (1 : 2), wide for animals (2 : 1). */
     public int mw = BW, mh = BH;
     /** Screen pixels per mesh cell (2 = pixel level: a cell is never bigger than two pixels). */
-    public static float CELL_PX = 1.5f;
+    public static float CELL_PX = 1f;
     /** The picture's and the face crop's size in pixels (the mesh never gets finer than the picture). */
     public int srcW = 1100, srcH = 1100, faceW = 300, faceH = 300;
     public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows

@@ -135,6 +135,7 @@ public final class ShotBook {
         String ar = aspect == null ? "16:9" : aspect;
         b.append(TechnicalDirector.PROTOCOL).append("\n\n");
         b.append(PixarLead.SUMMARY).append("\n\n");
+        b.append(Handbook.SUMMARY).append("\n\n");
         PixarLead.Format fmt = PixarLead.spec(ar);
         b.append("TECHNICAL DIRECTOR PACKAGE — ").append(st.title).append("\n");
         b.append("============================================================\n");
@@ -183,6 +184,7 @@ public final class ShotBook {
             b.append("ANIMATION: ").append(PixarLead.stepName(PixarLead.stepFps(c))).append("; principles in every clip: ").append(PixarLead.PRINCIPLES).append("\n");
             List<String> vw = new ArrayList<String>(VoiceMatch.want(c).words);
             vw.addAll(VoiceStyle.forCharacter(c).words);
+            b.append("VOICE IDENTITY (handbook ch. 10): ").append(Handbook.voiceIdentity(c)).append("\n");
             b.append("VOICE LOCK: ").append(Bible.voiceHint(c, false));
             if (!vw.isEmpty()) { b.append(" — "); for (int i = 0; i < vw.size(); i++) b.append(i > 0 ? ", " : "").append(vw.get(i)); }
             b.append(". Keep the same voice in every line; record or generate 10-20 s as a sample.\n");
@@ -264,11 +266,14 @@ public final class ShotBook {
             l.add(sh);
         }
         int n = 0;
+        java.util.Set<Integer> objectiveDone = new java.util.HashSet<Integer>();
         for (Film.Shot sh : film.shots) {
             n++;
             Film.Seg sg = film.segAt(sh.t + 0.01f);
             if (sg == null) continue;
             String id = String.format(Locale.US, "%03d", n);
+            int sceneNo = sg.scene >= 0 && sg.scene < st.scenes.size() ? st.scenes.get(sg.scene).number : 0;
+            String shotId = sh.id.length() > 0 ? sh.id : Handbook.shotId(sceneNo, n, 1);
             // who is in the frame, left to right
             Film.Cam cam = null;
             for (Film.Cam c : sg.cams) if (c.t <= sh.t + 0.01f) cam = c;
@@ -290,6 +295,10 @@ public final class ShotBook {
                 place.append(third).append(": ").append(a.c.shown()).append(" | ");
                 grounding.append(a.c.shown()).append(" is ").append(feet(a.look)).append(", ");
             }
+            if (sg.scene >= 0 && sg.scene < st.scenes.size() && !objectiveDone.contains(sg.scene)) {
+                objectiveDone.add(sg.scene);
+                b.append(Handbook.sceneObjective(st, st.scenes.get(sg.scene))).append("\n");
+            }
             String bgText = sg.scene >= 0 ? Bible.oneLine(Bible.firstClauseOf(st.scenes.get(sg.scene).setting.length() > 0 ? st.scenes.get(sg.scene).setting : st.scenes.get(sg.scene).title)) : Sets.label(sg.set);
             String placement = "Foreground (0-1 m): " + foreground(sg.set) + " | " + place + "Background (10-100 m): " + bgText
                     + " | Depth: characters at 3 m, background 30 m | Occlusion: characters in front of the background | Ground: " + ground(sg.set);
@@ -298,7 +307,7 @@ public final class ShotBook {
                     : line != null ? sh.subject + " speaks, head almost still, only mouth and jaw move" : clean(sh.action);
             String groundingTxt = "feet firmly on the ground, shadow under feet touching the ground, scale reference: " + grounding + "gravity and weight";
             String lighting = light(sg.set, sg.tod, sh.light);
-            b.append("SHOT ").append(id).append(String.format(Locale.US, "   [%s, at %d:%04.1f, %.1f s → make as %d clip(s) of 3 s]%n",
+            b.append("SHOT ").append(id).append("  ").append(shotId).append(String.format(Locale.US, "   [%s, at %d:%04.1f, %.1f s → make as %d clip(s) of 3 s]%n",
                     sg.scene >= 0 ? st.scenes.get(sg.scene).heading : "", (int) (sh.t / 60), sh.t % 60, sh.dur, Math.max(1, Math.round(sh.dur / 3f))));
             b.append("PURPOSE: ").append(sh.purpose).append("   FRAMING: ").append(framing(sh.size)).append("\n");
             b.append("1. CHARACTERS: ").append(chars.length() > 0 ? chars : "none (location plate only)").append("\n");
@@ -307,6 +316,16 @@ public final class ShotBook {
             b.append("4. GROUNDING: ").append(groundingTxt).append("\n");
             b.append("5. LIGHTING: ").append(lighting).append("\n");
             b.append("6. CAMERA: ").append(CAMERA).append("\n");
+            // the handbook's shot-prompt architecture (ch. 8), after the six mandatory fields
+            String lens = Handbook.focalFor(sh.size, ar);
+            String project = "shot " + shotId + " of \"" + st.title + "\", " + String.format(Locale.US, "%.1f", Math.min(sh.dur, TechnicalDirector.MAX_SHOT_SECONDS)) + " s, " + ar + ", 24 fps";
+            String intention = sh.emotionalPurpose + (sh.purpose.length() > 0 ? " — " + sh.purpose : "");
+            String blocking = "start: " + (place.length() > 0 ? place.toString() : "the place") + "; one action; end: the same positions, the action's end pose";
+            String performance = "face: " + sh.face + (sh.body.length() > 0 ? "; body: " + sh.body : "") + "; gaze: " + Handbook.gaze(sh);
+            String continuity = "the lock sheets' costumes; no identity drift; the ledger of the scene; " + Handbook.angleMeaning(sh.height) + "; lens " + lens;
+            String endState = sh.cutWhen;
+            b.append("7. PROJECT: ").append(project).append("\n8. INTENTION: ").append(intention).append("\n9. BLOCKING: ").append(blocking)
+                    .append("\n10. PERFORMANCE: ").append(performance).append("\n11. CONTINUITY: ").append(continuity).append("\n12. END STATE: ").append(endState).append("\n");
             // lip-sync: only in a front-facing close-up, at most six words per shot
             if (line != null && !sh.reaction) {
                 // exactly the words heard in this shot (at most six, timed like the film's own lip-sync shots)
@@ -324,15 +343,16 @@ public final class ShotBook {
             for (Film.Actor a : inFrame) if (a.c.shown().equals(sh.subject)) fps = a.stepFps > 0 ? a.stepFps : PixarLead.stepFps(a.c);
             String formatLine = fmt.id + " — safe zone: " + fmt.note;
             String image = TechnicalDirector.fill(TechnicalDirector.IMAGE_TEMPLATE, "FINAL_AR", "@AR@", "SIZE", fmt.w + "x" + fmt.h, "REFERENCES", refs,
-                    "FORMAT", formatLine, "FRAMING", framing(sh.size), "FOCAL", fmt.focal,
+                    "FORMAT", formatLine, "FRAMING", framing(sh.size), "FOCAL", lens,
                     "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
-                    "LIGHTING", lighting, "HANDS", hands);
+                    "LIGHTING", lighting, "HANDS", hands, "INTENTION", intention, "PERFORMANCE", performance, "CONTINUITY", continuity);
             boolean speaks = speech && sh.size >= ShotPlanner.CU;
             String video = TechnicalDirector.fill(TechnicalDirector.VIDEO_TEMPLATE, "SHOT", id, "SNAPSHOT", "first_frame_" + id, "FINAL_AR", "@AR@",
                     "DURATION", String.format(Locale.US, "%.1f", Math.min(sh.dur, TechnicalDirector.MAX_SHOT_SECONDS)), "SPEECH_FLAG", speaks ? "true" : "false",
                     "FPS", fps + (fps < 24 ? " (animated " + PixarLead.stepName(fps) + ", rendered at 24)" : ""), "FORMAT", formatLine,
                     "CHARACTERS", chars.length() > 0 ? chars.toString() : "none", "PLACEMENT", placement, "ACTION", action, "GROUNDING", groundingTxt,
-                    "LIGHTING", lighting, "SPEECH", speaks ? "contains_speech = true" : "contains_speech = false");
+                    "LIGHTING", lighting, "SPEECH", speaks ? "contains_speech = true" : "contains_speech = false",
+                    "PROJECT", project, "INTENTION", intention, "BLOCKING", blocking, "PERFORMANCE", performance, "CONTINUITY", continuity, "END", endState);
             // the validation layer: every prompt is checked before it is written; what fails is corrected first
             TechnicalDirector.Shot chk = new TechnicalDirector.Shot();
             chk.id = id; chk.characters = chars.toString(); chk.placement = placement; chk.action = action; chk.grounding = groundingTxt;

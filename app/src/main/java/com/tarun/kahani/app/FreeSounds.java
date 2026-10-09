@@ -36,6 +36,16 @@ final class FreeSounds {
             {"school", "children playing playground", "Children playing"}, {"garden", "garden birds ambience", "Garden"},
     };
 
+    /** Keyless recordings on GitHub (remvze/moodist: CC0 or Pixabay Content Licence, per its README): the sound's word → the file. */
+    static final String MOODIST = "https://raw.githubusercontent.com/remvze/moodist/main/public/sounds/";
+    static final String[][] GITHUB = {
+            {"storm", "rain/thunder"}, {"rain", "rain/light-rain"}, {"thunder", "rain/thunder"}, {"wind", "nature/wind"},
+            {"waterfall", "nature/waterfall"}, {"river", "nature/river"}, {"sea", "nature/waves"}, {"fire", "nature/campfire"},
+            {"crickets", "animals/crickets"}, {"forest", "nature/jungle"}, {"birds", "animals/birds"}, {"village", "places/night-village"},
+            {"market", "urban/crowd"}, {"temple", "places/temple"}, {"cave", "nature/droplets"}, {"desert", "nature/howling-wind"},
+            {"city", "urban/traffic"}, {"train", "transport/train"}, {"garden", "animals/birds"},
+    };
+
     /** How many recordings were added (at most max per film, each a few MB at most). */
     static int fetchFor(Context ctx, Film film, Library lib, Cloud cloud, int max, List<String> notes) {
         if (cloud == null || film == null) return 0;
@@ -52,6 +62,28 @@ final class FreeSounds {
         for (String[] w : need.values()) {
             if (added >= max) break;
             if (have.bestUser(w[0], "amb") != null) continue;           // the library already has a recording of it
+            // first the keyless recording on GitHub (no search, no key, a known file)
+            String gh = null;
+            for (String[] g : GITHUB) if (g[0].equals(w[0])) { gh = g[1]; break; }
+            if (gh != null) {
+                try {
+                    byte[] b = cloud.download(MOODIST + gh + ".mp3");
+                    if (b != null && b.length >= 20000 && b.length <= 12 * 1024 * 1024) {
+                        Library.Item it = lib.addBytes(Library.SOUND, "amb", w[2] + " (free recording)", w[0] + ", " + gh.replace('/', ' ').replace('-', ' '), b, ".mp3",
+                                "moodist (GitHub) CC0 / Pixabay licence");
+                        if (AudioIO.decode(ctx, it.path) == null) lib.remove(it);
+                        else {
+                            it.setMeta("kindSet", "1");
+                            it.kind = "amb";
+                            added++;
+                            notes.add(w[2].toLowerCase(Locale.US) + " sound (moodist on GitHub, CC0 / Pixabay licence)");
+                            continue;
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // not reachable: Openverse next
+                }
+            }
             try {
                 List<Cloud.Found> fs = cloud.searchSounds(w[1], 10);
                 Cloud.Found pick = null;

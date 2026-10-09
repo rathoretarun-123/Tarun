@@ -164,6 +164,23 @@ public final class FilmJob implements Runnable {
             if (fromLib.length() > 0) info = "Taken from your library: " + fromLib;
             check();
             if (Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
+            // free pictures of the story's important objects (Fluent Emoji 3D on GitHub, MIT), for inserts
+            if (Prefs.online(ctx) && Prefs.freeObjects(ctx)) {
+                check();
+                step("Fetching free pictures of the story's objects…", 0.022f);
+                java.util.List<String> got = new java.util.ArrayList<String>();
+                int n = FreeArt.fetchFor(project, story, Prefs.cloud(ctx), Library.get(ctx), 6, got);
+                if (n > 0) objectNotes = got;
+            }
+            // Studio 3D: whatever still has no picture (AI off, offline, or the service down) is built in three
+            // dimensions on the phone — characters with their face points, places with their floor line
+            if (Prefs.studio3d(ctx)) {
+                check();
+                int made = Studio3DArt.makeMissing(project, story, ed, Library.get(ctx), new Studio3DArt.Progress() {
+                    public void at(String what) { check(); step(what + "…", 0.025f); }
+                });
+                if (made > 0) notes3d = made;
+            }
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
             check();
@@ -413,7 +430,12 @@ public final class FilmJob implements Runnable {
             if (!ok) throw last != null ? last : new IllegalStateException("The video could not be made");
             check();
             File fin = project.film();
-            if (fin.exists()) fin.delete();
+            // version discipline (handbook ch. 15): the previous film is kept as film_previous.mp4, never overwritten
+            if (fin.exists()) {
+                File prev = project.file("film_previous.mp4");
+                if (prev.exists()) prev.delete();
+                if (!fin.renameTo(prev)) fin.delete();
+            }
             if (!out.renameTo(fin)) throw new IllegalStateException("The film could not be saved");
             project.setSetting("filmSeconds", String.valueOf((int) film.duration));
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
@@ -504,6 +526,11 @@ public final class FilmJob implements Runnable {
         }
     }
 
+    /** How many pictures Studio 3D made for this film (shown in the notes). */
+    private int notes3d;
+    /** The free object pictures fetched for this film (shown in the notes). */
+    private java.util.List<String> objectNotes;
+
     /** The lock sheets and location plates made for this film: {file, caption, kind ("char" or "place")}. */
     public final java.util.List<String[]> lockItems = new java.util.ArrayList<String[]>();
 
@@ -557,6 +584,8 @@ public final class FilmJob implements Runnable {
         for (int i = n; project.has("lock_char_" + i + ".jpg"); i++) project.file("lock_char_" + i + ".jpg").delete();
         for (int i = m; project.has("lock_place_" + i + ".jpg"); i++) project.file("lock_place_" + i + ".jpg").delete();
         film.shotList += String.format(java.util.Locale.US, "%nLOCK SHEETS (pipeline steps 1-2): %d Character Lock Sheets and %d Location Lock Plates made before any shot, saved with the film (lock_char_N.jpg, lock_place_N.jpg)%n", n, m);
+        if (notes3d > 0) film.shotList += String.format(java.util.Locale.US, "STUDIO 3D: %d missing picture(s) built in three dimensions on the phone (characters with their eyes and mouth known exactly, places with their floor line)%n", notes3d);
+        if (objectNotes != null) film.shotList += "FREE OBJECT PICTURES (inserts, each shown once when the story first brings the thing in): " + objectNotes + "\n";
     }
 
     /** Pipeline step 6 (and the floating check of step 8): every shot played frame by frame at check size (FinalQc). */
@@ -577,6 +606,11 @@ public final class FilmJob implements Runnable {
                 public boolean cancelled() { return cancelled; }
             });
             film.shotList += "\n" + r.text();
+            // the handbook's approval gates and scores (ch. 13) and the delivery checklist (ch. 16), from what was checked
+            if (film.stats != null) {
+                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, r.boiling, r.shaking, r.floating);
+                film.shotList += "\n" + card.text() + "\n" + com.tarun.kahani.core.Handbook.delivery(card, film.stats);
+            }
         } finally {
             g.release();
             bmp.recycle();

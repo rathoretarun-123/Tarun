@@ -50,6 +50,8 @@ public final class Art {
         public int w, h;
         public float x0 = 0, y0 = 0, x1 = 1, y1 = 1;  // crop window (fractions)
         public float ground = 0.9f;                    // where feet stand (fraction of frame height)
+        /** A picture of one object on a transparent background (an insert), not a place. */
+        public boolean object;
         /** Sky, water, waterfall and plants found in the picture (null = not read). */
         public Nature.Scan scan;
         /** The average colour of the picture's lower part (the ground): the colour of the bounce light (0 = unknown). */
@@ -60,6 +62,8 @@ public final class Art {
         public String scene;          // scene number ("8") or "" for any
         public String[] keys;
         public Backdrop pic;
+        /** A picture of an object on a transparent background (an insert of the thing itself, shown once, over the darkened scene). */
+        public boolean object;
     }
 
     public final Map<String, Sprite> sprites = new HashMap<String, Sprite>();   // by character id
@@ -78,7 +82,12 @@ public final class Art {
     public Shot shotFor(int scene, String text) {
         for (Shot s : shots) {
             if (s.scene.length() > 0 && !s.scene.equals(String.valueOf(scene))) continue;
-            for (String k : s.keys) if (k.length() > 0 && Txt.has(text, k)) return s;
+            for (String k : s.keys) {
+                k = k.trim();
+                if (k.length() == 0) continue;
+                // an English key is a whole word ("key" is not in "monkey"); a Hindi key is a stem
+                if (k.charAt(0) < 0x0900 ? Txt.hasWord(text, k) : Txt.has(text, k)) return s;
+            }
         }
         return null;
     }
@@ -330,6 +339,8 @@ public final class Art {
                     s.scene = f[1];
                     s.keys = f[2].split(",");
                     s.pic = b;
+                    s.object = f.length >= 5 && f[4].trim().equals("object");
+                    b.object = s.object;
                     art.shots.add(s);
                 } else if (f[0].equals("title") || f[0].equals("end")) {
                     Backdrop b = makeBackdrop(L, f[1], 1600);

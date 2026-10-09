@@ -637,6 +637,15 @@ public class MainActivity extends Activity {
         String miss = "Still missing:\n• " + noPic + " character pictures  • " + noVoice + " voice samples  • " + noBg + " backgrounds"
                 + "\nAnything you don't add, the studio creates with AI in 3D style when you make the film (internet), or draws itself offline.";
         sum.addView(Ui.text(this, miss, 14, noPic + noVoice + noBg == 0 ? Ui.GREEN : Ui.PRIMARY_DARK, false));
+        if (noPic + noBg > 0) sum.addView(Ui.small(this, "🧊 Build all " + (noPic + noBg) + " missing pictures in 3D now (on the phone)", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is building the missing pictures…", new Work() {
+                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, null); }
+                }, new Done() {
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not build them: " + e.getMessage()); else toast("Studio 3D built " + res + " picture(s)"); showStudio(); }
+                });
+            }
+        }));
         for (String w : st.warnings) sum.addView(Ui.text(this, "⚠ " + w, 13, Ui.RED, false));
         if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ No dialogue found. Tap \"Read with AI\" or write lines like — Name: \"dialogue\"", 14, Ui.RED, true));
         sum.addView(Ui.button(this, "📄  Descriptions for other apps: characters, places, objects, every shot, sounds, voices", Ui.BLUE, new View.OnClickListener() {
@@ -784,6 +793,27 @@ public class MainActivity extends Activity {
             public void onClick(View v) { project.setManifest("char", keyFor(c), null); project.setManifest("char", c.displayName, null); showStudio(); }
         }));
         card.addView(r);
+        // Studio 3D: the character built in three dimensions on the phone (and its master sheet from every side)
+        LinearLayout r3 = Ui.row(this);
+        r3.addView(Ui.small(this, "🧊 3D picture", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is building " + c.shown() + "…", new Work() {
+                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, c, library); }
+                }, new Done() {
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
+                });
+            }
+        }));
+        r3.addView(Ui.small(this, "📐 Front · side · back", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is drawing the master sheet of " + c.shown() + "…", new Work() {
+                    public Object run() throws Exception { return Studio3DArt.masterSheet(project, c); }
+                }, new Done() {
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not draw it: " + e.getMessage()); else showStill(project.file((String) res), "📐 " + c.shown() + " — front, three-quarter, side, back"); }
+                });
+            }
+        }));
+        card.addView(r3);
         return card;
     }
 
@@ -823,6 +853,15 @@ public class MainActivity extends Activity {
         }));
         if (file != null) r.addView(Ui.small(this, "✖", Ui.RED, new View.OnClickListener() {
             public void onClick(View v) { project.setManifest("scene", key, null); project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null); showStudio(); }
+        }));
+        r.addView(Ui.small(this, "🧊 3D place", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is building the place…", new Work() {
+                    public Object run() throws Exception { return Studio3DArt.makePlace(project, castStory, sc, edits(), library); }
+                }, new Done() {
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
+                });
+            }
         }));
         card.addView(r);
         return card;
@@ -2548,6 +2587,7 @@ public class MainActivity extends Activity {
         body.addView(qg);
         // pictures still missing (the library is searched first; the rest can be made with AI)
         final CheckBox ai = new CheckBox(this);
+        final CheckBox three = new CheckBox(this);
         try {
             Story st = ScriptParser.parse(FilmJob.scriptOf(project));
             List<String[]> miss = AutoLibrary.missingTargets(project, st);
@@ -2564,6 +2604,9 @@ public class MainActivity extends Activity {
                 ai.setChecked(Prefs.autoArt(this) && Prefs.online(this));
                 ai.setEnabled(Prefs.online(this));
                 body.addView(ai);
+                three.setText("Studio 3D: build whatever is still missing in 3D on the phone (characters and places, no internet)");
+                three.setChecked(Prefs.studio3d(this));
+                body.addView(three);
             }
         } catch (Exception ignored) {}
         final CheckBox qc = new CheckBox(this);
@@ -2582,6 +2625,7 @@ public class MainActivity extends Activity {
                         if (q >= 0 && q < qs.length) e.height = qs[q];
                         saveEdits(e);
                         if (ai.getParent() != null) Prefs.put(MainActivity.this, "autoArt", ai.isChecked() ? "1" : "0");
+                        if (three.getParent() != null) Prefs.put(MainActivity.this, "studio3d", three.isChecked() ? "1" : "0");
                         Prefs.put(MainActivity.this, "humanQc", qc.isChecked() ? "1" : "0");
                         go.run();
                     }
@@ -2696,6 +2740,10 @@ public class MainActivity extends Activity {
         catch (Exception e) { given = com.tarun.kahani.core.TechnicalDirector.PROTOCOL; }
         try { lead = new String(Project.readAll(getAssets().open("pixar_lead_protocol.md")), "UTF-8"); }
         catch (Exception e) { lead = com.tarun.kahani.core.PixarLead.SUMMARY; }
+        String handbook;
+        try { handbook = new String(Project.readAll(getAssets().open("ai_animation_director_handbook.md")), "UTF-8"); }
+        catch (Exception e) { handbook = ""; }
+        handbook = com.tarun.kahani.core.Handbook.SUMMARY + "\n\n" + handbook;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -2712,8 +2760,11 @@ public class MainActivity extends Activity {
                 + "(suggestions in the descriptions, the director decides), two lights only (key + bounce), the Disney principle tags in every clip, a ma pause after "
                 + "two fast beats, one comic beat per scene, a shadow pass in funny scenes with a villain, steps by the floor's material, animation on twos (Settings), "
                 + "five delivery formats with their safe zones and character scale lock, pictures made natively at the format's size and checked for their shape, "
-                + "first-frame checks (head and feet inside), and a thumbnail and poster made separately.\n\n";
-        TextView tv = Ui.text(this, how + given + "\n\n" + lead, 13, Ui.TEXT, false);
+                + "first-frame checks (head and feet inside), and a thumbnail and poster made separately.\n"
+                + "• The AI Animation Director handbook: the five questions, a shot ID and a lens for every shot; thought before action (a pause and a look "
+                + "before a reaction); a Dutch angle at most once per scene; the scene objective and the continuity ledger in the descriptions; the four approval "
+                + "gates and ten scores in the film's quality check; where it disagrees with the protocols, the table in the handbook's summary says what the studio does.\n\n";
+        TextView tv = Ui.text(this, how + given + "\n\n" + lead + "\n\n" + handbook, 13, Ui.TEXT, false);
         tv.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
         tv.setTextIsSelectable(true);
         ScrollView sv = new ScrollView(this);
@@ -3180,7 +3231,9 @@ public class MainActivity extends Activity {
         LinearLayout dir = Ui.card(this);
         dir.addView(Ui.title(this, "🎬 The director"));
         dir.addView(toggle("Online features (AI, free pictures and sounds)", "online", true));
-        dir.addView(toggle("Make missing pictures with free AI (3D animated style)", "autoArt", true));
+        dir.addView(toggle("Make missing pictures with free AI (3D animated style, needs internet)", "autoArt", true));
+        dir.addView(toggle("Studio 3D: build whatever is still missing in 3D on the phone (no internet)", "studio3d", true));
+        dir.addView(toggle("Free pictures of the story's objects for inserts (Fluent Emoji 3D on GitHub, MIT)", "freeObjects", true));
         dir.addView(toggle("Human QC: show me every shot's first frame before the film is made", "humanQc", true));
         dir.addView(toggle("Natural voices (Microsoft neural, no key)", "naturalVoices", true));
         dir.addView(toggle("Expressive AI voices (needs a key; small free limit)", "aiVoices", false));

@@ -1,6 +1,7 @@
 package com.tarun.kahani.app;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -161,11 +162,68 @@ public final class AndroidGfx implements Gfx {
         c.drawBitmap(b, src, rf, img);
     }
 
+    /**
+     * Canvas.drawBitmapMesh indexes its vertices with 16 bits: a mesh with more vertices than this draws
+     * incompletely (the triangles past the limit land on the first rows). Every picture is meshed to the
+     * pixel (a body up to 512 x 1024 cells, a place up to 1920 x 1080), so a finer mesh is drawn in bands
+     * of rows through Canvas.drawVertices with the picture as the shader and the exact texture point of
+     * every vertex: the same triangles and the same sampling as one draw, so the bands meet without a seam.
+     * Public so the tests can lower it and check the banded drawing against a single one.
+     */
+    public static int MESH_VERTS_PER_DRAW = 65535;
+
     public void imageMesh(Object im, int meshW, int meshH, float[] verts) {
         Bitmap b = (Bitmap) im;
         if (b == null || b.isRecycled()) return;
-        img.setAlpha((int) (255 * alpha));
-        c.drawBitmapMesh(b, meshW, meshH, verts, 0, null, 0, img);
+        int rowsPerBand = MESH_VERTS_PER_DRAW / (meshW + 1) - 1;
+        if ((long) (meshW + 1) * (meshH + 1) <= MESH_VERTS_PER_DRAW || rowsPerBand < 1) {
+            img.setAlpha((int) (255 * alpha));
+            c.drawBitmapMesh(b, meshW, meshH, verts, 0, null, 0, img);
+            return;
+        }
+        meshPaint.setShader(new BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+        meshPaint.setAlpha((int) (255 * alpha));
+        int stride = (meshW + 1) * 2;
+        float sw = b.getWidth() / (float) meshW, sh = b.getHeight() / (float) meshH;
+        if (texX.length < meshW + 1) texX = new float[meshW + 1];
+        for (int i = 0; i <= meshW; i++) texX[i] = i == meshW ? b.getWidth() : i * sw;
+        for (int r0 = 0; r0 < meshH; r0 += rowsPerBand) {
+            int rows = Math.min(rowsPerBand, meshH - r0), n = (rows + 1) * stride;
+            if (bandVerts.length < n) { bandVerts = new float[n]; bandTexs = new float[n]; }
+            // the band's own points (drawVertices' vertOffset is not relied on: the platform has applied it
+            // doubled since Android 9 and ignored it before) and the texture point of each, as one draw has it
+            System.arraycopy(verts, r0 * stride, bandVerts, 0, n);
+            int k = 0;
+            for (int j = 0; j <= rows; j++) {
+                float ty = r0 + j == meshH ? b.getHeight() : (r0 + j) * sh;
+                for (int i = 0; i <= meshW; i++) { bandTexs[k++] = texX[i]; bandTexs[k++] = ty; }
+            }
+            c.drawVertices(Canvas.VertexMode.TRIANGLES, n, bandVerts, 0, bandTexs, 0, null, 0,
+                    bandIndices(meshW, rows), 0, rows * meshW * 6, meshPaint);
+        }
+        meshPaint.setShader(null);
+    }
+
+    private final Paint meshPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+    private float[] bandVerts = new float[0], bandTexs = new float[0], texX = new float[0];
+    private short[] bandIdx = new short[0];
+    private int bandIdxW = -1, bandIdxRows = -1;
+
+    /** The two triangles of every cell of a band, as drawBitmapMesh splits them (kept while the band shape stays). */
+    private short[] bandIndices(int meshW, int rows) {
+        if (bandIdxW == meshW && bandIdxRows == rows) return bandIdx;
+        int n = rows * meshW * 6;
+        if (bandIdx.length < n) bandIdx = new short[n];
+        int k = 0;
+        for (int j = 0; j < rows; j++) {
+            for (int i = 0; i < meshW; i++) {
+                int a = j * (meshW + 1) + i;
+                bandIdx[k++] = (short) a; bandIdx[k++] = (short) (a + meshW + 1); bandIdx[k++] = (short) (a + 1);
+                bandIdx[k++] = (short) (a + 1); bandIdx[k++] = (short) (a + meshW + 1); bandIdx[k++] = (short) (a + meshW + 2);
+            }
+        }
+        bandIdxW = meshW; bandIdxRows = rows;
+        return bandIdx;
     }
 
     public int imageWidth(Object im) { return ((Bitmap) im).getWidth(); }

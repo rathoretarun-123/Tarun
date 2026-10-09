@@ -2,6 +2,8 @@
 
 Since v14 the Pixar-Lead protocol v4.0 (`docs/pixar-lead.md`) sits on top of this one: formats with safe zones and a
 character scale lock, two lights only, the story spine, the Braintrust, the Disney principle tags and the first-frame checks.
+Since v17 the AI Animation Director handbook (`docs/handbook.md`) sits beside both; where it disagrees with this protocol,
+the hard constraints here win and the table in `docs/handbook.md` says exactly what the studio does.
 
 The protocol below is hardcoded in `app/src/main/java/com/tarun/kahani/core/TechnicalDirector.java` (its text,
 numbers, templates, forbidden words, validation layer and error correction) and enforced by the director,
@@ -59,7 +61,7 @@ A side find of the audit: a scene described as a "small living room" was staged 
 | §11 Pipeline order | 1 lock sheets → 2 location plates → 3 shot table → 4 first frames and Human QC → 5 the shots → 6 the frame-by-frame check with the 80 % fix → 7 the edit (music, sounds, film grain, dissolves) → 8 the finished film metered frame by frame. Steps 1, 2, 6 and 8 are done by the studio itself (`FilmJob.lockSheets`, `FilmJob.finalCheck`, `FinalQc.Meter`); the descriptions file lists them for other apps too. |
 | §11 step 4 Human QC | Before anything is generated the app asks the film's shape (FINAL_AR) and whether AI may make the missing pictures. After the director has planned the film it shows the lock sheets, the location plates and the **first frame of every shot**; the user checks them and can fix any shot with the protocol's corrections (calmer = motion cut by 80% / closer / wider / show the listener instead of a bad lip-sync / no cut). Only after approval is the film made. (Settings → Human QC; on by default.) |
 | §12 Error correction | `TechnicalDirector.correct` (motion → 80 % cut and "subtle breathing only"; background → static, no parallax; floating → feet planted with a contact shadow; costume → the lock text; hands → hidden; lip-sync → silent close-up; face fill → reframed) — applied to every shot by `validateShots`, by Human QC's fixes and by the frame-by-frame check. |
-| Pixar Test: no morphing | Every picture — characters, faces, animals, places, title and end pages, insert shots — is bent through a mesh of about one cell per 1.5 screen pixels (`Rig.CELL_PX`, `Nature.CELL_PX`); a picture where nothing moves is mapped exactly to the pixel. |
+| Pixar Test: no morphing | Every picture — characters, faces, animals, places, title and end pages, insert shots — is bent through a mesh of one cell per screen pixel since v17 (`Rig.CELL_PX`, `Nature.CELL_PX`); a picture where nothing moves is mapped exactly to the pixel. On the phone a mesh above 65 535 points is drawn in bands of rows (`AndroidGfx.imageMesh`), each with the exact texture points, so the picture is complete and seamless. |
 | Classy finish | `FilmLook`: filmic tone curve, soft bloom, vibrance, split toning and a colour script that follows each part's mood; `RimLight`: a warm edge light on every character from the key light's side. |
 
 The protocol exactly as given is also stored in the app (`app/src/main/assets/technical_director_protocol.md`) and can be read in the app: ⚙ Settings → 📜 The director's protocols.

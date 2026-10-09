@@ -124,6 +124,11 @@ public class MakeFilm {
             }, null);
             film.shotList += "\n" + qr.text();
             System.out.print(qr.text());
+            if (film.stats != null) {
+                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, qr.boiling, qr.shaking, qr.floating);
+                film.shotList += "\n" + card.text() + "\n" + com.tarun.kahani.core.Handbook.delivery(card, film.stats);
+                System.out.print(card.text());
+            }
             System.out.println("  (final check in " + (System.currentTimeMillis() - tq) + "ms)");
         }
         int frames = (int) (dur * fps);

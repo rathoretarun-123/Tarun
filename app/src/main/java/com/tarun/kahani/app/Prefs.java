@@ -24,6 +24,10 @@ public final class Prefs {
     public static boolean naturalVoices(Context c) { return !"0".equals(get(c, "naturalVoices", "1")); }
     /** The studio creates missing character/background pictures with free AI (3D animated style) when online. */
     public static boolean autoArt(Context c) { return !"0".equals(get(c, "autoArt", "1")); }
+    /** Free pictures of the story's objects from GitHub (Fluent Emoji 3D, MIT) for inserts. */
+    public static boolean freeObjects(Context c) { return !"0".equals(get(c, "freeObjects", "1")); }
+    /** Studio 3D: whatever still has no picture is built in three dimensions on the phone (no internet needed). */
+    public static boolean studio3d(Context c) { return !"0".equals(get(c, "studio3d", "1")); }
     /** Human QC (protocol step 4): the director shows the first frame of every shot and waits for the user's check. */
     public static boolean humanQc(Context c) { return !"0".equals(get(c, "humanQc", "1")); }
     public static boolean aiVoices(Context c) { return "1".equals(get(c, "aiVoices", "0")); }

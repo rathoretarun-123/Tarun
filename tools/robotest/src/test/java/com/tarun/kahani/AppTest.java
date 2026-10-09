@@ -15,8 +15,16 @@ import com.tarun.kahani.app.MainActivity;
 import com.tarun.kahani.app.Project;
 import com.tarun.kahani.core.Art;
 import com.tarun.kahani.core.Director;
+import com.tarun.kahani.core.Doll3D;
 import com.tarun.kahani.core.Film;
 import com.tarun.kahani.core.FinalQc;
+import com.tarun.kahani.core.Handbook;
+import com.tarun.kahani.core.Look;
+import com.tarun.kahani.core.Nature;
+import com.tarun.kahani.core.Pose;
+import com.tarun.kahani.core.Rig;
+import com.tarun.kahani.core.Set3D;
+import com.tarun.kahani.core.Sets;
 import com.tarun.kahani.core.Gfx;
 import com.tarun.kahani.core.Renderer;
 import com.tarun.kahani.core.ScriptParser;
@@ -612,6 +620,145 @@ public class AppTest {
         assertTrue(com.tarun.kahani.core.Sets.detect("Grandpa's small living room at night, a candle on the table") == com.tarun.kahani.core.Sets.ROOM);
         assertTrue(com.tarun.kahani.core.Sets.detect("the dark basement of the closed mall") == com.tarun.kahani.core.Sets.BASEMENT);
         assertTrue(com.tarun.kahani.core.Sets.detect("the rooftop of Sky-Line Tower") == com.tarun.kahani.core.Sets.ROOFTOP);
+    }
+
+    /**
+     * v17 — Studio 3D builds a character and a place on the phone (Android bitmaps, no service): the character comes
+     * with its eye and mouth points, turns round for the master sheet and changes expression; the place comes with
+     * its floor line; the pictures go into a story and are read back by the art loader with the face known exactly.
+     * The handbook's helpers: the stimulus words, the shot ID, the lens, the scorecard. Every mesh is pixel level.
+     */
+    @Test
+    public void studio3dBuildsCharactersAndPlacesAndTheHandbookIsWired() throws Exception {
+        assertTrue(Rig.CELL_PX == 1f && Nature.CELL_PX == 1f);
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        // a person, an animal, a bird and a robot in 3D
+        int made = 0;
+        for (Story.CharacterDef c : story.cast()) {
+            Doll3D.Result r = Doll3D.make(c.look, 360, made);
+            assertTrue(c.shown() + " size", r.w > 60 && r.h > 60);
+            int opaque = 0;
+            for (int i = 0; i < r.px.length; i += 7) if ((r.px[i] >>> 24) > 200) opaque++;
+            assertTrue(c.shown() + " drawn", opaque > r.px.length / 7 / 8);
+            assertTrue(c.shown() + " face points", r.mouthY > r.eyeLY && r.eyeLX < r.eyeRX && r.eyeR > 0.005f && r.mouthHW > 0.005f);
+            if (++made >= 6) break;
+        }
+        Look bird = new Look(); bird.kind = Look.BIRD; bird.species = Look.SP_PEACOCK; bird.furColor = 0xFF1E88E5;
+        assertTrue(Doll3D.make(bird, 300, 1).sideView);
+        Look robot = new Look(); robot.kind = Look.ANIMAL; robot.species = Look.SP_DOG; robot.robot = true; robot.furColor = 0xFFB71C1C;
+        assertTrue(Doll3D.make(robot, 300, 2).w > 100);
+        // the master sheet and the expressions
+        Story.CharacterDef hero = story.cast().get(0);
+        Doll3D.Result sheet = Doll3D.masterSheet(hero.look, 240, 0);
+        assertTrue("sheet " + sheet.w + "x" + sheet.h, sheet.w > sheet.h * 2);
+        Doll3D.Result happy = Doll3D.make(hero.look, 300, 0, 0, Pose.HAPPY), back = Doll3D.make(hero.look, 300, 0, 180, Pose.NEUTRAL);
+        assertTrue(happy.faceKnown && !back.faceKnown);
+        // a place at night with its floor line
+        Set3D.Result place = Set3D.make(Sets.GARDEN, Sets.NIGHT, 320, 180, 3);
+        assertTrue(place.ground > 0.55f && place.ground < 0.9f);
+        int distinct = 0, last = 0;
+        for (int i = 0; i < place.px.length; i += 53) if (place.px[i] != last) { distinct++; last = place.px[i]; }
+        assertTrue("place drawn", distinct > 60);
+        // saved into a story through the phone's picture path, the face points travel with the picture
+        Story.CharacterDef c0 = story.cast().get(0);
+        String file = invokeStudio3DArt("makeCharacter", p, c0);
+        assertTrue(p.has(file));
+        String line = p.manifestLine("char", c0.displayName);
+        assertNotNull(line);
+        assertTrue(line, line.split("\\|").length >= 11);
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Art.Sprite sp = art.sprites.get(c0.id);
+        assertNotNull(sp);
+        assertTrue("face known from the 3D picture", sp.faceKnown);
+        // the handbook's helpers
+        assertTrue(Handbook.stimulus("अचानक एक आवाज़ आई।") && Handbook.stimulus("She hears a knock.") && !Handbook.stimulus("वह बगीचे में चलती है।"));
+        assertTrue(Handbook.shotId(4, 7, 3).equals("KAHANI_SC04_SH007_V003"));
+        assertTrue(Handbook.focalFor(com.tarun.kahani.core.ShotPlanner.XWIDE, "16:9").equals("28mm") && Handbook.focalFor(com.tarun.kahani.core.ShotPlanner.CU, "16:9").equals("85mm"));
+        Director d = new Director(story, new Director.Options());
+        Film film = d.prepare();
+        film = d.direct(art);
+        assertNotNull(film.stats);
+        assertTrue(film.shotList.contains("SHOT ID: KAHANI_SC") && film.shotList.contains("FIVE QUESTIONS") && film.shotList.contains("CONTINUITY LEDGER"));
+        Handbook.Card card = Handbook.score(film, film.stats, 0, 0, 0);
+        assertTrue(card.text().contains("Gate 1") && card.score[7] == 5 && card.gate[2]);
+        assertTrue(Handbook.delivery(card, film.stats).contains("FINAL DELIVERY CHECKLIST"));
+        // the handbook text and its summary are in the app
+        assertTrue(Handbook.SUMMARY.contains("WHERE THE HANDBOOK AND THE PROTOCOLS DISAGREE"));
+        assertTrue(new String(Files.readAllBytes(new File(ASSETS, "ai_animation_director_handbook.md").toPath()), "UTF-8").contains("Four approval gates"));
+    }
+
+    /** The platform's mesh drawing with more vertices than a 16-bit index can count: what Skia does with it. */
+    @Test
+    public void bigMeshDrawsThroughTheAndroidCanvas() throws Exception {
+        // Canvas.drawBitmapMesh indexes vertices with 16 bits: past 65536 vertices a single draw leaves the far rows
+        // undrawn, so AndroidGfx draws a fine mesh in bands — every size must come out complete
+        for (int cells : new int[]{100, 255, 256, 300, 500, 1024}) {
+            Bitmap src = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+            src.eraseColor(0xFFFF0000);
+            Bitmap dst = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888);
+            dst.eraseColor(0xFF0000FF);
+            AndroidGfx g = new AndroidGfx(dst, 4);
+            float[] v = new float[(cells + 1) * (cells + 1) * 2];
+            int k = 0;
+            for (int j = 0; j <= cells; j++) for (int i = 0; i <= cells; i++) { v[k++] = 200f * i / cells; v[k++] = 200f * j / cells; }
+            g.imageMesh(src, cells, cells, v);
+            int blue = 0;
+            StringBuilder where = new StringBuilder();
+            for (int y = 0; y < 200; y += 3) for (int x = 0; x < 200; x += 3) if ((dst.getPixel(x, y) & 0xFFFFFF) != 0xFF0000) { blue++; if (where.length() < 200) where.append(x).append(',').append(y).append(' '); }
+            System.out.println("mesh " + cells + "x" + cells + " (" + ((cells + 1) * (cells + 1)) + " vertices): " + blue + " undrawn sample points " + where);
+            g.release();
+            assertTrue("mesh of " + cells + " cells did not draw fully", blue == 0);
+        }
+        // the banded drawing gives the same picture as a single draw: a wavy mesh over a detailed picture, drawn
+        // once directly (under the limit) and once in many bands (the limit lowered), opaque and translucent
+        int W = 240, Hh = 240, cells = 200;
+        Bitmap src = Bitmap.createBitmap(300, 220, Bitmap.Config.ARGB_8888);
+        int[] sp = new int[300 * 220];
+        for (int y = 0; y < 220; y++) for (int x = 0; x < 300; x++) {
+            int r = (x * 255 / 299), gg = (y * 255 / 219), b = ((x / 7 + y / 5) & 1) == 0 ? 40 : 220;
+            int a = (x > 20 && x < 280) ? 255 : 90;        // soft edges like a cut-out character
+            sp[y * 300 + x] = (a << 24) | (r << 16) | (gg << 8) | b;
+        }
+        src.setPixels(sp, 0, 300, 0, 0, 300, 220);
+        float[] v = new float[(cells + 1) * (cells + 1) * 2];
+        int k = 0;
+        for (int j = 0; j <= cells; j++) for (int i = 0; i <= cells; i++) {
+            v[k++] = 10 + 220f * i / cells + (float) Math.sin(j * 0.11) * 6;
+            v[k++] = 10 + 220f * j / cells + (float) Math.cos(i * 0.09) * 5;
+        }
+        for (float alpha : new float[]{1f, 0.6f}) {
+            int[] one = null;
+            int worst = 0, worstAt = -1;
+            for (int pass = 0; pass < 2; pass++) {
+                Bitmap dst = Bitmap.createBitmap(W, Hh, Bitmap.Config.ARGB_8888);
+                dst.eraseColor(0xFF203040);
+                AndroidGfx g = new AndroidGfx(dst, 4);
+                int saved = AndroidGfx.MESH_VERTS_PER_DRAW;
+                AndroidGfx.MESH_VERTS_PER_DRAW = pass == 0 ? 1 << 20 : 4000;   // one draw, then about ten bands
+                try { g.save(); g.setAlpha(alpha); g.imageMesh(src, cells, cells, v); g.restore(); }
+                finally { AndroidGfx.MESH_VERTS_PER_DRAW = saved; }
+                int[] px = new int[W * Hh];
+                dst.getPixels(px, 0, W, 0, 0, W, Hh);
+                g.release();
+                if (pass == 0) { one = px; continue; }
+                for (int i = 0; i < px.length; i++) {
+                    int a = one[i], b = px[i];
+                    int d = Math.max(Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)), Math.max(Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)), Math.abs((a & 255) - (b & 255))));
+                    if (d > worst) { worst = d; worstAt = i; }
+                }
+            }
+            System.out.println("banded vs single draw at alpha " + alpha + ": worst channel difference " + worst + " at " + (worstAt % W) + "," + (worstAt / W));
+            assertTrue("the banded mesh differs from a single draw by " + worst + " at alpha " + alpha, worst <= 2);
+        }
+    }
+
+    /** Calls the package-private Studio3DArt helper by reflection (the test lives in another package). */
+    private static String invokeStudio3DArt(String method, Project p, Story.CharacterDef c) throws Exception {
+        Class<?> k = Class.forName("com.tarun.kahani.app.Studio3DArt");
+        Method m = k.getDeclaredMethod(method, Project.class, Story.CharacterDef.class, Class.forName("com.tarun.kahani.app.Library"));
+        m.setAccessible(true);
+        return (String) m.invoke(null, p, c, null);
     }
 
     /**

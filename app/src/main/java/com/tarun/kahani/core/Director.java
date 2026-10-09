@@ -182,6 +182,7 @@ public final class Director {
         Story.CharacterDef heroDef = PixarLead.hero(story);
         film.hero = heroDef == null ? "" : heroDef.shown();
         maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0; framedFace = 0; faceFillSum = 0; faceFillN = 0;
+        thoughtBeats = 0; dutchCount = 0; dutchUsed = 0; usedInserts.clear();
 
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
@@ -262,6 +263,8 @@ public final class Director {
         // the Braintrust (PixarLead): the four questions every five shots, suggestions only — appended to the shot list
         film.braintrust = PixarLead.braintrust(film, story);
         film.shotList += "\n" + film.braintrust.text;
+        // the handbook's continuity ledger (ch. 12)
+        film.shotList += "\n" + Handbook.ledger(film, story);
         return film;
     }
 
@@ -485,7 +488,18 @@ public final class Director {
             b.append("SOUND: ").append(sh.sound.length() > 0 ? sh.sound : "music and ambience").append('\n');
             b.append(String.format(java.util.Locale.US, "DURATION: %.1f s%n", sh.dur));
             b.append("CUT WHEN: ").append(sh.cutWhen).append('\n');
-            b.append("EMOTIONAL PURPOSE: ").append(sh.emotionalPurpose).append("\n\n");
+            b.append("EMOTIONAL PURPOSE: ").append(sh.emotionalPurpose).append('\n');
+            // the handbook's record (ch. 5, 6, 15)
+            Film.Seg sgh = film.segAt(sh.t + 0.01f);
+            int sceneNo = sgh != null && sgh.scene >= 0 && sgh.scene < story.scenes.size() ? story.scenes.get(sgh.scene).number : 0;
+            sh.id = Handbook.shotId(sceneNo, n, 1);
+            sh.lens = Handbook.focalFor(sh.size, opt.aspect);
+            sh.gaze = Handbook.gaze(sh);
+            sh.attention = Handbook.attention(sh);
+            b.append("SHOT ID: ").append(sh.id).append("   LENS: ").append(sh.lens).append("   ANGLE: ").append(Handbook.angleMeaning(sh.height)).append('\n');
+            b.append("FIVE QUESTIONS: see — ").append(sh.action).append(" | feel — ").append(sh.emotionalPurpose).append(" | attention first — ").append(sh.attention)
+                    .append(" | reveals — ").append(sh.purpose).append(" | why this camera — ").append(Handbook.purposeOf(sh.size, sh.type)).append('\n');
+            b.append("GAZE: ").append(sh.gaze).append("\n\n");
         }
         b.append("QUALITY CHECK\n");
         b.append("• Every part opens on a readable wide shot: ").append(estab == 0 ? "yes" : "fixed " + estab).append('\n');
@@ -519,6 +533,17 @@ public final class Director {
             b.append("• Story spine filled before any shot was planned (R4, hardcoded): yes — hero ").append(film.hero.length() > 0 ? film.hero : "—").append("; the ending was read first (R3)\n");
             b.append("• Spider-Verse animation on twos: ").append(opt.onTwos ? "on (experts 24, learners 12, rebels 8 fps)" : "off (every character moves every frame; switch it on in Settings)").append('\n');
             b.append("• Nolan: real sounds — steps by the floor of the place (stone, marble, cave, earth), running steps for runs; cross-cutting between speaker and listener in long lines\n");
+            java.util.Set<Integer> durs = new java.util.HashSet<Integer>();
+            for (Film.Shot sh : film.shots) durs.add(Math.round(sh.dur * 4));
+            b.append(String.format(java.util.Locale.US, "• Handbook (AI Animation Director): the five questions answered for every shot, a stable shot ID and a lens by shot size; "
+                    + "thought-before-action beats (a pause and a look before the reaction): %d; Dutch angles: %d (at most one per scene); shot durations: %d distinct lengths (never the same for every shot); "
+                    + "the continuity ledger per scene and the four approval gates follow below%n", thoughtBeats, dutchCount, durs.size()));
+            Handbook.Stats hs = new Handbook.Stats();
+            hs.shots = n; hs.speech = speech; hs.over6 = over6; hs.overMotion = overMotion; hs.multi = multi; hs.longest = longest; hs.jumpRemoved = jump;
+            hs.estabFixed = estab; hs.passed = passed; hs.corrected = corrected; hs.stillWrong = stillWrong.size(); hs.reactions = reactions;
+            hs.thoughtBeats = thoughtBeats; hs.dutch = dutchCount; hs.calmedRuns = calmed; hs.spine = film.hero.length() > 0; hs.faceFill = faceFillN == 0 ? 0 : faceFillSum / faceFillN;
+            hs.durationsDistinct = durs.size();
+            film.stats = hs;
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
         }
@@ -709,6 +734,7 @@ public final class Director {
         lastSubject = null;
         lastGroup.clear();
         dlgCount = 0;
+        dutchUsed = 0;
         lastSpeaker = null;
         lastDlgShot = null;
 
@@ -1678,6 +1704,8 @@ public final class Director {
     private int motionCuts, actionCuts, framed;
     /** PixarLead counters: ma pauses (Miyazaki), comic beats (Russo / Gunn), shadow passes (Gunn), first-frame reframes (head, feet). */
     private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet, framedFace;
+    /** The handbook's beats: thought before action (ch. 6), Dutch angles used (ch. 5: sparingly, at most one per scene). */
+    private int thoughtBeats, dutchCount, dutchUsed;
     /** The face fill of the lip-sync shots (section 8.3), summed, and how many were measured. */
     private float faceFillSum;
     private int faceFillN;
@@ -1834,6 +1862,8 @@ public final class Director {
 
     private int passed, corrected;
     private final List<String> stillWrong = new ArrayList<String>();
+    /** Object inserts already shown (each once). */
+    private final Set<Art.Shot> usedInserts = new java.util.HashSet<Art.Shot>();
 
     /**
      * Section 10, the validation layer, on the finished shot list: every shot is checked (static camera, at most
@@ -2144,6 +2174,8 @@ public final class Director {
             sh.light = 0.3f;
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
+        // an object's picture is an insert of the thing itself, once — when the story first brings it in
+        if (shot != null && shot.object && !usedInserts.add(shot)) shot = null;
         estab = establishing || leading;      // descriptions before anyone speaks set how things are from the start
         String cue = newCues(b.cue, text);
         if (cue.length() > 0) {
@@ -2165,7 +2197,7 @@ public final class Director {
             if (tc < l.start + l.dur + 0.3f) tc = l.start + l.dur + 0.3f;
         }
         if (shot != null) {
-            Film.Fx fx = new Film.Fx(Film.FX_SHOT, t0 + 0.2f, t0 + 4.4f);
+            Film.Fx fx = new Film.Fx(Film.FX_SHOT, t0 + 0.2f, t0 + (shot.object ? 2.8f : 4.4f));
             fx.pic = shot.pic;
             seg.fx.add(fx);
             // the action continues after the cinematic picture
@@ -2196,6 +2228,14 @@ public final class Director {
         }
         float d = 1.4f;
         boolean focusSet = false;
+        // thought before action (handbook ch. 6): a sound or a sudden sight is perceived first — a pause, the head
+        // turns toward it, the body holds still — and only then comes the action of the sentence
+        if (subj != null && subj.stateAt(t).visible && Handbook.stimulus(s)) {
+            subj.acts.add(new Film.Act(t, t + 0.6f, Film.G_LISTEN));
+            t += 0.55f;
+            d += 0.55f;
+            thoughtBeats++;
+        }
 
         // ---- weather and nature that the action calls for (rain starts, thunder, a stone into the pond…)
         d = Math.max(d, natureFrom(s, t, subj));
@@ -3082,7 +3122,9 @@ public final class Director {
             return;
         }
         float zoom = ShotPlanner.zoomFor(size, h);
-        float roll = menace ? (dlgCount % 2 == 0 ? 1 : -1) * 2.4f : 0;
+        // a Dutch angle for menace, used sparingly (handbook ch. 5): at most once per scene
+        float roll = menace && dutchUsed == 0 ? (dlgCount % 2 == 0 ? 1 : -1) * 2.4f : 0;
+        if (roll != 0) { dutchUsed++; dutchCount++; }
         float cx, cy;
         String comp;
         float view = 1280f / zoom;

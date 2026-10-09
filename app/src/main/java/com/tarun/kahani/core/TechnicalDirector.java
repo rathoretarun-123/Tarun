@@ -56,7 +56,10 @@ public final class TechnicalDirector {
             + "two lights only (key + bounce), warm catch-light in the eyes, clean background, no text";
     /** The NEGATIVE line of every first-frame prompt: what must never appear. */
     public static final String NEGATIVE = "stretched, distorted face, extra fingers, cut-off head, cut-off feet, floating, blurry upscale, morphing, "
-            + "text, watermark, camera motion, second light source";
+            + "text, watermark, camera motion, second light source, "
+            // the handbook's targeted constraints (ch. 8): the recurring defects, named
+            + "character redesign, costume change, malformed hands, inconsistent shadows, random background characters, abrupt pose change, "
+            + "mouth movement during silence, proprietary characters";
     public static final String LIP_SYNC = "close-up, front-facing, face looking directly at the camera 0 degrees, face 65-75% of the frame, "
             + "mouth clearly visible, no shadow on the mouth, soft frontal light on the face, catch-light in the eyes, head almost still, "
             + "only mouth and jaw move, no head turn, contains_speech = true";
@@ -87,6 +90,9 @@ public final class TechnicalDirector {
             + "CAMERA: " + CAMERA + "\n"
             + "STYLE: " + STYLE + "\n"
             + "NEGATIVE: " + NEGATIVE + "\n"
+            + "INTENTION: {INTENTION}\n"
+            + "PERFORMANCE: {PERFORMANCE}\n"
+            + "CONTINUITY: {CONTINUITY}\n"
             + CLOTH + ". {HANDS}. " + STABLE + ". No text.";
 
     /** VIDEO TEMPLATE (from the approved first frame, 3 seconds). Fill with {@link #fill}. */
@@ -101,6 +107,12 @@ public final class TechnicalDirector {
             + "LIGHTING: {LIGHTING}\n"
             + "CAMERA: " + CAMERA + "\n"
             + "PRINCIPLES: " + PixarLead.PRINCIPLES + "\n"
+            + "PROJECT: {PROJECT}\n"
+            + "INTENTION: {INTENTION}\n"
+            + "BLOCKING: {BLOCKING}\n"
+            + "PERFORMANCE: {PERFORMANCE}\n"
+            + "CONTINUITY: {CONTINUITY}\n"
+            + "END STATE: {END}\n"
             + STABLE + ". {SPEECH}";
 
     /** Replaces {NAME} fields; pairs of name, value. */

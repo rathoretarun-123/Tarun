@@ -157,10 +157,10 @@ public final class Nature {
     // ================================================================== the living background
 
     public static final int MW = 192, MH = 108;    // the smallest mesh of a living place (plants, water, falls)
-    /** The most cells a place picture is bent through (pixel level: about one cell per 2 screen pixels). */
-    public static final int MAX_COLS = 960, MAX_ROWS = 960, MAX_CELLS = 520000;
-    /** Screen pixels per mesh cell of a place picture (2 = pixel level). */
-    public static float CELL_PX = 2f;
+    /** The most cells a place picture is bent through (pixel level: one cell per screen pixel, up to a 1080p frame). */
+    public static final int MAX_COLS = 1920, MAX_ROWS = 1080, MAX_CELLS = 2073600;
+    /** Screen pixels per mesh cell of a place picture (1 = pixel level). */
+    public static float CELL_PX = 1f;
 
     /**
      * How finely to bend a place picture this frame: {cols, rows}. A picture with plants, water or a waterfall

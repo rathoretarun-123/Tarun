@@ -49,7 +49,11 @@ public final class Film {
         public String spoken = "";
         /** What the user changed after checking the shot (Human QC), or "". */
         public String fixed = "";
+        /** The handbook's record of the shot (ch. 5, 6, 15): its stable ID, the lens, where the eyes go, where attention goes first. */
+        public String id = "", lens = "", gaze = "", attention = "";
     }
+    /** What the director counted while planning (the handbook's scorecard, ch. 13). */
+    public Handbook.Stats stats;
     public Object titleImage, endImage;                           // user pictures (platform images) or null
     public boolean subtitles = true;
 
@@ -122,7 +126,8 @@ public final class Film {
             G_HEAD_SCRATCH = 47,  // the comic beat (Russo / Gunn): a puzzled scratch of the head, a shrug
             G_WEIGHT_SHIFT = 48,  // secondary action while idle: the weight moves from one foot to the other, a glance aside
             G_SHIELD_EYES = 49,   // an arm up against a blinding light, the head turned away
-            G_PULL = 50;          // a hard pull (a plug, a wire, a rope): lean back and yank
+            G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
+            G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;

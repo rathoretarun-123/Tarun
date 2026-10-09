@@ -24,14 +24,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps a second, permanent copy of everything the user puts in the library (photos, voices, sounds) in the
- * phone's Downloads/KahaniFilm/Library folder. That copy survives closing, updating and even uninstalling the
- * app, and the library can be restored from it.
+ * Keeps a second, permanent copy of everything the user puts in the app's own library "tarunkahani" (photos,
+ * voices, sounds) in the phone's Downloads/tarunkahani folder, as private files that no gallery or music player
+ * lists. That copy survives closing, updating and even uninstalling the app, and the library can be restored from
+ * it. Nothing is ever written to the camera or photos library.
  */
 final class Backup {
     private Backup() {}
 
-    static final String FOLDER = "KahaniFilm/Library";
+    static final String FOLDER = "tarunkahani";
+    /** Where versions before v18 kept the backup (still read when old copies are moved to the private form). */
+    static final String OLD_FOLDER = "KahaniFilm/Library";
     /** Added to backed-up files so galleries and music players leave them alone. */
     static final String PRIVATE = ".kfbak";
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
@@ -68,7 +71,8 @@ final class Backup {
                     ContentResolver cr = app.getContentResolver();
                     Uri base = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
                     Cursor c = cr.query(base, new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE},
-                            MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?", new String[]{Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER + "%"}, null);
+                            MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " + MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?",
+                            new String[]{Environment.DIRECTORY_DOWNLOADS + "/" + OLD_FOLDER + "%", Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER + "%"}, null);
                     if (c == null) return;
                     List<Object[]> old = new ArrayList<Object[]>();
                     try {
@@ -127,7 +131,7 @@ final class Backup {
     }
 
     /**
-     * Brings back library items from a backup folder the user picked (Downloads/KahaniFilm/Library).
+     * Brings back library items from a backup folder the user picked (Downloads/tarunkahani, or the older Downloads/KahaniFilm/Library).
      * Items already in the library are skipped. Returns how many were restored.
      */
     static int restore(Context c, Uri tree, Library lib) throws Exception {

@@ -375,7 +375,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) { openSample(); }
         }));
         LinearLayout r = Ui.row(this);
-        r.addView(Ui.small(this, "📚 Library", Ui.GREEN, new View.OnClickListener() {
+        r.addView(Ui.small(this, "📚 tarunkahani Library", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { showLibrary(); }
         }));
         r.addView(Ui.small(this, "⚙ Settings", Ui.SUB, new View.OnClickListener() {
@@ -640,12 +640,27 @@ public class MainActivity extends Activity {
         if (noPic + noBg > 0) sum.addView(Ui.small(this, "🧊 Build all " + (noPic + noBg) + " missing pictures in 3D now (on the phone)", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building the missing pictures…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, null); }
+                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), null); }
                 }, new Done() {
-                    public void done(Object res, Exception e) { if (e != null) toast("Could not build them: " + e.getMessage()); else toast("Studio 3D built " + res + " picture(s)"); showStudio(); }
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not build them: " + e.getMessage()); else toast("Studio 3D made " + res + " picture(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
                 });
             }
         }));
+        int noViews = 0;
+        for (Story.CharacterDef c : st.cast()) if (charFile(c) != null && !Studio3DArt.hasViews(project, keyFor(c)) && Studio3DArt.viewProposals(project, keyFor(c)).isEmpty()) noViews++;
+        if (noViews > 0) sum.addView(Ui.small(this, "📐 Make the views of " + noViews + " character(s) from their pictures (three-quarter, side, back)", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is making the views from the pictures…", new Work() {
+                    public Object run() throws Exception {
+                        return Studio3DArt.makeAllViews(project, st, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null);
+                    }
+                }, new Done() {
+                    public void done(Object res, Exception e) { if (e != null) toast("Could not make them: " + e.getMessage()); else toast("Views made for " + res + " character(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
+                });
+            }
+        }));
+        int nProp = Studio3DArt.proposals(project).size();
+        if (nProp > 0) sum.addView(Ui.text(this, "🧊 " + nProp + " picture(s) made in 3D are waiting for your ✔ Use / ✖ Reject on the cards below — the director uses none of them before you decide.", 14, Ui.PRIMARY_DARK, true));
         for (String w : st.warnings) sum.addView(Ui.text(this, "⚠ " + w, 13, Ui.RED, false));
         if (st.dialogueCount() == 0) sum.addView(Ui.text(this, "⚠ No dialogue found. Tap \"Read with AI\" or write lines like — Name: \"dialogue\"", 14, Ui.RED, true));
         sum.addView(Ui.button(this, "📄  Descriptions for other apps: characters, places, objects, every shot, sounds, voices", Ui.BLUE, new View.OnClickListener() {
@@ -793,18 +808,60 @@ public class MainActivity extends Activity {
             public void onClick(View v) { project.setManifest("char", keyFor(c), null); project.setManifest("char", c.displayName, null); showStudio(); }
         }));
         card.addView(r);
-        // Studio 3D: the character built in three dimensions on the phone (and its master sheet from every side)
+        // Studio 3D: the character built in three dimensions on the phone, the views made from its picture,
+        // and the proposals waiting for a decision (the director asks before a 3D-made picture is used)
+        final String key = keyFor(c);
+        final String[] vfiles = Studio3DArt.viewFiles(project, key);
+        final boolean views = file != null && Studio3DArt.hasViews(project, key);
         LinearLayout r3 = Ui.row(this);
-        r3.addView(Ui.small(this, "🧊 3D picture", Ui.PRIMARY_DARK, new View.OnClickListener() {
+        if (file == null) r3.addView(Ui.small(this, "🧊 3D doll", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
-                background("Studio 3D is building " + c.shown() + "…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, c, library); }
+                background("Studio 3D is building " + c.shown() + " from the description…", new Work() {
+                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
                 });
             }
         }));
-        r3.addView(Ui.small(this, "📐 Front · side · back", Ui.BLUE, new View.OnClickListener() {
+        if (file != null && !views && Studio3DArt.viewProposals(project, key).isEmpty()) r3.addView(Ui.small(this, "📐 Views from this picture", Ui.PRIMARY_DARK, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Studio 3D is making the three-quarter, side and back views of " + c.shown() + " from the picture…", new Work() {
+                    public Object run() throws Exception {
+                        return Studio3DArt.makeViews(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null);
+                    }
+                }, new Done() {
+                    public void done(Object res, Exception e) {
+                        if (e != null) toast("Could not make them: " + e.getMessage());
+                        else if (((Integer) res) == 0) toast("No views for a side-on animal picture: the film mirrors it");
+                        showStudio();
+                    }
+                });
+            }
+        }));
+        if (views) {
+            r3.addView(Ui.small(this, "📐 Views ✓", Ui.GREEN, new View.OnClickListener() {
+                public void onClick(View v) {
+                    background("Laying out the views…", new Work() {
+                        public Object run() throws Exception { return Studio3DArt.viewSheet(project, key, file, vfiles); }
+                    }, new Done() {
+                        public void done(Object res, Exception e) { if (e != null || res == null) toast("Could not show them"); else showStill(project.file((String) res), "📐 " + c.shown() + " — the picture, three-quarter, side, back"); }
+                    });
+                }
+            }));
+            r3.addView(Ui.small(this, "✖ Views", Ui.RED, new View.OnClickListener() {
+                public void onClick(View v) { Studio3DArt.removeViews(project, key); project.setSetting("rejected3d.view." + key, "1"); showStudio(); }
+            }));
+        }
+        if (file != null) {
+            // the plain-English guide: a front picture does not show the back — the user's own back or side picture is the best view
+            r3.addView(Ui.small(this, "📷 Back", Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) { choosePicture("view:" + key + ":180", c.displayName + " back view"); }
+            }));
+            r3.addView(Ui.small(this, "📷 Side", Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) { choosePicture("view:" + key + ":-90", c.displayName + " side view"); }
+            }));
+        }
+        if (file == null) r3.addView(Ui.small(this, "📐 Doll sheet", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is drawing the master sheet of " + c.shown() + "…", new Work() {
                     public Object run() throws Exception { return Studio3DArt.masterSheet(project, c); }
@@ -814,7 +871,50 @@ public class MainActivity extends Activity {
             }
         }));
         card.addView(r3);
+        String[] pc = Studio3DArt.proposalFor(project, Studio3DArt.P_CHAR, key);
+        if (pc != null) proposalRow(card, pc, "🧊 Proposed 3D doll for " + c.shown());
+        java.util.List<String[]> pv = Studio3DArt.viewProposals(project, key);
+        if (!pv.isEmpty() && pc == null) proposalRow(card, pv.get(0), "📐 Proposed views (three-quarter, side, back) of " + c.shown());
         return card;
+    }
+
+    /** A proposal the studio made in 3D, waiting for the user's decision: the picture, its score, Use / Reject. */
+    private void proposalRow(LinearLayout card, final String[] f, String title) {
+        LinearLayout box = Ui.column(this);
+        box.setBackgroundColor(0xFFFFF4D6);
+        box.setPadding(Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
+        box.addView(Ui.text(this, title, 14, Ui.PRIMARY_DARK, true));
+        LinearLayout row = Ui.row(this);
+        final boolean view = f[1].equals(Studio3DArt.P_VIEW);
+        java.util.List<String[]> all = view ? Studio3DArt.viewProposals(project, f[2]) : java.util.Collections.singletonList(f);
+        for (String[] one : all) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            File pf = project.file(Studio3DArt.fileOf(one));
+            if (pf.exists()) iv.setImageBitmap(thumb(pf, 300));
+            row.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, f[1].equals(Studio3DArt.P_SCENE) ? 200 : 80), Ui.dp(this, 120)));
+        }
+        box.addView(row);
+        String verdict = Studio3DArt.verdictOf(f);
+        if (verdict.length() > 0) box.addView(Ui.text(this, verdict, 12, Ui.SUB, false));
+        box.addView(Ui.text(this, "The director asks before any picture made in 3D is used. Reject it and it is deleted; the character then keeps " + (view ? "only the front picture" : "the studio's drawn puppet (or an AI picture when online)") + ".", 12, Ui.SUB, false));
+        LinearLayout r = Ui.row(this);
+        r.addView(Ui.small(this, "✔ Use", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Adding the picture…", new Work() {
+                    public Object run() throws Exception {
+                        if (view) for (String[] one : Studio3DArt.viewProposals(project, f[2])) Studio3DArt.accept(project, library, MainActivity.this, one);
+                        else Studio3DArt.accept(project, library, MainActivity.this, f);
+                        return null;
+                    }
+                }, new Done() { public void done(Object res, Exception e) { if (e != null) toast("Could not add it: " + e.getMessage()); showStudio(); } });
+            }
+        }));
+        r.addView(Ui.small(this, "✖ Reject", Ui.RED, new View.OnClickListener() {
+            public void onClick(View v) { Studio3DArt.reject(project, f); toast("Rejected and deleted"); showStudio(); }
+        }));
+        box.addView(r);
+        card.addView(box);
     }
 
     private LinearLayout narratorCard() {
@@ -857,13 +957,15 @@ public class MainActivity extends Activity {
         r.addView(Ui.small(this, "🧊 3D place", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building the place…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makePlace(project, castStory, sc, edits(), library); }
+                    public Object run() throws Exception { return Studio3DArt.makePlace(project, castStory, sc, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, castStory), Prefs.ask3d(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
                 });
             }
         }));
         card.addView(r);
+        String[] ps = Studio3DArt.proposalFor(project, Studio3DArt.P_SCENE, key);
+        if (ps != null) proposalRow(card, ps, "🧊 Proposed 3D place for part " + sc.number);
         return card;
     }
 
@@ -991,7 +1093,7 @@ public class MainActivity extends Activity {
                 // the production file, then the full Technical Director package (lock sheets, plates, objects,
                 // sounds, voices and every shot with ready prompts)
                 String qc = project.read("qc.txt");
-                return Bible.write(st, sl, pics, voices) + "\n\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect)
+                return Bible.write(st, sl, pics, voices) + "\n\n" + Studio3DArt.bibles(project, st) + "\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect)
                         + (qc.trim().isEmpty() ? "" : "\n\nTHE LAST FILM MADE — the director's shot list and every check (validation, Human QC, final QC)\n"
                         + "============================================================\n" + qc);
             }
@@ -1069,6 +1171,7 @@ public class MainActivity extends Activity {
 
     private String targetName(String t) {
         if (t.startsWith("char:")) return t.substring(5);
+        if (t.startsWith("view:")) { String[] p = t.split(":"); return p[1] + (p.length > 2 && p[2].equals("180") ? " (back view)" : " (side view)"); }
         if (t.startsWith("scene:")) return (castStory != null && castStory.hindi ? "Part " : "Part ") + t.substring(6);
         if (t.equals("title")) return "Title";
         if (t.equals("end")) return "End";
@@ -1077,7 +1180,9 @@ public class MainActivity extends Activity {
 
     private void choosePicture(final String tgt, final String query) {
         target = tgt;
-        new Picker(this, library).show("Picture: " + targetName(tgt), Library.PIC, query,
+        Picker pk = new Picker(this, library);
+        pk.forViews = tgt.startsWith("view:");
+        pk.show("Picture: " + targetName(tgt), Library.PIC, query,
                 new String[]{"phone", "camera", "online", "ai", "auto"}, new Picker.Listener() {
                     public void picked(Library.Item it) { usePicture(it); }
                     public void action(String a) {
@@ -1092,6 +1197,7 @@ public class MainActivity extends Activity {
 
     private void clearTarget(String tgt) {
         if (tgt.startsWith("char:")) project.setManifest("char", tgt.substring(5), null);
+        else if (tgt.startsWith("view:")) { String[] p = tgt.split(":"); Studio3DArt.setView(project, p[1], Float.parseFloat(p[2]), null); }
         else if (tgt.startsWith("scene:")) { String k = tgt.substring(6); project.setManifest("scene", k, null); project.setManifest("scene", k + "a", null); project.setManifest("scene", k + "b", null); }
         else if (tgt.equals("title") || tgt.equals("end")) project.setManifest(tgt, tgt, null);
         else if (tgt.startsWith("voice:")) project.setSetting("vsample." + tgt.substring(6), "");
@@ -1105,7 +1211,7 @@ public class MainActivity extends Activity {
         background("Adding the picture…", new Work() {
             public Object run() throws Exception {
                 InputStream in = library.open(it);
-                return project.savePicture(Project.readAll(in), tgt.startsWith("char:") ? "char" : tgt.startsWith("scene:") ? "scene" : tgt);
+                return project.savePicture(Project.readAll(in), tgt.startsWith("char:") ? "char" : tgt.startsWith("scene:") ? "scene" : tgt.startsWith("view:") ? "view" : tgt);
             }
         }, new Done() {
             public void done(Object r, Exception e) {
@@ -1114,8 +1220,14 @@ public class MainActivity extends Activity {
                 if (tgt.startsWith("char:")) {
                     String name = tgt.substring(5);
                     project.setManifest("char", name, "char|" + name + "|" + f);
+                    project.setSetting("pic.char:" + name, it.id);      // the views kept with this library picture follow it
                     showFace(name);
                     return;
+                } else if (tgt.startsWith("view:")) {
+                    // the user's own back or side picture: the best view there is (the plain-English guide)
+                    String[] p = tgt.split(":");
+                    Studio3DArt.setView(project, p[1], Float.parseFloat(p[2]), "view|" + p[1] + "|" + p[2] + "|" + f);
+                    project.setSetting("rejected3d.view." + p[1], "0");
                 } else if (tgt.startsWith("scene:")) {
                     String k = tgt.substring(6);
                     project.setManifest("scene", k + "a", null);
@@ -1137,7 +1249,7 @@ public class MainActivity extends Activity {
      */
     private void incomingPicture(final byte[] data, final String fileName) {
         final String tgt = target == null ? "lib:pic" : target;
-        final boolean person = tgt.startsWith("char:") || tgt.equals("lib:pic");
+        final boolean person = tgt.startsWith("char:") || tgt.startsWith("view:") || tgt.equals("lib:pic");
         boolean camera = "camera".equals(fileName) || Library.cameraPhoto(data);
         if (camera) {
             toast("📷 Real photo — turning it into an animated avatar…");
@@ -1159,12 +1271,15 @@ public class MainActivity extends Activity {
         background(toon ? "Making the animated avatar…" : "Saving…", new Work() {
             public Object run() throws Exception {
                 byte[] bytes = toon ? toonify(data, person) : data;
-                String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
+                String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.startsWith("view:") ? "view" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
                 String name = targetName(tgt);
                 if (name.length() == 0 && fileName != null) name = fileName.replaceAll("\\.[A-Za-z0-9]+$", "");
                 String ext = toon && person ? ".png" : ".jpg";
                 Library.Item it = library.addBytes(Library.PIC, kind, name, fileName == null ? "" : fileName, bytes, ext, toon ? "photo → avatar" : "phone");
-                if (toon) { it.setMeta("avatar", "1"); library.save(); }
+                if (toon) it.setMeta("avatar", "1");
+                // a back or side picture stays that character's view in every later story (never a front picture)
+                if (tgt.startsWith("view:")) { String[] p = tgt.split(":"); it.setMeta("view", p[2]); it.setMeta("ofName", p[1]); }
+                if (toon || tgt.startsWith("view:")) library.save();
                 return it;
             }
         }, new Done() {
@@ -1354,8 +1469,9 @@ public class MainActivity extends Activity {
                             public void onClick(DialogInterface d, int w) {
                                 try {
                                     String tgt = target == null ? "lib:pic" : target;
-                                    Library.Item it = library.addBytes(Library.PIC, tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt,
+                                    Library.Item it = library.addBytes(Library.PIC, tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.startsWith("view:") ? "view" : tgt,
                                             targetName(tgt), prompt.length() > 200 ? prompt.substring(0, 200) : prompt, b, ".jpg", "AI");
+                                    if (tgt.startsWith("view:")) { String[] p = tgt.split(":"); it.setMeta("view", p[2]); it.setMeta("ofName", p[1]); library.save(); }
                                     usePicture(it);
                                 } catch (Exception ex) { toast("Could not save"); }
                             }
@@ -2654,6 +2770,89 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * The director asks: the pictures the studio made in 3D for this film (dolls, places, the views of every
+     * character from its picture) are shown one by one with their score; the user uses or rejects each, and the
+     * film goes on only when every one is decided.
+     */
+    private void showProposals(final FilmJob j) {
+        LinearLayout body = page(S_QC, "🧊 Pictures made in 3D — your decision", false);
+        LinearLayout head = Ui.card(this);
+        head.addView(Ui.text(this, "The studio made these pictures in three dimensions: a doll for every character without a picture, a place for every part without a "
+                + "background, and the three-quarter, side and back views of every character made from its own picture. The director uses none of them before you decide. "
+                + "✔ Use puts the picture into the story and the app's own library (tarunkahani); ✖ Reject deletes it (the character keeps the drawn puppet, or only its front picture).", 14, Ui.SUB, false));
+        body.addView(head);
+        final LinearLayout list = Ui.column(this);
+        body.addView(list);
+        final Runnable[] fill = new Runnable[1];
+        fill[0] = new Runnable() {
+            public void run() {
+                list.removeAllViews();
+                java.util.List<String[]> all = Studio3DArt.proposals(project);
+                java.util.Set<String> seen = new HashSet<String>();
+                for (String[] f : all) {
+                    String id = f[1] + ":" + f[2];
+                    if (f[1].equals(Studio3DArt.P_VIEW) && !seen.add(id)) continue;
+                    LinearLayout card = Ui.card(MainActivity.this);
+                    String title = f[1].equals(Studio3DArt.P_CHAR) ? "🧊 3D doll: " + f[2] : f[1].equals(Studio3DArt.P_SCENE) ? "🧊 3D place: part " + f[2] : "📐 Views of " + f[2] + " (three-quarter, side, back)";
+                    final String[] ff = f;
+                    LinearLayout box = Ui.column(MainActivity.this);
+                    box.addView(Ui.text(MainActivity.this, title, 15, Ui.TEXT, true));
+                    LinearLayout row = Ui.row(MainActivity.this);
+                    java.util.List<String[]> group = f[1].equals(Studio3DArt.P_VIEW) ? Studio3DArt.viewProposals(project, f[2]) : java.util.Collections.singletonList(f);
+                    for (String[] one : group) {
+                        ImageView iv = new ImageView(MainActivity.this);
+                        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                        File pf = project.file(Studio3DArt.fileOf(one));
+                        if (pf.exists()) iv.setImageBitmap(thumb(pf, 300));
+                        row.addView(iv, new LinearLayout.LayoutParams(Ui.dp(MainActivity.this, f[1].equals(Studio3DArt.P_SCENE) ? 220 : 80), Ui.dp(MainActivity.this, 130)));
+                    }
+                    box.addView(row);
+                    box.addView(Ui.text(MainActivity.this, Studio3DArt.verdictOf(f), 12, Ui.SUB, false));
+                    LinearLayout r = Ui.row(MainActivity.this);
+                    r.addView(Ui.small(MainActivity.this, "✔ Use", Ui.GREEN, new View.OnClickListener() {
+                        public void onClick(View v) {
+                            background("Adding…", new Work() {
+                                public Object run() throws Exception {
+                                    if (ff[1].equals(Studio3DArt.P_VIEW)) for (String[] one : Studio3DArt.viewProposals(project, ff[2])) Studio3DArt.accept(project, library, MainActivity.this, one);
+                                    else Studio3DArt.accept(project, library, MainActivity.this, ff);
+                                    return null;
+                                }
+                            }, new Done() { public void done(Object res, Exception e) { fill[0].run(); } });
+                        }
+                    }));
+                    r.addView(Ui.small(MainActivity.this, "✖ Reject", Ui.RED, new View.OnClickListener() {
+                        public void onClick(View v) { Studio3DArt.reject(project, ff); fill[0].run(); }
+                    }));
+                    box.addView(r);
+                    card.addView(box);
+                    list.addView(card);
+                }
+                if (all.isEmpty()) {
+                    list.addView(Ui.text(MainActivity.this, "✅ Every picture is decided — the film goes on.", 15, Ui.GREEN, true));
+                    j.proposalsDone();
+                    ui.postDelayed(new Runnable() { public void run() { if (screen == S_QC) showProgress(); } }, 600);
+                }
+            }
+        };
+        fill[0].run();
+        LinearLayout c = Ui.card(this);
+        c.addView(Ui.button(this, "✔  Use all of them", Ui.GREEN, new View.OnClickListener() {
+            public void onClick(View v) {
+                background("Adding…", new Work() {
+                    public Object run() throws Exception { Studio3DArt.decideAll(project, library, MainActivity.this, true); return null; }
+                }, new Done() { public void done(Object res, Exception e) { fill[0].run(); } });
+            }
+        }));
+        c.addView(Ui.button(this, "✖  Reject all of them", Ui.RED, new View.OnClickListener() {
+            public void onClick(View v) { Studio3DArt.decideAll(project, library, MainActivity.this, false); fill[0].run(); }
+        }));
+        c.addView(Ui.button(this, "■  Stop the film", Ui.SUB, new View.OnClickListener() {
+            public void onClick(View v) { j.cancel(); j.proposalsDone(); showStory(); }
+        }));
+        body.addView(c);
+    }
+
+    /**
      * Human QC: the director made the first frame of every shot; the user looks through them, fixes any shot with
      * the protocol's corrections, and approves. Only then is the film made.
      */
@@ -2733,6 +2932,31 @@ public class MainActivity extends Activity {
         body.addView(c);
     }
 
+    /** One picture per shot (the keyframes of the film), as a grid, named by shot ID. */
+    private void showShotPictures(final File dir) {
+        LinearLayout body = page(S_QC, "🎞 One picture per shot", false);
+        body.addView(Ui.text(this, "The first frame of every shot, made with the film: the reverse shots over the speaker's shoulder, the walks in side view, the two-shots — one picture per shot, named by its shot ID, kept with the story.", 14, Ui.SUB, false));
+        File[] fs = dir.listFiles();
+        if (fs == null) return;
+        java.util.Arrays.sort(fs);
+        LinearLayout row = null;
+        int i = 0;
+        for (final File f : fs) {
+            if (!f.getName().endsWith(".jpg")) continue;
+            if (i++ % 2 == 0) { row = Ui.row(this); body.addView(row); }
+            LinearLayout cell = Ui.column(this);
+            cell.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 8));
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            iv.setBackgroundColor(0xFF000000);
+            iv.setImageBitmap(thumb(f, 400));
+            cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 100)));
+            cell.addView(Ui.text(this, f.getName().replace(".jpg", ""), 11, Ui.TEXT, false));
+            cell.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showStill(f, f.getName().replace(".jpg", "")); } });
+            row.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+    }
+
     /** The Technical Director protocol exactly as given, and how the app applies each part of it. */
     private void showProtocol() {
         String given, lead;
@@ -2744,6 +2968,10 @@ public class MainActivity extends Activity {
         try { handbook = new String(Project.readAll(getAssets().open("ai_animation_director_handbook.md")), "UTF-8"); }
         catch (Exception e) { handbook = ""; }
         handbook = com.tarun.kahani.core.Handbook.SUMMARY + "\n\n" + handbook;
+        String maker;
+        try { maker = new String(Project.readAll(getAssets().open("ai_3d_scene_maker_guide.md")), "UTF-8"); }
+        catch (Exception e) { maker = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.SceneMaker.SUMMARY + "\n\n" + maker;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "
@@ -2826,6 +3054,7 @@ public class MainActivity extends Activity {
                 if (screen != S_PROGRESS) return;
                 FilmJob j = FilmJob.current;
                 if (j == null) { showStory(); return; }
+                if (j.proposalsWaiting) { showProposals(j); return; }
                 if (j.qcWaiting) { showQc(j); return; }
                 stage.setText(j.paused ? "⏸ Paused — tap Resume to carry on" : j.stage);
                 eta.setText(j.paused ? "" : j.eta());
@@ -2896,6 +3125,11 @@ public class MainActivity extends Activity {
         }));
         panel.addView(r);
         final File thumb = project.file("thumbnail.jpg"), poster = project.file("poster.jpg");
+        final File shotsDir = project.file("shots");
+        final String[] shotFiles = shotsDir.isDirectory() ? shotsDir.list() : null;
+        if (shotFiles != null && shotFiles.length > 0) panel.addView(Ui.button(this, "🎞  One picture per shot (" + shotFiles.length + ")", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { showShotPictures(shotsDir); }
+        }));
         if (thumb.exists() || poster.exists()) {
             LinearLayout r2 = Ui.row(this);
             if (thumb.exists()) r2.addView(Ui.small(this, "🖼 Thumbnail (16:9)", Ui.GREEN, new View.OnClickListener() {
@@ -3087,7 +3321,7 @@ public class MainActivity extends Activity {
 
     private void showLibrary() {
         target = "lib:" + libTab;
-        LinearLayout body = page(S_LIBRARY, "📚 My library", true);
+        LinearLayout body = page(S_LIBRARY, "📚 tarunkahani — the app's own library", true);
         LinearLayout tabs = Ui.row(this);
         tabs.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
         final String[][] t = {{Library.PIC, "🖼 Pictures"}, {Library.VOICE, "🎙 Voices"}, {Library.SOUND, "🔊 Sounds"}};
@@ -3211,6 +3445,7 @@ public class MainActivity extends Activity {
                 {"freesoundKey", "Freesound recordings", "freesound.org/apiv2/apply → Create new API credentials", "key"},
                 {"pixabayKey", "Pixabay pictures", "pixabay.com/api/docs → signed in, the key is on that page", "key"},
                 {"pexelsKey", "Pexels photos", "pexels.com/api → Your API key", "key"},
+                {"meshyKey", "Meshy image-to-3D models (a 3D model from each character's picture; paid per model)", "meshy.ai → API keys", "msy_…"},
         };
         for (final String[] tl : tools) {
             final boolean have = Prefs.get(this, tl[0], "").length() > 10;
@@ -3223,7 +3458,8 @@ public class MainActivity extends Activity {
             }));
             keys.addView(row);
         }
-        keys.addView(Ui.text(this, "Built in, no key: Microsoft neural voices, Pollinations AI pictures and story reading, Openverse and Wikimedia pictures, the phone's own voice offline. "
+        keys.addView(Ui.text(this, "Every picture, voice and sound you upload, photograph, find or make here is kept in the app's own library \"tarunkahani\" (with a private backup in Downloads/tarunkahani) — never in the camera or photos library. "
+                + "Built in, no key: Microsoft neural voices, Pollinations AI pictures and story reading, Openverse and Wikimedia pictures, the studio's own 3D figure model, the phone's own voice offline. "
                 + "No keys come inside the app because its code is public — a key built in would be misused and switched off within days.", 12, Ui.SUB, false));
         body.addView(keys);
 
@@ -3232,9 +3468,11 @@ public class MainActivity extends Activity {
         dir.addView(Ui.title(this, "🎬 The director"));
         dir.addView(toggle("Online features (AI, free pictures and sounds)", "online", true));
         dir.addView(toggle("Make missing pictures with free AI (3D animated style, needs internet)", "autoArt", true));
-        dir.addView(toggle("Studio 3D: build whatever is still missing in 3D on the phone (no internet)", "studio3d", true));
+        dir.addView(toggle("Studio 3D: build whatever is still missing in 3D on the phone, and the views of every character from its picture (no internet)", "studio3d", true));
+        dir.addView(toggle("Ask me before a picture made in 3D is used (✔ Use / ✖ Reject where pictures are chosen)", "ask3d", true));
         dir.addView(toggle("Free pictures of the story's objects for inserts (Fluent Emoji 3D on GitHub, MIT)", "freeObjects", true));
         dir.addView(toggle("Human QC: show me every shot's first frame before the film is made", "humanQc", true));
+        dir.addView(toggle("Faster drawing: a mesh cell of 2 pixels instead of 1 (about twice as fast, a little less smooth)", "fastMesh", false));
         dir.addView(toggle("Natural voices (Microsoft neural, no key)", "naturalVoices", true));
         dir.addView(toggle("Expressive AI voices (needs a key; small free limit)", "aiVoices", false));
         dir.addView(toggle("Animate on twos (Spider-Verse: learners 12 fps, rebels 8 fps)", "onTwos", false));

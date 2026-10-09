@@ -39,6 +39,7 @@ final class AutoLibrary {
         Cloud cloud = null;
         try { if (Prefs.online(ctx)) cloud = Prefs.cloud(ctx); } catch (Throwable ignored) {}
         try { pictures(lib, project, st, notes, cloud); } catch (Throwable ignored) {}
+        try { views(lib, project, st, notes); } catch (Throwable ignored) {}
         try { voices(lib, project, st, notes); } catch (Throwable ignored) {}
         StringBuilder b = new StringBuilder();
         for (String n : notes) b.append(b.length() > 0 ? ", " : "").append(n);
@@ -110,7 +111,7 @@ final class AutoLibrary {
         Set<String> used = new HashSet<String>(java.util.Arrays.asList(project.setting("auto.pics", "").split(",")));
         List<Library.Item> pics = new ArrayList<Library.Item>();
         for (Library.Item it : lib.find(Library.PIC, null, null)) {
-            if (it.builtIn || used.contains(it.id)) continue;
+            if (it.builtIn || used.contains(it.id) || "view".equals(it.kind)) continue;     // a back or side view is never a front picture
             String who = ScriptAI.matchName(it.name, allNames);
             if (who != null) {
                 boolean free = false;
@@ -214,6 +215,40 @@ final class AutoLibrary {
     }
 
     static byte[] shrink(byte[] data, int max) { return MainActivity.shrink(data, max); }
+
+    // ------------------------------------------------------------------ views
+
+    /**
+     * A character whose picture came from the library takes the back and side views kept with that picture
+     * (the app's own back views, or the views the user gave that character in an earlier story), so the
+     * over-the-shoulder reverses and the walks use the real views instead of made ones.
+     */
+    static void views(Library lib, Project project, Story st, List<String> notes) {
+        for (Story.CharacterDef c : st.cast()) {
+            if (Studio3DArt.charFile(project, st, c) == null) continue;
+            String key = Studio3DArt.keyFor(project, st, c);
+            String[] have = Studio3DArt.viewFiles(project, key);
+            String from = project.setting("auto.pic.char:" + c.displayName, project.setting("pic.char:" + c.displayName, ""));
+            for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                if (!"view".equals(it.kind)) continue;
+                float angle;
+                try { angle = Float.parseFloat(it.meta("view") == null ? "180" : it.meta("view")); } catch (NumberFormatException e) { continue; }
+                int idx = com.tarun.kahani.core.Figure3D.viewIndex(angle);
+                if (idx < 0 || have[idx] != null) continue;
+                boolean mine = from.length() > 0 && from.equals(it.meta("of"));
+                if (!mine) { String of = it.meta("ofName"); mine = of != null && (of.equals(c.displayName) || c.aliases.contains(of)); }
+                if (!mine) continue;
+                try {
+                    String f = project.savePicture(Project.readAll(lib.open(it)), "view");
+                    Studio3DArt.setView(project, key, angle, "view|" + key + "|" + (int) angle + "|" + f);
+                    project.setSetting("rejected3d.view." + key, "0");
+                    have[idx] = f;
+                    notes.add(c.shown() + " ← " + (idx == 2 ? "back" : idx == 1 ? "side" : "three-quarter") + " view \"" + it.label() + "\"");
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
 
     // ------------------------------------------------------------------ voices
 

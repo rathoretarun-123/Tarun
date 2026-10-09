@@ -43,6 +43,14 @@ public final class Art {
         /** Where the headwear sits, in eye-distances from the point between the eyes (left, top, right, bottom). */
         public float hatX0, hatY0, hatX1, hatY1;
         public int hatW, hatH;
+        /**
+         * The same character seen from other sides (Figure3D.VIEW_ANGLES: three-quarter, side in mid-stride,
+         * back), each a sprite of its own with its own rig, or null where there is none. The front picture
+         * stays the identity; the views are used for walking, for two-shots and for over-the-shoulder reverses.
+         */
+        public Sprite[] views;
+        /** The view at an index of Figure3D.VIEW_ANGLES, or null. */
+        public Sprite view(int i) { return views == null || i < 0 || i >= views.length ? null : views[i]; }
     }
 
     public static final class Backdrop {
@@ -259,12 +267,15 @@ public final class Art {
     public static Art fromManifest(String text, Story story, Loader L) {
         Art art = new Art();
         boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
+        java.util.List<String[]> views = new java.util.ArrayList<String[]>();
         for (String raw : text.split("\n")) {
             String line = raw.trim();
             if (line.length() == 0 || line.startsWith("#")) continue;
             String[] f = line.split("\\|");
             try {
-                if (f[0].equals("char") && f.length >= 3) {
+                if (f[0].equals("view") && f.length >= 4) {
+                    views.add(f);            // after the characters, below
+                } else if (f[0].equals("char") && f.length >= 3) {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
                     if (c == null) continue;
                     boolean beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
@@ -351,6 +362,44 @@ public final class Art {
                 }
             } catch (RuntimeException e) {
                 // a bad line must never stop the film; skip it
+            }
+        }
+        // the views of the characters (view|name|angle|file|mouthX|mouthY|mouthHW|eyeLX|eyeLY|eyeRX|eyeRY|eyeR)
+        for (String[] f : views) {
+            try {
+                Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                if (c == null) continue;
+                Sprite main = art.sprites.get(c.id);
+                int idx = Figure3D.viewIndex(Float.parseFloat(f[2].trim()));
+                if (main == null || idx < 0) continue;
+                Sprite v = makeSprite(L, f[3], 1100, false);
+                if (v == null) continue;
+                v.faceKnown = false;
+                if (f.length >= 12) {
+                    float[] p = new float[8];
+                    for (int i = 0; i < 8; i++) p[i] = Float.parseFloat(f[4 + i].trim());
+                    if (p[0] > 0 && p[1] > 0) {
+                        v.mouthX = p[0]; v.mouthY = p[1]; v.mouthHW = p[2];
+                        v.eyeLX = p[3]; v.eyeLY = p[4]; v.eyeRX = p[5]; v.eyeRY = p[6]; v.eyeR = p[7];
+                        v.faceKnown = true;
+                    }
+                }
+                v.skin = main.skin; v.lip = main.lip; v.lid = main.lid;
+                try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L); } catch (RuntimeException e) { v.rig = null; }
+                if (v.rig != null && v.pixelsForSampling != null) {
+                    try {
+                        Cutout.Result cr = v.pixelsForSampling;
+                        int[][] rl = RimLight.make(cr.px, cr.w, cr.h);
+                        v.rimL = L.create(rl[0], rl[2][0], rl[2][1]);
+                        v.rimR = L.create(rl[1], rl[2][0], rl[2][1]);
+                    } catch (Throwable ignored) { v.rimL = v.rimR = null; }
+                    if (rainy) v.wetImg = L.create(wetPixels(v.pixelsForSampling.px), v.pixelsForSampling.w, v.pixelsForSampling.h);
+                }
+                v.pixelsForSampling = null;
+                if (main.views == null) main.views = new Sprite[Figure3D.VIEW_ANGLES.length];
+                main.views[idx] = v;
+            } catch (RuntimeException e) {
+                // a bad view never stops the film
             }
         }
         return art;

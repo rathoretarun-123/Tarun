@@ -26,8 +26,16 @@ public final class Doll3D {
      * master-sheet views of the handbook, ch. 3) with an expression (Pose.NEUTRAL, HAPPY, SAD, ANGRY, SURPRISED,
      * SCARED). The face points are only valid for the front view.
      */
-    public static Result make(Look look, int size, int seed, float angleDeg, int emotion) {
+    public static Result make(Look look, int size, int seed, float angleDeg, int emotion) { return make(look, size, seed, angleDeg, emotion, null); }
+
+    /** With a style cue from the user's own pictures: lit from their side, graded onto their line, their skin tones. */
+    public static Result make(Look look, int size, int seed, float angleDeg, int emotion, StyleCue cue) {
         if (look == null) look = new Look();
+        if (cue != null && cue.skins.length > 0 && look.kind != Look.ANIMAL && look.kind != Look.BIRD && look.kind != Look.MONSTER) {
+            Look l2 = look.copy();
+            l2.skin = cue.skin(seed, look.skin);
+            look = l2;
+        }
         Studio3D.Scene s = new Studio3D.Scene();
         boolean beast = look.kind == Look.ANIMAL || look.kind == Look.BIRD;
         float H = 1f;
@@ -47,13 +55,15 @@ public final class Doll3D {
         if (angleDeg != 0 && !beast) w = Math.round(size * 0.75f);
         float half = Math.max(extentH / 2f, extentW / 2f * h / (float) w) * 1.04f;
         s.fovDeg = (float) Math.toDegrees(2 * Math.atan(half / dist));
-        float kx = -0.5f, ky = 0.9f, kz = 0.8f, rx = 0.75f, ry = 0.4f, rz = -0.5f;
+        float side = cue != null && cue.lightSure > 0.3f ? cue.lightSide : -1;      // the key light from the references' side
+        float kx = 0.5f * side, ky = 0.9f, kz = 0.8f, rx = -0.75f * side, ry = 0.4f, rz = -0.5f;
         s.keyX = kx * cs + kz * sn; s.keyY = ky; s.keyZ = -kx * sn + kz * cs;
         s.rimX = rx * cs + rz * sn; s.rimY = ry; s.rimZ = -rx * sn + rz * cs;
         s.skyTop = 0;
         s.ao = true; s.shadows = true;
         s.aoRadius = 0.045f * H;
         Studio3D.Picture p = Studio3D.crop(Studio3D.render(s, w, h, 2), 3);
+        if (cue != null) cue.grade(p.px, p.w, p.h);
         Result r = new Result();
         r.px = p.px; r.w = p.w; r.h = p.h;
         r.sideView = beast;

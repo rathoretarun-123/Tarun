@@ -169,8 +169,15 @@ public final class Library {
                 Item it = new Item();
                 it.id = "asset:sample/" + f; it.type = PIC; it.builtIn = true; it.path = "asset:sample/" + f; it.source = "app";
                 String base = f.replaceAll("\\.(jpg|png)$", "");
-                it.kind = base.startsWith("char_") ? "person" : base.startsWith("bg_") ? "place" : base.startsWith("shot_") ? "shot" : base;
+                boolean back = base.startsWith("char_") && base.endsWith("_back");
+                it.kind = back ? "view" : base.startsWith("char_") ? "person" : base.startsWith("bg_") ? "place" : base.startsWith("shot_") ? "shot" : base;
                 it.name = base.replace("char_", "").replace("bg_", "").replace("shot_", "").replace('_', ' ');
+                if (back) {
+                    // the back view of a character's picture: never a front picture, kept with the picture it belongs to
+                    it.name = base.substring(5, base.length() - 5).replace('_', ' ') + " (back view)";
+                    it.setMeta("view", "180");
+                    it.setMeta("of", "asset:sample/" + base.substring(0, base.length() - 5) + ".jpg");
+                }
                 it.tags = it.name;
                 items.add(it);
             }
@@ -207,6 +214,8 @@ public final class Library {
         synchronized (this) { items.add(0, it); }
         save();
         Backup.copy(ctx, it);
+        // the picture lives only in the app's own library "tarunkahani" (this folder and its private backup);
+        // it is never written to the camera or photos library
         return it;
     }
 

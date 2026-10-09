@@ -1,4 +1,4 @@
-# Studio 3D — the studio's own picture maker (v17)
+# Studio 3D — the studio's own picture maker (v17, v18)
 
 When a character or a place has no picture, the director can now build one in three dimensions on the phone,
 without any service or key: `core/Studio3D.java` (the renderer), `core/Doll3D.java` (characters), `core/Set3D.java`
@@ -50,6 +50,43 @@ at morning, day, evening or night (sky, key light, fog and practicals follow the
 * The Studio: 🧊 3D picture and 📐 Front · side · back on every character, 🧊 3D place on every scene, and
   "🧊 Build all missing pictures in 3D now".
 * The lock sheets and location plates then show the 3D pictures; the film animates them like any picture.
+
+## v18: from the user's own pictures (`Figure3D`), proposals, views, the library
+
+* **The figure from a picture.** `Figure3D.build` reads the cut-out row by row: the opaque runs of each row are the head,
+  the body, an arm beside the body, each leg; each run becomes a ring of an elliptical solid (head round, body flatter,
+  arms and legs round, a skirt in between), with a round core and flat flaps for hair, ribbons and tails beside it; the
+  rings of neighbouring rows are joined, the skull above the eyes is a sphere a quarter wider than the face (the face is
+  the span of skin at the eye rows). The picture is the texture: the front half shows it, the back half shows it mirrored
+  (the costume goes round), the back and the sides of the head show the band of hair above the hairline repeated
+  (never the face). The soft edge of the cut-out is un-mixed from the old background first. The material keeps 68 % of
+  the picture's own light and shade. Views: three-quarter (−45°), side in mid-stride (−90°, the legs apart in depth,
+  the arms opposite), back (180°), facing right like the front picture; the face points are carried through the
+  three-quarter view. A side-on animal picture gets no views (the film mirrors it).
+* **Style cue.** `StyleCue` reads the light side, warmth, saturation, contrast and skin tones of the pictures the story
+  already has; dolls and places are lit from that side and graded toward those values; the views are graded too.
+* **Proposals.** `Studio3DArt` writes `propose|char|…`, `propose|scene|…`, `propose|view|…` lines with the scene maker
+  rubric's score and verdict; the character and scene cards and the progress screen show them with ✔ Use / ✖ Reject;
+  `accept` turns them into `char|`, `scene|` and `view|` lines and adds them to the app's own library; `reject`
+  deletes the files and remembers the rejection (`rejected3d.<kind>.<key>`), so the film job never proposes them again
+  by itself. The job waits (`proposalsWaiting`) until every proposal is decided.
+* **Views in the film.** `Art` loads `view|name|angle|file|face points` lines into `Sprite.views` (each with its own
+  rig); the renderer takes the side view while walking, the three-quarter view in a two-shot when turned to the other
+  character, and the back view as the over-the-shoulder foreground that the director plans for reaction shots once
+  the back view exists; every shot's "PICTURES USED" line in the quality check says which.
+* **One picture per shot.** `FilmJob.shotPictures` saves the first frame of every shot as `shots/<shot id>.jpg`.
+* **The user's own views.** 📷 Back / 📷 Side on the character card save a `view|` line directly (no proposal: the
+  user chose it). `makeViews` then fills only the angles that are missing (`viewFiles`), `makeAllViews` runs for a
+  character until `allViews` is true, and `makeCharacter` never proposes a doll view at an angle the user has given.
+  The sample story ships eleven real back views (`char_<name>_back.jpg`, `view|<name>|180|…` lines in `sample/cast.txt`).
+* **Views in the library.** A back or side picture is a library item of kind `view` (built-in ones carry
+  `meta of=<the front picture's id>`, uploaded ones `meta view=<angle>;ofName=<character>`); `AutoLibrary.pictures`
+  never offers a view as a front picture, and `AutoLibrary.views` gives a character the views kept with the library
+  picture it received (or named for it) before every film.
+* **An image-to-3D service.** With a Meshy key, `ImageTo3D.meshy` sends the cut-out and `Glb.load` reads the model;
+  `Glb.render` draws the views through the same camera as the figure. Built from the public API; not run with a live key.
+* **The library.** Every accepted picture goes into the app's own library "tarunkahani" (the app's private folder with a
+  private backup in Downloads/tarunkahani) — never into the camera or photos library.
 
 ## Cost and limits
 

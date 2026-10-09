@@ -18,7 +18,7 @@ public class MakeFilm {
         String out = a[2];
         int width = Integer.parseInt(a[3]);
         String aspect = System.getenv().getOrDefault("ASPECT", "16:9");
-        int height = aspect.equals("9:16") ? width * 16 / 9 : aspect.equals("1:1") ? width : width * 9 / 16;
+        int height = Math.round(width / com.tarun.kahani.core.PixarLead.spec(aspect).ratio) & ~1;   // every delivery format's exact shape
         int fps = Integer.parseInt(a[4]);
         String stills = a.length > 5 ? a[5] : null;
         float maxSec = a.length > 6 ? Float.parseFloat(a[6]) : 1e9f;
@@ -35,6 +35,10 @@ public class MakeFilm {
 
         Director.Options opt = new Director.Options();
         opt.aspect = aspect;
+        // the app's switches: SUBS=1 subtitles, TWOS=1 animation on twos, PACE=0.8..1.3 the speed
+        opt.subtitles = System.getenv("SUBS") != null;
+        opt.onTwos = System.getenv("TWOS") != null;
+        opt.pace = Float.parseFloat(System.getenv().getOrDefault("PACE", "1"));
         Director dir = new Director(story, opt);
         Film film = dir.prepare();
         float[][] voices = new float[film.lines.size()][];
@@ -125,7 +129,7 @@ public class MakeFilm {
             film.shotList += "\n" + qr.text();
             System.out.print(qr.text());
             if (film.stats != null) {
-                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, qr.boiling, qr.shaking, qr.floating);
+                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, qr.boilingLeft, qr.shakingLeft, qr.floating);   // what is left after the fix
                 film.shotList += "\n" + card.text() + "\n" + com.tarun.kahani.core.Handbook.delivery(card, film.stats);
                 System.out.print(card.text());
             }

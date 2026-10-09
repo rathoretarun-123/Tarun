@@ -530,7 +530,7 @@ public final class Cutout {
         return mx - mn < 22 && mx > 120;
     }
 
-    static boolean isSkin(int c) {
+    public static boolean isSkin(int c) {
         int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
         if ((c >>> 24) < 200) return false;
         return r > 95 && g > 50 && b > 25 && r > g && g >= b - 5 && (r - b) > 30 && (r - g) < 95 && (r - g) > 8 && Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b)) > 25;

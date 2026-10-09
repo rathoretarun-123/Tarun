@@ -155,9 +155,18 @@ final class Picker {
      * Shows the chooser. type = Library.PIC / VOICE / SOUND, query sorts best matches first,
      * actions = which extra buttons to offer.
      */
+    /** The chooser is for a character's back or side view: the library's views come first; otherwise they are left out. */
+    boolean forViews;
+
     void show(String title, final String type, final String query, final String[] actions, final Listener l) {
         final List<Library.Item> items = new java.util.ArrayList<Library.Item>(lib.find(type, null, query));
         items.addAll(extra);
+        if (Library.PIC.equals(type)) {
+            // a back or side view is never offered as a front picture; for a view it is the first choice
+            List<Library.Item> views = new java.util.ArrayList<Library.Item>();
+            for (java.util.Iterator<Library.Item> it = items.iterator(); it.hasNext(); ) { Library.Item x = it.next(); if ("view".equals(x.kind)) { it.remove(); views.add(x); } }
+            if (forViews) items.addAll(0, views);
+        }
         if (!suggested.isEmpty()) {
             java.util.Collections.sort(items, new java.util.Comparator<Library.Item>() {
                 public int compare(Library.Item x, Library.Item y) {

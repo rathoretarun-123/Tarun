@@ -51,6 +51,10 @@ public final class Film {
         public String fixed = "";
         /** The handbook's record of the shot (ch. 5, 6, 15): its stable ID, the lens, where the eyes go, where attention goes first. */
         public String id = "", lens = "", gaze = "", attention = "";
+        /** An over-the-shoulder reverse: the character whose shoulder and back are in the foreground, or "". */
+        public String ots = "";
+        /** The picture of each character this shot is drawn with (the front picture, or a view made from it). */
+        public String view = "";
     }
     /** What the director counted while planning (the handbook's scorecard, ch. 13). */
     public Handbook.Stats stats;

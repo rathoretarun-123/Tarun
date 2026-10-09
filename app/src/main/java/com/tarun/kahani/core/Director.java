@@ -360,7 +360,8 @@ public final class Director {
                 float next = sg.t1;
                 for (int j = i + 1; j < sg.cams.size(); j++) if (sg.cams.get(j).ease == 0) { next = sg.cams.get(j).t; break; }
                 Film.Shot match = null;
-                for (Film.Shot p : planned) if (Math.abs(p.t - c.t) < 0.25f) { match = p; break; }
+                for (Film.Shot p : planned) if (Math.abs(p.t - c.t) < 0.25f && (match == null || Math.abs(p.t - c.t) < Math.abs(match.t - c.t))) match = p;
+                if (match != null) planned.remove(match);            // a planned shot describes one cut, never two
                 Film.Shot sh = match;
                 if (sh == null) {
                     sh = new Film.Shot();
@@ -384,6 +385,15 @@ public final class Director {
                     }
                     sh.purpose = talk != null ? "A cut-in / cut-out on the speaker so no shot is longer than about 3 seconds"
                             : sh.size <= ShotPlanner.MWIDE ? "Follow the action: everyone who moves stays in the frame" : "Show what " + sh.subject + " does";
+                    // a cut inside a cinematic picture (a long still split so no shot is longer than 4 s): the picture stays
+                    for (Film.Fx f : sg.fx) if (f.type == Film.FX_SHOT && c.t > f.t0 + 0.05f && c.t < f.t1 - 0.05f) {
+                        sh.purpose = "The cinematic picture of the moment, continued (a long still cut so no shot is longer than 4 s)";
+                        sh.subject = "the moment, as a picture";
+                        sh.type = ShotPlanner.SINGLE;
+                        sh.size = ShotPlanner.WIDE;
+                        who = null;
+                        break;
+                    }
                     sh.action = talk != null ? (talk.who.length() > 0 ? talk.who + ": \"" + clip(talk.text, 40) + "\"" : clip(talk.text, 50))
                             : (who == null ? "the place" : who.c.shown() + (who.stateAt(c.t + 0.1f).moveDur > 0 ? " moves" : " in the scene"));
                     sh.face = who == null ? "—" : faceOf(who.stateAt(c.t + 0.1f).emotion);
@@ -421,6 +431,20 @@ public final class Director {
                 sg.cams.add(0, w);
                 estab++;
             }
+            // two cuts within a few frames of each other would flash one frame of the first (a planned cut and
+            // the lip-sync cut at the line's start): the later one is the shot, the earlier is dropped (the
+            // opening cut of a part stays; then the later one goes)
+            List<Film.Cam> flash = new ArrayList<Film.Cam>();
+            Film.Cam prevC = null;
+            for (Film.Cam c : sg.cams) {
+                if (c.ease > 0) continue;
+                if (prevC != null && c.t - prevC.t < 0.3f) {
+                    if (prevC.t <= sg.t0 + 0.01f) { flash.add(c); continue; }
+                    flash.add(prevC);
+                }
+                prevC = c;
+            }
+            sg.cams.removeAll(flash);
             Film.Cam prevCut = null;
             List<Film.Cam> drop = new ArrayList<Film.Cam>();
             for (Film.Cam c : sg.cams) {
@@ -497,6 +521,9 @@ public final class Director {
             sh.gaze = Handbook.gaze(sh);
             sh.attention = Handbook.attention(sh);
             b.append("SHOT ID: ").append(sh.id).append("   LENS: ").append(sh.lens).append("   ANGLE: ").append(Handbook.angleMeaning(sh.height)).append('\n');
+            if (sh.ots.length() > 0) b.append("OVER THE SHOULDER: ").append(sh.ots).append("'s shoulder and back in the foreground, soft (the back view made from the picture)\n");
+            sh.view = SceneMaker.viewsUsed(this.art, film, sh);
+            if (sh.view.length() > 0) b.append("PICTURES USED: ").append(sh.view).append('\n');
             b.append("FIVE QUESTIONS: see — ").append(sh.action).append(" | feel — ").append(sh.emotionalPurpose).append(" | attention first — ").append(sh.attention)
                     .append(" | reveals — ").append(sh.purpose).append(" | why this camera — ").append(Handbook.purposeOf(sh.size, sh.type)).append('\n');
             b.append("GAZE: ").append(sh.gaze).append("\n\n");
@@ -1359,13 +1386,16 @@ public final class Director {
             boolean reaction = listener && k % 3 == 2;
             Film.Shot sh;
             if (reaction) {
-                // Shot C = reaction: the listener's face, silent; the line goes on off-screen
+                // Shot C = reaction: the listener's face, silent; the line goes on off-screen — over the speaker's
+                // shoulder when the speaker's back view exists (the scene maker guide, ch. 7: the listener's perspective)
                 Film.Cam c = faceCam(to, tk, light, 0.75f);
                 c.keep = true;
                 seg.cams.add(c);
-                sh = shot(tk, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, to, sp, stage);
+                boolean ots = overShoulder(sp, to, tk);
+                sh = shot(tk, ShotPlanner.MCU, ots ? ShotPlanner.OTS : ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, to, sp, stage);
                 sh.reaction = true;
-                sh.purpose = "Reaction (part " + (k + 1) + " of " + n + "): " + to.c.shown() + " listens; the line goes on off-screen";
+                if (ots) sh.ots = sp.c.shown();
+                sh.purpose = "Reaction (part " + (k + 1) + " of " + n + "): " + to.c.shown() + " listens" + (ots ? ", seen over " + sp.c.shown() + "'s shoulder" : "") + "; the line goes on off-screen";
                 sh.action = to.c.shown() + " listens, subtle breathing, one small change of expression";
                 sh.face = faceOf(empathy(line.emotion, sp, to));
                 sh.speech = false;
@@ -2053,9 +2083,11 @@ public final class Director {
             changed = true;
         }
         if (changed) to.at(end + 0.35f + plan.breathe + 0.5f).emotion = Pose.NEUTRAL;
-        Film.Shot sh = shot(end + 0.05f, size, ShotPlanner.SINGLE, plan.height, ShotPlanner.STATIC, to, sp, plan.stage);
+        boolean ots = overShoulder(sp, to, end + 0.05f);
+        Film.Shot sh = shot(end + 0.05f, size, ots ? ShotPlanner.OTS : ShotPlanner.SINGLE, plan.height, ShotPlanner.STATIC, to, sp, plan.stage);
         sh.reaction = true;
-        sh.purpose = "Reaction: the audience feels the line through " + to.c.shown() + "'s face, and it is allowed to breathe";
+        if (ots) sh.ots = sp.c.shown();
+        sh.purpose = "Reaction: the audience feels the line through " + to.c.shown() + "'s face" + (ots ? ", over " + sp.c.shown() + "'s shoulder" : "") + ", and it is allowed to breathe";
         sh.action = to.c.shown() + " listens and takes it in, without words";
         sh.face = faceOf(r.emotion);
         sh.cutWhen = "the feeling has landed (" + Math.round(plan.breathe * 10) / 10f + " s of silence)";
@@ -2204,6 +2236,28 @@ public final class Director {
             float shift = fx.t1 - t0 - 0.3f;
             shiftAfter(t0 + 0.3f, shift);
             tc += shift;
+            // the picture is a shot of its own: a cut into it and a cut back to the same framing, so the shot list
+            // and the frame-by-frame check see the cuts the viewer sees
+            Film.Cam at = null;
+            for (Film.Cam c : seg.cams) if (c.t <= fx.t0 + 1e-3f && (at == null || c.t >= at.t)) at = c;
+            Film.Cam in = at == null ? new Film.Cam(fx.t0, 640, 372, 1.08f, 0) : new Film.Cam(fx.t0, at.cx, at.cy, at.zoom, 0);
+            Film.Cam out = at == null ? new Film.Cam(fx.t1, 640, 372, 1.08f, 0) : new Film.Cam(fx.t1, at.cx, at.cy, at.zoom, 0);
+            if (at != null) { in.light = at.light; out.light = at.light; in.angle = at.angle; out.angle = at.angle; in.roll = at.roll; out.roll = at.roll; }
+            in.keep = true; in.still = true; out.keep = true; out.still = true;
+            seg.cams.add(in);
+            seg.cams.add(out);
+            String what = Txt.withoutParens(text);
+            if (what.length() > 60) what = what.substring(0, 60) + "…";
+            Film.Shot ins = shot(fx.t0, shot.object ? ShotPlanner.CU : ShotPlanner.WIDE, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, null, null, ShotPlanner.DEVELOP);
+            ins.subject = shot.object ? "the thing itself (insert)" : "the moment, as a picture";
+            ins.purpose = shot.object ? "Insert shot: the thing itself in close-up, from its own picture — once, when the story first brings it in"
+                    : "A cinematic picture of this moment from the library, shown as a still while the narration goes on";
+            ins.action = what;
+            ins.face = "—";
+            ins.body = "—";
+            ins.cutWhen = "the picture has been seen (" + String.format(java.util.Locale.US, "%.1f", fx.t1 - fx.t0) + " s)";
+            ins.emotionalPurpose = shot.object ? "The audience sees exactly what the story is about" : "The stage direction made visible";
+            ins.sound = "The scene's ambience under the picture";
             film.notes.add("  ↳ cinematic shot: " + Txt.withoutParens(text).substring(0, Math.min(40, Txt.withoutParens(text).length())) + "…");
         }
         return tc;
@@ -3203,6 +3257,18 @@ public final class Director {
         sh.sound = "Dialogue in the room of " + Sets.label(seg.set) + ", " + Sets.name(seg.set) + " ambience";
         film.shots.add(sh);
         return sh;
+    }
+
+    /**
+     * An over-the-shoulder reverse is possible when the speaker stands on the ground near the listener and the
+     * speaker's back view exists (made from the speaker's own picture, or given by the user).
+     */
+    private boolean overShoulder(Film.Actor sp, Film.Actor to, float t) {
+        if (sp == null || to == null || art == null) return false;
+        Film.Key ks = sp.stateAt(t), kt = to.stateAt(t);
+        if (!ks.visible || ks.anchor != Film.A_GROUND || ks.body == Pose.LIE || kt.anchor != Film.A_GROUND) return false;
+        Art.Sprite s = art.sprites.get(sp.c.id);
+        return s != null && s.view(2) != null;
     }
 
     static String faceOf(int emo) {

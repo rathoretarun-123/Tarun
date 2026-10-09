@@ -60,6 +60,8 @@ public final class FinalQc {
     /** What step 6 found. */
     public static final class Result {
         public int shots, checked, skipped, windows, pairs, boiling, shaking, calmed, stillLively, storyShakes, effects, feetChecked, floating;
+        /** Boiling / shaking shots left after the protocol's fix (motion cut by 80%): what the finished film shows. */
+        public int boilingLeft, shakingLeft;
         public float worstBoil, worstMoved;
         public String worstAt = "";
         public final List<String> notes = new ArrayList<String>();
@@ -114,6 +116,8 @@ public final class FinalQc {
             Verdict again = play(film, ren, s, sh, prev, cur, gw, gh, null);
             if (again.lively()) {
                 r.stillLively++;
+                if (again.boils()) r.boilingLeft++;
+                if (again.shakes()) r.shakingLeft++;
                 if (r.notes.size() < 12) r.notes.add(String.format(Locale.US, "shot %03d at %s still lively after the 80%% cut (%s): an effect of the story moves there",
                         i + 1, stamp(sh.t), again.why()));
             } else {
@@ -221,6 +225,9 @@ public final class FinalQc {
                 case Film.FX_SHAKE: out = Math.max(out, 1); break;
                 case Film.FX_FLASH: case Film.FX_LIGHTNING: case Film.FX_GLITCH: case Film.FX_FLICKER: case Film.FX_FIREWORKS: return 2;
                 case Film.FX_LIGHTS_OFF: if (t < f.t0 + 0.8f || t > f.t1 - 0.3f) return 2; break;
+                // an insert picture (a full-screen shot of the story) begins and ends with a cut of its own: the two
+                // frames across that cut are a cut, not boiling
+                case Film.FX_SHOT: if (Math.abs(t - f.t0) < 0.1f || Math.abs(t - f.t1) < 0.1f) return 2; break;
                 default:
             }
         }

@@ -30,7 +30,18 @@ public final class Studio3D {
         public int color;
         public float spec = 0.25f, gloss = 24f, wrap = 0.2f, rim = 0.3f, metal = 0f, sss = 0f;
         public int emissive = 0;
+        /** A picture as the colour (sampled by the vertices' texture points, in pixels of the picture), or null. */
+        public int[] tex;
+        public int texW, texH;
+        /** How much of the picture's own light and shade is kept (1 = drawn flat, 0 = lit by the scene only). */
+        public float unlit = 0f;
         public Material(int color) { this.color = color; }
+        /** A material that shows a picture: a cut-out character keeps most of its own shading. */
+        public static Material textured(int[] px, int w, int h, float unlit) {
+            Material m = new Material(0xFFFFFFFF).set(0.08f, 12f, 0.35f, 0.2f);
+            m.tex = px; m.texW = w; m.texH = h; m.unlit = unlit;
+            return m;
+        }
         Material set(float spec, float gloss, float wrap, float rim) { this.spec = spec; this.gloss = gloss; this.wrap = wrap; this.rim = rim; return this; }
     }
 
@@ -52,6 +63,8 @@ public final class Studio3D {
 
     public static final class Mesh {
         float[] v = new float[3 * 8192], n = new float[3 * 8192];
+        /** Texture points (u, v in pixels of the material's picture), only for textured vertices. */
+        float[] uv = new float[2 * 8192];
         int nv;
         int[] t = new int[3 * 16384], tm = new int[16384];
         int nt;
@@ -60,13 +73,24 @@ public final class Studio3D {
         public int mat(Material m) { mats.add(m); return mats.size() - 1; }
 
         int vertex(float x, float y, float z, float nx, float ny, float nz) {
-            if (nv * 3 + 3 > v.length) { v = java.util.Arrays.copyOf(v, v.length * 2); n = java.util.Arrays.copyOf(n, n.length * 2); }
+            if (nv * 3 + 3 > v.length) { v = java.util.Arrays.copyOf(v, v.length * 2); n = java.util.Arrays.copyOf(n, n.length * 2); uv = java.util.Arrays.copyOf(uv, uv.length * 2); }
             float l = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
             if (l < 1e-6f) { nx = 0; ny = 1; nz = 0; l = 1; }
             v[nv * 3] = x; v[nv * 3 + 1] = y; v[nv * 3 + 2] = z;
             n[nv * 3] = nx / l; n[nv * 3 + 1] = ny / l; n[nv * 3 + 2] = nz / l;
+            uv[nv * 2] = 0; uv[nv * 2 + 1] = 0;
             return nv++;
         }
+
+        /** A vertex with its texture point. */
+        public int vertex(float x, float y, float z, float nx, float ny, float nz, float u, float tv) {
+            int i = vertex(x, y, z, nx, ny, nz);
+            uv[i * 2] = u; uv[i * 2 + 1] = tv;
+            return i;
+        }
+
+        /** A triangle (counter-clockwise seen from outside). */
+        public void triangle(int a, int b, int c, int m) { tri(a, b, c, m); }
 
         void tri(int a, int b, int c, int m) {
             if (nt * 3 + 3 > t.length) { t = java.util.Arrays.copyOf(t, t.length * 2); tm = java.util.Arrays.copyOf(tm, tm.length * 2); }
@@ -438,8 +462,15 @@ public final class Studio3D {
                 float ny = pa * m.n[a * 3 + 1] + pb * m.n[b * 3 + 1] + pc * m.n[c * 3 + 1];
                 float nz = pa * m.n[a * 3 + 2] + pb * m.n[b * 3 + 2] + pc * m.n[c * 3 + 2];
                 float nl = len(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+                int albedo = mat.color;
+                if (mat.tex != null) {
+                    float u = pa * m.uv[a * 2] + pb * m.uv[b * 2] + pc * m.uv[c * 2];
+                    float tv = pa * m.uv[a * 2 + 1] + pb * m.uv[b * 2 + 1] + pc * m.uv[c * 2 + 1];
+                    albedo = sample(mat.tex, mat.texW, mat.texH, u, tv);
+                    if ((albedo >>> 24) < 60) continue;      // a transparent part of the picture: nothing there
+                }
                 depth[i] = z;
-                col[i] = sh.shade(mat, wx, wy, wz, nx, ny, nz);
+                col[i] = sh.shade(mat, albedo, wx, wy, wz, nx, ny, nz);
                 nrm[i] = ((int) ((nx * 0.5f + 0.5f) * 255) << 16) | ((int) ((ny * 0.5f + 0.5f) * 255) << 8) | (int) ((nz * 0.5f + 0.5f) * 255);
             }
         }
@@ -493,8 +524,10 @@ public final class Studio3D {
             return sum / 9f;
         }
 
-        int shade(Material m, float x, float y, float z, float nx, float ny, float nz) {
-            float br = (m.color >> 16 & 255) / 255f, bg = (m.color >> 8 & 255) / 255f, bb = (m.color & 255) / 255f;
+        int shade(Material m, float x, float y, float z, float nx, float ny, float nz) { return shade(m, m.color, x, y, z, nx, ny, nz); }
+
+        int shade(Material m, int albedo, float x, float y, float z, float nx, float ny, float nz) {
+            float br = (albedo >> 16 & 255) / 255f, bg = (albedo >> 8 & 255) / 255f, bb = (albedo & 255) / 255f;
             // the view direction
             float vx = s.camX - x, vy = s.camY - y, vz = s.camZ - z;
             float vl = len(vx, vy, vz); vx /= vl; vy /= vl; vz /= vl;
@@ -525,6 +558,13 @@ public final class Studio3D {
             float r = br * (kr * diff * dk + fr * fill * dk + ar) + sr * kr + rim * rr + sss * br * 1.1f;
             float g = bg * (kg * diff * dk + fg * fill * dk + ag) + sg * kg + rim * rg + sss * bg * 0.55f;
             float b = bb * (kb * diff * dk + fb * fill * dk + ab) + sb * kb + rim * rb + sss * bb * 0.4f;
+            if (m.unlit > 0) {
+                // a picture keeps its own light and shade: the scene's lighting only modulates it a little
+                float u = m.unlit;
+                r = r * (1 - u) + (br + (sr * kr + rim * rr) * 0.5f) * u;
+                g = g * (1 - u) + (bg + (sg * kg + rim * rg) * 0.5f) * u;
+                b = b * (1 - u) + (bb + (sb * kb + rim * rb) * 0.5f) * u;
+            }
             if (m.emissive != 0) {
                 float ea = (m.emissive >>> 24) / 255f;
                 r += (m.emissive >> 16 & 255) / 255f * ea; g += (m.emissive >> 8 & 255) / 255f * ea; b += (m.emissive & 255) / 255f * ea;
@@ -532,6 +572,27 @@ public final class Studio3D {
             r *= s.exposure; g *= s.exposure; b *= s.exposure;
             return 0xFF000000 | tone(r) << 16 | tone(g) << 8 | tone(b);
         }
+    }
+
+    /** The picture's colour at (u, v) in pixels, blended between the four nearest pixels (clamped at the edges). */
+    static int sample(int[] px, int w, int h, float u, float v) {
+        float fx = u - 0.5f, fy = v - 0.5f;
+        int x0 = (int) Math.floor(fx), y0 = (int) Math.floor(fy);
+        float kx = fx - x0, ky = fy - y0;
+        int x1 = x0 + 1, y1 = y0 + 1;
+        if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 < 0) x1 = 0; if (y1 < 0) y1 = 0;
+        if (x0 >= w) x0 = w - 1; if (x1 >= w) x1 = w - 1; if (y0 >= h) y0 = h - 1; if (y1 >= h) y1 = h - 1;
+        int c00 = px[y0 * w + x0], c10 = px[y0 * w + x1], c01 = px[y1 * w + x0], c11 = px[y1 * w + x1];
+        float w00 = (1 - kx) * (1 - ky), w10 = kx * (1 - ky), w01 = (1 - kx) * ky, w11 = kx * ky;
+        // weighted by alpha, so the colour of a transparent neighbour never bleeds in
+        float a00 = (c00 >>> 24) * w00, a10 = (c10 >>> 24) * w10, a01 = (c01 >>> 24) * w01, a11 = (c11 >>> 24) * w11;
+        float asum = a00 + a10 + a01 + a11;
+        if (asum <= 0) return 0;
+        float r = ((c00 >> 16 & 255) * a00 + (c10 >> 16 & 255) * a10 + (c01 >> 16 & 255) * a01 + (c11 >> 16 & 255) * a11) / asum;
+        float g = ((c00 >> 8 & 255) * a00 + (c10 >> 8 & 255) * a10 + (c01 >> 8 & 255) * a01 + (c11 >> 8 & 255) * a11) / asum;
+        float b = ((c00 & 255) * a00 + (c10 & 255) * a10 + (c01 & 255) * a01 + (c11 & 255) * a11) / asum;
+        int a = Math.round(asum);
+        return (a << 24) | (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
     }
 
     /** A filmic shoulder: the brights roll off instead of clipping. */

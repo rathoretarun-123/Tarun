@@ -11,19 +11,47 @@ char|रतनलाल|char_ratanlal.jpg|0.510|0.343|0.055|0.411|0.280|0.527|0.
 char|सिम्बा|char_simba.jpg|0.494|0.261|0.058|0.407|0.198|0.564|0.196|0.040|0
 char|सिंघम|char_singham.jpg|0.488|0.264|0.045|0.414|0.210|0.543|0.210|0.035|0
 char|रोहू|char_rohu.jpg|0.509|0.257|0.058|0.414|0.200|0.582|0.195|0.043|0
+char|आंटी चुड़ैल|char_witch.jpg
 # scene|number|file|cropX0|cropY0|cropX1|cropY1|groundY (fraction of the 16:9 frame)
 scene|1|bg_garden.jpg|0|0.08|1|0.92|0.90
-scene|2|bg_courtyard.jpg|0|0.10|1|0.94|0.90
+scene|2|bg_practice_ground.jpg|0|0.06|1|0.94|0.84
 scene|3|bg_main_gate.jpg|0|0.08|1|0.92|0.92
+scene|4|bg_cave_inside.jpg|0|0|1|1|0.88
 scene|5|bg_garden_gate.jpg|0.27|0.30|1|0.916|0.92
 scene|6|bg_garden_gate.jpg|0.27|0.30|1|0.916|0.92
 scene|7|bg_garden.jpg|0|0.08|1|0.92|0.90
 scene|8|bg_forest.jpg|0|0.08|1|0.92|0.92
-scene|10a|bg_forest_cave.jpg|0|0.08|1|0.92|0.92
-scene|10b|bg_garden.jpg|0|0.08|1|0.92|0.90
+scene|9|bg_cave_inside.jpg|0|0|1|1|0.88
+scene|10a|bg_cave_mouth.jpg|0|0|1|1|0.90
+scene|10b|bg_palace_night.jpg|0|0|1|1|0.92
 # shot|scene|keywords (any)|file  -> full-screen cinematic picture for the stage direction that matches
-shot|8|गुफा की ओर इशारा|shot_cave_bell.jpg
-shot|9|शीशा निकालती|shot_mirror.jpg
 shot|10|टन! टन!|shot_cave_bell.jpg
 title|title.jpg|0
 end|end.jpg|0
+# more pictures of the story (v18): full-screen inserts for the stage directions that match
+shot|8|घना जंगल,रात का अँधेरा|shot_forest_night.jpg
+shot|10|ढोल-नगाड़े,रोशनियों से सजा|shot_celebration.jpg
+shot|9|पिंजरे में बेहोश,भारी पत्थर|shot_cave_cage.jpg
+shot|7|लाल रिबन उठाती,धुएँ की गंध|shot_ribbon.jpg
+shot|6|विशाल कंधे,धुएँ के गुबार|shot_kidnap.jpg
+shot|5|बूढ़ी,लड्डू|shot_old_woman.jpg
+shot|4|हरी जादुई रोशनी,भारी चट्टान|shot_cave_villains.jpg
+shot|3|पगड़ी,झपट्टा|shot_turban.jpg
+shot|1|विशाल महल|shot_palace_wide.jpg
+shot|9|कुंडी खोलती|shot_bamboo_cage.jpg
+shot|10|लोहे का जाल|shot_victory.jpg
+shot|8|गुफा की ओर इशारा|shot_cave_entrance.jpg
+shot|10|खिलखिलाहट|shot_family_hug.jpg
+shot|9|शीशा निकालती|shot_mirror_closeup.jpg
+shot|10|गुफा के मुहाने|shot_cave_bell_girls.jpg
+view|वृंदा|180|char_vrinda_back.jpg
+view|वानुषा|180|char_vanusha_back.jpg
+view|कृपा|180|char_kripa_back.jpg
+view|राजू|180|char_raju_back.jpg
+view|राजा तरुण|180|char_tarun_back.jpg
+view|रानी प्रिया|180|char_priya_back.jpg
+view|रतनलाल|180|char_ratanlal_back.jpg
+view|सिम्बा|180|char_simba_back.jpg
+view|रोहू|180|char_rohu_back.jpg
+view|आंटी चुड़ैल|180|char_witch_back.jpg
+view|खान राक्षस|180|char_khan_back.jpg

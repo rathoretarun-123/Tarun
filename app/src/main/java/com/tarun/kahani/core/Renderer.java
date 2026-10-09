@@ -786,6 +786,7 @@ public final class Renderer {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
+        overShoulder(g, s, t);
         weatherScreen(g, s, t);
         light(g, s, t);
         foreground(g, s, t);
@@ -1008,6 +1009,10 @@ public final class Renderer {
             }
         }
         applyActs(a, p, tp);
+        // lip-sync protocol: a speaker seen close keeps the head still — a gesture may still move the arms, but
+        // never bob or rock the whole body (on a narrow screen the face is the whole frame, and a bob reads as
+        // a shake; the frame-by-frame check measured it at 15–19 per cell on 9:16 before this rule)
+        if (spk != null && camZ >= 2.5f) { mo.dx *= 0.15f; mo.dy *= 0.15f; mo.rot *= 0.15f; }
         // a shot the user asked to be calmer (Human QC): every movement there is cut by 80%
         float calm = film == null ? 1f : film.calmAt(t);
         if (calm < 1f) {
@@ -1109,7 +1114,7 @@ public final class Renderer {
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
         g.save();
-        if (sp != null) drawSprite(g, sp, a.look, p, h, mo.rot, a);
+        if (sp != null) drawSprite(g, viewOf(sp, a, s, p, k, spk != null, t), a.look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
@@ -1684,6 +1689,70 @@ public final class Renderer {
         if (p.emotion == Pose.HAPPY && p.mouth < 0.05f) st.breathe = (float) Math.sin(t * 9 + seed);
     }
 
+    /**
+     * The picture a character is drawn with in this moment: the front picture (the identity) — or, when the
+     * views made from it exist, the side view while walking (facing the way of the walk), the three-quarter
+     * view in a two-shot while turned to the other character. Never while speaking (lip-sync needs the face),
+     * never lying, sitting or carried.
+     */
+    private Art.Sprite viewOf(Art.Sprite sp, Film.Actor a, Film.Seg s, Pose p, Film.Key k, boolean speaking, float t) {
+        if (sp.views == null || speaking || k.body != Pose.STAND || k.anchor != Film.A_GROUND || p.sit > 0) return sp;
+        if (p.walkAmt > 0.35f && sp.view(1) != null) return sp.view(1);
+        Film.Shot sh = shotAt(t);
+        if (sh != null && sh.type == ShotPlanner.TWO_SHOT && sp.view(0) != null && p.walkAmt <= 0.35f) {
+            // turned toward the other character of the two-shot: the three-quarter view
+            for (Film.Actor o : s.actors) {
+                if (o == a || !o.stateAt(t).visible || o.stateAt(t).anchor != Film.A_GROUND) continue;
+                float dx = Director.xAt(o, t) - Director.xAt(a, t);
+                if (Math.abs(dx) < 40 || Math.abs(dx) > 900) continue;
+                if (Math.signum(dx) == Math.signum(k.facing)) return sp.view(0);
+            }
+        }
+        return sp;
+    }
+
+    private int lastShot;
+
+    /** The shot playing at t (the shots are in order; the last one found is tried first). */
+    Film.Shot shotAt(float t) {
+        if (film == null || film.shots.isEmpty()) return null;
+        int n = film.shots.size();
+        int i = Math.max(0, Math.min(n - 1, lastShot));
+        Film.Shot sh = film.shots.get(i);
+        if (!(t >= sh.t && t < sh.t + sh.dur)) {
+            for (i = 0; i < n; i++) { sh = film.shots.get(i); if (t >= sh.t && t < sh.t + sh.dur) break; }
+            if (i >= n) return null;
+            lastShot = i;
+        }
+        return sh;
+    }
+
+    /**
+     * The over-the-shoulder reverse: the speaker's shoulder and the back of their head in the foreground at the
+     * edge of the frame, on the side the listener faces, large and soft (out of the depth of field), so the
+     * reaction is seen from the speaker's place in the conversation (the scene maker guide, ch. 7).
+     */
+    private void overShoulder(Gfx g, Film.Seg s, float t) {
+        Film.Shot sh = shotAt(t);
+        if (sh == null || sh.ots.length() == 0) return;
+        Film.Actor fg = null, to = null;
+        for (Film.Actor a : s.actors) { if (a.c.shown().equals(sh.ots)) fg = a; if (a.c.shown().equals(sh.subject)) to = a; }
+        if (fg == null) return;
+        Art.Sprite sp = art.sprites.get(fg.c.id);
+        Art.Sprite back = sp == null ? null : sp.view(2);
+        if (back == null) return;
+        float side = to != null ? to.stateAt(t).facing : -fg.stateAt(t).facing;
+        final float h = vh * 1.45f, w = h * back.w / Math.max(1, back.h);
+        final float cx = side > 0 ? vw - w * 0.34f : w * 0.34f, bottom = vh * 1.12f;
+        final Object img = back.img;
+        final float fw = w;
+        g.layerLow("ots:" + fg.c.id + ":" + (side > 0 ? "R" : "L"), vw, vh, 0.35f, new Gfx.Painter() {
+            public void paint(Gfx gg) {
+                gg.image(img, cx - fw / 2, bottom - h, fw, h);
+            }
+        });
+    }
+
     private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot, Film.Actor actor) {
         float scale = h / sp.h;
         float w = sp.w * scale;
@@ -1808,8 +1877,13 @@ public final class Renderer {
                 g.oval(ex2, ey2 + er * 1.4f + (fall + h * 0.03f) % (h * 0.08f), er * 0.22f, er * 0.32f);
             }
             if (p.sweat) {
-                g.color(0xCC81D4FA);
-                g.oval(ex2 + er * 2.2f, ey2 - er * 1.6f + (p.time * 15) % (er * 2), er * 0.25f, er * 0.38f);
+                // a drop of sweat at the temple sliding down: a teardrop (round below, pointed above) with a glint
+                float dx = ex2 + er * 2.2f, dy = ey2 - er * 1.6f + (p.time * 15) % (er * 2), dr = er * 0.22f;
+                g.color(0xB081D4FA);
+                g.oval(dx, dy + dr * 0.4f, dr, dr * 1.1f);
+                g.oval(dx, dy - dr * 0.35f, dr * 0.45f, dr * 0.9f);
+                g.color(0x90FFFFFF);
+                g.oval(dx - dr * 0.35f, dy + dr * 0.1f, dr * 0.22f, dr * 0.3f);
             }
             // lip-sync mouth (open in surprise or laughter even when not speaking)
             float m = p.mouth;

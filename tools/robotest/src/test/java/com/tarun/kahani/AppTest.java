@@ -465,8 +465,21 @@ public class AppTest {
         Thread runner = new Thread(new Runnable() { public void run() { job.run(); } });
         runner.start();
         long wait = System.currentTimeMillis();
-        while (!job.qcWaiting && runner.isAlive() && System.currentTimeMillis() - wait < 600000) Thread.sleep(50);
+        // the director asks first: the dolls the studio made for the two characters without a picture are proposals
+        // until the user decides (here: use them all)
+        boolean asked = false;
+        while (!job.qcWaiting && runner.isAlive() && System.currentTimeMillis() - wait < 600000) {
+            if (job.proposalsWaiting && !asked) {
+                java.util.List<?> props = (java.util.List<?>) s3d("proposals", p);
+                assertTrue("a doll proposed for the character without a picture, with its views", props.size() >= 2);
+                s3d("decideAll", p, null, RuntimeEnvironment.getApplication(), true);
+                asked = true;
+            }
+            Thread.sleep(50);
+        }
         assertTrue("the job did not stop for the shot check: " + job.error, job.qcWaiting);
+        assertTrue("the director asked before using the 3D dolls", asked);
+        assertTrue("the accepted doll is the character's picture", p.manifestLine("char", "मीना") != null);
         int shots = 0;
         for (Integer i : job.qcShotIndex) if (i >= 0) shots++;
         System.out.println("QC: " + job.qcItems.size() + " stills (" + shots + " shots)");
@@ -581,6 +594,29 @@ public class AppTest {
             public boolean cancelled() { return done[0] >= 40; }
         });
         System.out.println("final QC of 40 shots in " + (System.currentTimeMillis() - t0) + "ms\n" + r.text());
+        if (r.stillLively > 0 || r.boiling > 0) {
+            // what the check saw: the frames of the first flagged shot, for a look (build/qc_dump)
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("shot (\\d+) at").matcher(r.notes.get(0));
+            if (m.find()) {
+                Film.Shot sh = film.shots.get(Integer.parseInt(m.group(1)) - 1);
+                Renderer ren = new Renderer(film, art);
+                File dd = new File("build/qc_dump");
+                dd.mkdirs();
+                for (float u : new float[]{0.05f, 0.5f, 0.95f}) for (int i = 0; i < 4; i++) {
+                    float t = sh.t + sh.dur * u + i / 24f;
+                    ren.render(g, t);
+                    java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dd, String.format(java.util.Locale.US, "s%03d_%07.3f.png", Integer.parseInt(m.group(1)), t)));
+                    bmp.compress(Bitmap.CompressFormat.PNG, 100, o);
+                    o.close();
+                }
+                System.out.println("QC DUMP shot " + m.group(1) + " t=" + sh.t + " dur=" + sh.dur + " size=" + sh.size + " | " + sh.purpose + " | " + sh.action + " | " + sh.subject);
+                for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE && sh.t >= sg.t0 && sh.t < sg.t1) {
+                    for (Film.Fx f : sg.fx) if (f.t1 >= sh.t - 1 && f.t0 <= sh.t + sh.dur + 1) System.out.println("  fx type=" + f.type + " " + f.t0 + "-" + f.t1);
+                    for (Film.Cam c : sg.cams) if (c.t >= sh.t - 1 && c.t <= sh.t + sh.dur + 1) System.out.println("  cam t=" + c.t + " zoom=" + c.zoom + " ease=" + c.ease);
+                }
+                for (Film.Weather wt : film.weather) if (wt.t1 >= sh.t - 1 && wt.t0 <= sh.t + sh.dur + 1) System.out.println("  weather type=" + wt.type + " " + wt.t0 + "-" + wt.t1);
+            }
+        }
         assertTrue("checked " + r.checked, r.checked >= 30);
         assertTrue("feet " + r.feetChecked, r.feetChecked > 100);
         assertTrue("floating " + r.floating, r.floating == 0);
@@ -662,7 +698,7 @@ public class AppTest {
         assertTrue("place drawn", distinct > 60);
         // saved into a story through the phone's picture path, the face points travel with the picture
         Story.CharacterDef c0 = story.cast().get(0);
-        String file = invokeStudio3DArt("makeCharacter", p, c0);
+        String file = (String) s3d("makeCharacter", p, story, c0, null, RuntimeEnvironment.getApplication(), null, false);
         assertTrue(p.has(file));
         String line = p.manifestLine("char", c0.displayName);
         assertNotNull(line);
@@ -753,12 +789,188 @@ public class AppTest {
         }
     }
 
-    /** Calls the package-private Studio3DArt helper by reflection (the test lives in another package). */
-    private static String invokeStudio3DArt(String method, Project p, Story.CharacterDef c) throws Exception {
-        Class<?> k = Class.forName("com.tarun.kahani.app.Studio3DArt");
-        Method m = k.getDeclaredMethod(method, Project.class, Story.CharacterDef.class, Class.forName("com.tarun.kahani.app.Library"));
-        m.setAccessible(true);
-        return (String) m.invoke(null, p, c, null);
+    /** Calls a package-private Studio3DArt helper by reflection (the test lives in another package): by name and number of arguments. */
+    private static Object s3d(String method, Object... args) throws Exception {
+        return call("com.tarun.kahani.app.Studio3DArt", method, args);
+    }
+
+    private static Object call(String cls, String method, Object... args) throws Exception {
+        Class<?> k = Class.forName(cls);
+        for (Method m : k.getDeclaredMethods()) {
+            if (!m.getName().equals(method) || m.getParameterTypes().length != args.length) continue;
+            m.setAccessible(true);
+            try { return m.invoke(null, args); }
+            catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause() instanceof Exception ? (Exception) e.getCause() : e; }
+        }
+        throw new NoSuchMethodException(cls + "." + method + "/" + args.length);
+    }
+
+    /**
+     * v18: the views of a character made from its own picture (three-quarter, side, back) — the back of the head
+     * shows hair, not the face; the proposals wait for the user's decision and a rejected one is deleted; the
+     * dolls of characters without a picture are proposed with their views; the director plans over-the-shoulder
+     * reverses once the back view exists and the renderer draws them; a GLB model is read and rendered; the
+     * library keeps every picture in the app's own folder (tarunkahani), never the photos library; the scene maker's rubric scores every proposal.
+     */
+    @Test
+    public void viewsFromThePictureProposalsAlbumAndOverTheShoulder() throws Exception {
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        Story.CharacterDef vanusha = null;
+        for (Story.CharacterDef c : story.cast()) if (c.displayName.contains("वानुषा")) vanusha = c;
+        assertNotNull(vanusha);
+        String key = (String) s3d("keyFor", p, story, vanusha);
+        String front = (String) s3d("charFile", p, story, vanusha);
+        assertNotNull(front);
+        // ---- the sample gives her a real back view (the user's own picture): it is the back, and stays the back
+        String[] own = (String[]) s3d("viewFiles", p, key);
+        assertTrue("the real back view of the sample", own[2] != null && own[2].contains("_back") && own[0] == null && own[1] == null);
+        // ---- the other views, as proposals (the director asks): only the three-quarter and the side are made
+        long t0 = System.currentTimeMillis();
+        int made = (Integer) s3d("makeViews", p, story, vanusha, null, ctx, null, true, "", null, null);
+        System.out.println("views of " + vanusha.shown() + " made in " + (System.currentTimeMillis() - t0) + " ms");
+        assertTrue("two views proposed beside the real back: " + made, made == 2);
+        java.util.List<String[]> props = (java.util.List<String[]>) s3d("viewProposals", p, key);
+        assertTrue(props.size() == 2);
+        for (String[] f : props) assertTrue("scored: " + f[f.length - 1], f[f.length - 1].startsWith("Score"));
+        String[] before = (String[]) s3d("viewFiles", p, key);
+        assertTrue("nothing used before the decision", before[0] == null && before[1] == null && own[2].equals(before[2]));
+        // the back view: as tall as the picture, its head of hair (no skin where the face would be)
+        String backFile = own[2], sideFile = null;
+        for (String[] f : props) { assertTrue("the real back is never replaced", !f[3].trim().equals("180")); if (f[3].trim().equals("-90")) sideFile = f[4]; }
+        assertNotNull(sideFile);
+        Bitmap back = android.graphics.BitmapFactory.decodeFile(p.file(backFile).getAbsolutePath());
+        Bitmap side = android.graphics.BitmapFactory.decodeFile(p.file(sideFile).getAbsolutePath());
+        Bitmap fr = android.graphics.BitmapFactory.decodeFile(p.file(front).getAbsolutePath());
+        assertTrue("back view tall", back.getHeight() > 900);
+        assertTrue("side view narrower than the front", side.getWidth() / (float) side.getHeight() < fr.getWidth() / (float) fr.getHeight());
+        int skin = 0, n = 0;
+        for (int y = (int) (back.getHeight() * 0.08f); y < back.getHeight() * 0.16f; y += 3) for (int x = (int) (back.getWidth() * 0.4f); x < back.getWidth() * 0.6f; x += 3) {
+            int c = back.getPixel(x, y);
+            if ((c >>> 24) < 200) continue;
+            n++;
+            if (com.tarun.kahani.core.Cutout.isSkin(c)) skin++;
+        }
+        assertTrue("the back of the head is hair, not a face (" + skin + "/" + n + ")", n > 20 && skin < n * 0.15f);
+        // ---- accept the views: manifest lines, the sprite's views with their own rigs
+        for (String[] f : props) s3d("accept", p, null, ctx, f);
+        assertTrue((Boolean) s3d("hasViews", p, key));
+        assertTrue(((java.util.List<?>) s3d("viewProposals", p, key)).isEmpty());
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Art.Sprite sp = art.sprites.get(vanusha.id);
+        assertNotNull(sp.views);
+        assertTrue("three views loaded", sp.view(0) != null && sp.view(1) != null && sp.view(2) != null);
+        assertTrue("the side view has a rig", sp.view(1).rig != null);
+        assertTrue("the three-quarter view keeps the face points", sp.view(0).faceKnown);
+        // ---- the dolls of the characters without a picture (the monster, the witch) are proposed with their views
+        int dolls = (Integer) s3d("makeMissing", p, story, new com.tarun.kahani.core.Edits(), null, ctx, null, true, null);
+        java.util.List<String[]> all = (java.util.List<String[]>) s3d("proposals", p);
+        int chars = 0;
+        String[] rejectMe = null;
+        for (String[] f : all) if (f[1].equals("char")) { chars++; if (rejectMe == null) rejectMe = f; }
+        assertTrue("a doll proposed for the monster (the only one without a picture): " + dolls + "/" + chars, dolls >= 1 && chars >= 1);
+        String rejectedFile = rejectMe[3];
+        s3d("reject", p, rejectMe);
+        assertTrue("a rejected proposal is deleted", !p.has(rejectedFile));
+        assertTrue("remembered as rejected", (Boolean) s3d("rejected", p, "char", rejectMe[2]));
+        assertTrue("no picture after a rejection", p.manifestLine("char", rejectMe[2]) == null);
+        s3d("decideAll", p, null, ctx, true);
+        assertTrue(((java.util.List<?>) s3d("proposals", p)).isEmpty());
+        // ---- the director: an over-the-shoulder reverse once the back view exists, drawn by the renderer
+        art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director d = new Director(story, new Director.Options());
+        Film film = d.prepare();
+        film = d.direct(art);
+        Film.Shot ots = null;
+        for (Film.Shot sh : film.shots) if (sh.ots.length() > 0 && sh.type == com.tarun.kahani.core.ShotPlanner.OTS) { ots = sh; break; }
+        assertNotNull("an over-the-shoulder reverse was planned", ots);
+        assertTrue(film.shotList.contains("OVER THE SHOULDER") && film.shotList.contains("PICTURES USED"));
+        Bitmap bmp = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        new Renderer(film, art).render(g, ots.t + 0.1f);
+        int[] px = new int[640 * 360];
+        bmp.getPixels(px, 0, 640, 0, 0, 640, 360);
+        int distinct = 0, last = 0;
+        for (int i = 0; i < px.length; i += 331) if (px[i] != last) { distinct++; last = px[i]; }
+        assertTrue("the reverse shot is drawn", distinct > 50);
+        OUT.mkdirs();
+        FileOutputStream o = new FileOutputStream(new File(OUT, "ots.png"));
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, o);
+        o.close();
+        g.release();
+        // ---- the scene maker's rubric and the character bible
+        int[] ratings = com.tarun.kahani.core.SceneMaker.ratings(true, true, true, true, 1f, true);
+        int sc = com.tarun.kahani.core.SceneMaker.score(ratings);
+        assertTrue("a view from the picture scores for approval: " + sc, sc >= 85 && com.tarun.kahani.core.SceneMaker.status(sc, "").equals("review for approval"));
+        assertTrue(com.tarun.kahani.core.SceneMaker.score(com.tarun.kahani.core.SceneMaker.ratings(false, false, false, false, 0f, false)) < 70);
+        assertTrue(com.tarun.kahani.core.SceneMaker.status(95, "the face differs").startsWith("rejected"));
+        String bibles = (String) s3d("bibles", p, story);
+        assertTrue(bibles.contains("CHARACTER BIBLE CHAR_001") && bibles.contains("views accepted"));
+        // ---- a GLB model (a textured cube written here) is read and rendered from the side
+        byte[] glb = tinyGlb();
+        com.tarun.kahani.core.Glb.Model model = com.tarun.kahani.core.Glb.load(glb, new com.tarun.kahani.core.Glb.ImageDecoder() {
+            public int[] decode(byte[] bytes) {
+                Bitmap b = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                int[] out = new int[b.getWidth() * b.getHeight() + 2];
+                out[0] = b.getWidth(); out[1] = b.getHeight();
+                b.getPixels(out, 2, b.getWidth(), 0, 0, b.getWidth(), b.getHeight());
+                return out;
+            }
+        });
+        assertTrue(model.note, model.triangles == 12 && model.pictures == 1);
+        Doll3D.Result cube = com.tarun.kahani.core.Glb.render(model, 200, -45);
+        int opaque = 0;
+        for (int i = 0; i < cube.px.length; i++) if ((cube.px[i] >>> 24) > 200) opaque++;
+        assertTrue("the cube is drawn", opaque > cube.px.length / 6);
+        java.util.Map<String, Object> body = com.tarun.kahani.core.ImageTo3D.meshyBody(new byte[]{1, 2, 3}, "a king");
+        assertTrue(((String) body.get("image_url")).startsWith("data:image/png;base64,AQID") && ((String) body.get("texture_prompt")).contains("a king"));
+        // ---- the library: a picture added to the app's own library lands in the app's private folder, nowhere else
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        com.tarun.kahani.app.Library.Item it = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "test", "", Files.readAllBytes(p.file(front).toPath()), ".jpg", "test");
+        assertNotNull(it);
+        assertTrue("kept in the app's own library folder: " + it.path, it.path.startsWith(ctx.getFilesDir().getAbsolutePath()));
+        assertTrue("never offered to the photos library", it.meta("album") == null || it.meta("album").length() == 0);
+    }
+
+    /** A GLB with one textured cube: 8 vertices, 12 triangles, a 2x2 PNG. */
+    private static byte[] tinyGlb() throws Exception {
+        float[] pos = {-1,0,-1, 1,0,-1, 1,2,-1, -1,2,-1, -1,0,1, 1,0,1, 1,2,1, -1,2,1};
+        float[] uv = {0,0, 1,0, 1,1, 0,1, 0,0, 1,0, 1,1, 0,1};
+        short[] idx = {0,2,1, 0,3,2, 4,5,6, 4,6,7, 0,1,5, 0,5,4, 1,2,6, 1,6,5, 2,3,7, 2,7,6, 3,0,4, 3,4,7};
+        Bitmap tex = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888);
+        tex.setPixel(0, 0, 0xFFFF0000); tex.setPixel(1, 0, 0xFF00FF00); tex.setPixel(0, 1, 0xFF0000FF); tex.setPixel(1, 1, 0xFFFFFF00);
+        java.io.ByteArrayOutputStream po = new java.io.ByteArrayOutputStream();
+        tex.compress(Bitmap.CompressFormat.PNG, 100, po);
+        byte[] png = po.toByteArray();
+        java.nio.ByteBuffer bin = java.nio.ByteBuffer.allocate(pos.length * 4 + uv.length * 4 + idx.length * 2 + 4 + png.length + 8).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (float f : pos) bin.putFloat(f);
+        int uvOff = bin.position();
+        for (float f : uv) bin.putFloat(f);
+        int idxOff = bin.position();
+        for (short i : idx) bin.putShort(i);
+        while (bin.position() % 4 != 0) bin.put((byte) 0);
+        int pngOff = bin.position();
+        bin.put(png);
+        while (bin.position() % 4 != 0) bin.put((byte) 0);
+        byte[] binBytes = java.util.Arrays.copyOf(bin.array(), bin.position());
+        String json = "{\"asset\":{\"version\":\"2.0\"},\"scene\":0,\"scenes\":[{\"nodes\":[0]}],\"nodes\":[{\"mesh\":0}],"
+                + "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"TEXCOORD_0\":1},\"indices\":2,\"material\":0}]}],"
+                + "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0},\"metallicFactor\":0}}],"
+                + "\"textures\":[{\"source\":0}],\"images\":[{\"bufferView\":3,\"mimeType\":\"image/png\"}],"
+                + "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":8,\"type\":\"VEC3\"},{\"bufferView\":1,\"componentType\":5126,\"count\":8,\"type\":\"VEC2\"},"
+                + "{\"bufferView\":2,\"componentType\":5123,\"count\":36,\"type\":\"SCALAR\"}],"
+                + "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":" + (pos.length * 4) + "},{\"buffer\":0,\"byteOffset\":" + uvOff + ",\"byteLength\":" + (uv.length * 4) + "},"
+                + "{\"buffer\":0,\"byteOffset\":" + idxOff + ",\"byteLength\":" + (idx.length * 2) + "},{\"buffer\":0,\"byteOffset\":" + pngOff + ",\"byteLength\":" + png.length + "}],"
+                + "\"buffers\":[{\"byteLength\":" + binBytes.length + "}]}";
+        byte[] jb = json.getBytes("UTF-8");
+        int jpad = (4 - jb.length % 4) % 4;
+        java.nio.ByteBuffer out = java.nio.ByteBuffer.allocate(12 + 8 + jb.length + jpad + 8 + binBytes.length).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        out.putInt(0x46546C67).putInt(2).putInt(out.capacity());
+        out.putInt(jb.length + jpad).putInt(0x4E4F534A).put(jb);
+        for (int i = 0; i < jpad; i++) out.put((byte) 0x20);
+        out.putInt(binBytes.length).putInt(0x004E4942).put(binBytes);
+        return out.array();
     }
 
     /**

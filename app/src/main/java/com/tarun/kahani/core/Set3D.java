@@ -19,7 +19,10 @@ public final class Set3D {
     /** The camera's stage: characters stand on the line z = 0; the ground runs from the camera into the distance. */
     static final float CAM_Z = 7.5f, FAR = -130f;
 
-    public static Result make(int set, int tod, int w, int h, int seed) {
+    public static Result make(int set, int tod, int w, int h, int seed) { return make(set, tod, w, h, seed, null); }
+
+    /** With a style cue from the user's own pictures: the key light from their side, graded onto their line. */
+    public static Result make(int set, int tod, int w, int h, int seed, StyleCue cue) {
         Studio3D.Scene s = new Studio3D.Scene();
         java.util.Random rnd = new java.util.Random(seed * 7919L + set * 131L + tod);
         boolean indoor = !Sets.outdoorSet(set) && set != Sets.CAVE_MOUTH;
@@ -48,8 +51,10 @@ public final class Set3D {
             case Sets.STREET: street(s, tod, rnd); break;
             default: garden(s, tod, rnd, false);
         }
+        if (cue != null && cue.lightSure > 0.3f && Math.signum(s.keyX) != Math.signum(cue.lightSide) && s.keyX != 0) s.keyX = -s.keyX;
         int floor = s.mark(0, 0, 0);
         Studio3D.Picture p = Studio3D.render(s, w, h, 2);
+        if (cue != null) cue.grade(p.px, p.w, p.h);
         Result r = new Result();
         r.px = p.px; r.w = p.w; r.h = p.h;
         r.ground = Math.max(0.5f, Math.min(0.98f, p.marks[floor][1]));

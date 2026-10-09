@@ -137,6 +137,10 @@ public final class FilmJob implements Runnable {
         File tmp = new File(ctx.getCacheDir(), "film_tmp_" + startedAt);
         try {
             tmp.mkdirs();
+            // the meshes: one cell per screen pixel (the default), or two for a faster film on a slow phone
+            float cell = Prefs.fastMesh(ctx) ? 2f : 1f;
+            com.tarun.kahani.core.Rig.CELL_PX = cell;
+            com.tarun.kahani.core.Nature.CELL_PX = cell;
             step("Reading the story…", 0.01f);
             String script = scriptOf(project);
             if (script.trim().length() < 10) throw new IllegalStateException("The story is empty. Write or paste a story first.");
@@ -176,10 +180,29 @@ public final class FilmJob implements Runnable {
             // dimensions on the phone — characters with their face points, places with their floor line
             if (Prefs.studio3d(ctx)) {
                 check();
-                int made = Studio3DArt.makeMissing(project, story, ed, Library.get(ctx), new Studio3DArt.Progress() {
+                step("Reading the style of your pictures…", 0.024f);
+                final com.tarun.kahani.core.StyleCue cue = Studio3DArt.styleCue(project, story);
+                styleNote = cue.describe();
+                boolean ask = Prefs.ask3d(ctx);
+                Studio3DArt.Progress sp = new Studio3DArt.Progress() {
                     public void at(String what) { check(); step(what + "…", 0.025f); }
-                });
+                };
+                int made = Studio3DArt.makeMissing(project, story, ed, Library.get(ctx), ctx, cue, ask, sp);
+                // every character with a picture gets its views from that picture (three-quarter, side, back)
+                made += Studio3DArt.makeAllViews(project, story, Library.get(ctx), ctx, cue, ask, Prefs.meshyKey(ctx), Prefs.cloud(ctx), sp);
                 if (made > 0) notes3d = made;
+                // the director asks: every picture the studio made is a proposal until the user accepts it (in the
+                // Studio, where pictures are chosen, or on the progress screen); a rejected one is deleted and never used
+                if (ask && !Studio3DArt.proposals(project).isEmpty()) {
+                    int n = Studio3DArt.proposals(project).size();
+                    stage = "Waiting for you: " + n + " picture(s) the studio made in 3D need your decision (✔ Use / ✖ Reject)";
+                    proposalsWaiting = true;
+                    while (proposalsWaiting && !cancelled && !Studio3DArt.proposals(project).isEmpty()) {
+                        try { Thread.sleep(300); } catch (InterruptedException e) { break; }
+                    }
+                    proposalsWaiting = false;
+                    check();
+                }
             }
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
@@ -386,6 +409,8 @@ public final class FilmJob implements Runnable {
             // pipeline step 6: every shot played frame by frame at check size (the frames seen one by one at 0.25x
             // speed); a shot that boils or shakes has its motion cut by 80% and is played again from the same first frame
             finalCheck(film, art, ed);
+            // the scene maker guide (9.3): a keyframe for every shot — one picture per shot, saved with the story
+            shotPictures(film, art, ed);
             step("Mixing music and sounds…", 0.30f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
@@ -468,6 +493,10 @@ public final class FilmJob implements Runnable {
     public final java.util.List<String[]> qcItems = new java.util.ArrayList<String[]>();
     /** True while the job waits for the user to check the shots. */
     public volatile boolean qcWaiting;
+    /** The job waits for the user's decision on the pictures the studio made in 3D (proposals in the manifest). */
+    public volatile boolean proposalsWaiting;
+    public void proposalsDone() { proposalsWaiting = false; }
+    private String styleNote = "";
     /** The user's fix per shot (index into film.shots → Director.FIX_*), set by the screen before approving. */
     public final java.util.Map<Integer, Integer> qcFixes = new java.util.concurrent.ConcurrentHashMap<Integer, Integer>();
     /** Shot index of each "shot" item in qcItems. */
@@ -584,7 +613,8 @@ public final class FilmJob implements Runnable {
         for (int i = n; project.has("lock_char_" + i + ".jpg"); i++) project.file("lock_char_" + i + ".jpg").delete();
         for (int i = m; project.has("lock_place_" + i + ".jpg"); i++) project.file("lock_place_" + i + ".jpg").delete();
         film.shotList += String.format(java.util.Locale.US, "%nLOCK SHEETS (pipeline steps 1-2): %d Character Lock Sheets and %d Location Lock Plates made before any shot, saved with the film (lock_char_N.jpg, lock_place_N.jpg)%n", n, m);
-        if (notes3d > 0) film.shotList += String.format(java.util.Locale.US, "STUDIO 3D: %d missing picture(s) built in three dimensions on the phone (characters with their eyes and mouth known exactly, places with their floor line)%n", notes3d);
+        if (notes3d > 0) film.shotList += String.format(java.util.Locale.US, "STUDIO 3D: %d picture(s) made in three dimensions on the phone (dolls for characters without a picture, places with their floor line, the views of every character from its own picture), each accepted by you%n", notes3d);
+        if (styleNote.length() > 0) film.shotList += styleNote + "\n";
         if (objectNotes != null) film.shotList += "FREE OBJECT PICTURES (inserts, each shown once when the story first brings the thing in): " + objectNotes + "\n";
     }
 
@@ -608,7 +638,7 @@ public final class FilmJob implements Runnable {
             film.shotList += "\n" + r.text();
             // the handbook's approval gates and scores (ch. 13) and the delivery checklist (ch. 16), from what was checked
             if (film.stats != null) {
-                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, r.boiling, r.shaking, r.floating);
+                com.tarun.kahani.core.Handbook.Card card = com.tarun.kahani.core.Handbook.score(film, film.stats, r.boilingLeft, r.shakingLeft, r.floating);
                 film.shotList += "\n" + card.text() + "\n" + com.tarun.kahani.core.Handbook.delivery(card, film.stats);
             }
         } finally {
@@ -677,6 +707,42 @@ public final class FilmJob implements Runnable {
         }
         if (fixed > 0) film.shotList += "\nHUMAN QC (your check of every first frame)\n" + fixed + " shot(s) fixed:" + note + "\n";
         else film.shotList += "\nHUMAN QC: every first frame approved as it was.\n";
+    }
+
+    /** One picture per shot: the first frame of every shot, saved as shots/<shot id>.jpg (reverse shots, movements, everything). */
+    private void shotPictures(Film film, Art art, Edits ed) throws IOException {
+        File sd = project.file("shots");
+        sd.mkdirs();
+        File[] old = sd.listFiles();
+        if (old != null) for (File f : old) f.delete();
+        int[] size = ed.size();
+        int w = 400, h = Math.max(120, Math.round(400f * size[1] / size[0]));
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer r = new Renderer(film, art);
+        com.tarun.kahani.core.FilmLook look = new com.tarun.kahani.core.FilmLook(w, h);
+        com.tarun.kahani.core.FilmLook.Params lp = new com.tarun.kahani.core.FilmLook.Params();
+        int[] px = new int[w * h];
+        int n = film.shots.size();
+        try {
+            for (int i = 0; i < n; i++) {
+                check();
+                Film.Shot sh = film.shots.get(i);
+                if (i % 10 == 0) step("Making one picture per shot (" + (i + 1) + "/" + n + ")…", 0.298f);
+                r.render(g, sh.t + 0.05f);
+                bmp.getPixels(px, 0, w, 0, 0, w, h);
+                look.apply(px, com.tarun.kahani.core.FilmLook.at(film, sh.t + 0.05f, lp));
+                bmp.setPixels(px, 0, w, 0, 0, w, h);
+                String name = (sh.id == null || sh.id.length() == 0 ? String.format(java.util.Locale.US, "SHOT_%03d", i + 1) : sh.id) + ".jpg";
+                java.io.FileOutputStream o = new java.io.FileOutputStream(new File(sd, name));
+                bmp.compress(Bitmap.CompressFormat.JPEG, 82, o);
+                o.close();
+            }
+        } finally {
+            g.release();
+            bmp.recycle();
+        }
+        film.shotList += "\nSHOT PICTURES: one picture per shot — " + n + " files in shots/, named by shot ID (the keyframe of every shot: the reverse shots, the movements, everything).\n";
     }
 
     /**

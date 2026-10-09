@@ -73,8 +73,10 @@ public final class Bible {
         if (c.age > 0) b.append(", age ").append(c.age);
         if (c.look != null) b.append(", ").append(kindWord(c.look, false));
         b.append(". Description: ").append(oneLine(c.description));
-        b.append(" Pose: full body from head to feet, standing straight and facing the camera, mouth closed, eyes open, ");
-        b.append("fully and modestly dressed, plain pure-white background, soft studio light, no text, no other people.");
+        b.append(" Pose: full body from head to feet, standing straight and facing the camera, arms a little away from the body (A-pose), ");
+        b.append("both hands visible, nothing held in front of the body, feet a little apart, mouth closed, eyes open, ");
+        b.append("fully and modestly dressed, isolated on a plain pure-white background, soft studio light, no text, no other people. ");
+        b.append("Avoid: blurry, extra limbs, distorted hands, a cropped body.");
         return b.toString();
     }
 

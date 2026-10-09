@@ -1128,13 +1128,17 @@ public final class Renderer {
         g.save();
         // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
         // it is for the whole shot (nothing bent, nothing swaying, no step cycle): the pose is in the picture
-        Art.PoseSprite chosen = chosenPicture(sp, a, t);
+        Art.PoseSprite chosen = chosenPicture(sp, a, t, p);
         if (chosen != null && chosen.sprite() != null) {
             Art.Sprite real = chosen.sprite();
             g.restore();
             g.restore();
             float hReal = h * chosen.hRatio;
-            float pxs = x, pys = y;
+            // v28: while the character walks or runs, the picture keeps the step's rise and lean (the rest of the
+            // idle motion is dropped: a real picture does not sway)
+            boolean stepping = mv != null && p.walkAmt > 0.05f && k.anchor == Film.A_GROUND;
+            float pxs = x, pys = y + (stepping ? mo.dy : 0);
+            float lean = stepping ? mo.rot * 0.6f : 0;
             // in a close shot the camera was aimed at the front picture's face: the chosen picture's face goes
             // exactly there (its feet are out of frame anyway); in a wide shot the feet stay on the ground
             if (camZ > 1.6f && sp != null && sp.faceKnown && real.faceKnown && Math.abs(chosen.angle) < 100 && chosen.pose != PoseSense.LIE) {
@@ -1146,8 +1150,10 @@ public final class Renderer {
             g.save();
             g.translate(pxs, pys);
             if (scale != 1f) g.scale(scale, scale);
+            if (lean != 0) g.rotate(lean);
             g.save();
-            p.body = Pose.STAND; p.sit = 0; p.walkAmt = 0; p.bob = 0; p.armL = 8; p.armR = 8; p.elbowL = 10; p.elbowR = 10;
+            p.body = Pose.STAND; p.sit = 0; p.bob = 0; p.armL = 8; p.armR = 8; p.elbowL = 10; p.elbowR = 10;
+            if (!stepping || real.rig != null) p.walkAmt = 0;                              // a rigged picture never steps through its mesh; a still one keeps the step's pulse
             p.wave = 0; p.swing = false; p.twirl = false; p.headTilt = 0; p.tilt = 0; p.nod = 0;
             if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; }
             if (chosen.pose != PoseSense.STAND) p.blink = 0;
@@ -1765,13 +1771,22 @@ public final class Renderer {
 
     private int lastShot;
 
-    /** v27: the user's picture the director chose for this character in the shot playing at t, or null (the front picture, rigged). */
-    private Art.PoseSprite chosenPicture(Art.Sprite sp, Film.Actor a, float t) {
+    /**
+     * v27: the user's picture the director chose for this character in the shot playing at t, or null (the front
+     * picture, rigged). v28: while the character steps, the pictures of its steps take turns, one per step.
+     */
+    private Art.PoseSprite chosenPicture(Art.Sprite sp, Film.Actor a, float t, Pose p) {
         if (sp == null || sp.poses == null || sp.poses.isEmpty()) return null;
         Film.Shot sh = shotAt(t);
         if (sh == null) return null;
         Integer idx = sh.pictures.get(a.c.id);
         if (idx == null || idx < 0 || idx >= sp.poses.size()) return null;
+        int[] cyc = sh.cycles.get(a.c.id);
+        if (cyc != null && cyc.length >= 2 && p != null && p.walkAmt > 0.35f) {
+            int step = (int) Math.floor(p.walk / Math.PI);
+            int i = cyc[((step % cyc.length) + cyc.length) % cyc.length];
+            if (i >= 0 && i < sp.poses.size()) idx = i;
+        }
         return sp.poses.get(idx);
     }
 

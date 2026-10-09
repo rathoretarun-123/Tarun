@@ -647,10 +647,10 @@ public class AppTest {
         int[] px = pixelsOf(new File(sheets[0].getParentFile(), "sheet02.jpg"), wh);
         List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, wh[0], wh[1]), wh[0], wh[1]);
         assertTrue(figs.size() >= 10);
-        int[] use = {0, 1, 5, 8, 9};
-        float[] angle = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.FRONT};
-        int[] pose = {com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.WALK, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.SIT};
-        int[] emo = {com.tarun.kahani.core.PoseSense.SAD, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.LAUGH, com.tarun.kahani.core.PoseSense.NEUTRAL};
+        int[] use = {0, 1, 5, 8, 9, 2};
+        float[] angle = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.SIDE};
+        int[] pose = {com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.WALK, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.SIT, com.tarun.kahani.core.PoseSense.STAND};
+        int[] emo = {com.tarun.kahani.core.PoseSense.SAD, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.LAUGH, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.NEUTRAL};
         StringBuilder cast = new StringBuilder(p.read("cast.txt"));
         for (int i = 0; i < use.length; i++) {
             com.tarun.kahani.core.Angles.Piece pc = figs.get(use[i]);
@@ -670,7 +670,7 @@ public class AppTest {
         Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
         Art.Sprite sp = art.sprites.get(vrinda.id);
         assertNotNull(sp);
-        assertTrue("five pose pictures loaded: " + (sp.poses == null ? 0 : sp.poses.size()), sp.poses != null && sp.poses.size() == 5);
+        assertTrue("six pose pictures loaded: " + (sp.poses == null ? 0 : sp.poses.size()), sp.poses != null && sp.poses.size() == 6);
         Director d = new Director(story, new Director.Options());
         Film film = d.prepare();
         film = d.direct(art);
@@ -696,7 +696,12 @@ public class AppTest {
             for (Film.Key kk : her.keys) if (kk.moveDur > 0 && mid >= kk.t && mid < kk.t + kk.moveDur) moving = true;
             if (sh.ots.length() > 0 && sh.ots.equals(vrinda.shown())) { assertTrue("behind her shoulder: her back picture, got " + idx, idx == 2); backShots++; }
             else if (k.body == com.tarun.kahani.core.Pose.SIT) { assertTrue("sitting: her sitting picture, got " + idx, idx == 4); sitShots++; }
-            else if (moving && k.body == com.tarun.kahani.core.Pose.STAND) { assertTrue("walking: her sideways walking picture, got " + idx, idx == 1); walkShots++; }
+            else if (moving && k.body == com.tarun.kahani.core.Pose.STAND) {
+                assertTrue("walking: her sideways walking picture, got " + idx, idx == 1);
+                int[] cyc = sh.cycles.get(vrinda.id);
+                assertTrue("a step cycle of her two sideways pictures: " + java.util.Arrays.toString(cyc), cyc != null && cyc.length == 2 && cyc[0] == 1 && cyc[1] == 5);
+                walkShots++;
+            }
             else if (cry.t0 < sh.t + sh.dur && cry.t1 > sh.t && k.body == com.tarun.kahani.core.Pose.STAND) { assertTrue("crying: her crying picture, got " + idx, idx == 0); cryShots++; }
         }
         System.out.println("CASTING of " + vrinda.shown() + ":\n" + log);
@@ -713,6 +718,11 @@ public class AppTest {
         Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
         AndroidGfx g = new AndroidGfx(bmp, 4);
         Renderer rd = new Renderer(film, art);
+        // every shot renders (the walk with its step cycle at two phases, the back, the seat, the laugh)
+        long t0r = System.currentTimeMillis();
+        int rendered = 0;
+        for (Film.Shot sh : film.shots) { rd.render(g, sh.t + Math.min(0.4f, sh.dur * 0.5f)); rendered++; if (sh.cycles.containsKey(vrinda.id)) { rd.render(g, sh.t + Math.min(0.4f, sh.dur * 0.5f) + 0.36f); rendered++; } }
+        System.out.println("CASTING: " + rendered + " frames of " + film.shots.size() + " shots rendered in " + (System.currentTimeMillis() - t0r) + " ms");
         rd.render(g, crying.t + 0.5f);
         int[] fpx = new int[1280 * 720];
         bmp.getPixels(fpx, 0, 1280, 0, 0, 1280, 720);

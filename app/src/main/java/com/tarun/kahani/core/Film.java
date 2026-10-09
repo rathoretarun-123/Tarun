@@ -57,6 +57,8 @@ public final class Film {
         public String view = "";
         /** v27: the user's own picture each character is drawn with in this shot (character id → index into Art.Sprite.poses; -1 = the front picture). */
         public final java.util.Map<String, Integer> pictures = new java.util.HashMap<String, Integer>();
+        /** v28: while a character walks or runs in this shot, the user's pictures of its steps (indices into Sprite.poses), shown one per step. */
+        public final java.util.Map<String, int[]> cycles = new java.util.HashMap<String, int[]>();
     }
     /** What the director counted while planning (the handbook's scorecard, ch. 13). */
     public Handbook.Stats stats;

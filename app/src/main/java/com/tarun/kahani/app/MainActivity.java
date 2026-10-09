@@ -693,7 +693,9 @@ public class MainActivity extends Activity {
                 int unreadable = 0, files = 0;
                 for (byte[] d : datas) {
                     if (++files > 10) break;                                    // v26: up to 10 pictures, each up to 10 angles
-                    int[] dec = decodeBytes(d, 1600);
+                    // v28: a sheet is read at up to 2600 px wide where the heap allows, so every figure cut from it
+                    // (a tenth of the sheet) is sharp enough for a close-up and its face large enough to read
+                    int[] dec = decodeBytes(d, Runtime.getRuntime().maxMemory() >= (384L << 20) ? 2600 : 1600);
                     if (dec == null) { unreadable++; continue; }
                     int w = dec[0], h = dec[1];
                     int[] px = new int[w * h];

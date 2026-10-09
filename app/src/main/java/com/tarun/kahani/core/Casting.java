@@ -29,6 +29,7 @@ public final class Casting {
         if (art == null || film == null) return;
         for (Film.Shot sh : film.shots) {
             sh.pictures.clear();
+            sh.cycles.clear();
             Film.Seg s = film.segAt(sh.t + 0.01f);
             if (s == null) continue;
             float mid = sh.t + Math.max(0.05f, Math.min(sh.dur * 0.5f, 1.2f));
@@ -40,6 +41,10 @@ public final class Casting {
                 Want w = want(film, s, sh, a, mid);
                 int best = choose(sp, w);
                 sh.pictures.put(a.c.id, best);
+                if (best >= 0 && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN)) {
+                    int[] cyc = stepCycle(sp, best, w);
+                    if (cyc != null) sh.cycles.put(a.c.id, cyc);
+                }
             }
         }
     }
@@ -85,6 +90,34 @@ public final class Casting {
         w.emotion = PoseSense.groupOf(emo);
         if (k.eyesShut && w.pose == PoseSense.LIE) w.emotion = PoseSense.ASLEEP;
         return w;
+    }
+
+    /**
+     * v28: the pictures of the character's steps at this angle — the chosen one first, then its other walking
+     * and running pictures, then a standing one of the same angle (up to four) — shown one per step, so a walk
+     * is a walk and not a picture gliding; null when there is only the one.
+     */
+    public static int[] stepCycle(Art.Sprite sp, int chosen, Want w) {
+        List<Art.PoseSprite> ps = sp.poses;
+        if (ps == null || chosen < 0 || chosen >= ps.size()) return null;
+        java.util.List<Integer> out = new java.util.ArrayList<Integer>();
+        out.add(chosen);
+        float angle = ps.get(chosen).angle;
+        for (int pass = 0; pass < 2 && out.size() < 4; pass++) {
+            for (int i = 0; i < ps.size() && out.size() < 4; i++) {
+                if (out.contains(i)) continue;
+                Art.PoseSprite p = ps.get(i);
+                if (!sameAngle(p.angle, angle)) continue;
+                boolean step = p.pose == PoseSense.WALK || p.pose == PoseSense.RUN;
+                if (pass == 0 ? !step : p.pose != PoseSense.STAND) continue;
+                if (p.emotion != PoseSense.NEUTRAL && p.emotion != w.emotion && p.emotion != ps.get(chosen).emotion) continue;
+                out.add(i);
+            }
+        }
+        if (out.size() < 2) return null;
+        int[] cyc = new int[out.size()];
+        for (int i = 0; i < cyc.length; i++) cyc[i] = out.get(i);
+        return cyc;
     }
 
     /** The best of the character's pictures for the want, or MAIN. */
@@ -144,7 +177,12 @@ public final class Casting {
             Art.Sprite sp = art.sprites.get(a.c.id);
             String what;
             if (idx < 0 || sp == null || sp.poses == null || idx >= sp.poses.size()) what = "the front picture (rigged)";
-            else { Art.PoseSprite p = sp.poses.get(idx); what = "your picture " + (idx + 1) + " (" + Angles.name(p.angle) + ", " + PoseSense.poseName(p.pose) + ", " + PoseSense.emotionName(p.emotion) + ")"; }
+            else {
+                Art.PoseSprite p = sp.poses.get(idx);
+                what = "your picture " + (idx + 1) + " (" + Angles.name(p.angle) + ", " + PoseSense.poseName(p.pose) + ", " + PoseSense.emotionName(p.emotion) + ")";
+                int[] cyc = sh.cycles.get(a.c.id);
+                if (cyc != null) { StringBuilder c = new StringBuilder(); for (int k : cyc) c.append(c.length() > 0 ? ", " : "").append(k + 1); what += " stepping through pictures " + c; }
+            }
             b.append(b.length() > 0 ? "; " : "").append(a.c.shown()).append(" ← ").append(what);
         }
         return b.toString();

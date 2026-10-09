@@ -1,4 +1,4 @@
-# Kahani Film — v27
+# Kahani Film — v28
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,13 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v28
+
+* **A walk is a walk, not a picture gliding** — while a character walks or runs, the director lines up the user's pictures of its steps at that angle (the walking and running pictures, then a standing one, up to four) and the renderer shows them one per step, with the step's rise and lean kept; the shot list says "stepping through pictures 2, 6". A rigged picture never steps through its mesh; a still one keeps the step's pulse.
+* **Sharper pieces from the sheets** — a sheet is read at up to 2600 px wide (where the heap allows; 1600 on small phones), so each figure cut from it is about 1.6× larger than in v27: sharper in close-ups and a larger face for the feeling reading.
+* **Every shot type rendered in the test** — the director test now draws a frame of every shot of its story (the walk at two step phases, the back behind the shoulder, the seat, the laugh) through the Android canvas.
+* Still honest: the Java heap and the cores bound the renderer, not the phone's RAM; the feeling reading stays conservative (correct it in the review after an upload); no "perfect physics" claim.
 
 ## New in v27
 

@@ -77,3 +77,13 @@ The user gave two documents with "Train your director with these and hardcode th
 | Camera focus: half the face cut | The over-the-shoulder shoulder takes at most 28 % of the frame width (it hid half the listener in 9:16); checked on a contact sheet of 12 close-ups. |
 | More RAM, faster | Drawing threads on every core the free memory allows (up to 8), three frames in flight each. |
 | 3D picture maker making bad pictures | `Studio3DArt.referencePicture`: the library picture that fits the description best is cut out and recoloured to the description's colours (the two most worn hues turned, shading kept) and proposed first, named after its source; the doll only when none fits or it is rejected. |
+
+## v24 follow-up (the notes repeated)
+
+| Note | Done |
+|---|---|
+| Blur in close-ups | Removed entirely: the place behind a close-up is drawn as it is. |
+| More shots, smooth movement | The director cuts at 3.2 s (`TechnicalDirector.CUT_SECONDS`; the 4-s cap stays the limit); establishing shots held 3.1 s. Sample: 948 → 1038 shots, none over 3.2 s, 0 boiling / 0 shaking; 30 fps from v23. |
+| More RAM | Four frames in flight per drawing thread, every core the free memory allows. |
+| 3D picture maker | `Studio3DArt.referencePlace`: the library place picture that fits the scene's words best, graded for night or evening, proposed before any painted set and named after its source; a rejected one brings the painted set. Characters from the user's own pictures since v23. |
+| Upload at the make-film screen; background-only pictures | v23: the dialog's **📷 Pictures first**; plates with the floor line, said on every place card. |

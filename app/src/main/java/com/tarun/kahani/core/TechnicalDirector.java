@@ -30,6 +30,8 @@ public final class TechnicalDirector {
     public static final float SHOT_SECONDS = 3f;
     /** P6: never longer than 4 seconds per shot. */
     public static final float MAX_SHOT_SECONDS = 4f;
+    /** Where the director cuts (v24): shots of about 3 s, never over the cap — about a quarter more shots than cutting at the cap. */
+    public static final float CUT_SECONDS = 3.2f;
     /** C5: a character moves less than 15 % of the frame width in one shot. */
     public static final float MAX_MOTION = 0.15f;
     /** C4.3: one action only, at most 10 % frame movement (the shot table asks for this). */

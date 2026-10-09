@@ -282,7 +282,7 @@ public final class Director {
             lockCameras();
             enforceMotion();
             oneActionPerShot();
-            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+            limitShotLength(TechnicalDirector.CUT_SECONDS);
         }
         film.shotList = qualityCheck();
         // the Braintrust (PixarLead): the four questions every five shots, suggestions only — appended to the shot list
@@ -488,18 +488,18 @@ public final class Director {
             // the protocol's passes again until nothing changes (a reframed shot has a different frame width)
             for (int pass = 0; pass < 3; pass++) {
                 int before = motionCuts + actionCuts;
-                limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+                limitShotLength(TechnicalDirector.CUT_SECONDS);
                 safeFrames();
                 enforceMotion();
                 oneActionPerShot();
                 if (motionCuts + actionCuts == before) break;
             }
-            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+            limitShotLength(TechnicalDirector.CUT_SECONDS);
             safeFrames();
             // the last word goes to the motion and action limits (their new shots are framed on the action)
             enforceMotion();
             oneActionPerShot();
-            limitShotLength(TechnicalDirector.MAX_SHOT_SECONDS);
+            limitShotLength(TechnicalDirector.CUT_SECONDS);
         }
         shotsFromCuts();
         if (opt.technical) validateShots();
@@ -609,8 +609,8 @@ public final class Director {
             hs.thoughtBeats = thoughtBeats; hs.dutch = dutchCount; hs.calmedRuns = calmed; hs.spine = film.hero.length() > 0; hs.faceFill = faceFillN == 0 ? 0 : faceFillSum / faceFillN;
             hs.durationsDistinct = durs.size();
             hs.pov = povShots; hs.loudReactions = loudReactions;
-            for (Film.Shot sh : film.shots) if (sh.stage == ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) { hs.estabTotal++; if (sh.dur >= 3.8f) hs.estabHeld++; }
-            b.append(String.format(java.util.Locale.US, "• Director's manual (v2.0): establishing shots held for the top of the 4-s cap (3.9 s): %d of %d (the rest are cut sooner by the "
+            for (Film.Shot sh : film.shots) if (sh.stage == ShotPlanner.ESTABLISH && sh.purpose.startsWith("Establish")) { hs.estabTotal++; if (sh.dur >= 3.0f) hs.estabHeld++; }
+            b.append(String.format(java.util.Locale.US, "• Director's manual (v2.0): establishing shots held for the cut length (3.1 s; shots are cut at 3.2 s, the 4-s cap stays): %d of %d (the rest are cut sooner by the "
                     + "protocol's motion rule — someone enters or moves during them, and the move is seen wide); point-of-view shots for looks: %d; "
                     + "reactions staged for loud sounds: %d; suspicion and relief read from the manners; every shot carries its ASSETS, TRANSITION IN, STATE AT START / END and "
                     + "VOICE / MUSIC lines; the beat sheet, scene records, coverage report, prop ledger and location records follow the ledger%n", hs.estabHeld, hs.estabTotal, povShots, loudReactions));
@@ -2289,12 +2289,12 @@ public final class Director {
         estab = false;
         // the director's manual (3.6): an establishing shot wants 4-10 s; the protocol caps every shot at 4 s — so it is
         // held for the top of the cap (3.9 s) before anything comes closer
-        float minDur = establishing ? 3.9f : 2.2f;
+        float minDur = establishing ? 3.1f : 2.2f;
         if (tc - t0 < minDur) tc = t0 + minDur;
         if (establishing) {
             // nothing cuts closer before the establishing shot has been held: a cut planned inside it (an entrance, a
             // first action) waits until the hold is over — the action itself is seen wide, as the manual's table wants
-            for (Film.Cam c : seg.cams) if (c.ease == 0 && c.t > t0 + 0.15f && c.t < t0 + 3.9f) c.t = t0 + 3.9f;
+            for (Film.Cam c : seg.cams) if (c.ease == 0 && c.t > t0 + 0.15f && c.t < t0 + 3.1f) c.t = t0 + 3.1f;
         }
         if (li >= 0) { // narrator speaks the direction
             Film.Line l = film.lines.get(li);

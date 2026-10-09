@@ -245,6 +245,11 @@ final class Studio3DArt {
         String kind = f[1], key = f[2];
         dropProposals(project, kind, key, kind.equals(P_VIEW) ? f[3] : null, true);
         if (kind.equals(P_CHAR)) dropProposals(project, P_VIEW, key, null, true);
+        if (kind.equals(P_SCENE) && f[f.length - 1].contains("from your picture")) {
+            // the place made from the user's own picture is turned down: the painted set is proposed next time
+            project.setSetting("rejected3d.refplace." + key, "1");
+            return;
+        }
         if (kind.equals(P_CHAR) && f[f.length - 1].contains("recoloured to the description")) {
             // the picture made from the user's own picture is turned down: the studio's own doll is proposed next time
             project.setSetting("rejected3d.ref." + key, "1");
@@ -475,6 +480,13 @@ final class Studio3DArt {
         int[] size = ed.size();
         int w = size[0] >= size[1] ? 1280 : Math.round(1280f * size[0] / size[1]), h = size[0] >= size[1] ? Math.round(1280f * size[1] / size[0]) : 1280;
         w &= ~1; h &= ~1;
+        // v24: the user's own place pictures first — the library picture that fits the scene's words best, graded for
+        // the hour, proposed before the painted set; rejecting it brings the painted set next time
+        String key0 = String.valueOf(sc.number);
+        if (!rejected(project, "refplace", key0)) {
+            String fromPicture = referencePlace(project, sc, where, tod, lib, ctx, cue, ask);
+            if (fromPicture != null) return fromPicture;
+        }
         Set3D.Result r = Set3D.make(set, tod, w, h, sc.number, cue);
         String file = project.savePicture(encode(r.px, r.w, r.h, false), "3d_place");
         int[] ratings = SceneMaker.ratings(false, false, true, cue != null && cue.pictures > 0, 0.8f, true);
@@ -484,6 +496,63 @@ final class Studio3DArt {
         addProposal(project, String.format(Locale.US, "propose|scene|%s|%s|0|0|1|1|%.4f|%d|%s", key, file, r.ground, SceneMaker.score(ratings), verdict));
         if (!ask) accept(project, lib, ctx, proposalFor(project, P_SCENE, key));
         return file;
+    }
+
+    /**
+     * v24: a place without a picture is made from the user's own place pictures first — the library picture that
+     * fits the scene's words best (fit at least 50%, by what it shows and what it is called), graded for the story's
+     * hour (night and evening), proposed as the scene's plate; the painted set only when none fits or it is rejected.
+     */
+    static String referencePlace(Project project, Story.Scene sc, String where, int tod, Library lib, Context ctx, StyleCue cue, boolean ask) {
+        if (lib == null) return null;
+        Library.Item best = null;
+        float bestS = 0.5f;
+        int seen = 0;
+        String words = sc.title + " " + where;
+        try {
+            for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                if ("person".equals(it.kind) || "view".equals(it.kind) || "object".equals(it.kind)) continue;
+                if (seen++ > 300) break;
+                com.tarun.kahani.core.PicSense.Info in = lib.info(it);
+                if (in == null || in.figure) continue;
+                float sc2 = com.tarun.kahani.core.PicSense.matchPlace(in, words);
+                sc2 = Math.max(sc2, com.tarun.kahani.core.PicSense.textMatch(it.name + " " + it.tags, sc.title, where));
+                if (sc2 > bestS) { bestS = sc2; best = it; }
+            }
+        } catch (Throwable e) {
+            return null;
+        }
+        if (best == null) return null;
+        try {
+            byte[] data = Project.readAll(lib.open(best));
+            int[] dec = MainActivity.decodeBytes(data, 1600);
+            if (dec == null) return null;
+            int w = dec[0], h = dec[1];
+            int[] px = new int[w * h];
+            System.arraycopy(dec, 2, px, 0, px.length);
+            if (tod == Sets.NIGHT || tod == Sets.EVENING) gradeHour(px, tod);
+            String key = String.valueOf(sc.number);
+            String file = project.savePicture(encode(px, w, h, false), "3d_place");
+            int[] ratings = SceneMaker.ratings(true, false, true, cue != null && cue.pictures > 0, bestS, true);
+            String verdict = SceneMaker.verdict(ratings, "") + String.format(Locale.US, " — from your picture \"%s\" (fit %.0f%%)%s; reject it if this is not the place",
+                    best.label(), bestS * 100, tod == Sets.NIGHT ? ", graded for night" : tod == Sets.EVENING ? ", graded for evening" : "");
+            dropProposals(project, P_SCENE, key, null, true);
+            addProposal(project, String.format(Locale.US, "propose|scene|%s|%s|0|0|1|1|%.4f|%d|%s", key, file, 0.88f, SceneMaker.score(ratings), verdict));
+            if (!ask) accept(project, lib, ctx, proposalFor(project, P_SCENE, key));
+            return file;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /** A day picture graded for the story's hour: night darkens and cools it, evening warms it. */
+    static void gradeHour(int[] px, int tod) {
+        float kr = tod == Sets.NIGHT ? 0.42f : 1.02f, kg = tod == Sets.NIGHT ? 0.48f : 0.88f, kb = tod == Sets.NIGHT ? 0.68f : 0.72f;
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i];
+            int r = Math.min(255, Math.round(((c >> 16) & 255) * kr)), g = Math.min(255, Math.round(((c >> 8) & 255) * kg)), b = Math.min(255, Math.round((c & 255) * kb));
+            px[i] = (c & 0xFF000000) | (r << 16) | (g << 8) | b;
+        }
     }
 
     /** Every character and place still without a picture (and not rejected before) gets a proposal. Returns how many were made. */

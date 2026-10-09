@@ -1060,13 +1060,13 @@ public final class FilmJob implements Runnable {
         // item 13 / the phone guide §9.4: as many drawing threads as the phone's cores and free memory allow (each
         // worker holds its frame bitmap and two finished frames), never more than the cores, never a frozen phone
         int cores = Runtime.getRuntime().availableProcessors();
-        long perWorker = (long) w * h * 4 * 4 + 40L * 1024 * 1024;
+        long perWorker = (long) w * h * 4 * 5 + 40L * 1024 * 1024;
         long budget = memoryBudget();
         int byMem = (int) Math.max(1, Math.min(cores, budget / perWorker));
-        final int workers = Math.max(1, Math.min(Math.min(cores, 8), byMem));          // v23: every core the memory allows, three frames in flight each
+        final int workers = Math.max(1, Math.min(Math.min(cores, 8), byMem));          // v24: every core the memory allows, four frames in flight each
         film.shotList += String.format(java.util.Locale.US, "%nRENDER: %d drawing threads (%d cores, %d MB free for frames), %dx%d at %d fps%n", workers, cores, budget / (1024 * 1024), w, h, fps);
-        final int[][] slots = new int[workers * 3][];
-        final int[] slotFrame = new int[workers * 3];
+        final int[][] slots = new int[workers * 4][];
+        final int[] slotFrame = new int[workers * 4];
         for (int i = 0; i < slotFrame.length; i++) slotFrame[i] = -1;
         final Object lock = new Object();
         final int[] nextToEncode = {0};

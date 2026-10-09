@@ -1227,7 +1227,15 @@ public class AppTest {
         String made = (String) call("com.tarun.kahani.app.Studio3DArt", "referencePicture", p, story, c0, lib, RuntimeEnvironment.getApplication(), null, false);
         assertTrue("a picture made from the user's picture", made != null && p.has(made) && p.file(made).length() > 1000);
         assertTrue(p.setting("credit3d." + c0.displayName, "").contains("recoloured"));
-        System.out.println("PHONE GUIDE: bridges " + bridges + " reverse cams " + reverse + " pieces " + pieces.size() + " " + note[0] + " made " + made);
+        // v24: a place without a picture is made from the user's own place picture that fits the scene's words best
+        byte[] gd = Files.readAllBytes(new File(ASSETS, "sample/bg_garden.jpg").toPath());
+        com.tarun.kahani.app.Library.Item place = lib.addBytes(com.tarun.kahani.app.Library.PIC, "place", "महल का बगीचा", "garden बगीचा", gd, ".jpg", "test");
+        lib.analysePicture(place);
+        Story.Scene sc1 = story.scenes.get(0);
+        String madePlace = (String) call("com.tarun.kahani.app.Studio3DArt", "referencePlace", p, sc1, sc1.setting, com.tarun.kahani.core.Sets.NIGHT, lib, RuntimeEnvironment.getApplication(), null, false);
+        assertTrue("a place made from the user's picture: " + madePlace, madePlace != null && p.file(madePlace).length() > 1000);
+        assertTrue(p.read("cast.txt").contains("scene|1|" + madePlace) || p.read("cast.txt").contains("|" + madePlace));
+        System.out.println("PHONE GUIDE: bridges " + bridges + " reverse cams " + reverse + " pieces " + pieces.size() + " " + note[0] + " made " + made + " place " + madePlace);
     }
 
     @Test

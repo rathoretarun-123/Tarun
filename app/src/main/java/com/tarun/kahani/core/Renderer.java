@@ -717,15 +717,7 @@ public final class Renderer {
             }
             // a close-up softens the place behind the face, never melts it: a half-size layer, at most two thirds in,
             // only once the shot is a real close-up
-            // v23: the place behind a close-up stays readable — a faint softening only (a three-quarter-size layer, at
-            // most 30% in, only in a tight close-up); a blurred-away background looked unreal
-            float dof = Math.max(0, Math.min(0.3f, (camZ - 2.0f) / 0.8f));
-            if (dof > 0.02f) {
-                g.save();
-                g.setAlpha(dof);
-                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.75f, bp);
-                g.restore();
-            }
+            // v24: the place behind a close-up is drawn as it is — no softening at all (every blur read as unreal)
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
             if (s.tod == Sets.NIGHT && s.set != Sets.FOREST) { g.color(0x50101C3A); g.rect(0, 0, W, H); }
             if (s.festive) Sets.celebrationLights(g, t);

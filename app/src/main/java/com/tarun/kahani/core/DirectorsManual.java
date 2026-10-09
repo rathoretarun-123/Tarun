@@ -131,7 +131,7 @@ public final class DirectorsManual {
     public static final String[][] PRECEDENCE = {
             {"Shot durations", "establishing 4–10 s, emotional close-up 3–8 s, dialogue 3–6 s (planning ranges)",
                     "Technical Director: no shot over 4 s; lip-sync close-ups of at most 6 words",
-                    "the cap wins (the manual calls its ranges planning ranges, not rules): establishing shots are held for the top of the cap (3.9 s) unless someone "
+                    "the cap wins (the manual calls its ranges planning ranges, not rules): shots are cut at 3.2 s (v24, for the flow) and establishing shots are held for that length unless someone "
                     + "enters or moves during them (then the motion rule cuts sooner and the move is seen wide); a long emotional close-up is cut into locked close-ups and reactions of at most 4 s each"},
             {"Tracking shots", "follow movement when movement matters",
                     "Technical Director: the camera is a locked tripod; no character moves 15% of the frame in one shot",
@@ -173,7 +173,7 @@ public final class DirectorsManual {
             {"3.3 Scenes", "DirectorsManual.sceneRecords: ID, purpose, start and end state, characters, objectives, actions, emotional progression, what is revealed, the transition"},
             {"3.4 Shot types", "ShotPlanner sizes + SINGLE / TWO_SHOT / OTS / POV; inserts (FX_SHOT); reactions; establishing shots; POV for \"looks at\"; cuts instead of tracking"},
             {"3.5 Shot production record", "every shot in the QC: PURPOSE … GAZE (the handbook) + ASSETS, TRANSITION IN, STATE AT START / END, VOICE / MUSIC (the manual)"},
-            {"3.6 Durations", "establishing shots held 3.9 s where no one moves (counted in the QC); everything within the 4-second cap; distinct durations"},
+            {"3.6 Durations", "shots cut at 3.2 s, establishing shots held 3.1 s where no one moves (counted in the QC); everything within the 4-second cap; distinct durations"},
             {"3.7 Animatic", "FilmJob.animatic: every shot's first frame held for its length with the real voices, music and sounds, approved in Human QC before the film is rendered"},
             {"3.8 Shots in sequence", "the whole film is drawn from the approved plan; held items and positions carried key to key; neighbours compared by the ledger"},
             {"3.9 Transitions", "DirectorsManual.transition per shot: cut on action, reaction cut, establishing cut, dissolve / fade (dips to black and white), plain cut"},

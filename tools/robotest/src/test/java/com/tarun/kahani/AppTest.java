@@ -973,16 +973,11 @@ public class AppTest {
         com.tarun.kahani.core.Glb.Model plainModel = com.tarun.kahani.core.Glb.load(tinyGlb(), null);
         assertTrue(plainModel.triangles == 12 && plainModel.joints == 0);
         // ---- the training documents are bundled
-        android.content.Context ctx = RuntimeEnvironment.getApplication();
         for (String a : new String[]{"image_to_3d_plain_guide.md", "director_training_guide.md", "ai_3d_scene_maker_guide.md", "ai_animation_director_handbook.md"}) {
-            java.io.InputStream in = ctx.getAssets().open(a);
-            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            for (int n; (n = in.read(buf)) > 0; ) bo.write(buf, 0, n);
-            in.close();
-            String text = new String(bo.toByteArray(), "UTF-8");
+            String text = new String(Files.readAllBytes(new File(ASSETS, a).toPath()), "UTF-8");
             assertTrue(a + " is bundled", text.length() > 1000);
         }
+        assertTrue("the recorded guide maps its rules to the code", new String(Files.readAllBytes(new File(ASSETS, "image_to_3d_plain_guide.md").toPath()), "UTF-8").contains("Figure3D.details"));
         // ---- the description's details on the back of a figure made from a picture: a braid adds geometry, a plain look does not
         Project p = sampleProject();
         Story story = ScriptParser.parse(p.read("script.txt"));

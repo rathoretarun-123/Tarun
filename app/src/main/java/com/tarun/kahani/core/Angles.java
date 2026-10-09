@@ -46,9 +46,14 @@ public final class Angles {
             for (int i = 0; i < on.length; i++) on[i] = (tmp[i] >>> 24) > 100;
         }
         clearGridLines(on, w, h);
-        List<int[]> cellsA = cells(on, w, h, true), cellsB = cells(on, w, h, false);
-        List<Piece> a = pieces(src, w, h, cellsA, alpha || !cutOut ? 0 : bg), b = pieces(src, w, h, cellsB, alpha || !cutOut ? 0 : bg);
-        List<Piece> best = figures(a, w, h).size() >= figures(b, w, h).size() ? a : b;
+        int[] labelsA = new int[w * h], labelsB = new int[w * h];
+        List<int[]> cellsA = cells(on, w, h, true, labelsA), cellsB = cells(on, w, h, false, labelsB);
+        List<Piece> a = pieces(src, w, h, cellsA, alpha || !cutOut ? 0 : bg, labelsA), b = pieces(src, w, h, cellsB, alpha || !cutOut ? 0 : bg, labelsB);
+        // the order that finds more figures wins — unless it did so by cutting a figure into a big and a small part
+        // (a piece under 30% of the median area), which the other order did not
+        List<Piece> fa = figures(a, w, h), fb = figures(b, w, h);
+        boolean ta = tinyPiece(fa), tb = tinyPiece(fb);
+        List<Piece> best = ta != tb ? (ta ? b : a) : fa.size() >= fb.size() ? a : b;
         if (figures(best, w, h).size() >= 2) return order(best, h);
         return splitByGroups(src, w, h);
     }
@@ -66,18 +71,26 @@ public final class Angles {
         int[] cols = new int[w], rows = new int[h];
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (on[y * w + x]) { cols[x]++; rows[y]++; }
         int thinW = Math.max(4, Math.round(w * 0.006f)), thinH = Math.max(4, Math.round(h * 0.006f));
+        // only the line itself goes: a pixel of the band whose column (or row) is occupied just outside the band on
+        // both sides belongs to a figure the line runs through, and stays
         for (int x = 0; x < w; ) {
             if (cols[x] < h * 0.5f) { x++; continue; }
             int x1 = x;
             while (x1 < w && cols[x1] >= h * 0.5f) x1++;
-            if (x1 - x <= thinW) for (int xx = x; xx < x1; xx++) for (int y = 0; y < h; y++) on[y * w + xx] = false;
+            if (x1 - x <= thinW) {
+                int l = Math.max(0, x - 2), rr = Math.min(w - 1, x1 + 1);
+                for (int y = 0; y < h; y++) { boolean through = on[y * w + l] && on[y * w + rr]; if (!through) for (int xx = x; xx < x1; xx++) on[y * w + xx] = false; }
+            }
             x = x1;
         }
         for (int y = 0; y < h; ) {
             if (rows[y] < w * 0.5f) { y++; continue; }
             int y1 = y;
             while (y1 < h && rows[y1] >= w * 0.5f) y1++;
-            if (y1 - y <= thinH) for (int yy = y; yy < y1; yy++) for (int x = 0; x < w; x++) on[yy * w + x] = false;
+            if (y1 - y <= thinH) {
+                int t = Math.max(0, y - 2), b = Math.min(h - 1, y1 + 1);
+                for (int x = 0; x < w; x++) { boolean through = on[t * w + x] && on[b * w + x]; if (!through) for (int yy = y; yy < y1; yy++) on[yy * w + x] = false; }
+            }
             y = y1;
         }
     }
@@ -105,7 +118,7 @@ public final class Angles {
             if (!merged.isEmpty()) {
                 int[] prev = merged.get(merged.size() - 1);
                 int gap = r[0] - prev[1];
-                boolean seam = gap < Math.max(3, count.length * 0.008f) && count[Math.max(0, prev[1] - reach)] > 0.5f * max && count[Math.min(count.length - 1, r[0] + reach)] > 0.5f * max;
+                boolean seam = gap < Math.max(3, count.length * 0.008f) && count[Math.max(0, prev[1] - reach)] > 0.25f * max && count[Math.min(count.length - 1, r[0] + reach)] > 0.25f * max;
                 if (gap < join || seam) { prev[1] = r[1]; continue; }
             }
             merged.add(r);
@@ -119,9 +132,12 @@ public final class Angles {
      * cut at the thinnest place between them — only when the part is clearly too long for one figure and both
      * halves are figure-tall, so an outstretched arm is never cut off.
      */
-    static List<int[]> cells(boolean[] on, int w, int h, boolean rowsFirst) {
+    static List<int[]> cells(boolean[] on, int w, int h, boolean rowsFirst) { return cells(on, w, h, rowsFirst, null); }
+
+    /** With 'labels' (w*h, zero = none): a cell {x0, y0, x1, y1, label} whose figure was told apart from a touching neighbour by erosion keeps only its own pixels. */
+    static List<int[]> cells(boolean[] on, int w, int h, boolean rowsFirst, int[] labels) {
         List<int[]> out = new ArrayList<int[]>();
-        xy(on, w, h, new int[]{0, 0, w, h}, rowsFirst, false, 0, 0, out);
+        xy(on, w, h, new int[]{0, 0, w, h}, rowsFirst, false, 0, 0, out, labels);
         return out;
     }
 
@@ -138,7 +154,7 @@ public final class Angles {
         return p;
     }
 
-    private static void xy(boolean[] on, int w, int h, int[] region, boolean rows, boolean triedOther, int depth, int siblingMedian, List<int[]> out) {
+    private static void xy(boolean[] on, int w, int h, int[] region, boolean rows, boolean triedOther, int depth, int siblingMedian, List<int[]> out, int[] labels) {
         int[] r = tight(on, w, region);
         if (r == null) return;
         int rw = r[2] - r[0], rh = r[3] - r[1];
@@ -155,7 +171,7 @@ public final class Angles {
             int med = lens.get(lens.size() / 2);
             for (int[] run : runs) {
                 int[] sub = rows ? new int[]{r[0], r[1] + run[0], r[2], r[1] + run[1]} : new int[]{r[0] + run[0], r[1], r[0] + run[1], r[3]};
-                xy(on, w, h, sub, !rows, false, depth + 1, runs.size() >= 3 ? med : 0, out);
+                xy(on, w, h, sub, !rows, false, depth + 1, runs.size() >= 3 ? med : 0, out, labels);
             }
             return;
         }
@@ -170,12 +186,126 @@ public final class Angles {
         if (cutAt > 0) {
             int[] a = rows ? new int[]{r[0], r[1], r[2], r[1] + cutAt} : new int[]{r[0], r[1], r[0] + cutAt, r[3]};
             int[] b = rows ? new int[]{r[0], r[1] + cutAt, r[2], r[3]} : new int[]{r[0] + cutAt, r[1], r[2], r[3]};
-            xy(on, w, h, a, rows, false, depth + 1, siblingMedian, out);
-            xy(on, w, h, b, rows, false, depth + 1, siblingMedian, out);
+            xy(on, w, h, a, rows, false, depth + 1, siblingMedian, out, labels);
+            xy(on, w, h, b, rows, false, depth + 1, siblingMedian, out, labels);
             return;
         }
-        if (!triedOther) { xy(on, w, h, r, !rows, true, depth + 1, siblingMedian, out); return; }
+        if (!triedOther) { xy(on, w, h, r, !rows, true, depth + 1, siblingMedian, out, labels); return; }
+        // two figures touching more than lightly (a foot on a tail, a fist at a shoulder): when the part is too long
+        // for one figure in either direction, the mask thinned a little falls apart into them
+        // the thinning check is its own proof (two figure-sized groups beside each other), so every part at least
+        // as wide as it is tall (figures are taller than wide; a pair side by side is square or wider) is tried
+        boolean tooLongEither = rw > 0.9f * rh || rh > 3.0f * rw || (siblingMedian > 0 && along > 1.5f * siblingMedian);
+        if (tooLongEither && labels != null) {
+            List<int[]> parts = erodeSplit(on, w, r, labels);
+            if (parts != null) { out.addAll(parts); return; }
+        }
         out.add(r);
+    }
+
+    private static int nextLabel = 1;
+
+    /**
+     * The figures of a part that touch: the mask eroded by 2% of the part's smaller side is labelled into its
+     * groups; the groups at least 40% as tall or as wide as the part are figures; every pixel of the part is then
+     * given to the nearest figure (a flood from all of them at once). Returns the figures' cells {x0, y0, x1, y1,
+     * label} or null when the part does not fall apart.
+     */
+    static List<int[]> erodeSplit(boolean[] on, int w, int[] r, int[] labels) {
+        // thinned a little first, then more (a foot resting on a leg is thicker than a tail tip), never past 6%
+        for (float f : new float[]{0.02f, 0.035f, 0.05f, 0.06f}) {
+            List<int[]> parts = erodeSplit(on, w, r, labels, f);
+            if (parts != null) return parts;
+        }
+        return null;
+    }
+
+    static List<int[]> erodeSplit(boolean[] on, int w, int[] r, int[] labels, float fraction) {
+        int x0 = r[0], y0 = r[1], rw = r[2] - r[0], rh = r[3] - r[1];
+        if (rw < 8 || rh < 8) return null;
+        int rad = Math.max(2, Math.round(Math.min(rw, rh) * fraction));
+        boolean[] t = new boolean[rw * rh], e = new boolean[rw * rh];
+        for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) {
+            boolean all = true;
+            for (int d = -rad; d <= rad && all; d++) { int xx = x + d; if (xx < 0 || xx >= rw || !on[(y + y0) * w + xx + x0]) all = false; }
+            t[y * rw + x] = all;
+        }
+        for (int y = 0; y < rh; y++) for (int x = 0; x < rw; x++) {
+            boolean all = true;
+            for (int d = -rad; d <= rad && all; d++) { int yy = y + d; if (yy < 0 || yy >= rh || !t[yy * rw + x]) all = false; }
+            e[y * rw + x] = all;
+        }
+        int[] lab = new int[rw * rh];
+        int[] stack = new int[rw * rh];
+        int n = 0;
+        List<int[]> boxes = new ArrayList<int[]>();      // {x0, y0, x1, y1, area}
+        for (int i = 0; i < lab.length; i++) {
+            if (!e[i] || lab[i] != 0) continue;
+            n++;
+            int sp = 0; stack[sp++] = i; lab[i] = n;
+            int bx0 = rw, by0 = rh, bx1 = -1, by1 = -1, area = 0;
+            while (sp > 0) {
+                int c = stack[--sp];
+                int cx = c % rw, cy = c / rw;
+                area++;
+                if (cx < bx0) bx0 = cx;
+                if (cx > bx1) bx1 = cx;
+                if (cy < by0) by0 = cy;
+                if (cy > by1) by1 = cy;
+                int[] nb = {cx > 0 ? c - 1 : -1, cx < rw - 1 ? c + 1 : -1, cy > 0 ? c - rw : -1, cy < rh - 1 ? c + rw : -1};
+                for (int j : nb) if (j >= 0 && e[j] && lab[j] == 0) { lab[j] = n; stack[sp++] = j; }
+            }
+            boxes.add(new int[]{bx0, by0, bx1 + 1, by1 + 1, area});
+        }
+        // the figures: in a wide part the figures stand side by side, so each is nearly as tall as the part and
+        // they lie beside each other (a head cut from its body by the thinning is neither); in a tall part the other way round
+        boolean wide = rw >= rh;
+        List<Integer> big = new ArrayList<Integer>();
+        for (int k = 0; k < boxes.size(); k++) {
+            int[] b = boxes.get(k);
+            // a figure lying or sitting beside a standing one is well under its height, but never under 35% of it
+            boolean tall = b[3] - b[1] >= 0.35f * rh && b[2] - b[0] >= 0.15f * rw, broad = b[2] - b[0] >= 0.35f * rw && b[3] - b[1] >= 0.15f * rh;
+            if ((wide ? tall : broad) && b[4] >= 0.02f * rw * rh) big.add(k + 1);
+        }
+        if (big.size() < 2) return null;
+        // the figures of a pair are alike in bulk: a fist, a horn or a sword tip beside a body is far smaller (under 40% of it)
+        int largest = 0;
+        for (int k : big) largest = Math.max(largest, boxes.get(k - 1)[4]);
+        for (int k : big) if (boxes.get(k - 1)[4] < 0.4f * largest) return null;
+        for (int i = 0; i < big.size(); i++) for (int j = i + 1; j < big.size(); j++) {
+            int[] a = boxes.get(big.get(i) - 1), b = boxes.get(big.get(j) - 1);
+            int o = wide ? Math.min(a[2], b[2]) - Math.max(a[0], b[0]) : Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+            int small = wide ? Math.min(a[2] - a[0], b[2] - b[0]) : Math.min(a[3] - a[1], b[3] - b[1]);
+            if (o > 0.5f * small) return null;      // two groups over each other: one figure in pieces, not two figures
+        }
+        int[] owner = new int[rw * rh];
+        int[] queue = new int[rw * rh];
+        int qh = 0, qt = 0;
+        for (int i = 0; i < lab.length; i++) if (lab[i] != 0 && big.contains(lab[i])) { owner[i] = lab[i]; queue[qt++] = i; }
+        while (qh < qt) {
+            int c = queue[qh++];
+            int cx = c % rw, cy = c / rw;
+            int[] nb = {cx > 0 ? c - 1 : -1, cx < rw - 1 ? c + 1 : -1, cy > 0 ? c - rw : -1, cy < rh - 1 ? c + rw : -1};
+            for (int j : nb) if (j >= 0 && owner[j] == 0 && on[(j / rw + y0) * w + j % rw + x0]) { owner[j] = owner[c]; queue[qt++] = j; }
+        }
+        List<int[]> out = new ArrayList<int[]>();
+        for (int k : big) {
+            int bx0 = rw, by0 = rh, bx1 = -1, by1 = -1;
+            int id;
+            synchronized (Angles.class) { id = nextLabel++; }
+            for (int i = 0; i < owner.length; i++) {
+                if (owner[i] != k) continue;
+                int x = i % rw, y = i / rw;
+                if (x < bx0) bx0 = x;
+                if (x > bx1) bx1 = x;
+                if (y < by0) by0 = y;
+                if (y > by1) by1 = y;
+                labels[(y + y0) * w + x + x0] = id;
+            }
+            if (bx1 < bx0) continue;
+            out.add(new int[]{bx0 + x0, by0 + y0, bx1 + 1 + x0, by1 + 1 + y0, id});
+        }
+        return out.size() >= 2 ? out : null;
     }
 
     /**
@@ -225,7 +355,9 @@ public final class Angles {
     }
 
     /** Each cell cut out on its own: a margin of background around it, the real background removed, the holes kept. */
-    static List<Piece> pieces(int[] src, int w, int h, List<int[]> cells, int bg) {
+    static List<Piece> pieces(int[] src, int w, int h, List<int[]> cells, int bg) { return pieces(src, w, h, cells, bg, null); }
+
+    static List<Piece> pieces(int[] src, int w, int h, List<int[]> cells, int bg, int[] labels) {
         boolean alpha = bg == 0;
         List<Piece> out = new ArrayList<Piece>();
         for (int[] c : cells) {
@@ -236,6 +368,11 @@ public final class Angles {
             if (p.w < 2 || p.h < 2) continue;
             p.px = new int[p.w * p.h];
             for (int y = 0; y < p.h; y++) System.arraycopy(src, (y + y0) * w + x0, p.px, y * p.w, p.w);
+            if (c.length >= 5 && labels != null) {
+                // a figure told apart from a touching neighbour: the neighbour's pixels in this box become background
+                int own = c[4];
+                for (int y = 0; y < p.h; y++) for (int x = 0; x < p.w; x++) { int l = labels[(y + y0) * w + x + x0]; if (l != 0 && l != own) p.px[y * p.w + x] = alpha ? 0 : bg; }
+            }
             if (!alpha) {
                 // a cell's own background: its border is background (the gap around the figure), the figure is not
                 try { Cutout.removeBackground(p.px, p.w, p.h, true, bg); } catch (RuntimeException e) { /* kept as it is */ }
@@ -247,21 +384,41 @@ public final class Angles {
 
     /**
      * The figures among the pieces (v26): at least 30% as tall as the tallest, 12% of the sheet's height and 4% of
-     * its width (labels, arrows, crumbs and grid bits dropped), the ten largest. Fewer than two: not a sheet.
+     * its width (labels, arrows, crumbs and grid bits dropped), the twelve largest (a sheet of ten, with room for an eleventh). Fewer than two: not a sheet.
      */
     public static List<Piece> figures(List<Piece> parts, int w, int h) {
         List<Piece> out = new ArrayList<Piece>();
         int tallest = 0;
         for (Piece pc : parts) tallest = Math.max(tallest, pc.h);
         for (Piece pc : parts) if (pc.h >= tallest * 0.3f && pc.h >= h * 0.12f && pc.w >= w * 0.04f && opaqueShare(pc) > 0.04f) out.add(pc);
+        // a prop that came loose from a figure (a sword, a hat, a bone) is far smaller than the figures: under 30% of their median area
+        if (out.size() >= 3) {
+            List<Long> areas = new ArrayList<Long>();
+            for (Piece pc : out) areas.add((long) pc.w * pc.h);
+            java.util.Collections.sort(areas);
+            long median = areas.get(areas.size() / 2);
+            List<Piece> kept = new ArrayList<Piece>();
+            for (Piece pc : out) if ((long) pc.w * pc.h >= 0.3f * median) kept.add(pc);
+            out = kept;
+        }
         if (out.size() < 2) return new ArrayList<Piece>();
-        if (out.size() > 10) {
+        if (out.size() > 12) {
             java.util.Collections.sort(out, new java.util.Comparator<Piece>() {
                 public int compare(Piece a, Piece b) { return Long.compare((long) b.w * b.h, (long) a.w * a.h); }
             });
-            out = new ArrayList<Piece>(out.subList(0, 10));
+            out = new ArrayList<Piece>(out.subList(0, 12));
         }
         return order(out, h);
+    }
+
+    /** True when a piece is under 30% of the median piece area (a part of a figure, not a figure). */
+    static boolean tinyPiece(List<Piece> figs) {
+        if (figs.size() < 2) return false;
+        List<Long> areas = new ArrayList<Long>();
+        for (Piece p : figs) areas.add((long) p.w * p.h);
+        java.util.Collections.sort(areas);
+        long median = areas.get(areas.size() / 2);
+        return areas.get(0) < 0.3f * median;
     }
 
     static float opaqueShare(Piece p) {

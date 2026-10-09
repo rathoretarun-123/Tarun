@@ -438,13 +438,14 @@ public class AppTest {
 
     /**
      * v26: every one of the user's 60 sheets (characters in angles, poses and emotions; places in views) splits
-     * into its figures or panels — at least 9 of 10 on each — and the pieces are whole (as tall as the tallest).
+     * into its figures or panels — ten on most, eleven or twelve where the generator put six on a row — every
+     * piece a whole figure: none under 30% of the median area, none overlapping another.
      */
     @Test
     public void userSheetsSplitIntoTheirFigures() throws Exception {
         File[] sheets = userSheets();
         assertTrue("no sheets at " + new File(ASSETS, "../../../../tools/testdata/sheets"), sheets.length >= 40);
-        int perfect = 0, total = 0;
+        int total = 0, figures = 0;
         StringBuilder report = new StringBuilder();
         for (File f : sheets) {
             if (!f.getName().endsWith(".jpg")) continue;
@@ -453,18 +454,24 @@ public class AppTest {
             boolean place = f.getName().matches("sheet(3[4-9]|40|41|42|43)\\.jpg");
             List<com.tarun.kahani.core.Angles.Piece> all = com.tarun.kahani.core.Angles.split(px, wh[0], wh[1], !place);
             List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(all, wh[0], wh[1]);
-            int tallest = 0;
-            for (com.tarun.kahani.core.Angles.Piece pc : figs) tallest = Math.max(tallest, pc.h);
-            int whole = 0;
-            for (com.tarun.kahani.core.Angles.Piece pc : figs) if (pc.h >= 0.45f * tallest || pc.w >= 0.6f * tallest) whole++;   // a lying or sitting pose is wide, not tall
+            List<Long> areas = new ArrayList<Long>();
+            for (com.tarun.kahani.core.Angles.Piece pc : figs) areas.add((long) pc.w * pc.h);
+            java.util.Collections.sort(areas);
+            long median = areas.isEmpty() ? 0 : areas.get(areas.size() / 2);
+            int overlaps = 0;
+            for (int i = 0; i < figs.size(); i++) for (int j = i + 1; j < figs.size(); j++) {
+                com.tarun.kahani.core.Angles.Piece a = figs.get(i), b = figs.get(j);
+                int ix = Math.max(0, Math.min(a.x0 + a.w, b.x0 + b.w) - Math.max(a.x0, b.x0)), iy = Math.max(0, Math.min(a.y0 + a.h, b.y0 + b.h) - Math.max(a.y0, b.y0));
+                if ((long) ix * iy > 0.3f * Math.min((long) a.w * a.h, (long) b.w * b.h)) overlaps++;
+            }
             report.append(f.getName()).append('=').append(figs.size()).append(' ');
             total++;
-            if (figs.size() == 10) perfect++;
-            assertTrue(f.getName() + ": " + figs.size() + " figures", figs.size() >= 9);
-            assertTrue(f.getName() + ": " + whole + " of " + figs.size() + " whole", whole >= figs.size() - 1);
+            figures += figs.size();
+            assertTrue(f.getName() + ": " + figs.size() + " figures", figs.size() >= 10 && figs.size() <= 12);
+            assertTrue(f.getName() + ": a piece under 30% of the median (a part of a figure)", areas.isEmpty() || areas.get(0) >= 0.3f * median);
+            assertTrue(f.getName() + ": " + overlaps + " overlapping pieces", overlaps == 0);
         }
-        System.out.println("SHEETS: " + perfect + " of " + total + " split 10/10 — " + report);
-        assertTrue(perfect + " of " + total + " perfect", perfect >= total * 0.9f);
+        System.out.println("SHEETS: " + total + " sheets, " + figures + " figures, none cut — " + report);
     }
 
     /**

@@ -55,7 +55,7 @@ final class SheetSaver {
             if (++files > 10) break;                                    // v26: up to 10 pictures, each up to 10 angles
             // v28: a sheet is read at up to 2600 px wide where the heap allows, so every figure cut from it
             // (a tenth of the sheet) is sharp enough for a close-up and its face large enough to read
-            int[] dec = MainActivity.decodeBytes(d, Runtime.getRuntime().maxMemory() >= (384L << 20) ? 2600 : 1600);
+            int[] dec = MainActivity.decodeBytes(d, Project.bigSide());
             if (dec == null) { unreadable++; continue; }
             int w = dec[0], h = dec[1];
             int[] px = new int[w * h];
@@ -69,6 +69,19 @@ final class SheetSaver {
             try {
                 parts = kind.equals("scene") ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, false), w, h)
                         : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h);
+            } catch (OutOfMemoryError oom) {
+                // v30: a large sheet on a phone with little heap left: read again smaller and split that
+                parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
+                try {
+                    int[] dec2 = MainActivity.decodeBytes(d, 1600);
+                    if (dec2 != null) {
+                        w = dec2[0]; h = dec2[1];
+                        px = new int[w * h];
+                        System.arraycopy(dec2, 2, px, 0, px.length);
+                        parts = kind.equals("scene") ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, false), w, h)
+                                : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h);
+                    }
+                } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             if (parts.size() >= 2) camera = false;
             if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }

@@ -244,8 +244,10 @@ public final class FilmJob implements Runnable {
             }
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             // v26: pictures are read at a size that fits the output (sharper at 1080p, lighter at 480p), within the memory left
-            Art.spriteSide = Math.max(900, Math.min(2000, Math.round(ed.height * 1.25f)));
-            Art.backdropSide = Math.max(1280, Math.min(2600, Math.round(ed.height * 16f / 9f * 1.15f)));
+            // v30: a phone with a large heap reads the pictures larger (sharper close-ups); a small one stays light
+            int big = Project.bigSide();
+            Art.spriteSide = Math.max(900, Math.min(big >= 3000 ? 2600 : 2000, Math.round(ed.height * 1.25f)));
+            Art.backdropSide = Math.max(1280, Math.min(big >= 3000 ? 3200 : 2600, Math.round(ed.height * 16f / 9f * 1.15f)));
             Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
             check();
 
@@ -693,6 +695,7 @@ public final class FilmJob implements Runnable {
                 public boolean cancelled() { return cancelled; }
             });
             film.shotList += "\n" + r.text();
+            film.shotList += "\n" + com.tarun.kahani.core.DirectorTraining.scoreCard(film, art, null, r);     // v30: the training guide's score with what the QC saw
             qcBoiling = r.boilingLeft; qcShaking = r.shakingLeft; qcFloating = r.floating;
             // the handbook's approval gates and scores (ch. 13) and the delivery checklist (ch. 16), from what was checked
             if (film.stats != null) {

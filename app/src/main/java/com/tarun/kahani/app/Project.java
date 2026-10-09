@@ -157,6 +157,19 @@ public final class Project {
         return savePicture(readAll(in), base);
     }
 
+    /**
+     * v30: the largest side a picture is read and kept at on this phone — by the heap Android grants the app: 4000 px
+     * from 1 GB, 3000 from 512 MB, 2600 from 384 MB, else 1600 (a sheet of ten figures at 4000 px gives figures sharp
+     * enough for a full-frame close-up).
+     */
+    public static int bigSide() {
+        long max = Runtime.getRuntime().maxMemory();
+        if (max >= (1024L << 20)) return 4000;
+        if (max >= (512L << 20)) return 3000;
+        if (max >= (384L << 20)) return 2600;
+        return 1600;
+    }
+
     /** Saves picture bytes (any format Android can read) into the project, downscaled. Returns the file name. */
     public String savePicture(byte[] data, String base) throws IOException {
         BitmapFactory.Options o = new BitmapFactory.Options();
@@ -164,7 +177,8 @@ public final class Project {
         BitmapFactory.decodeByteArray(data, 0, data.length, o);
         if (o.outWidth <= 0) throw new IOException("This picture could not be read");
         int sample = 1;
-        while (Math.max(o.outWidth, o.outHeight) / sample > 2600) sample *= 2;
+        int keep = Math.max(2600, bigSide());
+        while (Math.max(o.outWidth, o.outHeight) / sample > keep) sample *= 2;
         o = new BitmapFactory.Options();
         o.inSampleSize = sample;
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length, o);

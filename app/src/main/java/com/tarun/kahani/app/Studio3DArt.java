@@ -488,7 +488,7 @@ final class Studio3DArt {
         if (realAngles(project, keyFor(project, story, c))) return 0;       // v26: real angles, never drawn ones
         Look look = c.look != null ? c.look : new Look();
         boolean beast = look.kind == Look.ANIMAL || look.kind == Look.BIRD;
-        int[] d = project.loader().decode(file, 1600);
+        int[] d = project.loader().decode(file, Math.min(2600, Project.bigSide()));
         if (d == null) return 0;
         int[] px = new int[d[0] * d[1]];
         System.arraycopy(d, 2, px, 0, px.length);
@@ -600,7 +600,7 @@ final class Studio3DArt {
         if (best == null) return null;
         try {
             byte[] data = Project.readAll(lib.open(best));
-            int[] dec = MainActivity.decodeBytes(data, 1600);
+            int[] dec = MainActivity.decodeBytes(data, Math.min(2600, Project.bigSide()));
             if (dec == null) return null;
             int w = dec[0], h = dec[1];
             int[] px = new int[w * h];

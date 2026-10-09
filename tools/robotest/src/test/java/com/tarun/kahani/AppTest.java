@@ -806,6 +806,64 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * v30: the "AI Animated Film Director — Reference-Based Training & Production Guide" is trained in: the twelve
+     * principles and the sections mapped to code, the scene brief at the head of every scene of the shot list, the
+     * weighted quality score with the critical-defect override at its end, the guide on the protocols screen.
+     */
+    @Test
+    public void directorTrainingGuideIsTrainedAndScored() throws Exception {
+        assertTrue(com.tarun.kahani.core.DirectorTraining.TWELVE_MAP.length == 12);
+        for (int i = 0; i < 12; i++) {
+            String name = com.tarun.kahani.core.DirectorTraining.TWELVE_MAP[i][0].toLowerCase(java.util.Locale.US);
+            assertTrue(name + " vs " + com.tarun.kahani.core.PixarLead.TWELVE[i], name.equals(com.tarun.kahani.core.PixarLead.TWELVE[i]));
+            assertTrue("principle mapped to code: " + name, com.tarun.kahani.core.DirectorTraining.TWELVE_MAP[i][1].length() > 30);
+        }
+        assertTrue(com.tarun.kahani.core.DirectorTraining.SECTIONS.length == 15);
+        assertTrue(com.tarun.kahani.core.DirectorTraining.SUMMARY.contains("cannot do"));
+        File guide = new File(ASSETS, "director_reference_training_guide.md");
+        assertTrue("the guide is bundled", guide.exists());
+        String g = new String(Files.readAllBytes(guide.toPath()), "UTF-8");
+        assertTrue(g.contains("Twelve Principles") && g.contains("Quality-Control Scoring Engine") && g.contains("Master System Prompt"));
+        // the sample film: a scene brief per scene, the score card at the end
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director d = new Director(story, new Director.Options());
+        Film film = d.prepare();
+        film = d.direct(art);
+        int briefs = 0;
+        for (String l : film.shotList.split("\n")) if (l.startsWith("SCENE BRIEF")) briefs++;
+        assertTrue("a brief per scene: " + briefs + " of " + story.scenes.size(), briefs >= Math.min(3, story.scenes.size()) && briefs <= story.scenes.size() + 2);
+        assertTrue(film.shotList.contains("  Subjects: ") && film.shotList.contains("  Camera: ") && film.shotList.contains("  Constraints: "));
+        String card = com.tarun.kahani.core.DirectorTraining.scoreCard(film, art, story, null);
+        System.out.println("TRAINING SCORE:\n" + card);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("QC SCORE[^:]*: (\\d+)/100").matcher(card);
+        assertTrue("a score", m.find());
+        int sc = Integer.parseInt(m.group(1));
+        assertTrue("score 0..100: " + sc, sc >= 0 && sc <= 100);
+        int cats = 0;
+        for (String c : com.tarun.kahani.core.SceneMaker.CATEGORIES) if (card.contains(c)) cats++;
+        assertTrue("six categories", cats == 6);
+        assertTrue("the override line", card.contains("Critical-defect override: "));
+        assertTrue("no character of the sample is missing from its scene", com.tarun.kahani.core.DirectorTraining.missingCharacters(film) == 0);
+        assertTrue("the shot list ends with the score", film.shotList.contains("QC SCORE (training guide §12"));
+        // the protocols screen shows the guide
+        RuntimeEnvironment.getApplication().getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        Method sp = MainActivity.class.getDeclaredMethod("showProtocol");
+        sp.setAccessible(true);
+        sp.invoke(a);
+        idle();
+        android.app.Dialog dlg = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull("the protocols dialog", dlg);
+        String all = android.text.TextUtils.join("\n", texts(dlg.getWindow().getDecorView(), new ArrayList<String>()));
+        System.out.println("PROTOCOLS DIALOG: " + all.length() + " chars; training summary shown: " + all.contains("Reference-Based Training") + "; guide text shown: " + all.contains("Twelve Principles"));
+        assertTrue("the training summary on the protocols screen", all.contains("Reference-Based Training") && all.contains("What a phone cannot do"));
+        ac.pause().stop().destroy();
+    }
+
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
     @Test
     public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {

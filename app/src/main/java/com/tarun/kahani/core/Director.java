@@ -527,6 +527,8 @@ public final class Director {
                 Film.Seg sg = film.segAt(sh.t + 0.01f);
                 if (sg != null && sg.scene >= 0) b.append("────────── ").append(story.scenes.get(sg.scene).heading).append(": ").append(Sets.label(sg.set))
                         .append(sg.transition == 1 ? "  (opens with a dip to black: time has passed)" : sg.transition == 2 ? "  (opens with a dip to white)" : "").append('\n');
+                // v30: the structured scene brief of the training guide (§7)
+                if (sg != null && sg.scene >= 0) b.append(DirectorTraining.brief(film, story, sg, sh, cids));
             }
             n++;
             if (sh.size >= ShotPlanner.CU) cus++;
@@ -624,6 +626,8 @@ public final class Director {
         } else {
             b.append(String.format(java.util.Locale.US, "• Close-ups kept for turning points: %d of %d shots (%.0f%%)%n", cus, n, n == 0 ? 0 : 100f * cus / n));
         }
+        // v30: the training guide's weighted score of the film (§12), before the final QC refines it
+        b.append(DirectorTraining.scoreCard(film, this.art, story, null));
         b.append("• Static shots: ").append(statics).append(" of ").append(n).append(still > 0 ? " (" + still + " made still)" : "").append('\n');
         b.append("• Reactions shown and allowed to breathe: ").append(reactions).append('\n');
         b.append("• Relationships shown with both characters in the frame: ").append(twos).append(" two-shots\n");

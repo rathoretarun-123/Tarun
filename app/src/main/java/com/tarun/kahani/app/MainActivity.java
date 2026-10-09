@@ -3828,6 +3828,9 @@ public class MainActivity extends Activity {
         String phone;
         try { phone = new String(Project.readAll(getAssets().open("phone_local_film_creator_guide.md")), "UTF-8"); } catch (Exception e) { phone = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.PhoneGuide.SUMMARY + "\n\n" + phone;
+        String reference;
+        try { reference = new String(Project.readAll(getAssets().open("director_reference_training_guide.md")), "UTF-8"); } catch (Exception e) { reference = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.DirectorTraining.SUMMARY + "\n\n" + reference;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "

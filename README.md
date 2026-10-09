@@ -1,4 +1,4 @@
-# Kahani Film — v29
+# Kahani Film — v30
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,12 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v30
+
+* **The "AI Animated Film Director — Reference-Based Training & Production Guide" trained in** (`DirectorTraining`): the twelve principles of animation and Pixar's philosophy mapped to the code that applies each one; every section (1–15) answered; a **SCENE BRIEF** (§7: subjects with IDs, action, environment, lighting and mood, camera, constraints) at the head of every scene of the shot list; a **QC SCORE** (§12: the weighted rubric — identity 25 %, geometry 20 %, style 15 %, lighting and composition 10 %, compliance 15 %, continuity 15 %; 0–5 each; 85 / 70 thresholds) at the end of every shot list and again after the Final QC with what it saw, with the **critical-defect override** (a character of a scene drawn in none of its shots, floating geometry). The guide is on the protocols screen as given. What a phone cannot do is said plainly: no fine-tuning, no adapters, no video model.
+* **High resolution on a phone that has the memory** (`Project.bigSide`): sheets and pictures are read and kept at 4000 px on a phone whose heap is 1 GB or more, 3000 px from 512 MB, 2600 from 384 MB, 1600 below; the figures of a sheet come out sharp enough for a full-frame close-up; the renderer's picture size follows (2600 px sprites, 3200 px backdrops on such phones); a sheet that runs out of memory is read again at 1600 px instead of failing.
+* Test: `directorTrainingGuideIsTrainedAndScored`.
 
 ## New in v29
 

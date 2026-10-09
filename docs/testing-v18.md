@@ -53,7 +53,9 @@ character's feet drawn above the ground line.
 14. `anyScriptIsStagedByTheProtocol` — a generic script is staged by the technical protocol.
 15. `modernFreeFormScriptIsReadStagedAndCued` — a free-form modern script with its cues.
 
-<!-- ROBOLECTRIC RESULT -->
+Result with the final v18 code: **15 of 15 pass** (`gradle cleanTest test --offline`, Robolectric with native Android
+graphics). The longest are the end-to-end film job (86 s) and the final check of 40 shots (54 s); the views test
+takes 13 s (the three-quarter and side views of Vanusha from her picture in 4.3 s).
 
 ## What the testing found, and what was done
 

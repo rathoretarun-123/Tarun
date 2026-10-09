@@ -36,6 +36,24 @@ public final class Txt {
         return false;
     }
 
+    /** True if any needle is in the text as a whole word (no letter right before or after it): "mall" is not in "small". */
+    public static boolean hasWord(String hay, String... needles) {
+        String h = norm(hay);
+        for (String n : needles) {
+            String x = norm(n);
+            if (x.isEmpty()) continue;
+            int i = h.indexOf(x);
+            while (i >= 0) {
+                boolean l = i == 0 || !Character.isLetterOrDigit(h.charAt(i - 1));
+                int e = i + x.length();
+                boolean r = e >= h.length() || !Character.isLetterOrDigit(h.charAt(e));
+                if (l && r) return true;
+                i = h.indexOf(x, i + 1);
+            }
+        }
+        return false;
+    }
+
     public static int firstIndex(String hay, String... needles) {
         String h = norm(hay);
         int best = -1;

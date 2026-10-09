@@ -16,9 +16,12 @@ import com.tarun.kahani.app.Project;
 import com.tarun.kahani.core.Art;
 import com.tarun.kahani.core.Director;
 import com.tarun.kahani.core.Film;
+import com.tarun.kahani.core.FinalQc;
+import com.tarun.kahani.core.Gfx;
 import com.tarun.kahani.core.Renderer;
 import com.tarun.kahani.core.ScriptParser;
 import com.tarun.kahani.core.Story;
+import com.tarun.kahani.core.TechnicalDirector;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -503,6 +506,112 @@ public class AppTest {
         for (int i = 0; i < px.length; i += 997) if (px[i] != last) { distinct++; last = px[i]; }
         assertTrue("frame looks blank", distinct > 50);
         g.release();
+    }
+
+    /** A part rendered on its own through the Android canvas is not blank. */
+    private static boolean rendersSomething(Film film, Art art, Film.Seg s, int w, int h) {
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        try {
+            new Renderer(film, art).renderSeg(g, s, 0.5f);
+            int[] px = new int[w * h];
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
+            int distinct = 0, last = 0;
+            for (int i = 0; i < px.length; i += 97) if (px[i] != last) { distinct++; last = px[i]; }
+            return distinct > 40;
+        } finally {
+            g.release();
+            bmp.recycle();
+        }
+    }
+
+    /**
+     * v16 — the Technical Director pipeline's steps 1, 2, 6 and 8 are done by the studio itself: a Character Lock
+     * Sheet for every character and a Location Lock Plate (no characters) for every place render as pictures; every
+     * shot is played frame by frame at check size and compared (no boiling, no shake, no floating feet); the finished
+     * film is metered as it is written; the lip-sync face fill (8.3) is measured, validated and corrected; the
+     * objective length is reported.
+     */
+    @Test
+    public void finalQcPlaysEveryShotAndLocksEveryCharacterAndPlace() throws Exception {
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director d = new Director(story, new Director.Options());
+        Film film = d.prepare();
+        film = d.direct(art);
+        assertTrue(film.shotList.contains("Lip-sync framing (8.3)"));
+        assertTrue(film.shotList.contains("Objective (small films of 30-90 s)"));
+        // steps 1-2: a lock sheet for every character of the cast (pictures and drawn puppets alike), a plate per place
+        int sheets = 0;
+        for (Story.CharacterDef c : story.cast()) {
+            int[] sz = d.lockSheetSize(c);
+            Film.Seg s = d.lockSheet(c, sz[0] / (float) sz[1]);
+            assertTrue(s.actors.size() == 1 && s.actors.get(0).c == c);
+            assertTrue("lock sheet blank: " + c.shown(), rendersSomething(film, art, s, sz[0] / 2, sz[1] / 2));
+            sheets++;
+        }
+        assertTrue("sheets " + sheets, sheets >= 6);
+        List<Object[]> plates = d.locationPlates();
+        assertTrue("plates " + plates.size(), plates.size() >= 3);
+        for (Object[] pl : plates) assertTrue(((Film.Seg) pl[1]).actors.isEmpty());
+        assertTrue(rendersSomething(film, art, (Film.Seg) plates.get(0)[1], 320, 180));
+        // step 6: the first 40 shots played frame by frame at check size
+        final int w = 256, h = 144;
+        final Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        final AndroidGfx g = new AndroidGfx(bmp, 4);
+        final int[] px = new int[w * h];
+        final int[] done = {0};
+        long t0 = System.currentTimeMillis();
+        FinalQc.Result r = FinalQc.check(film, art, new FinalQc.Surface() {
+            public Gfx gfx() { return g; }
+            public int[] pixels() { bmp.getPixels(px, 0, w, 0, 0, w, h); return px; }
+            public int width() { return w; }
+            public int height() { return h; }
+        }, new FinalQc.Progress() {
+            public void at(int i, int total) { done[0] = i; }
+            public boolean cancelled() { return done[0] >= 40; }
+        });
+        System.out.println("final QC of 40 shots in " + (System.currentTimeMillis() - t0) + "ms\n" + r.text());
+        assertTrue("checked " + r.checked, r.checked >= 30);
+        assertTrue("feet " + r.feetChecked, r.feetChecked > 100);
+        assertTrue("floating " + r.floating, r.floating == 0);
+        assertTrue("still lively " + r.stillLively + " " + r.notes, r.stillLively == 0);
+        assertTrue(r.text().contains("Step 6") && r.text().contains("Floating: 0 of"));
+        // step 8: the meter fed frames in a row of one steady shot
+        Film.Shot steady = null;
+        for (Film.Shot sh : film.shots) { Film.Seg sg = film.segAt(sh.t + 0.01f); if (sg != null && sh.t > sg.t0 + 1.5f && sh.t + sh.dur < sg.t1 - 1.5f && sh.dur >= 1.5f) { steady = sh; break; } }
+        assertNotNull(steady);
+        FinalQc.Meter m = new FinalQc.Meter(film, w, h, 24);
+        Renderer ren = new Renderer(film, art);
+        int f0 = (int) Math.ceil((steady.t + 0.2f) * 24);
+        for (int f = f0; f < f0 + 8; f++) {
+            ren.render(g, f / 24f);
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
+            m.frame(f, px);
+        }
+        g.release();
+        bmp.recycle();
+        assertTrue("meter pairs " + m.pairs, m.frames == 8 && m.pairs >= 5);
+        assertTrue(m.report().contains("Step 8") && m.boilingShots() == 0 && m.shakingShots() == 0);
+        // 8.3: the validator flags a lip-sync face smaller than its picture and frame allow, and the correction reframes it
+        TechnicalDirector.Shot v = new TechnicalDirector.Shot();
+        v.speech = true; v.closeUp = true; v.words = 4; v.face = 0.40f; v.faceWant = 0.72f;
+        v.placement = "Foreground 0-1 m | Midground left third 2-4 m | Background 10-100 m";
+        v.grounding = TechnicalDirector.GROUND;
+        v.prompt = "CHARACTERS: PLACEMENT: ACTION: GROUNDING: LIGHTING: CAMERA: " + TechnicalDirector.STABLE;
+        assertTrue(TechnicalDirector.validate(v).toString().contains("lip-sync face fills 40%"));
+        assertTrue(TechnicalDirector.correct(v).isEmpty());
+        assertTrue(v.fixes.toString().contains("framed on the face"));
+        // a 9:16 frame cannot hold a 65% face inside its centre 60%: the most it allows is not a fault
+        TechnicalDirector.Shot narrow = new TechnicalDirector.Shot();
+        narrow.speech = true; narrow.closeUp = true; narrow.words = 3; narrow.face = 0.40f; narrow.faceWant = 0.40f;
+        narrow.placement = v.placement; narrow.grounding = v.grounding; narrow.prompt = v.prompt;
+        assertTrue(TechnicalDirector.validate(narrow).isEmpty());
+        // place names are whole words: a "small living room" is a room, not a mall's basement; a "proof" is no roof
+        assertTrue(com.tarun.kahani.core.Sets.detect("Grandpa's small living room at night, a candle on the table") == com.tarun.kahani.core.Sets.ROOM);
+        assertTrue(com.tarun.kahani.core.Sets.detect("the dark basement of the closed mall") == com.tarun.kahani.core.Sets.BASEMENT);
+        assertTrue(com.tarun.kahani.core.Sets.detect("the rooftop of Sky-Line Tower") == com.tarun.kahani.core.Sets.ROOFTOP);
     }
 
     /**

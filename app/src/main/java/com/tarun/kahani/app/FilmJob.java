@@ -360,9 +360,15 @@ public final class FilmJob implements Runnable {
             film.subtitles = ed.subtitles;
             filmSeconds = film.duration;
             check();
+            // pipeline steps 1-2: the Character Lock Sheet of every character and the Location Lock Plate of every
+            // place, saved with the film (and shown first in Human QC)
+            lockSheets(film, art, dir, ed);
             // Human QC (protocol pipeline step 4): the first frame of every shot, checked by the user before the film
             // is made; their fixes are applied, then the film is made
             if (Prefs.humanQc(ctx)) humanQc(film, art, dir, ed, tmp);
+            // pipeline step 6: every shot played frame by frame at check size (the frames seen one by one at 0.25x
+            // speed); a shot that boils or shakes has its motion cut by 80% and is played again from the same first frame
+            finalCheck(film, art, ed);
             step("Mixing music and sounds…", 0.30f);
             final File mix = new File(tmp, "mix.pcm");
             final java.io.OutputStream mo = new java.io.BufferedOutputStream(new java.io.FileOutputStream(mix), 1 << 16);
@@ -411,6 +417,8 @@ public final class FilmJob implements Runnable {
             if (!out.renameTo(fin)) throw new IllegalStateException("The film could not be saved");
             project.setSetting("filmSeconds", String.valueOf((int) film.duration));
             project.setSetting("madeAt", String.valueOf(System.currentTimeMillis()));
+            // the director's shot list with every check (validation, Human QC, the final QC of steps 6 and 8), kept with the film
+            project.write("qc.txt", film.shotList);
             project.setSetting("saved", "0");
             if (aiLines > 0) project.setSetting("aiLines", String.valueOf(aiLines));
             // the thumbnail and the poster, made separately in their own formats (extras: the film is done without them)
@@ -496,28 +504,94 @@ public final class FilmJob implements Runnable {
         }
     }
 
+    /** The lock sheets and location plates made for this film: {file, caption, kind ("char" or "place")}. */
+    public final java.util.List<String[]> lockItems = new java.util.ArrayList<String[]>();
+
+    /** One part rendered on its own into a JPEG (a lock sheet, a location plate), with the film's look. */
+    private void renderStill(Film film, Art art, Film.Seg s, int w, int h, File out) throws IOException {
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        try {
+            Renderer r = new Renderer(film, art);
+            r.renderSeg(g, s, 0.5f);
+            int[] px = new int[w * h];
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
+            new com.tarun.kahani.core.FilmLook(w, h).apply(px, com.tarun.kahani.core.FilmLook.forSeg(s, new com.tarun.kahani.core.FilmLook.Params()));
+            bmp.setPixels(px, 0, w, 0, 0, w, h);
+            java.io.FileOutputStream o = new java.io.FileOutputStream(out);
+            bmp.compress(Bitmap.CompressFormat.JPEG, 88, o);
+            o.close();
+        } finally {
+            g.release();
+            bmp.recycle();
+        }
+    }
+
+    /**
+     * Pipeline steps 1 and 2 (C1): the Character Lock Sheet of every character — standing, front view, exactly as
+     * the film draws them — and the Location Lock Plate of every place with no characters, saved with the film
+     * (lock_char_N.jpg, lock_place_N.jpg) before any shot is made, and shown first in Human QC.
+     */
+    private void lockSheets(Film film, Art art, Director dir, Edits ed) throws IOException {
+        lockItems.clear();
+        int n = 0;
+        for (Story.CharacterDef c : film.story == null ? java.util.Collections.<Story.CharacterDef>emptyList() : film.story.cast()) {
+            check();
+            step("Character Lock Sheet: " + c.shown() + "…", 0.292f);
+            File f = project.file("lock_char_" + n++ + ".jpg");
+            int[] sz = dir.lockSheetSize(c);
+            renderStill(film, art, dir.lockSheet(c, sz[0] / (float) sz[1]), sz[0], sz[1], f);
+            lockItems.add(new String[]{f.getAbsolutePath(), "LOCK SHEET: " + c.shown() + (c.role == null || c.role.isEmpty() ? "" : " · " + c.role), "char"});
+        }
+        int[] size = ed.size();
+        int w = 640, h = Math.max(120, Math.round(640f * size[1] / size[0])) & ~1;
+        int m = 0;
+        for (Object[] p : dir.locationPlates()) {
+            check();
+            step("Location Lock Plate: " + p[0] + "…", 0.293f);
+            File f = project.file("lock_place_" + m++ + ".jpg");
+            renderStill(film, art, (Film.Seg) p[1], w, h, f);
+            lockItems.add(new String[]{f.getAbsolutePath(), "LOCATION PLATE (no characters): " + p[0], "place"});
+        }
+        // sheets of a bigger cast or more places from an earlier film of this story
+        for (int i = n; project.has("lock_char_" + i + ".jpg"); i++) project.file("lock_char_" + i + ".jpg").delete();
+        for (int i = m; project.has("lock_place_" + i + ".jpg"); i++) project.file("lock_place_" + i + ".jpg").delete();
+        film.shotList += String.format(java.util.Locale.US, "%nLOCK SHEETS (pipeline steps 1-2): %d Character Lock Sheets and %d Location Lock Plates made before any shot, saved with the film (lock_char_N.jpg, lock_place_N.jpg)%n", n, m);
+    }
+
+    /** Pipeline step 6 (and the floating check of step 8): every shot played frame by frame at check size (FinalQc). */
+    private void finalCheck(final Film film, Art art, Edits ed) {
+        int[] size = ed.size();
+        final int w = 256, h = Math.max(96, Math.round(256f * size[1] / size[0])) & ~1;
+        final Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        final AndroidGfx g = new AndroidGfx(bmp, 4);
+        final int[] px = new int[w * h];
+        try {
+            com.tarun.kahani.core.FinalQc.Result r = com.tarun.kahani.core.FinalQc.check(film, art, new com.tarun.kahani.core.FinalQc.Surface() {
+                public com.tarun.kahani.core.Gfx gfx() { return g; }
+                public int[] pixels() { bmp.getPixels(px, 0, w, 0, 0, w, h); return px; }
+                public int width() { return w; }
+                public int height() { return h; }
+            }, new com.tarun.kahani.core.FinalQc.Progress() {
+                public void at(int done, int total) { check(); step("Final check: playing shot " + (done + 1) + " of " + total + " frame by frame…", 0.30f); }
+                public boolean cancelled() { return cancelled; }
+            });
+            film.shotList += "\n" + r.text();
+        } finally {
+            g.release();
+            bmp.recycle();
+        }
+    }
+
     private void humanQc(Film film, Art art, Director dir, Edits ed, File tmp) throws IOException {
         File qd = new File(tmp, "qc");
         qd.mkdirs();
         qcItems.clear();
         qcShotIndex.clear();
         qcFixes.clear();
-        // 1. the character lock sheets: every character's picture as the film will use it
-        for (Story.CharacterDef c : film.story == null ? java.util.Collections.<Story.CharacterDef>emptyList() : film.story.characters) {
-            Art.Sprite sp = art.sprites.get(c.id);
-            if (sp == null || !(sp.img instanceof Bitmap)) continue;
-            Bitmap src = (Bitmap) sp.img;
-            int th = 240, tw = Math.max(40, Math.round(th * src.getWidth() / (float) src.getHeight()));
-            Bitmap b = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
-            android.graphics.Canvas cv = new android.graphics.Canvas(b);
-            cv.drawColor(0xFFE8EEF4);
-            cv.drawBitmap(src, null, new android.graphics.Rect(0, 0, tw, th), new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
-            File f = new File(qd, "c" + qcItems.size() + ".jpg");
-            java.io.FileOutputStream o = new java.io.FileOutputStream(f);
-            b.compress(Bitmap.CompressFormat.JPEG, 85, o);
-            o.close();
-            b.recycle();
-            qcItems.add(new String[]{f.getAbsolutePath(), "LOCK SHEET: " + c.shown(), "char"});
+        // 1. the character lock sheets and the location plates (pipeline steps 1-2), as made for this film
+        for (String[] it : lockItems) {
+            qcItems.add(it);
             qcShotIndex.add(-1);
         }
         // 2. the first frame of every shot
@@ -711,6 +785,8 @@ public final class FilmJob implements Runnable {
             ts[wi].start();
         }
         VideoWriter vw = new VideoWriter(w, h, fps);
+        // pipeline step 8: the finished film metered frame by frame as it is written (FinalQc)
+        final com.tarun.kahani.core.FinalQc.Meter meter = new com.tarun.kahani.core.FinalQc.Meter(film, w, h, fps);
         try {
             step("Making the video…", 0.36f);
             vw.start(out, new VideoWriter.FileSource(audio), Synth.SR, bpp);
@@ -728,6 +804,7 @@ public final class FilmJob implements Runnable {
                     px = slots[slot];
                 }
                 vw.frame(px);
+                meter.frame(f, px);
                 synchronized (lock) {
                     slots[slot] = null;
                     slotFrame[slot] = -1;
@@ -744,6 +821,7 @@ public final class FilmJob implements Runnable {
             }
             step("Saving the film…", 0.995f);
             vw.finish();
+            film.shotList += meter.report();
         } catch (Throwable e) {
             vw.release();
             synchronized (lock) { if (workerError[0] == null) workerError[0] = e; lock.notifyAll(); }

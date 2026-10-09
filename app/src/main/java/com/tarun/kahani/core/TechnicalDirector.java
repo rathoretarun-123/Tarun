@@ -175,6 +175,8 @@ public final class TechnicalDirector {
         public float headTop = 0.1f, feet = 0.9f;   // the first-frame checks: the head's top and the feet, fractions of the frame height (full shots)
         public boolean fullBody;                    // the feet are in the frame (a full shot)
         public float faceStretch;                   // |width scale / height scale - 1| of the face (RULE_RESIZE_7: 5% at most)
+        /** Section 8.3: the most of the frame's height the face of a lip-sync shot can fill with this picture and frame (the whole head inside, the centre 60%, sharpness). */
+        public float faceWant;
         /** What the error correction did to this shot. */
         public final List<String> fixes = new ArrayList<String>();
     }
@@ -193,6 +195,9 @@ public final class TechnicalDirector {
         if (!s.staticCamera) bad.add("camera not static");
         if (!s.aspectAsParameter) bad.add("aspect ratio not set as a parameter");
         if (s.speech && !(s.closeUp && s.frontFacing && s.words <= LIP_SYNC_WORDS)) bad.add("lip-sync outside a front close-up of at most 6 words");
+        // section 8.3: the face fills 65-75% of the frame — or as much as the whole head, the centre 60% of a narrow frame and the picture's sharpness allow
+        if (s.speech && s.face > 0 && (s.face < Math.min(FACE_MIN, s.faceWant > 0 ? s.faceWant : FACE_MIN) - 0.03f || s.face > FACE_MAX + 0.03f))
+            bad.add(String.format(Locale.US, "lip-sync face fills %.0f%% of the frame (65-75%%)", s.face * 100));
         String all = (s.prompt + " " + s.camera).toLowerCase(Locale.ROOT);
         if (!(all.contains("no morphing") && all.contains("static background") && all.contains("smooth motion"))) bad.add("missing: no morphing, static background, smooth motion");
         // C4: the six fields, in this order
@@ -230,6 +235,10 @@ public final class TechnicalDirector {
                 else if (b.startsWith("missing")) { s.prompt += " " + STABLE + ", no parallax."; s.camera = CAMERA; s.fixes.add("static background, no morphing added"); }
                 else if (b.startsWith("camera")) { s.staticCamera = true; s.camera = CAMERA; s.fixes.add("camera locked"); }
                 else if (b.startsWith("forbidden")) { s.prompt = clean(s.prompt); s.action = clean(s.action); s.fixes.add("forbidden words removed"); }
+                else if (b.startsWith("lip-sync face")) {
+                    s.face = Math.max(Math.min(FACE_MIN, s.faceWant > 0 ? s.faceWant : FACE_MIN), Math.min(s.face, FACE_MAX));
+                    s.fixes.add("framed on the face (65-75% of the frame)");
+                }
                 else if (b.startsWith("lip-sync")) { s.speech = false; s.fixes.add("made silent (lip-sync in post)"); }
                 else if (b.startsWith("aspect")) { s.aspectAsParameter = true; s.prompt = clean(s.prompt); s.fixes.add("aspect ratio moved to the parameter"); }
                 else if (b.startsWith("costume")) { s.costumeVerbatim = true; s.fixes.add("costume lock text pasted"); }

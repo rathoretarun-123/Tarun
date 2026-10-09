@@ -108,7 +108,24 @@ public class MakeFilm {
         AwtGfx g = new AwtGfx(img);
         Renderer r = new Renderer(film, art);
         r.safeZoneOverlay = System.getenv("SAFEZONE") != null;
-        if (stills != null) stillPages(dir, film, art, new File(stills));
+        if (stills != null) { lockSheets(dir, film, art, new File(stills), width, height); stillPages(dir, film, art, new File(stills)); }
+        // pipeline step 6 (FinalQc): every shot played frame by frame at check size before the film; QC=0 skips it
+        if (!"0".equals(System.getenv().getOrDefault("QC", "1")) && System.getenv("ONLY") == null) {
+            final int qw = 256, qh = Math.max(96, Math.round(256f * height / width)) & ~1;
+            final BufferedImage qimg = new BufferedImage(qw, qh, BufferedImage.TYPE_INT_ARGB);
+            final AwtGfx qg = new AwtGfx(qimg);
+            final int[] qpx = new int[qw * qh];
+            long tq = System.currentTimeMillis();
+            com.tarun.kahani.core.FinalQc.Result qr = com.tarun.kahani.core.FinalQc.check(film, art, new com.tarun.kahani.core.FinalQc.Surface() {
+                public com.tarun.kahani.core.Gfx gfx() { return qg; }
+                public int[] pixels() { qimg.getRGB(0, 0, qw, qh, qpx, 0, qw); return qpx; }
+                public int width() { return qw; }
+                public int height() { return qh; }
+            }, null);
+            film.shotList += "\n" + qr.text();
+            System.out.print(qr.text());
+            System.out.println("  (final check in " + (System.currentTimeMillis() - tq) + "ms)");
+        }
         int frames = (int) (dur * fps);
         long tr = System.currentTimeMillis();
         int stillEvery = Math.max(1, (int) (fps * Float.parseFloat(System.getenv().getOrDefault("STILL_EVERY", "3"))));
@@ -117,6 +134,8 @@ public class MakeFilm {
         final com.tarun.kahani.core.FilmLook look = System.getenv("NO_LOOK") != null ? null : new com.tarun.kahani.core.FilmLook(width, height);
         final com.tarun.kahani.core.FilmLook.Params lp = new com.tarun.kahani.core.FilmLook.Params();
         final int[] lookPx = new int[width * height];
+        // pipeline step 8 (FinalQc.Meter): the finished film metered frame by frame as it is written
+        final com.tarun.kahani.core.FinalQc.Meter meter = look == null ? null : new com.tarun.kahani.core.FinalQc.Meter(film, width, height, fps);
         if (only >= 0) {
             // just write single frames at the given comma separated times
             for (String ts : System.getenv("TIMES").split(",")) {
@@ -132,6 +151,7 @@ public class MakeFilm {
             float t = f / (float) fps;
             r.render(g, t);
             if (look != null) finish(img, look, com.tarun.kahani.core.FilmLook.at(film, t, lp), lookPx);
+            if (meter != null) meter.frame(f, lookPx);
             byte[] px = ((java.awt.image.DataBufferByte) img.getRaster().getDataBuffer()).getData();
             os.write(px);
             if (stills != null && f % stillEvery == 0) ImageIO.write(img, "jpg", new File(stills, String.format("f%05d_%.1fs.jpg", f, t)));
@@ -140,6 +160,30 @@ public class MakeFilm {
         ff.waitFor();
         long ms = System.currentTimeMillis() - tr;
         System.out.println("rendered " + frames + " frames in " + ms + "ms (" + (frames * 1000f / Math.max(1, ms)) + " fps) -> " + out);
+        if (meter != null) { film.shotList += meter.report(); System.out.print(meter.report()); }
+        if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));
+    }
+
+    /** Pipeline steps 1-2: the Character Lock Sheet of every character (480x640) and the Location Lock Plate of every place, next to the stills. */
+    static void lockSheets(Director dir, Film film, Art art, File stills, int width, int height) throws Exception {
+        stills.mkdirs();
+        int n = 0, m = 0;
+        for (Story.CharacterDef c : film.story.cast()) {
+            int[] sz = dir.lockSheetSize(c);
+            writeSeg(film, art, dir.lockSheet(c, sz[0] / (float) sz[1]), sz[0], sz[1], new File(stills, "lock_char_" + n++ + ".jpg"));
+        }
+        int ph = Math.max(120, Math.round(640f * height / width)) & ~1;
+        for (Object[] p : dir.locationPlates()) writeSeg(film, art, (Film.Seg) p[1], 640, ph, new File(stills, "lock_place_" + m++ + ".jpg"));
+        System.out.println("lock sheets: " + n + " characters, " + m + " places -> " + stills);
+    }
+
+    /** One part on its own (a lock sheet, a plate) as a JPEG with the film's look. */
+    static void writeSeg(Film film, Art art, Film.Seg s, int w, int h, File out) throws Exception {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+        AwtGfx g = new AwtGfx(img);
+        new Renderer(film, art).renderSeg(g, s, 0.5f);
+        finish(img, new com.tarun.kahani.core.FilmLook(w, h), com.tarun.kahani.core.FilmLook.forSeg(s, new com.tarun.kahani.core.FilmLook.Params()), new int[w * h]);
+        ImageIO.write(img, "jpg", out);
     }
 
     /** The thumbnail (1280x720) and the poster (1080x1920), made natively (RULE_RESIZE_8), next to the stills. */
@@ -168,7 +212,7 @@ public class MakeFilm {
         for (int i = 0, o = 0; i < n; i++, o += 3) { int c = px[i]; b[o] = (byte) c; b[o + 1] = (byte) (c >> 8); b[o + 2] = (byte) (c >> 16); }
     }
 
-    static float[] espeak(Film.Line l, File dir, int i) {
+    public static float[] espeak(Film.Line l, File dir, int i) {
         try {
             File w = new File(dir, "v" + i + ".wav");
             int pitch = 50, speed = 150;

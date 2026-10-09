@@ -181,7 +181,7 @@ public final class Director {
         film.spine = PixarLead.spine(story);
         Story.CharacterDef heroDef = PixarLead.hero(story);
         film.hero = heroDef == null ? "" : heroDef.shown();
-        maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0;
+        maPauses = 0; comicBeats = 0; shadowPasses = 0; framedHead = 0; framedFeet = 0; framedFace = 0; faceFillSum = 0; faceFillN = 0;
 
         // ---------------- scenes
         for (int si = 0; si < story.scenes.size(); si++) {
@@ -510,6 +510,11 @@ public final class Director {
             b.append("• Pixar-Lead protocol v4.0: format ").append(fmt.id).append(" (").append(fmt.note).append("), character scale lock ")
                     .append(Math.round(fmt.charScale * 100)).append("% of the frame height, two lights only (key + bounce), colour script per act\n");
             b.append(String.format(java.util.Locale.US, "• First-frame checks: %d shots reframed for a cut head, %d for feet out of the frame (feet in the bottom 85-98%% with their shadow)%n", framedHead, framedFeet));
+            b.append(String.format(java.util.Locale.US, "• Lip-sync framing (8.3): the face fills %.0f%% of the frame on average in %d lip-sync shots (65-75%% where the picture and the "
+                    + "frame allow it; the whole head always inside; a narrow frame keeps the face in its centre 60%%); reframed on the face: %d%n",
+                    faceFillN == 0 ? 0 : 100 * faceFillSum / faceFillN, faceFillN, framedFace));
+            b.append(String.format(java.util.Locale.US, "• Objective (small films of 30-90 s): this film is %d:%02d — the script decides the length; it is made as %d shots of about 3 s, "
+                    + "each one checked on its own (the Pixar Test is passed shot by shot, not by the minute)%n", (int) (film.duration / 60), Math.round(film.duration) % 60, n));
             b.append(String.format(java.util.Locale.US, "• Miyazaki ma pauses after two fast beats: %d; Russo / Gunn comic beats: %d; Gunn shadow passes in funny scenes: %d%n", maPauses, comicBeats, shadowPasses));
             b.append("• Story spine filled before any shot was planned (R4, hardcoded): yes — hero ").append(film.hero.length() > 0 ? film.hero : "—").append("; the ending was read first (R3)\n");
             b.append("• Spider-Verse animation on twos: ").append(opt.onTwos ? "on (experts 24, learners 12, rebels 8 fps)" : "off (every character moves every frame; switch it on in Settings)").append('\n');
@@ -1134,6 +1139,95 @@ public final class Director {
         return out;
     }
 
+    // ================================================================== Lock sheets and location plates (pipeline steps 1-2)
+
+    /**
+     * C1 / pipeline step 1: the Character Lock Sheet of a character — standing, front view, neutral, on a plain
+     * plate, exactly as the film draws them (their picture rigged, or their drawn puppet): the reference every
+     * shot is made from. Rendered with {@link Renderer#renderSeg}.
+     */
+    public Film.Seg lockSheet(Story.CharacterDef c, float frameAspect) {
+        Film.Seg keepSeg = seg;
+        float keepGround = ground;
+        Film.Seg s = new Film.Seg();
+        s.type = Film.S_SCENE;
+        s.t0 = 0; s.t1 = 2;
+        s.set = Sets.GARDEN; s.tod = Sets.DAY;
+        s.mood = Film.M_HAPPY; s.act = 1;
+        s.charScale = PixarLead.spec(opt.aspect).charScale;
+        s.ground = Sets.GROUND;
+        s.solid = 0xFFE4EAF0;
+        s.fadeIn = 0; s.fadeOut = 0;
+        Film.Actor a = new Film.Actor();
+        a.c = c; a.look = c.look; a.order = 0;
+        Film.Key k = new Film.Key();
+        k.t = 0; k.x = 640; k.facing = 1; k.emotion = Pose.NEUTRAL; k.visible = true;
+        a.keys.add(k);
+        s.actors.add(a);
+        seg = s; ground = s.ground;
+        float h = heightOf(a);
+        // what is drawn: a picture is as wide as its picture; a drawn animal is wider than tall (tail and head) and
+        // its head rises above its body; a bird or a monkey too
+        float[] ext = drawnExtent(c, h);
+        float drawnW = ext[0], drawnH = ext[1];
+        // the whole character inside, with room above and beside: at most 82% of the frame's height, 84% of its width
+        float fh = Math.max(drawnH / 0.82f, drawnW / (frameAspect * 0.84f));
+        float top = ground - drawnH, frameTop = top - (fh - drawnH) / 2;
+        Film.Cam cam = new Film.Cam(0, 640, frameTop + fh / 2, 720f / fh, 0);
+        cam.still = true; cam.light = 0.2f;
+        s.cams.add(cam);
+        seg = keepSeg; ground = keepGround;
+        return s;
+    }
+
+    /** The width and height a character takes when drawn standing, for a height h. */
+    private float[] drawnExtent(Story.CharacterDef c, float h) {
+        Art.Sprite sp = art == null ? null : art.sprites.get(c.id);
+        if (sp != null && sp.h > 0) return new float[]{h * sp.w / (float) sp.h, h};
+        int kind = c.look == null ? Look.MAN : c.look.kind;
+        switch (kind) {
+            case Look.ANIMAL: return new float[]{2.1f * h, 1.35f * h};
+            case Look.BIRD: return new float[]{1.6f * h, 1.2f * h};
+            case Look.MONKEY: return new float[]{1.2f * h, 1.1f * h};
+            case Look.MONSTER: return new float[]{1.1f * h, 1.1f * h};
+            default: return new float[]{0.7f * h, 1.05f * h};
+        }
+    }
+
+    /** The lock sheet's picture size: portrait for people, landscape for animals, birds and pictures wider than tall. {w, h} */
+    public int[] lockSheetSize(Story.CharacterDef c) {
+        float[] ext = drawnExtent(c, 100f);
+        return ext[0] > ext[1] ? new int[]{640, 480} : new int[]{480, 640};
+    }
+
+    /**
+     * Pipeline step 2: one Location Lock Plate per place of the film — the place exactly as the film shows it
+     * (the user's or AI picture, or the painted set, at its time of day), with no characters. {label, part}
+     */
+    public List<Object[]> locationPlates() {
+        List<Object[]> out = new ArrayList<Object[]>();
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        if (film == null) return out;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            String key = sg.set + "|" + sg.tod + "|" + (sg.backdrop == null ? "painted" : String.valueOf(System.identityHashCode(sg.backdrop)));
+            if (!seen.add(key)) continue;
+            Film.Seg s = new Film.Seg();
+            s.type = Film.S_SCENE;
+            s.t0 = 0; s.t1 = 2;
+            s.set = sg.set; s.tod = sg.tod; s.scene = sg.scene;
+            s.backdrop = sg.backdrop; s.ground = sg.ground;
+            s.mood = sg.mood; s.act = sg.act; s.charScale = sg.charScale; s.festive = sg.festive;
+            s.fadeIn = 0; s.fadeOut = 0;
+            Film.Cam cam = new Film.Cam(0, 640, 360, 1f, 0);
+            cam.still = true; cam.light = 0.3f;
+            s.cams.add(cam);
+            String label = sg.scene >= 0 && sg.scene < story.scenes.size() ? story.scenes.get(sg.scene).heading + " — " + Sets.label(sg.set) : Sets.label(sg.set);
+            out.add(new Object[]{label, s});
+        }
+        return out;
+    }
+
     // ================================================================== Human QC (pipeline step 4)
 
     public static final int FIX_NONE = 0, FIX_CALM = 1, FIX_CLOSER = 2, FIX_WIDER = 3, FIX_LISTENER = 4, FIX_REMOVE = 5;
@@ -1583,7 +1677,10 @@ public final class Director {
 
     private int motionCuts, actionCuts, framed;
     /** PixarLead counters: ma pauses (Miyazaki), comic beats (Russo / Gunn), shadow passes (Gunn), first-frame reframes (head, feet). */
-    private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet;
+    private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet, framedFace;
+    /** The face fill of the lip-sync shots (section 8.3), summed, and how many were measured. */
+    private float faceFillSum;
+    private int faceFillN;
     private int[] sceneActs;
 
     private static boolean isAction(int type) {
@@ -1788,6 +1885,21 @@ public final class Director {
                 v.fullBody = v.feet < 1.02f && sh.size <= ShotPlanner.WIDE;
                 if (sh.size <= ShotPlanner.WIDE && v.feet >= 1.02f) v.fullBody = true;      // a full shot whose feet fell out of the frame
             }
+            // section 8.3: in a lip-sync shot the face fills 65-75% of the frame — measured, and what this
+            // picture and this frame allow (the whole head inside, the centre 60% of a narrow frame, sharpness)
+            if (sh.speech && main != null && sh.size >= ShotPlanner.CU) {
+                Film.Seg keepSeg = seg; float keepGround = ground;
+                seg = sg; ground = sg.ground;
+                float[] fb = faceBox(main, sh.t + 0.05f);
+                seg = keepSeg; ground = keepGround;
+                float ar = TechnicalDirector.ratio(opt.aspect);
+                float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 18;
+                v.face = fb[2] * cam.zoom / 720f;
+                v.faceWant = Math.min(Math.min(TechnicalDirector.FACE_MAX, TechnicalDirector.SAFE_ZONE * ar / 0.85f),
+                        Math.min(0.85f * fb[2] / Math.max(1, chin - headTop), fb[3] * fb[2] / 720f));
+                faceFillSum += v.face;
+                faceFillN++;
+            }
             if (TechnicalDirector.validate(v).isEmpty()) { passed++; continue; }
             List<String> left = TechnicalDirector.correct(v);
             corrected++;
@@ -1800,6 +1912,18 @@ public final class Director {
                     float h = heightOf(main), need = h / 0.84f;
                     if (need > fh && 720f / need >= 1f) { cam.zoom = 720f / need; fh = 720f / cam.zoom; }
                     cam.cy = sg.ground - 0.92f * fh + fh / 2; framedFeet++;
+                } else if (f.startsWith("framed on the face") && main != null) {
+                    // the close-up framed on the face again (65-75%), visibly different from the shot before it
+                    Film.Seg keepSeg = seg; float keepGround = ground;
+                    seg = sg; ground = sg.ground;
+                    Film.Cam prevCam = ci > 0 ? sg.cams.get(ci - 1) : null;
+                    Film.Cam fc = faceCam(main, sh.t + 0.05f, cam.light, 1f);
+                    if (prevCam != null && Math.abs(fc.zoom - prevCam.zoom) < prevCam.zoom * 0.1f) fc = faceCam(main, sh.t + 0.05f, cam.light, 1.18f);
+                    float[] fb = faceBox(main, sh.t + 0.05f);
+                    seg = keepSeg; ground = keepGround;
+                    cam.cx = fc.cx; cam.cy = fc.cy; cam.zoom = fc.zoom;
+                    faceFillSum += fb[2] * cam.zoom / 720f - v.face;       // the average counts the new framing
+                    framedFace++;
                 }
             }
             if (!left.isEmpty() && stillWrong.size() < 12) stillWrong.add(String.format(java.util.Locale.US, "%d:%04.1f %s", (int) (sh.t / 60), sh.t % 60, left));

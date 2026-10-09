@@ -39,6 +39,7 @@ public final class Renderer {
 
     public void render(Gfx g, float t) {
         curT = t;
+        if (feetLog != null) feetLog.clear();
         vh = H;
         vw = H * g.width() / (float) g.height();
         g.save();
@@ -798,6 +799,17 @@ public final class Renderer {
 
     /** Draws the format's safe zones over the frame (Human QC stills): the side margins, the headroom, the caption zone, the eye line. */
     public boolean safeZoneOverlay;
+    /**
+     * When set, every standing character drawn in a frame leaves a record {the feet's y as drawn, the ground line
+     * it stands on, its height, 1 if it is walking or in an action (a jump, a bounce, getting up) else 0}: the
+     * final QC's floating check reads where the feet really went (FinalQc).
+     */
+    public List<float[]> feetLog;
+
+    private static boolean acting(Film.Actor a, float t) {
+        for (Film.Act ac : a.acts) if (t >= ac.t0 - 0.3f && t <= ac.t1 + 0.6f) return true;
+        return false;
+    }
 
     private void safeZone(Gfx g) {
         PixarLead.Format f = PixarLead.specFor(vw / vh);
@@ -1089,6 +1101,9 @@ public final class Renderer {
             mo.rot += d[2];
             p.walkAmt = 0;
         }
+        // the final QC's floating check: where the feet are drawn against the ground line (FinalQc)
+        if (feetLog != null && k.anchor == Film.A_GROUND)
+            feetLog.add(new float[]{y + mo.dy, y, h, mv != null || acting(a, t) || (p.sit > 0 && p.sit < 1) ? 1 : 0});
         g.translate(x + mo.dx, y + mo.dy);
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;

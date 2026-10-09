@@ -64,10 +64,13 @@ public final class Sets {
         if (Txt.has(text, "गुफा के अंदर", "गुफा में", "inside the cave", "अपनी गुफा")) return CAVE_IN;
         if (Txt.has(text, "मुहान", "गुफा के बाहर", "गुफा के दरवाज", "cave entrance")) return CAVE_MOUTH;
         // places of today, before the old ones ("rooftop garden" is a rooftop, not the palace garden)
-        if (Txt.has(text, "basement", "बेसमेंट", "तहखान", "mall", "मॉल", "server room", "सर्वर रूम", "parking", "पार्किंग", "warehouse", "गोदाम", "garage", "गैराज",
-                "factory", "फैक्ट्री", "कारखान", "arcade", "bunker", "लैब", "laboratory")) return BASEMENT;
-        if (Txt.has(text, "rooftop", "roof", "छत पर", "की छत", "terrace", "टैरेस", "balcony", "बालकनी", "high-rise", "highrise", "skyline", "स्काई-लाइन", "स्काईलाइन",
-                "society", "सोसाइटी", "apartment", "अपार्टमेंट", "टावर", "tower", "building", "बिल्डिंग", "20वें फ्लोर", "floor")) return ROOFTOP;
+        // (English words as whole words: a "small living room" is no "mall", a "proof" no "roof")
+        if (Txt.has(text, "बेसमेंट", "तहखान", "मॉल", "सर्वर रूम", "पार्किंग", "गोदाम", "गैराज", "फैक्ट्री", "कारखान", "लैब")
+                || Txt.hasWord(text, "basement", "basements", "mall", "malls", "server room", "parking", "warehouse", "garage", "factory", "arcade", "bunker",
+                "lab", "laboratory")) return BASEMENT;
+        if (Txt.has(text, "छत पर", "की छत", "टैरेस", "बालकनी", "स्काई-लाइन", "स्काईलाइन", "सोसाइटी", "अपार्टमेंट", "टावर", "बिल्डिंग", "20वें फ्लोर")
+                || Txt.hasWord(text, "rooftop", "rooftops", "roof", "roofs", "terrace", "balcony", "high-rise", "highrise", "skyline", "society", "apartment",
+                "apartments", "tower", "towers", "building", "buildings", "20th floor")) return ROOFTOP;
         if (Txt.has(text, "गुफा", "cave", "कैदखान")) return CAVE_IN;
         if (Txt.has(text, "जंगल", "वन ", "forest", "jungle", "woods")) return FOREST;
         if (Txt.has(text, "सजा", "उत्सव", "जश्न", "रोशनियों", "ढोल", "celebration", "festival")) return CELEBRATION;
@@ -75,11 +78,12 @@ public final class Sets {
         if (Txt.has(text, "प्रांगण", "आँगन", "मैदान", "courtyard", "arena")) return COURTYARD;
         if (Txt.has(text, "बगीच", "बाग", "उद्यान", "garden")) return GARDEN;
         if (Txt.has(text, "दरबार", "सिंहासन", "throne", "palace hall", "महल के अंदर", "राजमहल", "दरबार") || (Txt.has(text, "महल", "palace") && Txt.has(text, "कक्ष", "कमरे", "hall", "room"))) return HALL;
-        if (Txt.has(text, "living room", "bedroom", "कमरा", "कमरे", "कक्ष", "office", "ऑफिस", "दफ़्तर", "दफ्तर", "classroom", "कक्षा", "school", "स्कूल", "क्लास",
-                "kitchen", "रसोई", "hospital", "अस्पताल", "shop", "दुकान", "library", "पुस्तकालय", "घर के अंदर", "inside the house", "indoors", "studio", "स्टूडियो",
-                "hall", "room", "flat")) return ROOM;
-        if (Txt.has(text, "सड़क", "street", "road", "गली", "lane", "traffic", "चौराहा", "crossing", "station", "स्टेशन", "bus stop", "शहर", "city", "मुंबई", "दिल्ली",
-                "mumbai", "delhi", "metro")) return STREET;
+        if (Txt.has(text, "कमरा", "कमरे", "कक्ष", "ऑफिस", "दफ़्तर", "दफ्तर", "कक्षा", "स्कूल", "क्लास", "रसोई", "अस्पताल", "दुकान", "पुस्तकालय", "घर के अंदर", "स्टूडियो")
+                || Txt.hasWord(text, "living room", "bedroom", "bedrooms", "office", "offices", "classroom", "classrooms", "school", "schools", "kitchen", "hospital",
+                "shop", "shops", "library", "inside the house", "indoors", "studio", "hall", "halls", "room", "rooms", "flat", "flats")) return ROOM;
+        if (Txt.has(text, "सड़क", "गली", "चौराहा", "स्टेशन", "शहर", "मुंबई", "दिल्ली")
+                || Txt.hasWord(text, "street", "streets", "road", "roads", "lane", "lanes", "traffic", "crossing", "station", "bus stop", "city", "mumbai", "delhi",
+                "metro")) return STREET;
         if (Txt.has(text, "गाँव", "गांव", "बाज़ार", "village", "market")) return VILLAGE;
         if (Txt.has(text, "महल", "palace")) return GARDEN;
         return GENERIC_OUT;

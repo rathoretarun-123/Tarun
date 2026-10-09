@@ -146,12 +146,16 @@ public final class ShotBook {
                 .append(" (no blurry upscale); letterbox or pillarbox instead of cutting heads or sides; the thumbnail and the poster are made separately.\n");
         b.append("Every shot: about 3 seconds, one action, locked tripod. Pixar quality comes from 100 perfect 3-second shots, not 1 bad 60-second shot.\n\n");
         b.append("PIPELINE ORDER\n");
-        b.append("1. Make the Character Lock Sheets (images) below.\n2. Make the Location Lock Plates (images, no characters).\n3. Use the Shot table below.\n"
-                + "4. For each shot: make the first-frame image -> check it yourself -> fix and make again if needed.\n"
+        b.append("1. Make the Character Lock Sheets (images) below. (The studio makes its own for every character before any shot: lock_char_N.jpg with the film.)\n"
+                + "2. Make the Location Lock Plates (images, no characters). (The studio makes its own for every place: lock_place_N.jpg.)\n"
+                + "3. Use the Shot table below.\n"
+                + "4. For each shot: make the first-frame image -> check it yourself -> fix and make again if needed. (In the app: Human QC shows the first frame of every shot.)\n"
                 + "5. For each approved first frame: make a 3-second video with that image as input.\n"
-                + "6. If a clip shakes or morphs: reduce the motion by 80% and make it again from the same first frame.\n"
+                + "6. If a clip shakes or morphs: reduce the motion by 80% and make it again from the same first frame. (The studio plays every shot frame by frame "
+                + "itself before the film is made and calms a lively one by 80%.)\n"
                 + "7. Join the clips in an editor; add sound effects, film grain, and camera shake only there if needed.\n"
-                + "8. Final check at 0.25x speed: morphing, floating feet, finger count.\n"
+                + "8. Final check at 0.25x speed: morphing, floating feet, finger count. (The studio meters the finished film frame by frame as it is written; "
+                + "the result is in the film's quality check, in this file after a film is made.)\n"
                 + "Or upload your finished pictures, clips' stills, voices and sounds into this app: the studio places them by their names.\n\n");
 
         // ---- 0. the story engine: hero, spine, acts, Braintrust

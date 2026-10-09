@@ -951,7 +951,10 @@ public class MainActivity extends Activity {
             public Object run() {
                 // the production file, then the full Technical Director package (lock sheets, plates, objects,
                 // sounds, voices and every shot with ready prompts)
-                return Bible.write(st, sl, pics, voices) + "\n\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect);
+                String qc = project.read("qc.txt");
+                return Bible.write(st, sl, pics, voices) + "\n\n" + com.tarun.kahani.core.ShotBook.write(st, sl, edits().aspect)
+                        + (qc.trim().isEmpty() ? "" : "\n\nTHE LAST FILM MADE — the director's shot list and every check (validation, Human QC, final QC)\n"
+                        + "============================================================\n" + qc);
             }
         }, new Done() {
             public void done(Object r, Exception e) {

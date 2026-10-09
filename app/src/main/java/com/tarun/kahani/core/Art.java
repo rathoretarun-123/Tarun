@@ -51,6 +51,55 @@ public final class Art {
         public Sprite[] views;
         /** The view at an index of Figure3D.VIEW_ANGLES, or null. */
         public Sprite view(int i) { return views == null || i < 0 || i >= views.length ? null : views[i]; }
+        /** v27: the user's own pictures of this character from a sheet — angles, poses, expressions (null = none). */
+        public java.util.List<PoseSprite> poses;
+    }
+
+    /**
+     * One of the user's pictures of a character (v27): what it shows (read by PoseSense or tagged by the user) and
+     * its sprite, read from the file only when a shot uses it (a hundred pictures are not all needed).
+     */
+    public static final class PoseSprite {
+        public String file;
+        public float angle = Angles.FRONT;
+        public int pose = PoseSense.STAND, emotion = PoseSense.NEUTRAL;
+        /** Its height against a standing picture of the character (1 = as tall; a sitting picture is lower). */
+        public float hRatio = 1f;
+        /** The face points given with it (mouth x, y, half-width, eyes), or null to find them in the picture. */
+        public float[] facePoints;
+        public boolean beast;
+        Sprite sprite, main;
+        Loader loader;
+        public boolean faceKnown() { return facePoints != null && facePoints[0] > 0 || (sprite != null && sprite.faceKnown); }
+        /** The sprite, read and prepared on first use. */
+        public synchronized Sprite sprite() {
+            if (sprite != null || loader == null) return sprite;
+            Sprite v = makeSprite(loader, file, spriteSide, beast);
+            if (v == null) return null;
+            if (facePoints != null && facePoints[0] > 0) {
+                v.mouthX = facePoints[0]; v.mouthY = facePoints[1]; v.mouthHW = facePoints[2];
+                v.eyeLX = facePoints[3]; v.eyeLY = facePoints[4]; v.eyeRX = facePoints[5]; v.eyeRY = facePoints[6]; v.eyeR = facePoints[7];
+                v.faceKnown = true;
+            }
+            if (main != null) { v.skin = main.skin; v.lip = main.lip; v.lid = main.lid; }
+            // the rig only where the face must speak (a front or three-quarter with a face); a picture of a pose is drawn as it is
+            boolean frontish = Math.abs(angle) < 46;
+            if (frontish && v.faceKnown && pose == PoseSense.STAND) {
+                try { v.rig = Rig.build(v.pixelsForSampling, v, main == null ? new Look() : mainLook, loader); } catch (RuntimeException e) { v.rig = null; }
+            }
+            if (v.pixelsForSampling != null) {
+                try {
+                    Cutout.Result cr = v.pixelsForSampling;
+                    int[][] rl = RimLight.make(cr.px, cr.w, cr.h);
+                    v.rimL = loader.create(rl[0], rl[2][0], rl[2][1]);
+                    v.rimR = loader.create(rl[1], rl[2][0], rl[2][1]);
+                } catch (Throwable ignored) { v.rimL = v.rimR = null; }
+            }
+            v.pixelsForSampling = null;
+            sprite = v;
+            return v;
+        }
+        Look mainLook;
     }
 
     public static final class Backdrop {
@@ -343,12 +392,15 @@ public final class Art {
         Art art = new Art();
         boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
         java.util.List<String[]> views = new java.util.ArrayList<String[]>();
+        java.util.List<String[]> poses = new java.util.ArrayList<String[]>();
         for (String raw : text.split("\n")) {
             String line = raw.trim();
             if (line.length() == 0 || line.startsWith("#")) continue;
             String[] f = line.split("\\|");
             try {
-                if (f[0].equals("view") && f.length >= 4) {
+                if (f[0].equals("pose") && f.length >= 6) {
+                    poses.add(f);            // v27: after the characters, below
+                } else if (f[0].equals("view") && f.length >= 4) {
                     views.add(f);            // after the characters, below
                 } else if (f[0].equals("char") && f.length >= 3) {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
@@ -473,6 +525,32 @@ public final class Art {
                 v.pixelsForSampling = null;
                 if (main.views == null) main.views = new Sprite[Figure3D.VIEW_ANGLES.length];
                 main.views[idx] = v;
+            } catch (RuntimeException e) {
+                // a bad line must never stop the film; skip it
+            }
+        }
+        // v27: the user's own pictures of each character (pose|name|file|angle|pose|emotion|hRatio|mouthX|mouthY|mouthHW|eyeLX|eyeLY|eyeRX|eyeRY|eyeR)
+        for (String[] f : poses) {
+            try {
+                Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                if (c == null) continue;
+                Sprite main = art.sprites.get(c.id);
+                if (main == null) continue;
+                PoseSprite p = new PoseSprite();
+                p.file = f[2];
+                p.angle = Float.parseFloat(f[3].trim());
+                p.pose = Integer.parseInt(f[4].trim());
+                p.emotion = Integer.parseInt(f[5].trim());
+                if (f.length >= 7) { try { p.hRatio = Math.max(0.2f, Math.min(1.5f, Float.parseFloat(f[6].trim()))); } catch (NumberFormatException ignored) {} }
+                if (f.length >= 15) {
+                    float[] pts = new float[8];
+                    for (int i = 0; i < 8; i++) pts[i] = Float.parseFloat(f[7 + i].trim());
+                    if (pts[0] > 0 && pts[1] > 0) p.facePoints = pts;
+                }
+                p.beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
+                p.main = main; p.mainLook = c.look != null ? c.look : new Look(); p.loader = L;
+                if (main.poses == null) main.poses = new java.util.ArrayList<PoseSprite>();
+                main.poses.add(p);
             } catch (RuntimeException e) {
                 // a bad view never stops the film
             }

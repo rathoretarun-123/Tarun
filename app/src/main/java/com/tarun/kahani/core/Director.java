@@ -510,6 +510,8 @@ public final class Director {
             if (!opt.technical && !sh.reaction && sh.stage == ShotPlanner.PEAK && sh.move != ShotPlanner.STATIC && sh.move != ShotPlanner.PUSH_IN) { sh.move = ShotPlanner.STATIC; still++; }
             if (sh.dur > TechnicalDirector.MAX_SHOT_SECONDS + 0.05f) longest++;
         }
+        // v27: the user's own pictures of every character, chosen once per shot (angle, pose, feeling), before the list is written
+        Casting.cast(this.art, film, story);
         StringBuilder b = new StringBuilder();
         b.append("DIRECTOR'S SHOT LIST — ").append(story.title).append('\n');
         b.append("Planned with the Pixar-style directing guide: emotion → performance → composition → camera → light → sound → cut.\n\n");
@@ -555,7 +557,7 @@ public final class Director {
             sh.attention = Handbook.attention(sh);
             b.append("SHOT ID: ").append(sh.id).append("   LENS: ").append(sh.lens).append("   ANGLE: ").append(Handbook.angleMeaning(sh.height)).append('\n');
             if (sh.ots.length() > 0) b.append("OVER THE SHOULDER: ").append(sh.ots).append("'s shoulder and back in the foreground, soft (the back view made from the picture)\n");
-            sh.view = SceneMaker.viewsUsed(this.art, film, sh);
+            sh.view = sh.pictures.isEmpty() ? SceneMaker.viewsUsed(this.art, film, sh) : Casting.describe(this.art, film, sh);
             if (sh.view.length() > 0) b.append("PICTURES USED: ").append(sh.view).append('\n');
             b.append("FIVE QUESTIONS: see — ").append(sh.action).append(" | feel — ").append(sh.emotionalPurpose).append(" | attention first — ").append(sh.attention)
                     .append(" | reveals — ").append(sh.purpose).append(" | why this camera — ").append(Handbook.purposeOf(sh.size, sh.type)).append('\n');
@@ -3434,7 +3436,10 @@ public final class Director {
         Film.Key ks = sp.stateAt(t), kt = to.stateAt(t);
         if (!ks.visible || ks.anchor != Film.A_GROUND || ks.body == Pose.LIE || kt.anchor != Film.A_GROUND) return false;
         Art.Sprite s = art.sprites.get(sp.c.id);
-        return s != null && s.view(2) != null;
+        if (s == null) return false;
+        if (s.view(2) != null) return true;
+        if (s.poses != null) for (Art.PoseSprite q : s.poses) if (Math.abs(Math.abs(q.angle) - 180) < 1 && q.pose == PoseSense.STAND) return true;   // v27: the user's own back picture
+        return false;
     }
 
     static String faceOf(int emo) {

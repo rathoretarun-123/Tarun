@@ -55,6 +55,8 @@ public final class Film {
         public String ots = "";
         /** The picture of each character this shot is drawn with (the front picture, or a view made from it). */
         public String view = "";
+        /** v27: the user's own picture each character is drawn with in this shot (character id → index into Art.Sprite.poses; -1 = the front picture). */
+        public final java.util.Map<String, Integer> pictures = new java.util.HashMap<String, Integer>();
     }
     /** What the director counted while planning (the handbook's scorecard, ch. 13). */
     public Handbook.Stats stats;

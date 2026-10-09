@@ -555,6 +555,176 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * v27: what the director reads of each figure of a sheet — its angle, its pose (standing, walking, running,
+     * sitting, lying, waving…) and its feeling — on the user's own sheets: the sure cases hold, and the reading
+     * never floods a sheet with one feeling (a wrong feeling would cast a wrong picture; the user corrects the rest).
+     */
+    @Test
+    public void poseSenseReadsTheUsersSheets() throws Exception {
+        File[] sheets = userSheets();
+        assertTrue(sheets.length >= 40);
+        File dir = sheets[0].getParentFile();
+        String[] names = {"sheet02.jpg", "sheet04.jpg", "sheet09.jpg", "sheet01.jpg", "sheet15.jpg"};
+        boolean[] beast = {false, false, true, true, false};
+        java.util.Map<String, List<com.tarun.kahani.core.PoseSense.Tag>> read = new java.util.HashMap<String, List<com.tarun.kahani.core.PoseSense.Tag>>();
+        for (int n = 0; n < names.length; n++) {
+            int[] wh = new int[2];
+            int[] px = pixelsOf(new File(dir, names[n]), wh);
+            List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, wh[0], wh[1]), wh[0], wh[1]);
+            assertTrue(names[n] + ": " + figs.size(), figs.size() >= 10);
+            int standH = 0;
+            List<com.tarun.kahani.core.Cutout.Result> rs = new ArrayList<com.tarun.kahani.core.Cutout.Result>();
+            for (com.tarun.kahani.core.Angles.Piece pc : figs) {
+                com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(pc.px.clone(), pc.w, pc.h, beast[n]);
+                rs.add(r);
+                if (r.w < r.h * 1.25f) standH = Math.max(standH, r.h);
+            }
+            List<com.tarun.kahani.core.PoseSense.Tag> tags = new ArrayList<com.tarun.kahani.core.PoseSense.Tag>();
+            StringBuilder sb = new StringBuilder(names[n] + ":");
+            int laughing = 0, sad = 0;
+            for (com.tarun.kahani.core.Cutout.Result r : rs) {
+                com.tarun.kahani.core.PoseSense.Tag t = com.tarun.kahani.core.PoseSense.tag(r, standH, beast[n]);
+                tags.add(t);
+                sb.append(" [").append(t).append(t.m != null ? String.format(java.util.Locale.US, " hR=%.2f low=%.2f feet=%.2f", t.m.hRatio, t.m.lowMass, t.m.feet) : "").append("]");
+                if (t.emotion == com.tarun.kahani.core.PoseSense.LAUGH) laughing++;
+                if (t.emotion == com.tarun.kahani.core.PoseSense.SAD) sad++;
+            }
+            System.out.println("POSES " + sb);
+            assertTrue(names[n] + " floods with laughing: " + laughing, laughing <= figs.size() / 4);
+            assertTrue(names[n] + " floods with sad: " + sad, sad <= figs.size() / 4);
+            read.put(names[n], tags);
+        }
+        // the sure cases: the girl's second figure stands sideways; the twelfth figure of sheet 4 sits (ninth);
+        // the sleeping bull (sheet 9, third) lies; the monkey's sixth figure runs; sheet 15's tenth runs sideways
+        com.tarun.kahani.core.PoseSense.Tag t = read.get("sheet02.jpg").get(1);
+        assertTrue("sheet02 #2: " + t, t.angle == com.tarun.kahani.core.Angles.SIDE && t.pose == com.tarun.kahani.core.PoseSense.STAND);
+        t = read.get("sheet04.jpg").get(8);
+        assertTrue("sheet04 #9: " + t, t.pose == com.tarun.kahani.core.PoseSense.SIT);
+        t = read.get("sheet09.jpg").get(2);
+        assertTrue("sheet09 #3: " + t, t.pose == com.tarun.kahani.core.PoseSense.LIE);
+        t = read.get("sheet01.jpg").get(5);
+        assertTrue("sheet01 #6: " + t, t.pose == com.tarun.kahani.core.PoseSense.RUN && t.angle == com.tarun.kahani.core.Angles.SIDE);
+        t = read.get("sheet15.jpg").get(9);
+        assertTrue("sheet15 #10: " + t, t.pose == com.tarun.kahani.core.PoseSense.RUN && t.angle == com.tarun.kahani.core.Angles.SIDE);
+        // every figure of every sheet is tagged standing-front at least somewhere, and more than one angle is seen
+        for (String nm : names) {
+            java.util.Set<Float> angles = new java.util.HashSet<Float>();
+            for (com.tarun.kahani.core.PoseSense.Tag tg : read.get(nm)) angles.add(tg.angle);
+            assertTrue(nm + " angles seen: " + angles, angles.size() >= 3);
+        }
+    }
+
+    /**
+     * v27: the director casts the right one of the user's own pictures for each shot — the sideways walking
+     * picture for the entrance, the crying picture for the crying line, the laughing picture for the laugh, the
+     * sitting picture once she sits, the back picture behind the shoulder — and writes it in the shot list; the
+     * renderer then draws that picture as it is for the whole shot.
+     */
+    @Test
+    public void directorUsesTheRightPictureForEachShot() throws Exception {
+        Project p = sampleProject();
+        String sample = p.read("script.txt");
+        String head = sample.substring(0, sample.indexOf("दृश्य 1:"));
+        String script = head
+                + "दृश्य 1: बगीचे में सुबह\n"
+                + "(स्थान: रत्नगढ़ का महल और बगीचा। सुबह का समय है। वानुषा फूलों के पास खड़ी है।)\n"
+                + "(वृंदा धीरे-धीरे चलती हुई बगीचे में आती है।)\n"
+                + "वृंदा (रोते हुए): \"मेरी तलवार खो गई है, मुझे वह कहीं नहीं मिल रही।\"\n"
+                + "वानुषा (हँसते हुए): \"दीदी, वह तो यहाँ पेड़ के नीचे पड़ी है!\"\n"
+                + "(वृंदा पेड़ के नीचे बैठ जाती है।)\n"
+                + "वृंदा (धीरे से): \"अब मैं यहीं बैठकर थोड़ा आराम करूँगी।\"\n"
+                + "वानुषा (प्यार से): \"ठीक है दीदी, मैं तितलियों के पीछे जाती हूँ।\"\n";
+        p.write("script.txt", script);
+        Story story = ScriptParser.parse(script);
+        Story.CharacterDef vrinda = null, vanusha = null;
+        for (Story.CharacterDef c : story.cast()) { if (c.displayName.contains("वृंदा")) vrinda = c; if (c.displayName.contains("वानुषा")) vanusha = c; }
+        assertNotNull(vrinda); assertNotNull(vanusha);
+        String key = (String) s3d("keyFor", p, story, vrinda);
+        // her pose pictures: five figures of the girl's sheet, tagged (as the user would after the reading)
+        File[] sheets = userSheets();
+        int[] wh = new int[2];
+        int[] px = pixelsOf(new File(sheets[0].getParentFile(), "sheet02.jpg"), wh);
+        List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, wh[0], wh[1]), wh[0], wh[1]);
+        assertTrue(figs.size() >= 10);
+        int[] use = {0, 1, 5, 8, 9};
+        float[] angle = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.FRONT};
+        int[] pose = {com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.WALK, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.STAND, com.tarun.kahani.core.PoseSense.SIT};
+        int[] emo = {com.tarun.kahani.core.PoseSense.SAD, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.NEUTRAL, com.tarun.kahani.core.PoseSense.LAUGH, com.tarun.kahani.core.PoseSense.NEUTRAL};
+        StringBuilder cast = new StringBuilder(p.read("cast.txt"));
+        for (int i = 0; i < use.length; i++) {
+            com.tarun.kahani.core.Angles.Piece pc = figs.get(use[i]);
+            Bitmap pb = Bitmap.createBitmap(pc.px, pc.w, pc.h, Bitmap.Config.ARGB_8888);
+            java.io.FileOutputStream fo = new java.io.FileOutputStream(new File(p.dir, "pose_" + i + ".png"));
+            pb.compress(Bitmap.CompressFormat.PNG, 100, fo);
+            fo.close();
+            com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(pc.px.clone(), pc.w, pc.h, false);
+            String face = r.faceFound && Math.abs(angle[i]) < 46
+                    ? String.format(java.util.Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR)
+                    : "0|0|0|0|0|0|0|0";
+            if (i == 0) assertTrue("the crying front picture has a face to speak with", r.faceFound);
+            cast.append("pose|").append(key).append("|pose_").append(i).append(".png|").append((int) angle[i]).append("|").append(pose[i]).append("|").append(emo[i])
+                    .append("|").append(pose[i] == com.tarun.kahani.core.PoseSense.SIT ? "0.72" : "1.0").append("|").append(face).append("\n");
+        }
+        p.write("cast.txt", cast.toString());
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Art.Sprite sp = art.sprites.get(vrinda.id);
+        assertNotNull(sp);
+        assertTrue("five pose pictures loaded: " + (sp.poses == null ? 0 : sp.poses.size()), sp.poses != null && sp.poses.size() == 5);
+        Director d = new Director(story, new Director.Options());
+        Film film = d.prepare();
+        film = d.direct(art);
+        assertTrue("the shot list names the pictures used", film.shotList.contains("PICTURES USED"));
+        Film.Actor her = null;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c == vrinda && her == null) her = a;
+        assertNotNull(her);
+        // the crying line and the laugh, by their times
+        Film.Speak cry = null, sit = null;
+        for (Film.Speak sk : her.speaks) { if (sk.emotion == com.tarun.kahani.core.Pose.SAD && cry == null) cry = sk; else if (sk.emotion != com.tarun.kahani.core.Pose.SAD) sit = sk; }
+        assertNotNull("the crying line", cry);
+        assertNotNull("the sitting line", sit);
+        int walkShots = 0, cryShots = 0, sitShots = 0, backShots = 0, realShots = 0;
+        StringBuilder log = new StringBuilder();
+        for (Film.Shot sh : film.shots) {
+            Integer idx = sh.pictures.get(vrinda.id);
+            log.append(String.format(java.util.Locale.US, "%5.1f %-6s %s%n", sh.t, idx == null ? "-" : String.valueOf(idx), sh.view));
+            if (idx == null) continue;
+            if (idx >= 0) realShots++;
+            Film.Key k = her.stateAt(sh.t + Math.max(0.05f, Math.min(sh.dur * 0.5f, 1.2f)));
+            boolean moving = false;
+            float mid = sh.t + Math.max(0.05f, Math.min(sh.dur * 0.5f, 1.2f));
+            for (Film.Key kk : her.keys) if (kk.moveDur > 0 && mid >= kk.t && mid < kk.t + kk.moveDur) moving = true;
+            if (sh.ots.length() > 0 && sh.ots.equals(vrinda.shown())) { assertTrue("behind her shoulder: her back picture, got " + idx, idx == 2); backShots++; }
+            else if (k.body == com.tarun.kahani.core.Pose.SIT) { assertTrue("sitting: her sitting picture, got " + idx, idx == 4); sitShots++; }
+            else if (moving && k.body == com.tarun.kahani.core.Pose.STAND) { assertTrue("walking: her sideways walking picture, got " + idx, idx == 1); walkShots++; }
+            else if (cry.t0 < sh.t + sh.dur && cry.t1 > sh.t && k.body == com.tarun.kahani.core.Pose.STAND) { assertTrue("crying: her crying picture, got " + idx, idx == 0); cryShots++; }
+        }
+        System.out.println("CASTING of " + vrinda.shown() + ":\n" + log);
+        System.out.println("CASTING: walking " + walkShots + ", crying " + cryShots + ", sitting " + sitShots + ", back " + backShots + ", real pictures in " + realShots + " of " + film.shots.size() + " shots");
+        assertTrue("a walking shot", walkShots >= 1);
+        assertTrue("a crying shot", cryShots >= 1);
+        assertTrue("a sitting shot", sitShots >= 1);
+        assertTrue("real pictures used in most of her shots: " + realShots, realShots >= 3);
+        assertTrue("the shot list says which picture: " + film.shotList, film.shotList.contains("your picture 1 (front, standing, sad)") && film.shotList.contains("your picture 5 (front, sitting, neutral)"));
+        // the renderer draws a frame of the crying shot with the real picture, without error
+        Film.Shot crying = null;
+        for (Film.Shot sh : film.shots) { Integer idx = sh.pictures.get(vrinda.id); if (idx != null && idx == 0) { crying = sh; break; } }
+        assertNotNull(crying);
+        Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer rd = new Renderer(film, art);
+        rd.render(g, crying.t + 0.5f);
+        int[] fpx = new int[1280 * 720];
+        bmp.getPixels(fpx, 0, 1280, 0, 0, 1280, 720);
+        long sum = 0;
+        for (int i = 0; i < fpx.length; i += 97) sum += (fpx[i] >> 8) & 255;
+        assertTrue("the crying shot's frame is not blank", sum > 0);
+        OUT.mkdirs();
+        FileOutputStream fo = new FileOutputStream(new File(OUT, "casting_crying.png"));
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, fo);
+        fo.close();
+    }
+
     /** The user's own sounds: recognised offline, matched in Hindi and English, used as backgrounds and effects. */
     @Test
     public void userSoundsAreUsedWhereTheStoryDescribesThem() throws Exception {

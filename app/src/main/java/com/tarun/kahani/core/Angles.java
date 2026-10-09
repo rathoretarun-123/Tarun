@@ -497,7 +497,14 @@ public final class Angles {
      * eyes off the figure's centre = three-quarter; one narrow figure with a face at its edge = side; no face
      * on a figure = back. Returns FRONT, THREE_QUARTER, SIDE or BACK.
      */
-    public static float guess(Cutout.Result r) {
+    public static float guess(Cutout.Result r) { return guess(r, false); }
+
+    /**
+     * v27: beast = an animal (its fur reads as skin, so the skin rule is not used). For a person the first question
+     * is skin: a back shows hair where the face would be (skin under 42% of the face box), whatever the eyes do —
+     * so a face with its eyes shut (laughing, crying, asleep) is still a front, never a back.
+     */
+    public static float guess(Cutout.Result r, boolean beast) {
         if (r == null) return FRONT;
         if (!r.faceFound) {
             // no face: a back (or a side so narrow that the face finder lost it)
@@ -510,7 +517,8 @@ public final class Angles {
         float faceW = inter / 0.4f;
         float hairAbove = (r.faceTop - r.headTop) / Math.max(0.01f, r.chinY - r.faceTop);
         float skin = skinShare(r, r.eyeLX - inter * 0.5f, r.eyeY - inter * 0.3f, r.eyeRX + inter * 0.5f, r.mouthY + inter * 0.25f);
-        if (dark > 0.42f || faceW > 1.0f || (hairAbove > 2.2f && skin < 0.3f)) return BACK;
+        if (beast) { if (dark > 0.42f || faceW > 1.0f || (hairAbove > 2.2f && skin < 0.3f)) return BACK; }
+        else if (skin < 0.42f || (faceW > 1.0f && skin < 0.6f) || hairAbove > 1.6f || (dark > 0.42f && skin < 0.55f)) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
         float eyeMid = (r.eyeLX + r.eyeRX) / 2f;
         float off = Math.abs(eyeMid - 0.5f);
         if (inter < 0.05f || off > 0.16f) return SIDE;

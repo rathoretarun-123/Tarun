@@ -1,4 +1,4 @@
-# Kahani Film — v26
+# Kahani Film — v27
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,15 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v27
+
+* **The director casts your own pictures, shot by shot** — every figure split from a sheet is now a *pose picture* of the character with what the director read of it: its angle (front, three-quarter, side, back), its pose (standing, walking, running, sitting, lying, crouching, arms up, waving, pointing, fighting) and its feeling (neutral, happy, laughing, sad, angry, surprised, thinking, asleep) — `PoseSense`, read from the figure's silhouette and face. For every shot the director picks, once per shot, the picture that fits what the shot asks of the character — the sideways walking picture for an entrance, the crying picture for a crying line, the sitting picture once she sits, the back picture behind the shoulder — and writes it in the shot list: `PICTURES USED: वृंदा ← your picture 3 (side, walking, neutral)` (`Casting`). The rigged front picture is the fallback, and the only one that bends.
+* **Absolutely less shaky** — a chosen real picture is drawn as it is for the whole shot: no sway, no walk cycle, no rig bending, no head tilt, no change between frames; only breathing and the mouth (when the picture has a face). The idle weight shift of the rigged front is halved too. A picture never changes inside a shot, so nothing can flicker between two pictures.
+* **What each picture shows — a review after every upload**: the director's reading of each picture (angle, pose, feeling) with its thumbnail; tap a button to correct it, Save writes the corrections. The reading of poses and angles is reliable on the user's sheets (tested); the reading of feelings is deliberately conservative (a face read as "laughing" because of hair or clothing would cast a wrong picture, so a doubtful face stays "neutral") — correct the feelings in the review where it matters.
+* **The pictures follow the character into the next story** — the library keeps every pose picture with its reading (`posetag`), and a character placed from the library takes its pose pictures with it (`AutoLibrary.views`).
+* **Faster films** — a real picture needs no rig, no bending and no per-frame deformation; it is read once, on first use, at the output's size.
+* Tests: `poseSenseReadsTheUsersSheets` (five real sheets: sure poses hold, no feeling floods a sheet), `directorUsesTheRightPictureForEachShot` (a story with a walking entrance, a crying line, a laugh and a sit: the right picture in every such shot, named in the shot list, rendered without error).
 
 ## New in v26
 

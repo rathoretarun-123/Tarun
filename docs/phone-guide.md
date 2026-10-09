@@ -112,3 +112,12 @@ The user gave two documents with "Train your director with these and hardcode th
 | RAM > 8 GB | Honest limit: the Java heap Android grants (largeHeap) and the cores bound the renderer, not the phone's RAM; stated in the README. |
 | Natural effects / physics "perfect", "world class" | No claim made; unchanged this version. |
 | GitHub sources | Searched (Animated Drawings, Pose Animator, Stretchy Studio, Inochi2D, DragonBones); none runs on the phone as is; recorded in the README. |
+
+## v27 follow-up ("use the different emotions and activity pics uploaded by the user, make it absolutely less shaky, check the director uses the correct split picture for a shot")
+
+| Note | Done |
+|---|---|
+| Use the uploaded emotion and activity pictures before the app-made ones | Every split figure becomes a pose picture (`pose\|key\|file\|angle\|pose\|emotion\|hRatio\|face points` in cast.txt) read by `PoseSense`; the director (`Casting.cast`) chooses the fitting picture for every character in every shot — angle (back behind the shoulder, side while walking, three-quarter in a two-shot), pose (sitting, lying, running, fighting, pointing, waving…), feeling (the spoken line's, else the moment's) — the rigged front only when no picture fits better. No drawn view is made where real pictures exist (v26). |
+| Absolutely less shaky | A chosen picture is drawn as it is for the whole shot (`Renderer.chosenPicture`): no sway, walk cycle, bending, head tilt or nod; pixel-snapped; only breathing and lip movement. The idle weight shift of the rigged front halved. One picture per shot, never a change inside a shot. |
+| Director uses the correct split picture for a particular shot | Tested: `directorUsesTheRightPictureForEachShot` (walking entrance → sideways walking picture; crying line → crying picture; sit → sitting picture; behind the shoulder → back picture; named in the shot list under PICTURES USED). The reading of the sheets: `poseSenseReadsTheUsersSheets` (five real sheets). |
+| Reliability of the reading | Angles and poses: good on the 60 sheets (silhouette measures). Feelings: conservative — a doubtful face stays neutral (a saturated mouth box is hair or clothing); the review dialog after every upload ("What each picture shows") lets the user correct every reading, and the library keeps the corrected reading for the next story. |

@@ -1009,10 +1009,11 @@ public final class Renderer {
             // other, and now and then the head turns a little — never while speaking (the head stays almost
             // still in a lip-sync shot), and smaller the closer the camera is
             if (spk == null && k.anchor == Film.A_GROUND && k.body == Pose.STAND) {
+                // (v27: halved again — a weight shift is felt, never seen as a wobble)
                 float ws = (float) Math.sin(tp * 0.45f + a.order * 1.3f), close = 1f / Math.max(1f, camZ);
-                mo.dx += ws * 2.2f * close; mo.rot += ws * 0.35f * close;
+                mo.dx += ws * 1.1f * close; mo.rot += ws * 0.18f * close;
                 float gl = (float) Math.sin(tp * 0.21f + a.order * 2.1f);
-                if (gl > 0.93f) p.headTilt += (gl - 0.93f) / 0.07f * 3f * close * (p.facing < 0 ? -1 : 1);
+                if (gl > 0.93f && camZ < 1.6f) p.headTilt += (gl - 0.93f) / 0.07f * 2f * close * (p.facing < 0 ? -1 : 1);
             }
         }
         applyActs(a, p, tp);
@@ -1125,6 +1126,39 @@ public final class Renderer {
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
         g.save();
+        // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
+        // it is for the whole shot (nothing bent, nothing swaying, no step cycle): the pose is in the picture
+        Art.PoseSprite chosen = chosenPicture(sp, a, t);
+        if (chosen != null && chosen.sprite() != null) {
+            Art.Sprite real = chosen.sprite();
+            g.restore();
+            g.restore();
+            float hReal = h * chosen.hRatio;
+            float pxs = x, pys = y;
+            // in a close shot the camera was aimed at the front picture's face: the chosen picture's face goes
+            // exactly there (its feet are out of frame anyway); in a wide shot the feet stay on the ground
+            if (camZ > 1.6f && sp != null && sp.faceKnown && real.faceKnown && Math.abs(chosen.angle) < 100 && chosen.pose != PoseSense.LIE) {
+                float wMain = sp.w * (h / sp.h), wReal = real.w * (hReal / real.h);
+                pys += (-h + sp.mouthY * h) - (-hReal + real.mouthY * hReal);
+                pxs += ((sp.mouthX - 0.5f) * wMain - (real.mouthX - 0.5f) * wReal) * (p.facing < 0 ? -1 : 1);
+            }
+            if (camStill && pixelStep > 0) { pxs = Math.round(pxs / pixelStep) * pixelStep; pys = Math.round(pys / pixelStep) * pixelStep; }
+            g.save();
+            g.translate(pxs, pys);
+            if (scale != 1f) g.scale(scale, scale);
+            g.save();
+            p.body = Pose.STAND; p.sit = 0; p.walkAmt = 0; p.bob = 0; p.armL = 8; p.armR = 8; p.elbowL = 10; p.elbowR = 10;
+            p.wave = 0; p.swing = false; p.twirl = false; p.headTilt = 0; p.tilt = 0; p.nod = 0;
+            if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; }
+            if (chosen.pose != PoseSense.STAND) p.blink = 0;
+            mo.sy = 1 + (float) Math.sin(tp * 2.1f + a.order) * 0.004f; mo.sx = 1;
+            float facing = p.facing;
+            if (Math.abs(chosen.angle) > 1 && Math.abs(chosen.angle) < 179) p.facing = facing;      // a side or three-quarter picture faces the way of the picture; mirrored when the character faces the other way
+            drawSprite(g, real, a.look, p, hReal, 0, a);
+            g.restore();
+            g.restore();
+            return;
+        }
         if (sp != null) drawSprite(g, viewOf(sp, a, s, p, k, spk != null, t), a.look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
@@ -1731,6 +1765,16 @@ public final class Renderer {
 
     private int lastShot;
 
+    /** v27: the user's picture the director chose for this character in the shot playing at t, or null (the front picture, rigged). */
+    private Art.PoseSprite chosenPicture(Art.Sprite sp, Film.Actor a, float t) {
+        if (sp == null || sp.poses == null || sp.poses.isEmpty()) return null;
+        Film.Shot sh = shotAt(t);
+        if (sh == null) return null;
+        Integer idx = sh.pictures.get(a.c.id);
+        if (idx == null || idx < 0 || idx >= sp.poses.size()) return null;
+        return sp.poses.get(idx);
+    }
+
     /** The shot playing at t (the shots are in order; the last one found is tried first). */
     Film.Shot shotAt(float t) {
         if (film == null || film.shots.isEmpty()) return null;
@@ -1758,6 +1802,13 @@ public final class Renderer {
         if (fg == null) return;
         Art.Sprite sp = art.sprites.get(fg.c.id);
         Art.Sprite back = sp == null ? null : sp.view(2);
+        if (sp != null && sp.poses != null) {
+            // v27: the user's own back picture (standing) before any made one
+            Integer idx = sh.pictures.get(fg.c.id);
+            Art.PoseSprite ps = idx != null && idx >= 0 && idx < sp.poses.size() ? sp.poses.get(idx) : null;
+            if (ps == null || Math.abs(Math.abs(ps.angle) - 180) > 1) for (Art.PoseSprite q : sp.poses) if (Math.abs(Math.abs(q.angle) - 180) < 1 && q.pose == PoseSense.STAND) { ps = q; break; }
+            if (ps != null && Math.abs(Math.abs(ps.angle) - 180) < 1 && ps.sprite() != null) back = ps.sprite();
+        }
         if (back == null) return;
         float side = to != null ? to.stateAt(t).facing : -fg.stateAt(t).facing;
         final float h = vh * 1.45f, w = h * back.w / Math.max(1, back.h);

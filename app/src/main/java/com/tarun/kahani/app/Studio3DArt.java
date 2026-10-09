@@ -158,6 +158,74 @@ final class Studio3DArt {
 
     static void removeViews(Project project, String key) { for (float a : Figure3D.VIEW_ANGLES) setView(project, key, a, null); }
 
+    // ------------------------------------------------------------- v27: pose pictures (pose|key|file|angle|pose|emotion|hRatio|face points)
+
+    /** The pose lines of a character: the user's own pictures of its angles, poses and expressions, split into fields. */
+    static List<String[]> poseLines(Project project, String key) {
+        List<String[]> out = new ArrayList<String[]>();
+        for (String l : project.read("cast.txt").split("\n")) {
+            String[] f = l.trim().split("\\|");
+            if (f.length >= 6 && f[0].equals("pose") && f[1].equals(key)) out.add(f);
+        }
+        return out;
+    }
+
+    /** The pose line of one picture: what PoseSense read of it, its height against a standing picture, its face points (zeros when no face was found). */
+    static String poseLine(String key, String file, com.tarun.kahani.core.PoseSense.Tag t, float hRatio, com.tarun.kahani.core.Cutout.Result r) {
+        String face = r != null && r.faceFound
+                ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR)
+                : "0|0|0|0|0|0|0|0";
+        return "pose|" + key + "|" + file + "|" + (int) t.angle + "|" + t.pose + "|" + t.emotion + "|" + String.format(Locale.US, "%.3f", hRatio) + "|" + face;
+    }
+
+    /** Adds a pose line of a character; beyond 100 pictures the oldest give way (their files deleted). */
+    static void addPose(Project project, String key, String line) {
+        List<String> keep = new ArrayList<String>(), mine = new ArrayList<String>();
+        for (String l : project.read("cast.txt").split("\n")) {
+            if (l.trim().length() == 0) continue;
+            String[] f = l.split("\\|");
+            if (f.length >= 6 && f[0].equals("pose") && f[1].equals(key)) mine.add(l); else keep.add(l);
+        }
+        mine.add(line);
+        while (mine.size() > 100) {
+            String[] f = mine.remove(0).split("\\|");
+            if (project.has(f[2])) project.file(f[2]).delete();
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String l : keep) sb.append(l).append('\n');
+        for (String l : mine) sb.append(l).append('\n');
+        project.write("cast.txt", sb.toString());
+    }
+
+    /** Re-tags the pose line of a file: what the user said the picture shows. */
+    static void setPoseTag(Project project, String file, float angle, int pose, int emotion) {
+        StringBuilder sb = new StringBuilder();
+        for (String l : project.read("cast.txt").split("\n")) {
+            if (l.trim().length() == 0) continue;
+            String[] f = l.split("\\|");
+            if (f.length >= 6 && f[0].equals("pose") && f[2].equals(file)) {
+                f[3] = String.valueOf((int) angle); f[4] = String.valueOf(pose); f[5] = String.valueOf(emotion);
+                StringBuilder j = new StringBuilder();
+                for (int i = 0; i < f.length; i++) j.append(i > 0 ? "|" : "").append(f[i]);
+                l = j.toString();
+            }
+            sb.append(l).append('\n');
+        }
+        project.write("cast.txt", sb.toString());
+    }
+
+    /** Removes every pose picture of a character (its files too). */
+    static void removePoses(Project project, String key) {
+        StringBuilder sb = new StringBuilder();
+        for (String l : project.read("cast.txt").split("\n")) {
+            if (l.trim().length() == 0) continue;
+            String[] f = l.split("\\|");
+            if (f.length >= 6 && f[0].equals("pose") && f[1].equals(key)) { if (project.has(f[2])) project.file(f[2]).delete(); continue; }
+            sb.append(l).append('\n');
+        }
+        project.write("cast.txt", sb.toString());
+    }
+
     private static boolean sameAngle(String s, float angle) {
         try { return Math.abs(Float.parseFloat(s.trim()) - angle) < 1; } catch (NumberFormatException e) { return false; }
     }

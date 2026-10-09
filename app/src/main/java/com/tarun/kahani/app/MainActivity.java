@@ -570,6 +570,103 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * v27: "What each picture shows" — the director's reading of every pose picture just added (angle, pose, feeling),
+     * each a button that cycles through the choices; Save writes the corrections into the pose lines. The director
+     * casts the shots from these readings, so a wrong one shows as a wrong picture in a shot.
+     */
+    void reviewPoses(final String key, final String shown, List<String> files, final Runnable after) {
+        final List<String[]> lines = new ArrayList<String[]>();
+        for (String[] f : Studio3DArt.poseLines(project, key)) if (files.contains(f[2])) lines.add(f);
+        if (lines.isEmpty()) { after.run(); return; }
+        final float[] angleOf = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
+        final int[] angles = new int[lines.size()], poses = new int[lines.size()], emotions = new int[lines.size()];
+        float d = getResources().getDisplayMetrics().density;
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (8 * d);
+        list.setPadding(pad, pad, pad, pad);
+        TextView head = new TextView(this);
+        head.setText("The director read these from " + shown + "'s pictures. Tap a button to correct it; the shots are cast from this.");
+        head.setPadding(0, 0, 0, pad);
+        list.addView(head);
+        for (int i = 0; i < lines.size(); i++) {
+            final String[] f = lines.get(i);
+            final int idx = i;
+            try { float a = Float.parseFloat(f[3].trim()); angles[i] = 0; for (int k = 0; k < angleOf.length; k++) if (Math.abs(angleOf[k] - a) < 1) angles[i] = k; } catch (NumberFormatException e) { angles[i] = 0; }
+            try { poses[i] = Math.max(0, Math.min(9, Integer.parseInt(f[4].trim()))); } catch (NumberFormatException e) { poses[i] = 0; }
+            try { emotions[i] = Math.max(0, Math.min(7, Integer.parseInt(f[5].trim()))); } catch (NumberFormatException e) { emotions[i] = 0; }
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(0, pad / 2, 0, pad / 2);
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int side = (int) (96 * d);
+            iv.setLayoutParams(new LinearLayout.LayoutParams(side, side));
+            try {
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(project.file(f[2]).getPath(), o);
+                int sample = 1;
+                while (Math.max(o.outWidth, o.outHeight) / sample > 240) sample *= 2;
+                o = new BitmapFactory.Options();
+                o.inSampleSize = sample;
+                iv.setImageBitmap(BitmapFactory.decodeFile(project.file(f[2]).getPath(), o));
+            } catch (Throwable ignored) { /* no thumbnail then */ }
+            row.addView(iv);
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            final Button ba = new Button(this), bp = new Button(this), be = new Button(this);
+            ba.setAllCaps(false); bp.setAllCaps(false); be.setAllCaps(false);
+            ba.setText("Angle: " + com.tarun.kahani.core.Angles.name(angleOf[angles[i]]));
+            bp.setText("Pose: " + com.tarun.kahani.core.PoseSense.poseName(poses[i]));
+            be.setText("Feeling: " + com.tarun.kahani.core.PoseSense.emotionName(emotions[i]));
+            ba.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { angles[idx] = (angles[idx] + 1) % angleOf.length; ba.setText("Angle: " + com.tarun.kahani.core.Angles.name(angleOf[angles[idx]])); } });
+            bp.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { poses[idx] = (poses[idx] + 1) % 10; bp.setText("Pose: " + com.tarun.kahani.core.PoseSense.poseName(poses[idx])); } });
+            be.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { emotions[idx] = (emotions[idx] + 1) % 8; be.setText("Feeling: " + com.tarun.kahani.core.PoseSense.emotionName(emotions[idx])); } });
+            col.addView(ba); col.addView(bp); col.addView(be);
+            row.addView(col);
+            list.addView(row);
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(list);
+        final boolean[] went = {false};
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("📷 What each picture shows (" + lines.size() + ")").setView(sv)
+                .setPositiveButton("Save", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface di, int w) {
+                        int changed = 0;
+                        for (int i = 0; i < lines.size(); i++) {
+                            String[] f = lines.get(i);
+                            String a = String.valueOf((int) angleOf[angles[i]]);
+                            if (a.equals(f[3].trim()) && String.valueOf(poses[i]).equals(f[4].trim()) && String.valueOf(emotions[i]).equals(f[5].trim())) continue;
+                            Studio3DArt.setPoseTag(project, f[2], angleOf[angles[i]], poses[i], emotions[i]);
+                            for (Library.Item it : library.find(Library.PIC, null, null)) {
+                                String tag = it.meta("posetag");
+                                if (tag == null) continue;
+                                boolean same = f[2].equals(it.meta("posefile"));
+                                if (!same && !tag.startsWith(f[3].trim() + "|" + f[4].trim() + "|" + f[5].trim() + "|")) continue;
+                                if (!same && !shown.equals(it.meta("ofName")) && !(it.name.equals(shown) || it.name.startsWith(shown + " ("))) continue;
+                                String[] t = tag.split("\\|", -1);
+                                if (t.length < 4) continue;
+                                t[0] = a; t[1] = String.valueOf(poses[i]); t[2] = String.valueOf(emotions[i]);
+                                StringBuilder j = new StringBuilder();
+                                for (int k = 0; k < t.length; k++) j.append(k > 0 ? "|" : "").append(t[k]);
+                                it.setMeta("posetag", j.toString());
+                                it.setMeta("pose", com.tarun.kahani.core.PoseSense.poseName(poses[i]));
+                                it.setMeta("emotion", com.tarun.kahani.core.PoseSense.emotionName(emotions[i]));
+                                break;
+                            }
+                            changed++;
+                        }
+                        if (changed > 0) { library.save(); toast(changed + " picture reading(s) corrected"); }
+                    }
+                })
+                .setNegativeButton("Fine as read", null).create();
+        dlg.setOnDismissListener(new DialogInterface.OnDismissListener() { public void onDismiss(DialogInterface di) { if (!went[0]) { went[0] = true; after.run(); } } });
+        dlg.show();
+    }
+
+    /**
      * The pictures of one thing from several angles: a sheet holding several figures is split into them
      * (Angles.split); a figure's angle is read from its face (Angles.guess); the front becomes the thing's picture
      * when it has none, the other angles its views (a real angle always beats a made one), a place's second
@@ -585,6 +682,7 @@ public class MainActivity extends Activity {
         }
         final Story st = project == null ? null : loadStory();
         if (project == null || st == null) { toast("Open a story first"); return; }
+        final List<String> newPoses = new ArrayList<String>();      // v27: the pose pictures this upload made (reviewed after)
         background("The director is reading " + datas.size() + " picture(s) of " + shown + "…", new Work() {
             public Object run() throws Exception {
                 Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, key) : null;
@@ -622,16 +720,33 @@ public class MainActivity extends Activity {
                     // 2. the angle of each figure from its face, then the front, the views, the extras
                     float[] guessed = new float[pics.size()];
                     byte[][] bytes = new byte[pics.size()][];
+                    com.tarun.kahani.core.Cutout.Result[] cuts = new com.tarun.kahani.core.Cutout.Result[pics.size()];
+                    com.tarun.kahani.core.PoseSense.Tag[] tags = new com.tarun.kahani.core.PoseSense.Tag[pics.size()];
+                    float[] hRatios = new float[pics.size()];
+                    int standH = 0;
                     for (int i = 0; i < pics.size(); i++) {
                         Object[] o = pics.get(i);
                         int[] px = (int[]) o[0]; int w = (Integer) o[1], h = (Integer) o[2];
                         boolean cut = (Boolean) o[3], camera = (Boolean) o[4];
                         com.tarun.kahani.core.Cutout.Result r = null;
                         try { r = com.tarun.kahani.core.Cutout.process(px, w, h, beast); } catch (Throwable e) { /* the picture is kept as a front */ }
-                        guessed[i] = r == null ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.guess(r);
+                        cuts[i] = r;
+                        guessed[i] = r == null ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.guess(r, beast);
+                        if (r != null && cut && r.w > 0 && r.h > 0 && r.w < r.h * 1.25f) standH = Math.max(standH, r.h);   // the tallest upright figure stands (a lying one is wider than tall)
                         byte[] b = Studio3DArt.encode(px, w, h, cut);
                         if (camera && !cut) { try { b = toonify(b, true); } catch (Exception ignored) { /* the photo itself then */ } }
                         bytes[i] = b;
+                    }
+                    // v27: what each picture shows — its angle, pose and feeling, read from the figure (the user corrects the reading after)
+                    for (int i = 0; i < pics.size(); i++) {
+                        com.tarun.kahani.core.Cutout.Result r = cuts[i];
+                        if (r == null) continue;
+                        boolean cut = (Boolean) pics.get(i)[3];
+                        try {
+                            tags[i] = com.tarun.kahani.core.PoseSense.tag(r, cut ? standH : 0, beast);
+                            guessed[i] = tags[i].angle;
+                            hRatios[i] = cut && standH > 0 ? Math.max(0.2f, Math.min(1.5f, r.h / (float) standH)) : 1f;
+                        } catch (Throwable e) { tags[i] = null; }
                     }
                     // v26: every slot (front, three-quarter, side, back) takes the best real picture guessed at that angle —
                     // the largest one; the others of that angle go to the library as more pictures of the same thing.
@@ -662,10 +777,12 @@ public class MainActivity extends Activity {
                     project.setSetting("realangles." + key, "1");
                     project.setSetting("rejected3d.view." + key, "1");
                     String libKey = project.setting("pic.char:" + key, "");
+                    int posesMade = 0;
                     for (int i = 0; i < pics.size(); i++) {
                         float a = angles[i];
                         boolean png = bytes[i].length > 8 && (bytes[i][1] & 255) == 'P';
                         String ext = png ? ".png" : ".jpg";
+                        Library.Item made = null;
                         if (!Float.isNaN(a) && a == com.tarun.kahani.core.Angles.FRONT) {
                             project.setSetting("realview." + key + ".0", "1");
                             if (have == null) {
@@ -675,9 +792,11 @@ public class MainActivity extends Activity {
                                 project.setSetting("pic.char:" + key, it.id);
                                 libKey = it.id;
                                 have = f;
+                                made = it;
                                 done.append("front picture; ");
                             } else {
-                                library.addBytes(Library.PIC, "person", shown + " (front, another)", "front", bytes[i], ext, "angles");
+                                made = library.addBytes(Library.PIC, "person", shown + " (front, another)", "front", bytes[i], ext, "angles");
+                                made.setMeta("ofName", shown);
                                 done.append("another front (library); ");
                             }
                         } else if (!Float.isNaN(a)) {
@@ -688,6 +807,7 @@ public class MainActivity extends Activity {
                             it.setMeta("view", String.valueOf((int) a));
                             it.setMeta("ofName", shown);
                             if (libKey.length() > 0) it.setMeta("of", libKey);
+                            made = it;
                             done.append(com.tarun.kahani.core.Angles.name(a)).append(" view; ");
                         } else {
                             String an = com.tarun.kahani.core.Angles.name(guessed[i]);
@@ -695,9 +815,28 @@ public class MainActivity extends Activity {
                             it.setMeta("ofName", shown);
                             if (guessed[i] != com.tarun.kahani.core.Angles.FRONT) it.setMeta("view", String.valueOf((int) guessed[i]));
                             if (libKey.length() > 0) it.setMeta("of", libKey);
+                            made = it;
                             done.append(an).append(" ").append(i + 1).append(" (library); ");
                         }
+                        // v27: every picture is a pose picture of the character — the director picks it for the shots
+                        // that need its angle, pose and feeling (the library keeps the reading for the next story)
+                        if (tags[i] != null) {
+                            try {
+                                String pf = project.savePicture(bytes[i], "pose");
+                                String pl = Studio3DArt.poseLine(key, pf, tags[i], hRatios[i], cuts[i]);
+                                Studio3DArt.addPose(project, key, pl);
+                                newPoses.add(pf);
+                                posesMade++;
+                                if (made != null) {
+                                    made.setMeta("posefile", pf);
+                                    made.setMeta("posetag", pl.substring(pl.indexOf('|', pl.indexOf('|', pl.indexOf('|') + 1) + 1) + 1));
+                                    made.setMeta("pose", com.tarun.kahani.core.PoseSense.poseName(tags[i].pose));
+                                    made.setMeta("emotion", com.tarun.kahani.core.PoseSense.emotionName(tags[i].emotion));
+                                }
+                            } catch (Exception ignored) { /* the picture stays a view / library picture */ }
+                        }
                     }
+                    if (posesMade > 0) done.append(posesMade).append(" pose pictures for the shots; ");
                     Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
                 } else if (kind.equals("scene")) {
                     boolean haveMain = project.manifestLine("scene", key) != null, haveRev = project.manifestLine("scene", key + "r") != null;
@@ -749,14 +888,21 @@ public class MainActivity extends Activity {
                 if (e != null) { toast("Could not add the pictures: " + e.getMessage()); return; }
                 toast(String.valueOf(r));
                 Prefs.put(MainActivity.this, "angles.target", "");
-                String from = anglesFrom;
+                final String from = anglesFrom;
                 anglesFrom = null;
-                // v25: back to where the pictures were asked for — the make-film dialog, the story, the progress or the Studio
-                if ("make".equals(from)) { showStory(); makeFilm(); }
-                else if (screen == S_PROGRESS) showProgress();
-                else if (screen == S_QC && FilmJob.current != null) showQc(FilmJob.current);
-                else if (screen == S_STORY) showStory();
-                else showStudio();
+                Runnable back = new Runnable() {
+                    public void run() {
+                        // v25: back to where the pictures were asked for — the make-film dialog, the story, the progress or the Studio
+                        if ("make".equals(from)) { showStory(); makeFilm(); }
+                        else if (screen == S_PROGRESS) showProgress();
+                        else if (screen == S_QC && FilmJob.current != null) showQc(FilmJob.current);
+                        else if (screen == S_STORY) showStory();
+                        else showStudio();
+                    }
+                };
+                // v27: what the director read of each picture, for the user to correct
+                if (!newPoses.isEmpty() && project != null) reviewPoses(key, shown, newPoses, back);
+                else back.run();
             }
         });
     }

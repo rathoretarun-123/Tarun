@@ -289,6 +289,26 @@ final class AutoLibrary {
                 } catch (Exception ignored) {
                 }
             }
+            // v27: the pose pictures kept in the library with this character (angles, poses, feelings, as read or
+            // corrected in an earlier story) become its pose lines here, so the shots are cast from them again
+            if (Studio3DArt.poseLines(project, key).isEmpty()) {
+                int n = 0;
+                for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                    String tag = it.meta("posetag");
+                    if (tag == null || tag.split("\\|").length < 4) continue;
+                    boolean mine = from.length() > 0 && (from.equals(it.meta("of")) || from.equals(it.id));
+                    if (!mine) { String of = it.meta("ofName"); mine = of != null && (of.equals(c.displayName) || c.aliases.contains(of)); }
+                    if (!mine) continue;
+                    try {
+                        String f = project.savePicture(Project.readAll(lib.open(it)), "pose");
+                        Studio3DArt.addPose(project, key, "pose|" + key + "|" + f + "|" + tag);
+                        n++;
+                    } catch (Exception ignored) {
+                    }
+                    if (n >= 100) break;
+                }
+                if (n > 0) notes.add(c.shown() + " ← " + n + " pose pictures (angles, poses, feelings) from the library");
+            }
         }
     }
 

@@ -717,11 +717,13 @@ public final class Renderer {
             }
             // a close-up softens the place behind the face, never melts it: a half-size layer, at most two thirds in,
             // only once the shot is a real close-up
-            float dof = Math.max(0, Math.min(0.66f, (camZ - 1.6f) / 0.7f));
+            // v23: the place behind a close-up stays readable — a faint softening only (a three-quarter-size layer, at
+            // most 30% in, only in a tight close-up); a blurred-away background looked unreal
+            float dof = Math.max(0, Math.min(0.3f, (camZ - 2.0f) / 0.8f));
             if (dof > 0.02f) {
                 g.save();
                 g.setAlpha(dof);
-                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.5f, bp);
+                g.layerLow("bdblur:" + System.identityHashCode(b), W, H, 0.75f, bp);
                 g.restore();
             }
             if (s.tod == Sets.EVENING) { g.color(0x40FF7043); g.rect(0, 0, W, H); g.color(0x30301060); g.rect(0, 0, W, H); }
@@ -1767,7 +1769,9 @@ public final class Renderer {
         if (back == null) return;
         float side = to != null ? to.stateAt(t).facing : -fg.stateAt(t).facing;
         final float h = vh * 1.45f, w = h * back.w / Math.max(1, back.h);
-        final float cx = side > 0 ? vw - w * 0.34f : w * 0.34f, bottom = vh * 1.12f;
+        // the shoulder takes at most 28% of the frame's width (a narrow frame too): the listener's face stays whole (v23)
+        final float inside = Math.min(w * 0.34f, vw * 0.28f);
+        final float cx = side > 0 ? vw - inside : inside, bottom = vh * 1.12f;
         final Object img = back.img;
         final float fw = w;
         g.layerLow("ots:" + fg.c.id + ":" + (side > 0 ? "R" : "L"), vw, vh, 0.35f, new Gfx.Painter() {

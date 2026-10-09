@@ -1218,7 +1218,16 @@ public class AppTest {
         Look rl = (Look) call("com.tarun.kahani.app.Studio3DArt", "referenceLook", c0.look, c0, lib, note);
         assertNotNull(rl);
         assertTrue("reference note: " + note[0], note[0].contains("reference"));
-        System.out.println("PHONE GUIDE: bridges " + bridges + " reverse cams " + reverse + " pieces " + pieces.size() + " " + note[0]);
+        // v23: a character without a picture is made from the best-fitting library picture, recoloured to the description
+        int[] cloth = new int[40 * 40];
+        java.util.Arrays.fill(cloth, 0xFFD02020);                       // red cloth
+        int[] rec = (int[]) call("com.tarun.kahani.app.Studio3DArt", "recolour", cloth, 40, 40, 0xFF2040D0, 0xFFE8C04A);
+        float[] hv = com.tarun.kahani.core.PicSense.hsv(rec[800]);
+        assertTrue("the red cloth turned blue: hue " + hv[0], hv[0] > 200 && hv[0] < 260);
+        String made = (String) call("com.tarun.kahani.app.Studio3DArt", "referencePicture", p, story, c0, lib, RuntimeEnvironment.getApplication(), null, false);
+        assertTrue("a picture made from the user's picture", made != null && p.has(made) && p.file(made).length() > 1000);
+        assertTrue(p.setting("credit3d." + c0.displayName, "").contains("recoloured"));
+        System.out.println("PHONE GUIDE: bridges " + bridges + " reverse cams " + reverse + " pieces " + pieces.size() + " " + note[0] + " made " + made);
     }
 
     @Test

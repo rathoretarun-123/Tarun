@@ -30,6 +30,8 @@ public final class Prefs {
     public static boolean studio3d(Context c) { return !"0".equals(get(c, "studio3d", "1")); }
     /** Faster drawing: a mesh cell of two pixels instead of one (about twice as fast, a little less smooth). */
     public static boolean fastMesh(Context c) { return "1".equals(get(c, "fastMesh", "0")); }
+    /** Smooth motion: the film at 30 frames per second instead of 24 (a quarter more drawing). */
+    public static boolean fps30(Context c) { return !"0".equals(get(c, "fps30", "1")); }
     /** The director asks before any picture the studio made in 3D is used (a proposal with Use / Reject). */
     public static boolean ask3d(Context c) { return !"0".equals(get(c, "ask3d", "1")); }
     /** An image-to-3D model service key (Meshy), entered by the user, kept only on the phone. */

@@ -435,7 +435,7 @@ public final class FilmJob implements Runnable {
             if (film.duration > 30 * 60 + 30) warning = "The film is longer than 30 minutes (" + fmt((long) film.duration) + ") — it will take longer to make.";
             film.subtitles = ed.subtitles;
             filmSeconds = film.duration;
-            { int[] psz = ed.size(); plannedFrames = (int) Math.ceil(film.duration * 24); plannedW = psz[0]; plannedH = psz[1]; }
+            { int[] psz = ed.size(); plannedFrames = (int) Math.ceil(film.duration * (Prefs.fps30(ctx) ? 30 : 24)); plannedW = psz[0]; plannedH = psz[1]; }
             updateEta();
             check();
             // pipeline steps 1-2: the Character Lock Sheet of every character and the Location Lock Plate of every
@@ -476,7 +476,7 @@ public final class FilmJob implements Runnable {
 
             // ---------------- video
             int[] want = ed.size();
-            int fps = 24;
+            int fps = Prefs.fps30(ctx) ? 30 : 24;          // smooth motion (v23): 30 fps unless switched off in Settings
             File out = new File(project.dir, "film_new.mp4");
             Grade grade = new Grade(ed);
             // if this phone's encoder refuses a size, try smaller ones automatically
@@ -1060,13 +1060,13 @@ public final class FilmJob implements Runnable {
         // item 13 / the phone guide §9.4: as many drawing threads as the phone's cores and free memory allow (each
         // worker holds its frame bitmap and two finished frames), never more than the cores, never a frozen phone
         int cores = Runtime.getRuntime().availableProcessors();
-        long perWorker = (long) w * h * 4 * 3 + 40L * 1024 * 1024;
+        long perWorker = (long) w * h * 4 * 4 + 40L * 1024 * 1024;
         long budget = memoryBudget();
         int byMem = (int) Math.max(1, Math.min(cores, budget / perWorker));
-        final int workers = Math.max(1, Math.min(Math.min(cores, 6), byMem));
+        final int workers = Math.max(1, Math.min(Math.min(cores, 8), byMem));          // v23: every core the memory allows, three frames in flight each
         film.shotList += String.format(java.util.Locale.US, "%nRENDER: %d drawing threads (%d cores, %d MB free for frames), %dx%d at %d fps%n", workers, cores, budget / (1024 * 1024), w, h, fps);
-        final int[][] slots = new int[workers * 2][];
-        final int[] slotFrame = new int[workers * 2];
+        final int[][] slots = new int[workers * 3][];
+        final int[] slotFrame = new int[workers * 3];
         for (int i = 0; i < slotFrame.length; i++) slotFrame[i] = -1;
         final Object lock = new Object();
         final int[] nextToEncode = {0};

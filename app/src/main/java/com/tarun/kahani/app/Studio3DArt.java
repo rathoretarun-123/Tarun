@@ -245,6 +245,12 @@ final class Studio3DArt {
         String kind = f[1], key = f[2];
         dropProposals(project, kind, key, kind.equals(P_VIEW) ? f[3] : null, true);
         if (kind.equals(P_CHAR)) dropProposals(project, P_VIEW, key, null, true);
+        if (kind.equals(P_CHAR) && f[f.length - 1].contains("recoloured to the description")) {
+            // the picture made from the user's own picture is turned down: the studio's own doll is proposed next time
+            project.setSetting("rejected3d.ref." + key, "1");
+            project.setSetting("credit3d." + key, "");
+            return;
+        }
         if (kind.equals(P_CHAR) && f[f.length - 1].contains("free model")) {
             // the free model is turned down: the studio's own doll is proposed the next time instead
             project.setSetting("rejected3d.model." + key, "1");
@@ -282,6 +288,12 @@ final class Studio3DArt {
         if (freeModels && cloud != null && !rejected(project, "model", key)) {
             try { if (freeModel(project, story, c, lib, ctx, cue, ask, cloud, null)) return proposalFor(project, P_CHAR, key) != null ? proposalFor(project, P_CHAR, key)[3] : charFile(project, story, c); }
             catch (Throwable e) { android.util.Log.w("Kahani", "free 3D model: " + e); }
+        }
+        // v23: the user's own pictures first — the library picture that fits the description best is recoloured to
+        // the description and proposed as the character (a drawing on the user's own line); the doll is the fallback
+        if (!rejected(project, "ref", key)) {
+            String fromPicture = referencePicture(project, story, c, lib, ctx, cue, ask);
+            if (fromPicture != null) return fromPicture;
         }
         // the phone guide (§7.2) and item 6: the doll takes its reference from the user's pictures — the nearest
         // uploaded picture that fits the description lends its clothing colours and hair; the style cue its light and skin
@@ -585,6 +597,99 @@ final class Studio3DArt {
         if (note != null && note.length > 0) note[0] = String.format(Locale.US, "reference: your picture \"%s\" (fit %.0f%%) lends its colours", best.label(), bestS * 100);
         return out;
     }
+
+    /**
+     * v23 (the 3D maker retrained on the user's pictures): a character without a picture is made from the library
+     * picture that fits its description best (fit at least 60%; a picture named for the character counts double):
+     * the figure is cut out, its clothing recoloured to the description's colours, graded to the pictures' line and
+     * proposed as the character's picture — a drawing in the user's own style instead of the studio's doll. The
+     * proposal says which picture it came from; rejecting it brings the doll next time. Returns the file or null.
+     */
+    static String referencePicture(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask) {
+        if (lib == null || c == null || c.look == null) return null;
+        Library.Item best = null;
+        float bestS = 0.6f;
+        int seen = 0;
+        try {
+            for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
+                if (seen++ > 200) break;
+                com.tarun.kahani.core.PicSense.Info in = lib.info(it);
+                if (in == null || !in.figure) continue;
+                float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta), c);
+                if (com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null) sc = Math.min(1f, sc + 0.3f);
+                if (sc > bestS) { bestS = sc; best = it; }
+            }
+        } catch (Throwable e) {
+            return null;
+        }
+        if (best == null) return null;
+        try {
+            byte[] data = Project.readAll(lib.open(best));
+            int[] dec = MainActivity.decodeBytes(data, 1100);
+            if (dec == null) return null;
+            int w = dec[0], h = dec[1];
+            int[] px = new int[w * h];
+            System.arraycopy(dec, 2, px, 0, px.length);
+            boolean beast = c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD;
+            Cutout.Result r = Cutout.process(px, w, h, beast);
+            int[] out = recolour(r.px, r.w, r.h, c.look.primary, c.look.secondary);
+            if (cue != null && cue.pictures > 0) cue.grade(out, r.w, r.h);
+            String key = keyFor(project, story, c);
+            String file = project.savePicture(encode(out, r.w, r.h, true), "3d_char");
+            int[] ratings = SceneMaker.ratings(true, r.faceFound, true, cue != null && cue.pictures > 0, bestS, true);
+            String verdict = SceneMaker.verdict(ratings, "") + String.format(Locale.US, " — made from your picture \"%s\" (fit %.0f%%), recoloured to the description; reject it if %s must not look like that picture",
+                    best.label(), bestS * 100, c.shown());
+            String points = r.faceFound ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR, 0f)
+                    : "0|0|0|0|0|0|0|0|0";
+            dropProposals(project, P_CHAR, key, null, true);
+            dropProposals(project, P_VIEW, key, null, true);
+            addProposal(project, "propose|char|" + key + "|" + file + "|" + points + "|" + SceneMaker.score(ratings) + "|" + verdict);
+            project.setSetting("credit3d." + key, "from your picture \"" + best.label() + "\" (recoloured)");
+            if (!ask) accept(project, lib, ctx, proposalFor(project, P_CHAR, key));
+            return file;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * The clothing of a cut-out recoloured: the two most worn hues (saturated, not skin, not dark) are turned to the
+     * description's primary and secondary hues, keeping every pixel's light and saturation (shading, folds, trims stay).
+     */
+    static int[] recolour(int[] px, int w, int h, int primary, int secondary) {
+        int[] out = px.clone();
+        float[] bins = new float[12];
+        for (int c : px) {
+            if ((c >>> 24) < 128 || Cutout.isSkin(c)) continue;
+            float[] hsv = com.tarun.kahani.core.PicSense.hsv(c);
+            if (hsv[1] < 0.3f || hsv[2] < 0.25f) continue;
+            bins[((int) (hsv[0] / 30f + 0.5f)) % 12] += 1;
+        }
+        int b1 = 0;
+        for (int i = 1; i < 12; i++) if (bins[i] > bins[b1]) b1 = i;
+        int b2 = -1;
+        for (int i = 0; i < 12; i++) { int d = Math.min(Math.abs(i - b1), 12 - Math.abs(i - b1)); if (d >= 2 && (b2 < 0 || bins[i] > bins[b2])) b2 = i; }
+        if (bins[b1] == 0) return out;
+        if (b2 >= 0 && bins[b2] < bins[b1] * 0.2f) b2 = -1;
+        float t1 = com.tarun.kahani.core.PicSense.hsv(primary)[0], t2 = com.tarun.kahani.core.PicSense.hsv(secondary)[0];
+        float s1 = t1 - b1 * 30f, s2 = b2 < 0 ? 0 : t2 - b2 * 30f;
+        float[] hsv = new float[3];
+        for (int i = 0; i < out.length; i++) {
+            int c = out[i];
+            if ((c >>> 24) < 20 || Cutout.isSkin(c)) continue;
+            float[] v = com.tarun.kahani.core.PicSense.hsv(c);
+            if (v[1] < 0.25f || v[2] < 0.2f) continue;
+            float d1 = hueDist(v[0], b1 * 30f), d2 = b2 < 0 ? 999 : hueDist(v[0], b2 * 30f);
+            float shift = d1 <= 24f ? s1 : d2 <= 24f ? s2 : Float.NaN;
+            if (Float.isNaN(shift)) continue;
+            hsv[0] = ((v[0] + shift) % 360f + 360f) % 360f; hsv[1] = v[1]; hsv[2] = v[2];
+            out[i] = android.graphics.Color.HSVToColor(c >>> 24, hsv);
+        }
+        return out;
+    }
+
+    static float hueDist(float a, float b) { float d = Math.abs(a - b) % 360f; return d > 180f ? 360f - d : d; }
 
     /** A worn colour for a hue bin (30-degree steps): the doll's cloth in that hue. */
     static int hueColour(int bin) {

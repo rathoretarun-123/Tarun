@@ -1224,7 +1224,7 @@ public class MainActivity extends Activity {
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             iv.setImageBitmap(thumb(project.file(file), 500));
             card.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 120)));
-        } else card.addView(Ui.text(this, "🎨 Background made by the studio", 13, Ui.SUB, false));
+        } else card.addView(Ui.text(this, "🎨 Background made by the studio — or give only the background picture (no characters in it): the director places the characters in it as the script says, on its floor line", 13, Ui.SUB, false));
         Library.Item amb = library.byId(project.setting("amb." + key, ""));
         SoundLib.Entry auto = sl.best(sc.setting + " " + sc.title, "amb", null);
         card.addView(Ui.text(this, "🔊 Background sound: " + (amb != null ? amb.label() + " (your choice)"
@@ -2994,7 +2994,7 @@ public class MainActivity extends Activity {
         body.addView(Ui.text(this, "Where will this film be shown? (decided once for the whole film — every picture is made natively in that shape, with its own safe zones and character size)", 15, Ui.TEXT, true));
         final android.widget.RadioGroup rg = new android.widget.RadioGroup(this);
         final String[] ars = {"16:9", "9:16", "1:1", "4:5", "2.39:1"};
-        String[] labels = {"▭  YouTube / Facebook video / TV — landscape 16:9 (1920x1080)", "▯  Reels / Shorts / TikTok / WhatsApp status / Facebook Stories — vertical 9:16 (1080x1920)",
+        String[] labels = {"▶  YouTube video / Facebook video / TV — landscape 16:9 (1920x1080)", "▯  YouTube Shorts / Reels / TikTok / WhatsApp status / Facebook Stories — vertical 9:16 (1080x1920)",
                 "▢  Instagram / Facebook post — square 1:1 (1080x1080)", "▯  Instagram / Facebook feed — portrait 4:5 (1080x1350)", "▬  Cinema — 2.39:1 widescreen (1920x804)"};
         for (int i = 0; i < ars.length; i++) {
             android.widget.RadioButton rb = new android.widget.RadioButton(this);
@@ -3023,9 +3023,17 @@ public class MainActivity extends Activity {
         // pictures still missing (the library is searched first; the rest can be made with AI)
         final CheckBox ai = new CheckBox(this);
         final CheckBox three = new CheckBox(this);
+        final List<String[]> uploadable = new ArrayList<String[]>();     // {angles target, label} of what has no picture yet (v23)
         try {
             Story st = ScriptParser.parse(FilmJob.scriptOf(project));
             List<String[]> miss = AutoLibrary.missingTargets(project, st);
+            for (String[] t : miss) {
+                String tgt = null;
+                if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
+                else if (t[0].startsWith("place:")) { for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, t[0].substring(6))) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; } }
+                else if (t[0].startsWith("shot:")) { String[] sk = t[0].split(":", 3); if (sk.length == 3) tgt = "angles:obj:" + sk[2] + ":" + t[1]; }
+                if (tgt != null) uploadable.add(new String[]{tgt, t[1]});
+            }
             StringBuilder m = new StringBuilder();
             int shown = 0;
             for (String[] t : miss) {
@@ -3034,7 +3042,7 @@ public class MainActivity extends Activity {
             }
             if (shown > 10) m.append(" and ").append(shown - 10).append(" more");
             if (shown > 0) {
-                body.addView(Ui.text(this, "\nNo picture yet: " + m + ". The director looks in your library first.", 14, Ui.SUB, false));
+                body.addView(Ui.text(this, "\nNo picture yet: " + m + ". The director looks in your library first — or tap \"Pictures first\" below to add up to 10 angles of any of them now.", 14, Ui.SUB, false));
                 ai.setText("Make the rest with free AI in 3D animated style (made natively in the film's shape)");
                 ai.setChecked(Prefs.autoArt(this) && Prefs.online(this));
                 ai.setEnabled(Prefs.online(this));
@@ -3050,8 +3058,17 @@ public class MainActivity extends Activity {
         body.addView(qc);
         ScrollView sv = new ScrollView(this);
         sv.addView(body);
-        new AlertDialog.Builder(this).setTitle("🎬 Before the director makes your film").setView(sv)
-                .setPositiveButton("🎬 Make the film", new DialogInterface.OnClickListener() {
+        AlertDialog.Builder dlg = new AlertDialog.Builder(this).setTitle("🎬 Before the director makes your film").setView(sv);
+        if (!uploadable.isEmpty()) dlg.setNeutralButton("📷 Pictures first", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface d, int w) {
+                String[] names = new String[uploadable.size()];
+                for (int i = 0; i < names.length; i++) names[i] = uploadable.get(i)[1];
+                new AlertDialog.Builder(MainActivity.this).setTitle("📷 Add pictures of…").setItems(names, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dd, int k) { anglesFor(uploadable.get(k)[0], uploadable.get(k)[1]); }
+                }).setNegativeButton("Cancel", null).show();
+            }
+        });
+        dlg.setPositiveButton("🎬 Make the film", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         int k = rg.getCheckedRadioButtonId() - 1000;
                         Edits e = edits();
@@ -3852,6 +3869,7 @@ public class MainActivity extends Activity {
         dir.addView(toggle("Ask me before a picture made in 3D is used (✔ Use / ✖ Reject where pictures are chosen)", "ask3d", true));
         dir.addView(toggle("Free pictures of the story's objects for inserts (Fluent Emoji 3D on GitHub, MIT)", "freeObjects", true));
         dir.addView(toggle("Human QC: show me every shot's first frame before the film is made", "humanQc", true));
+        dir.addView(toggle("Smooth motion: 30 frames per second instead of 24 (every move smoother; a quarter more drawing)", "fps30", true));
         dir.addView(toggle("Faster drawing: a mesh cell of 2 pixels instead of 1 (about twice as fast, a little less smooth)", "fastMesh", false));
         dir.addView(toggle("Free 3D models from GitHub (CC0 / CC-BY, e.g. KayKit's knight, mage, rogue, barbarian; the Khronos fox) for a character without a picture, when its description fits one — always a proposal you accept or reject; the credit goes into the production file", "freeModels", true));
         dir.addView(toggle("Free image-to-3D demos (TripoSR, InstantMesh, Hunyuan3D-2 on Hugging Face Spaces, no key) for the views of a character's picture — slow, may be asleep or over quota; then the studio's own figure model does it", "freeSpaces", true));

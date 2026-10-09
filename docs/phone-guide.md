@@ -64,3 +64,16 @@ The user gave two documents with "Train your director with these and hardcode th
 | More shots | A reaction shot from a moderate feeling (0.45); a two-shot held over two lines only in calm talk. |
 | Director defines scenes and asks for pictures; upload on the film-making page | The plan card above *Make film* (and on the progress and check screens): every character, place and thing without a picture, the 10-angle upload and the library search; each new place gets its establishing bridge. |
 | Faces cut in close-ups | The head with its hair takes at most 74 % of the frame with a margin; lip-sync at CU / MCU, never XCU. Checked on the frame at 1:08.5 (hair was cut at v21, whole at v22). |
+
+## v23 follow-up
+
+| Note | Done |
+|---|---|
+| Background blurred completely in close-ups | A faint softening only (`Renderer`: three-quarter-size layer, at most 30 % in, from a tight close-up on). |
+| Upload of what is not found at the make-film screen | The make-film dialog's **📷 Pictures first** button lists everything without a picture and opens the 10-angle upload. |
+| Background-only pictures, characters fitted by the director | As before (plates with their floor line); now said on every place card. |
+| More shots / smooth movement | 30 frames per second (Settings → Smooth motion, on by default); the v22 reaction and hold rules. |
+| YouTube in the format selection | "▶ YouTube video" (16:9) and "YouTube Shorts" (9:16) named first. |
+| Camera focus: half the face cut | The over-the-shoulder shoulder takes at most 28 % of the frame width (it hid half the listener in 9:16); checked on a contact sheet of 12 close-ups. |
+| More RAM, faster | Drawing threads on every core the free memory allows (up to 8), three frames in flight each. |
+| 3D picture maker making bad pictures | `Studio3DArt.referencePicture`: the library picture that fits the description best is cut out and recoloured to the description's colours (the two most worn hues turned, shading kept) and proposed first, named after its source; the doll only when none fits or it is rejected. |

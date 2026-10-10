@@ -59,6 +59,7 @@ public final class SituationsGuide {
             {"A bath is shown the family way", "Director.activityFrom, Props.curtain, Props.bathWater: always behind a curtain from just below the shoulders (indoors a tiled corner and a bucket; outdoors the water up to the shoulders), water poured over the head from a mug, eyes shut against it; afterwards a towel round the shoulders and wet hair for a while"},
             {"Clothes are changed behind a screen", "Director (a change of clothes on the stage): a folding screen in front, only the head above it, the old clothes thrown over its top; the new clothes are on as they step out, then the reveal"},
             {"Affection the family way", "Director.activityFrom: a hug (they come together, both arms round), a peck on the cheek, or on the forehead for a child — the eyes close a moment, a small heart rises, a soft sound; the user's own words decide who; nothing more is shown"},
+            {"Animated characters only", "Library.realPersonPhoto, MainActivity: no camera for pictures, no turning a photo of a person into an avatar, no internet search for a character's picture; a camera photo of a person is refused wherever it comes in (one picture, many at once, angles, a change of clothes), the AI is asked too when a key is set, and photos or photo avatars kept by an earlier version are never offered or used"},
             {"No age is written into the studio", "the studio makes family films: no age range is set for the audience anywhere in the code or in what it asks of picture makers"},
             {"More everyday tasks", "Director.taskFrom: drawing a rangoli on the floor (it grows ring by ring and stays), painting at an easel (the picture appears stroke by stroke)"},
     };
@@ -79,7 +80,8 @@ public final class SituationsGuide {
             // v37
             {"A front-facing drawn character", "pedalling legs, a full push-up seen from the side and a slide's ladder climbed rung by rung are drawn simply (the seated legs do not pedal; a push-up is a kneeling push-up seen from the front)"},
             {"Photos on vehicles and playthings", "a photo is lowered onto the seat and folded at the knees; on a bicycle or a swing it reads less clearly than a drawn character or the user's own picture of it"},
-            {"What is never shown", "nudity, a bath or a change of clothes in view, and anything more than a hug or a peck on the cheek or the forehead: the studio makes family films from people's own photographs"},
+            {"What is never shown", "nudity, a bath or a change of clothes in view, and anything more than a hug or a peck on the cheek or the forehead: the studio makes family films"},
+            {"Photos of real people", "character pictures are animated, drawn or 3D-rendered only: a camera photo of a person is refused (its camera data, or the AI when a key is set); a screenshot of a photo without camera data can only be caught by the AI"},
     };
 
     public static final String SUMMARY;

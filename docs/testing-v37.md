@@ -51,12 +51,23 @@ change over 40 units).
 The character prompt for picture makers and the script reader's instructions carry no age range; the README and the home screen say
 "an animated family film".
 
-## 5. What the studio does not make
+## 5. Animated character pictures only (test `v37AnimatedCharacterPicturesOnly`)
+
+The user asked to disable adding real people's photos to the character library. A picture with a camera's EXIF data given as a
+character or a character's view is refused (nothing is kept) with the message "Only animated, drawn or 3D-rendered character
+pictures can be added…"; a drawn picture is kept; an avatar made from a photo by an earlier version is no longer offered; a photo of a
+place is still kept. The camera, the photo-to-avatar question for people and the internet search for characters are removed.
+
+Measured: a pixel test alone cannot tell a photo from a 3D render — on skin texture the sample renders (Raju 0.60, the witch 0.75)
+overlap the real photos (a portrait 0.52, a cat 0.34) — so the studio relies on the camera data, the AI when a key is set, and on
+having no camera in the app.
+
+## 6. What the studio does not make
 
 The same request asked for nudity, sexual scenes and intimate content. The studio animates real people from their own photographs
 and makes family films, so it never shows nudity, a bath or a change of clothes in view, or anything beyond a hug or a peck on the
 cheek or the forehead; these rules are hardcoded (`SituationsGuide`: "What is never shown").
 
-## 6. Full suite
+## 7. Full suite
 
 (filled in after the run)

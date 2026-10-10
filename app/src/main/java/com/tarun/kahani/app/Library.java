@@ -211,6 +211,8 @@ public final class Library {
         if (type.equals(VOICE)) analyseVoice(it);
         if (type.equals(PIC)) analysePicture(it);
         if (type.equals(SOUND)) analyseSound(it);
+        // v37: character pictures are animated only — a camera photo of a person is not kept
+        if (realPersonPhoto(it)) { new File(it.path).delete(); throw new PhotoRefused(); }
         synchronized (this) { items.add(0, it); }
         save();
         Backup.copy(ctx, it);
@@ -399,12 +401,35 @@ public final class Library {
         save();
     }
 
+    /** v37: a picture refused because it is a photo of a real person (character pictures are animated only). */
+    public static final class PhotoRefused extends IOException {
+        public PhotoRefused() { super(NO_PHOTOS); }
+    }
+
+    /** v37: what the user is told when a photo of a real person is offered as a character picture. */
+    public static final String NO_PHOTOS = "Only animated, drawn or 3D-rendered character pictures can be added. "
+            + "This looks like a photo of a real person, so it was not saved.";
+
+    /**
+     * v37: a photo of a real person — a camera photo (its EXIF data), one the AI recognised as a photograph, or an
+     * avatar made from a photo by an earlier version — given as a character, a character's view, or a picture of a
+     * figure with no kind. Such pictures are never kept or used (photos of places still are).
+     */
+    public static boolean realPersonPhoto(Item it) {
+        if (it == null || it.builtIn || !PIC.equals(it.type)) return false;
+        boolean photo = "1".equals(it.meta("camera")) || "1".equals(it.meta("realphoto")) || "1".equals(it.meta("avatar"));
+        if (!photo) return false;
+        if (it.kind.equals("person") || it.kind.equals("view")) return true;
+        return it.kind.length() == 0 && ("1".equals(it.meta("figure")) || "1".equals(it.meta("avatar")));
+    }
+
     /** Items of a type (and kind, if given), best matches for the query first. */
     public synchronized List<Item> find(String type, String kind, String query) {
         List<Item> out = new ArrayList<Item>();
         final String q = query == null ? "" : Txt.norm(query);
         for (Item it : items) {
             if (!it.type.equals(type)) continue;
+            if (realPersonPhoto(it)) continue;        // v37: kept from an earlier version, never offered or used
             if (kind != null && kind.length() > 0 && !kind.equals(it.kind)) continue;
             out.add(it);
         }

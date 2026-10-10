@@ -4394,4 +4394,72 @@ public class AppTest {
         String all = com.tarun.kahani.core.Bible.characterPrompt(st.characters.get(0)) + "\n" + com.tarun.kahani.core.ScriptAI.system(true) + "\n" + com.tarun.kahani.core.ScriptAI.system(false);
         for (String bad : new String[]{"6-15", "6–15", "(ages ", "years)."}) assertTrue("no age range: " + bad, !all.contains(bad));
     }
+
+    /** A JPEG of the given bitmap with a camera's EXIF block (Make = "Phone") — what a camera photo carries. */
+    private static byte[] withCameraExif(Bitmap bmp) throws Exception {
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        bmp.compress(Bitmap.CompressFormat.JPEG, 90, bo);
+        byte[] jpg = bo.toByteArray();
+        byte[] make = "Phone\0".getBytes("US-ASCII");
+        java.io.ByteArrayOutputStream t = new java.io.ByteArrayOutputStream();
+        t.write(new byte[]{'I', 'I', 42, 0, 8, 0, 0, 0});                    // TIFF header, IFD0 at 8
+        t.write(new byte[]{1, 0});                                            // one entry
+        t.write(new byte[]{0x0F, 0x01, 2, 0});                                 // Make, ASCII
+        t.write(new byte[]{(byte) make.length, 0, 0, 0});
+        t.write(new byte[]{26, 0, 0, 0});                                     // value at 8 + 2 + 12 + 4 = 26
+        t.write(new byte[]{0, 0, 0, 0});                                      // no next IFD
+        t.write(make);
+        byte[] tiff = t.toByteArray();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        out.write(jpg, 0, 2);                                                 // SOI
+        int len = 2 + 6 + tiff.length;
+        out.write(new byte[]{(byte) 0xFF, (byte) 0xE1, (byte) (len >> 8), (byte) len});
+        out.write("Exif\0\0".getBytes("US-ASCII"));
+        out.write(tiff);
+        out.write(jpg, 2, jpg.length - 2);
+        return out.toByteArray();
+    }
+
+    /**
+     * v37 (the user: "disable the functionality to add real persons' photos in the library of characters; only
+     * animated pictures should be uploadable"): a camera photo given as a character, a character's view or a figure
+     * is refused and not kept; an animated picture is kept; a photo or a photo avatar kept by an earlier version is
+     * never offered; a photo of a place is still kept.
+     */
+    @Test
+    public void v37AnimatedCharacterPicturesOnly() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        Bitmap bmp = Bitmap.createBitmap(200, 300, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 2);
+        g.color(0xFFFFFFFF); g.rect(0, 0, 200, 300);
+        g.save(); g.translate(100, 290);
+        Story st = ScriptParser.parse(ACTIVITIES);
+        Pose p = new Pose(); p.reset();
+        Puppet.draw(g, st.characters.get(0).look, p, 270);
+        g.restore(); g.release();
+        byte[] photo = withCameraExif(bmp);
+        assertTrue("the test picture carries camera data", com.tarun.kahani.app.Library.cameraPhoto(photo));
+        int before = lib.find(com.tarun.kahani.app.Library.PIC, "person", "").size();
+        for (String kind : new String[]{"person", "view"}) {
+            boolean refused = false;
+            try { lib.addBytes(com.tarun.kahani.app.Library.PIC, kind, "real person " + kind, "", photo, ".jpg", "phone"); }
+            catch (com.tarun.kahani.app.Library.PhotoRefused e) { refused = true; assertTrue(e.getMessage().contains("animated")); }
+            assertTrue("a camera photo as a " + kind + " is refused", refused);
+        }
+        assertTrue("nothing was kept", lib.find(com.tarun.kahani.app.Library.PIC, "person", "").size() == before);
+        // an animated picture (no camera data) is kept
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, bo);
+        com.tarun.kahani.app.Library.Item ok = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "drawn hero", "", bo.toByteArray(), ".png", "phone");
+        assertTrue("an animated picture is kept", lib.find(com.tarun.kahani.app.Library.PIC, "person", "drawn hero").contains(ok));
+        // a photo avatar from an earlier version is never offered
+        ok.setMeta("avatar", "1");
+        assertTrue("an old photo avatar is not offered", !lib.find(com.tarun.kahani.app.Library.PIC, "person", "").contains(ok));
+        lib.remove(ok);
+        // a photo of a place is still kept
+        com.tarun.kahani.app.Library.Item place = lib.addBytes(com.tarun.kahani.app.Library.PIC, "place", "a street photo", "", photo, ".jpg", "phone");
+        assertTrue("a photo of a place is kept", lib.find(com.tarun.kahani.app.Library.PIC, "place", "").contains(place));
+        lib.remove(place);
+    }
 }

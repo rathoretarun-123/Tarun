@@ -61,7 +61,18 @@ Test `v39HundredPicturesPlacesThingsLibraryAndReframe`:
 
 ## 5. The suite
 
-The full Robolectric suite was run after these changes; its result is in the commit that carries this file.
+Full Robolectric suite on the v39 code: 67 tests, 1 skipped (as before), 3 failures — all three from changes you
+asked for, none a crash:
+
+* `threeSimpleStoriesEndToEnd` counted only your still pictures as "your pictures"; the rigged front picture
+  (made from your picture, playing every shot) now counts too. Re-run: passes (20 minutes, three whole films).
+* `everyCharacterPlaceAndThingTakesPictures`: a replaced place picture was kept as a view of the film but no
+  longer copied to the library as "(earlier)"; both now. Re-run: passes.
+* `storyDirectionsMoveTheCharacters`: the sample story's own choreography count; with the final code it is as
+  before. Re-run: passes.
+
+Also re-run on the final code: `directorUsesTheRightPictureForEachShot`, `v39HundredPicturesPlacesThingsLibraryAndReframe`,
+`v38UserSheetsSplitSavedAndGroupLinesSpokenByTheCast` — all pass.
 
 ## Said plainly
 

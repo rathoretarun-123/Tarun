@@ -478,34 +478,51 @@ public class MainActivity extends Activity {
         final boolean more = tgt.startsWith("angles:char:") || tgt.startsWith("angles:scene:");
         final String[] optsAll = {"🖼  Gallery — up to 10 at once (animated pictures only)", "📁  Files (Downloads, WhatsApp…) — up to 10", "📚  From the tarunkahani library", "🌐  Search the internet / make with AI"};
         final String[] opts = more ? optsAll : java.util.Arrays.copyOf(optsAll, optsAll.length - 1);
-        new AlertDialog.Builder(this).setTitle("📷 Angles of " + what)
-                .setMessage("Front, three-quarter, side and back for a character; a wide view and its reverse for a place; front, side and rear for a thing. "
-                        + "A picture that holds several angles side by side is split by the director into separate pictures. Every picture is saved in the library as " + what + ".")
-                .setItems(opts, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        target = "angles";
-                        if (w == 0) pickPhotos(REQ_ANGLES, 10);
-                        else if (w == 1) pick("image/*", REQ_ANGLES, true);
-                        else if (w == 3) {
-                            // v33: the old chooser (a free picture from the internet, one made with AI) for a character or a place
-                            String[] q = tgt.split(":", 4);
-                            choosePicture((q[1].equals("char") ? "char:" : "scene:") + q[2], q.length > 3 ? q[3] : q[2]);
-                        }
-                        else {
-                            Picker pk = new Picker(MainActivity.this, library);
-                            pk.show("An angle of " + what, Library.PIC, what, new String[]{}, new Picker.Listener() {
-                                public void picked(Library.Item it) {
-                                    try {
-                                        List<byte[]> one = new ArrayList<byte[]>();
-                                        one.add(Project.readAll(library.open(it)));
-                                        saveAngles(tgt, one);
-                                    } catch (Exception e) { toast("Could not open the picture"); }
-                                }
-                                public void action(String a) { }
-                            });
-                        }
-                    }
-                }).setNegativeButton("Cancel", null).show();
+        // v38: the explanation and the choices as buttons in one view — a dialog with both a message and a list of
+        // items shows only the message on a phone (the choices were never seen: "a pop-up with no option to upload")
+        final AlertDialog[] dlg = new AlertDialog[1];
+        LinearLayout box = Ui.column(this);
+        box.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), Ui.dp(this, 8));
+        box.addView(Ui.text(this, "Front, three-quarter, side and back for a character; a wide view and its reverse for a place; front, side and rear for a thing. "
+                + "A picture that holds several angles side by side is split by the director into separate pictures. Every picture is saved in the library as " + what + ".", 13, Ui.SUB, false));
+        for (int i = 0; i < opts.length; i++) {
+            final int w = i;
+            box.addView(Ui.button(this, opts[i], i < 2 ? Ui.PRIMARY : Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (dlg[0] != null) dlg[0].dismiss();
+                    angleChoice(w, tgt, what);
+                }
+            }));
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+        dlg[0] = new AlertDialog.Builder(this).setTitle("📷 Angles of " + what).setView(sv).setNegativeButton("Cancel", null).create();
+        dlg[0].show();
+    }
+
+    /** v38: what each choice of the angles dialog does (0 gallery, 1 files, 2 the library, 3 the internet / AI). */
+    private void angleChoice(int w, final String tgt, final String what) {
+        target = "angles";
+        if (w == 0) pickPhotos(REQ_ANGLES, 10);
+        else if (w == 1) pick("image/*", REQ_ANGLES, true);
+        else if (w == 3) {
+            // v33: the old chooser (a free picture from the internet, one made with AI) for a character or a place
+            String[] q = tgt.split(":", 4);
+            choosePicture((q[1].equals("char") ? "char:" : "scene:") + q[2], q.length > 3 ? q[3] : q[2]);
+        }
+        else {
+            Picker pk = new Picker(MainActivity.this, library);
+            pk.show("An angle of " + what, Library.PIC, what, new String[]{}, new Picker.Listener() {
+                public void picked(Library.Item it) {
+                    try {
+                        List<byte[]> one = new ArrayList<byte[]>();
+                        one.add(Project.readAll(library.open(it)));
+                        saveAngles(tgt, one);
+                    } catch (Exception e) { toast("Could not open the picture"); }
+                }
+                public void action(String a) { }
+            });
+        }
     }
 
     /** {w, h, pixels…} of a picture's bytes, shrunk to maxSide, upright; null when unreadable. */
@@ -2669,7 +2686,7 @@ public class MainActivity extends Activity {
     private void addMany(final List<Uri> uris, final String audioAs) {
         background("Adding " + uris.size() + (uris.size() == 1 ? " file" : " files") + " to your library…", new Work() {
             public Object run() throws Exception {
-                int pics = 0, voices = 0, sounds = 0, bad = 0;
+                int pics = 0, voices = 0, sounds = 0, bad = 0, refused = 0;
                 final List<Library.Item> added = new ArrayList<Library.Item>();
                 for (Uri u : uris) {
                     try {
@@ -2696,6 +2713,8 @@ public class MainActivity extends Activity {
                         Library.Item it = library.addBytes(voice ? Library.VOICE : Library.SOUND, voice ? "voice" : "amb", base, name, b, ext, "phone");
                         if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); bad++; continue; }
                         if (voice) voices++; else sounds++;
+                    } catch (Library.PhotoRefused e) {
+                        refused++;          // v38: said as what it is, not as a file that could not be opened
                     } catch (Exception e) {
                         bad++;
                     }
@@ -2708,6 +2727,7 @@ public class MainActivity extends Activity {
                 if (pics + voices + sounds == 0) m = new StringBuilder("Nothing could be added");
                 if (bad > 0) m.append(" (").append(bad).append(" could not be opened)");
                 m.append(". The director uses them by itself in every story.");
+                if (refused > 0) m.append(" ").append(refused).append(refused == 1 ? " camera photo of a person was" : " camera photos of people were").append(" left out (animated pictures only).");
                 return new Object[]{m.toString(), added};
             }
         }, new Done() {

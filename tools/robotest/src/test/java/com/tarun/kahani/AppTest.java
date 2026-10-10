@@ -4723,4 +4723,67 @@ public class AppTest {
         assertTrue("0".equals(old.meta("camera")) && "2".equals(old.meta("camchk")));
         ac.pause().stop().destroy();
     }
+
+    /**
+     * v38 (the user: "uploading 60 images of a character from 10 images, the library is just the last one"; "the picker
+     * just opens a pop-up telling to upload pictures with no option to upload"): ten drawn pictures a phone saved (its
+     * make and model in each) all reach the library; and the angles pop-up shows its choices as buttons (a dialog with
+     * both a message and a list shows only the message on a phone).
+     */
+    @Test
+    public void v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File dir = new File(ASSETS.getParentFile().getParentFile().getParentFile().getParentFile(), "tools/testdata/upload");
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        int before = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        // ten different drawn pictures, each saved by a phone (the phone's make and model written in)
+        File tmp = new File(ctx.getCacheDir(), "ten");
+        tmp.mkdirs();
+        byte[] src = Files.readAllBytes(new File(dir, "drawn_character_phone_saved.jpg").toPath());
+        android.content.ClipData clip = null;
+        for (int i = 0; i < 10; i++) {
+            File f = new File(tmp, "kripa_" + i + ".jpg");
+            Files.write(f.toPath(), src);
+            android.net.Uri u = android.net.Uri.fromFile(f);
+            if (clip == null) clip = android.content.ClipData.newRawUri("pictures", u); else clip.addItem(new android.content.ClipData.Item(u));
+        }
+        android.content.Intent data = new android.content.Intent();
+        data.setClipData(clip);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        org.robolectric.shadows.ShadowToast.reset();
+        onResult.invoke(a, 23, android.app.Activity.RESULT_OK, data);
+        for (int i = 0; i < 900 && !uploadDone() && !String.valueOf(org.robolectric.shadows.ShadowToast.getTextOfLatestToast()).startsWith("Nothing"); i++) { idle(); Thread.sleep(100); }
+        idle();
+        int after = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        System.out.println("LIBRARY v38: " + before + " → " + after + " — " + org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+        assertEquals("all ten pictures kept", before + 10, after);
+        // the angles pop-up: its choices are buttons the user can see
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method angles = MainActivity.class.getDeclaredMethod("anglesFor", String.class, String.class);
+        angles.setAccessible(true);
+        for (String tgt : new String[]{"angles:char:vanusha:वानुषा", "angles:scene:1:बगीचा", "angles:obj:छाता:छाता"}) {
+            angles.invoke(a, tgt, "x");
+            idle();
+            android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            assertNotNull(dlg);
+            List<String> seen = texts(dlg.getWindow().getDecorView(), new ArrayList<String>());
+            String all = seen.toString();
+            System.out.println("ANGLES v38 " + tgt + ": " + all);
+            assertTrue("the gallery choice is there: " + all, all.contains("Gallery"));
+            assertTrue("the files choice is there: " + all, all.contains("Files"));
+            assertTrue("the library choice is there: " + all, all.contains("tarunkahani library"));
+            dlg.dismiss();
+        }
+        ac.pause().stop().destroy();
+    }
 }

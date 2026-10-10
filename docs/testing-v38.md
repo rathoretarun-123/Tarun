@@ -128,6 +128,11 @@ group, the subtitle naming them all (`Beat.chorus`, `Director.chorusLines`). Che
 सिया, परी): "तीनो: वाह! धन्यवाद मम्मी!" → पापा, सिया, परी; "दोनो: प्लीज़ पापा!" → सिया, परी; "सब: हुर्रे!" → all four.
 All 25 test stories (the sample, four test scripts, twenty soak stories): every speaker exactly as before.
 
+Rendered (no pictures, the studio's own drawing) and found two more: the living room was a garden (`Sets.detect` knew
+"living room" only in English letters), and "पापा, सिया और परी सोफ़े पर बैठे हैं" seated only पापा
+(`Director.joinedPlural`: names joined with a plural verb apply to all of them). After: a room, all three on the sofa,
+asserted in the test. Places of all 25 test stories unchanged.
+
 ## 3d. The user's pictures: "save in library and check upload and splitting"
 
 36 pictures (kept, phone-sized, in `tools/testdata/sheets38`): 19 character sheets on a transparent background, 10 place

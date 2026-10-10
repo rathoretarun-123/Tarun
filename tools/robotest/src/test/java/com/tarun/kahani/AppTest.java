@@ -4908,8 +4908,19 @@ public class AppTest {
         // the film: the others' lips move with the same line
         Director d = new Director(st, new Director.Options());
         d.prepare();
-        d.direct(new com.tarun.kahani.core.Art());
+        Film film = d.direct(new com.tarun.kahani.core.Art());
         assertTrue("lines said together: " + d.chorusLines, d.chorusLines >= 4);
+        // "घर का लिविंग रूम" is a room (it was drawn as a garden), and "पापा, सिया और परी सोफ़े पर बैठे हैं" seats all three
+        Film.Seg first = film.segs.get(0);
+        for (Film.Seg sg : film.segs) if (sg.scene == 0 && !sg.actors.isEmpty()) { first = sg; break; }
+        assertEquals("the living room is a room", com.tarun.kahani.core.Sets.ROOM, first.set);
+        float tl = film.lines.get(2).start + 0.3f;
+        StringBuilder seated = new StringBuilder();
+        for (Film.Actor ac : first.actors) {
+            seated.append(ac.c.fullName).append('=').append(ac.stateAt(tl).body).append(' ');
+            if (!ac.c.fullName.equals("मम्मी")) assertEquals("seated on the sofa: " + ac.c.fullName, Pose.SIT, ac.stateAt(tl).body);
+        }
+        System.out.println("CHAI seated: " + seated);
         // 2) the splitting, as the phone reads them (at most 1200 px)
         int[] want = {0, 6, 0, 0, 6, 6, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
         Method isSheet = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("isSheet", byte[].class, boolean.class);

@@ -89,6 +89,10 @@ public final class Sets {
         if (Txt.has(text, "बगीच", "बाग", "उद्यान", "वाटिका", "फुलवारी", "garden", "पार्क") || Txt.hasWord(text, "park", "parks", "playground")) return GARDEN;   // v37: a park, a playground
         if (Txt.has(text, "दरबार", "सिंहासन", "throne", "palace hall", "महल के अंदर", "राजमहल", "दरबार") || (Txt.has(text, "महल", "palace") && Txt.has(text, "कक्ष", "कमरे", "hall", "room"))) return HALL;
         if (Txt.has(text, "बाथरूम", "बाथ रूम", "स्नानघर", "स्नानागार", "गुसलखाना", "ग़ुसलखाना") || Txt.hasWord(text, "bathroom", "washroom")) return ROOM;     // v37: a bathroom is indoors
+        // v38: a home's rooms written in Hindi letters ("घर का लिविंग रूम", "ड्राइंग रूम", "बैठक", "किचन"), a sofa, "घर में"
+        if (Txt.has(text, "लिविंग रूम", "लिविंगरूम", "ड्राइंग रूम", "ड्रॉइंग रूम", "बेडरूम", "बेड रूम", "बैठक", "किचन", "डाइनिंग", "सोफ़े", "सोफे", "सोफ़ा", "सोफा",
+                "घर का", "घर की", "घर में") && !Txt.has(text, "घर के बाहर", "घर के आँगन", "घर के आंगन", "घर का आँगन", "घर का आंगन", "घर की छत", "बगीच", "garden")
+                || Txt.hasWord(text, "drawing room", "sofa", "couch", "dining room")) return ROOM;
         if (Txt.has(text, "कमरा", "कमरे", "कक्ष", "ऑफिस", "दफ़्तर", "दफ्तर", "कक्षा", "स्कूल", "क्लास", "रसोई", "अस्पताल", "दुकान", "पुस्तकालय", "घर के अंदर", "स्टूडियो")
                 || Txt.hasWord(text, "living room", "bedroom", "bedrooms", "office", "offices", "classroom", "classrooms", "school", "schools", "kitchen", "hospital",
                 "shop", "shops", "library", "inside the house", "indoors", "studio", "hall", "halls", "room", "rooms", "flat", "flats")) return ROOM;

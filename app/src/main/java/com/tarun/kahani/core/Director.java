@@ -4078,10 +4078,20 @@ public final class Director {
     }
 
     /** Sitting down, getting up, lying down, bowing, waving, nodding, turning — for the subject (or the whole group). */
+    /** v38: two or more names joined ("और", ",", "and") with a plural verb — the sentence is about all of them. */
+    static boolean joinedPlural(String s) {
+        boolean joined = Txt.has(s, " और ", ",", " तथा ", " एवं ") || Txt.hasWord(s, "and");
+        boolean plural = Txt.has(s, "े हैं", "ी हैं", "ें हैं", "े थे", "ी थीं", "े गए", "ी गईं", "ते हैं", "ती हैं", "ते थे", "ती थीं", "े रहे", "ी रहीं")
+                || Txt.hasWord(s, "are", "were", "they", "both", "together", "sit", "stand", "run", "walk", "lie");
+        return joined && plural;
+    }
+
     private float postureFrom(String s, float t, Film.Actor subj, List<Film.Actor> group) {
         if (subj == null) return 0;
         float d = 0;
         List<Film.Actor> who = group != null && group.size() > 1 && Txt.has(s, "सब", "सभी", "दोनों", "तीनों", "all", "both", "everyone") ? group : null;
+        // v38: names joined with a plural verb ("पापा, सिया और परी सोफ़े पर बैठे हैं", "Maya and Kabir sit down"): all of them
+        if (who == null && group != null && group.size() > 1 && joinedPlural(s)) who = group;
         if (who == null) { who = new ArrayList<Film.Actor>(); who.add(subj); }
         boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
         if (Txt.has(s, TURN_AWAY)) {

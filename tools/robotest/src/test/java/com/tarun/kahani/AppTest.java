@@ -4403,15 +4403,23 @@ public class AppTest {
         java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
         bmp.compress(Bitmap.CompressFormat.JPEG, 90, bo);
         byte[] jpg = bo.toByteArray();
+        // v38: what a camera writes — the make and, in the Exif directory, the exposure and the aperture (a phone's make
+        // alone is written into every picture its gallery saves, drawn ones too, and no longer counts as a photo)
         byte[] make = "Phone\0".getBytes("US-ASCII");
+        java.nio.ByteBuffer t0 = java.nio.ByteBuffer.allocate(90).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        t0.put(new byte[]{'I', 'I', 42, 0}).putInt(8);                        // TIFF header, IFD0 at 8
+        t0.putShort((short) 2);                                                 // IFD0: two entries
+        t0.putShort((short) 0x010F).putShort((short) 2).putInt(make.length).putInt(38);     // Make, ASCII, at 38
+        t0.putShort((short) 0x8769).putShort((short) 4).putInt(1).putInt(44);               // the Exif directory at 44
+        t0.putInt(0);                                                           // no next IFD
+        t0.put(make);                                                           // 38..44
+        t0.putShort((short) 2);                                                 // Exif directory: two entries
+        t0.putShort((short) 0x829A).putShort((short) 5).putInt(1).putInt(74);               // ExposureTime, RATIONAL, at 74
+        t0.putShort((short) 0x829D).putShort((short) 5).putInt(1).putInt(82);               // FNumber, RATIONAL, at 82
+        t0.putInt(0);
+        t0.putInt(1).putInt(120).putInt(18).putInt(10);                          // 1/120 s, f/1.8
         java.io.ByteArrayOutputStream t = new java.io.ByteArrayOutputStream();
-        t.write(new byte[]{'I', 'I', 42, 0, 8, 0, 0, 0});                    // TIFF header, IFD0 at 8
-        t.write(new byte[]{1, 0});                                            // one entry
-        t.write(new byte[]{0x0F, 0x01, 2, 0});                                 // Make, ASCII
-        t.write(new byte[]{(byte) make.length, 0, 0, 0});
-        t.write(new byte[]{26, 0, 0, 0});                                     // value at 8 + 2 + 12 + 4 = 26
-        t.write(new byte[]{0, 0, 0, 0});                                      // no next IFD
-        t.write(make);
+        t.write(t0.array(), 0, t0.position());
         byte[] tiff = t.toByteArray();
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
         out.write(jpg, 0, 2);                                                 // SOI
@@ -4611,5 +4619,108 @@ public class AppTest {
         }
         System.out.println("FLUSH v38: red over green " + red[0] + " -> " + red[1]);
         assertTrue("the cheeks flush", red[1] > red[0] * 1.01f);
+    }
+
+    /**
+     * v38 (the user: "not able to upload any picture for any character, object or place in the studio"): pictures
+     * come in exactly as the phone hands them over (onActivityResult, a content address) — drawn pictures saved by a
+     * phone's gallery carry the phone's make and model, and must be taken for a character, a thing and a place; a
+     * real camera photo (its exposure written in it) is still refused as a character and taken as a place.
+     */
+    @Test
+    public void v38UploadsFromThePhoneReachTheStudio() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File dir = new File(ASSETS.getParentFile().getParentFile().getParentFile().getParentFile(), "tools/testdata/upload");
+        assertTrue(dir.getAbsolutePath(), new File(dir, "drawn_character_phone_saved.jpg").exists());
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("target"), af = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true); af.setAccessible(true);
+        Story.CharacterDef[] chars = st.cast().toArray(new Story.CharacterDef[0]);
+        for (String f : new String[]{"camera_photo.jpg", "drawn_character_phone_saved.jpg"}) {
+            android.media.ExifInterface ex = new android.media.ExifInterface(new File(dir, f).getAbsolutePath());
+            System.out.println("EXIF v38 " + f + ": make " + ex.getAttribute("Make") + ", exposure " + ex.getAttribute("ExposureTime") + ", f " + ex.getAttribute("FNumber")
+                    + " → camera photo " + com.tarun.kahani.app.Library.cameraPhoto(Files.readAllBytes(new File(dir, f).toPath())));
+        }
+        assertTrue("a real camera photo is known", com.tarun.kahani.app.Library.cameraPhoto(Files.readAllBytes(new File(dir, "camera_photo.jpg").toPath())));
+        assertTrue("a drawn picture a phone saved is not a camera photo", !com.tarun.kahani.app.Library.cameraPhoto(Files.readAllBytes(new File(dir, "drawn_character_phone_saved.jpg").toPath())));
+        // {how, target kind, file, expected to be taken}
+        Object[][] cases = {
+                {"angles", "char", "drawn_character_phone_saved.jpg", true},
+                {"angles", "char", "drawn_character_plain.png", true},
+                {"angles", "obj", "drawn_thing_phone_saved.jpg", true},
+                {"angles", "scene", "drawn_place_phone_saved.jpg", true},
+                {"angles", "scene", "camera_photo.jpg", true},
+                {"angles", "char", "camera_photo.jpg", false},
+                {"image", "char", "drawn_character_phone_saved.jpg", true},
+                {"image", "scene", "drawn_place_phone_saved.jpg", true},
+        };
+        int ci = 0;
+        StringBuilder report = new StringBuilder();
+        boolean ok = true;
+        for (Object[] c : cases) {
+            String how = (String) c[0], kind = (String) c[1], file = (String) c[2];
+            boolean want = (Boolean) c[3];
+            Story.CharacterDef cd = chars[ci++ % chars.length];
+            String key = (String) keyFor.invoke(a, cd);
+            String sceneKey = String.valueOf(1 + ci % 3);
+            String before = p.read("cast.txt");
+            org.robolectric.shadows.ShadowToast.reset();
+            android.content.Intent data = new android.content.Intent();
+            data.setData(android.net.Uri.fromFile(new File(dir, file)));
+            int code;
+            if (how.equals("angles")) {
+                String tgt = kind.equals("char") ? "angles:char:" + key + ":" + cd.shown() : kind.equals("obj") ? "angles:obj:छाता:छाता" : "angles:scene:" + sceneKey + ":जगह";
+                af.set(a, tgt); tf.set(a, "angles");
+                code = 24;
+            } else {
+                tf.set(a, kind.equals("char") ? "char:" + key : "scene:" + sceneKey);
+                code = 13;
+            }
+            onResult.invoke(a, code, android.app.Activity.RESULT_OK, data);
+            String toast = null;
+            for (int i = 0; i < 900; i++) {
+                idle();
+                // the question for a picture of a place ("Is this a real photo?"): it is artwork — keep it
+                android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+                if (dlg != null && dlg.isShowing() && dlg.getButton(android.content.DialogInterface.BUTTON_NEGATIVE) != null
+                        && String.valueOf(dlg.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).getText()).contains("artwork")) {
+                    dlg.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).performClick();
+                    idle();
+                }
+                toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+                if (toast != null && (uploadDone() || toast.startsWith("Only animated") || toast.startsWith("Open a story"))) break;
+                if (!p.read("cast.txt").equals(before) && i > 20) break;
+                Thread.sleep(100);
+            }
+            idle();
+            String after = p.read("cast.txt");
+            boolean taken = !after.equals(before);
+            report.append(how).append(' ').append(kind).append(' ').append(file).append(": ").append(taken ? "taken" : "NOT taken").append(" — ").append(toast).append('\n');
+            if (taken != want) ok = false;
+        }
+        System.out.println("UPLOADS v38:\n" + report);
+        assertTrue(report.toString(), ok);
+        // a drawn picture v37 marked as a camera photo (only the phone's make and model in it) comes back once read again
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        com.tarun.kahani.app.Library.Item old = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "old drawn", "", Files.readAllBytes(new File(dir, "drawn_character_phone_saved.jpg").toPath()), ".jpg", "phone");
+        old.setMeta("camera", "1");
+        old.setMeta("camchk", "");
+        assertTrue("offered again after the recheck", lib.find(com.tarun.kahani.app.Library.PIC, "person", "").contains(old));
+        assertTrue("0".equals(old.meta("camera")) && "2".equals(old.meta("camchk")));
+        ac.pause().stop().destroy();
     }
 }

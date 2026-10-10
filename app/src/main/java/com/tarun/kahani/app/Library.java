@@ -256,12 +256,15 @@ public final class Library {
         }
     }
 
-    /** A real camera photo carries the camera's make/model or exposure in its EXIF data. */
+    /** A real camera photo carries its exposure, aperture, sensitivity or focal length in its EXIF data. */
     public static boolean cameraPhoto(byte[] data) {
         try {
+            // v38: what a camera writes when it takes a photo — the exposure, the aperture, the sensitivity, the focal
+            // length. A phone's make and model alone are no sign: a phone writes them into every picture its gallery
+            // saves or edits, drawn ones too (that refused every animated character picture from a phone's gallery)
             android.media.ExifInterface ex = new android.media.ExifInterface(new java.io.ByteArrayInputStream(data));
-            return ex.getAttribute(android.media.ExifInterface.TAG_MAKE) != null || ex.getAttribute(android.media.ExifInterface.TAG_MODEL) != null
-                    || ex.getAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME) != null || ex.getAttribute(android.media.ExifInterface.TAG_F_NUMBER) != null;
+            return ex.getAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME) != null || ex.getAttribute(android.media.ExifInterface.TAG_F_NUMBER) != null
+                    || ex.getAttribute(android.media.ExifInterface.TAG_ISO_SPEED_RATINGS) != null || ex.getAttribute(android.media.ExifInterface.TAG_FOCAL_LENGTH) != null;
         } catch (Throwable e) {
             return false;
         }
@@ -423,16 +426,35 @@ public final class Library {
         return it.kind.length() == 0 && ("1".equals(it.meta("figure")) || "1".equals(it.meta("avatar")));
     }
 
+    /**
+     * v38: a picture v37 marked as a camera photo only because the phone wrote its make and model into it (as a
+     * phone's gallery does for drawn pictures too) is read again once; when it carries no exposure it is a picture
+     * again and is offered like any other.
+     */
+    private boolean recheckedNotPhoto(Item it) {
+        if (!"1".equals(it.meta("camera")) || "2".equals(it.meta("camchk")) || it.path == null || it.path.startsWith("asset:")) return false;
+        try {
+            byte[] d = Project.readAll(new java.io.FileInputStream(it.path));
+            it.setMeta("camchk", "2");
+            if (!cameraPhoto(d)) { it.setMeta("camera", "0"); saveLater = true; return !realPersonPhoto(it); }
+        } catch (Exception ignored) { /* the file is gone: it stays out */ }
+        return false;
+    }
+
+    /** Set when a recheck changed an item's notes (saved on the next save()). */
+    private boolean saveLater;
+
     /** Items of a type (and kind, if given), best matches for the query first. */
     public synchronized List<Item> find(String type, String kind, String query) {
         List<Item> out = new ArrayList<Item>();
         final String q = query == null ? "" : Txt.norm(query);
         for (Item it : items) {
             if (!it.type.equals(type)) continue;
-            if (realPersonPhoto(it)) continue;        // v37: kept from an earlier version, never offered or used
+            if (realPersonPhoto(it) && !recheckedNotPhoto(it)) continue;        // v37: kept from an earlier version, never offered or used
             if (kind != null && kind.length() > 0 && !kind.equals(it.kind)) continue;
             out.add(it);
         }
+        if (saveLater) { saveLater = false; save(); }
         if (q.length() > 0) {
             java.util.Collections.sort(out, new java.util.Comparator<Item>() {
                 public int compare(Item a, Item b) { return score(b, q) - score(a, q); }

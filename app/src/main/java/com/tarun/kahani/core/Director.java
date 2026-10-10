@@ -3732,7 +3732,9 @@ public final class Director {
 
     static final String[] SIT_DOWN = {"बैठ गया", "बैठ गई", "बैठ गए", "बैठ गयी", "बैठ जाता", "बैठ जाती", "बैठ जाते", "बैठते हैं", "बैठा है", "बैठी है",
             "बैठे हैं", "बैठा हुआ", "बैठी हुई", "बैठे हुए", "पर बैठा", "पर बैठी", "पर बैठे", "बैठकर", "बैठ कर", "sat down", "sits down", "sat on", "sits on",
-            "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi"};
+            "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi",
+            // v39: the present of the user's directions — "उसके पास आकर बैठती है"
+            "बैठती है", "बैठता है", "बैठती हैं", "बैठते है", "sits next", "sits beside"};
     /** v34: the scene and beat being directed — to look ahead (does a character who walks off speak again in this scene?). */
     private Story.Scene dirScene;
     private int dirBeat = -1;
@@ -4333,8 +4335,10 @@ public final class Director {
                 && !creatureSits(s, subj.c)) {
             int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, SOFA) ? Film.SEAT_SOFA : Txt.has(s, BED) ? Film.SEAT_BED : Txt.has(s, CHAIR) ? Film.SEAT_CHAIR
                     : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
+            // v39: "पास आकर बैठती है" — they come first (the walk is staged after this rule) and sit there: never at the scene's start
+            boolean comeThenSit = Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat");
             for (Film.Actor a : who) {
-                Film.Key k = a.at(ts(t));
+                Film.Key k = a.at(comeThenSit ? t : ts(t));
                 k.body = Pose.SIT;
                 int st = seat;
                 if (st == -2) {

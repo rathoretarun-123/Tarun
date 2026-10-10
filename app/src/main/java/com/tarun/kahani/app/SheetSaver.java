@@ -276,7 +276,6 @@ final class SheetSaver {
             for (byte[] d : datas) {
                 boolean image = d != null && d.length > 8 && (((d[0] & 255) == 0xFF && (d[1] & 255) == 0xD8) || ((d[0] & 255) == 0x89 && d[1] == 'P') || (d[0] == 'R' && d[1] == 'I') || (d[4] == 'f' && d[5] == 't'));
                 if (!image && MainActivity.decodeBytes(d, 512) == null) continue;
-                if (Library.cameraPhoto(d)) return Library.NO_PHOTOS;      // v37: animated pictures only
                 String f = project.savePicture(d, "costume");
                 project.setManifest("costume", keyGiven, "costume|" + keyGiven + "|" + f);
                 Studio3DArt.dropProposals(project, Studio3DArt.P_COSTUME, keyGiven, null, true);     // the user's picture beats a made doll
@@ -298,7 +297,7 @@ final class SheetSaver {
         // 1. every picture; a sheet of several figures split into them
         List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
         int split = 0;
-        int unreadable = 0, files = 0, photosRefused = 0;
+        int unreadable = 0, files = 0;
         for (byte[] d : datas) {
             if (++files > 10) break;                                    // v26: up to 10 pictures, each up to 10 angles
             // v28: a sheet is read at up to 2600 px wide where the heap allows, so every figure cut from it
@@ -309,8 +308,6 @@ final class SheetSaver {
             int[] px = new int[w * h];
             System.arraycopy(dec, 2, px, 0, px.length);
             boolean camera = Library.cameraPhoto(d);
-            // v37: a character's pictures are animated only — a camera photo of a person is not used
-            if (camera && kind.equals("char")) { photosRefused++; continue; }
             List<com.tarun.kahani.core.Angles.Piece> parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
             // a sheet of several figures (angles, poses, expressions) is split into them: the figure-sized pieces
             // only (labels and crumbs dropped), the ten largest, in reading order; a sheet of place views is split
@@ -338,7 +335,6 @@ final class SheetSaver {
             else pics.add(new Object[]{px, w, h, Boolean.FALSE, camera});
             if (pics.size() >= 100) break;
         }
-        if (pics.isEmpty() && photosRefused > 0) return Library.NO_PHOTOS;
         if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG) or a smaller picture" : "No picture could be read";
         if (pics.size() > 100) pics = pics.subList(0, 100);
         StringBuilder done = new StringBuilder();
@@ -360,6 +356,7 @@ final class SheetSaver {
                 guessed[i] = r == null ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.guess(r, beast);
                 if (r != null && cut && r.w > 0 && r.h > 0 && r.w < r.h * 1.25f) standH = Math.max(standH, r.h);   // the tallest upright figure stands (a lying one is wider than tall)
                 byte[] b = Studio3DArt.encode(px, w, h, cut);
+                if (camera && !cut) { try { b = MainActivity.toonify(b, true); } catch (Exception ignored) { /* the photo itself then */ } }
                 bytes[i] = b;
             }
             // v27: what each picture shows — its angle, pose and feeling, read from the figure (the user corrects the reading after)

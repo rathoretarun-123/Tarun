@@ -198,8 +198,8 @@ public class AppTest {
         String pick = dialogText();
         System.out.println("PICKER: " + pick);
         assertTrue(pick.contains("Next 4"));
-        // v37: a character's picture is animated only — no camera is offered
-        assertTrue("no camera for a character's picture", !pick.toLowerCase(java.util.Locale.ROOT).contains("camera"));
+        // v38: the camera is offered again for a character's picture (a photo becomes an animated avatar)
+        assertTrue("the camera for a character's picture", pick.toLowerCase(java.util.Locale.ROOT).contains("camera"));
         org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
 
         // voice chooser
@@ -4438,7 +4438,7 @@ public class AppTest {
      * never offered; a photo of a place is still kept.
      */
     @Test
-    public void v37AnimatedCharacterPicturesOnly() throws Exception {
+    public void v38PhotosAndTheCameraAllowedAgain() throws Exception {
         android.content.Context ctx = RuntimeEnvironment.getApplication();
         com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
         Bitmap bmp = Bitmap.createBitmap(200, 300, Bitmap.Config.ARGB_8888);
@@ -4451,27 +4451,19 @@ public class AppTest {
         g.restore(); g.release();
         byte[] photo = withCameraExif(bmp);
         assertTrue("the test picture carries camera data", com.tarun.kahani.app.Library.cameraPhoto(photo));
-        int before = lib.find(com.tarun.kahani.app.Library.PIC, "person", "").size();
-        for (String kind : new String[]{"person", "view"}) {
-            boolean refused = false;
-            try { lib.addBytes(com.tarun.kahani.app.Library.PIC, kind, "real person " + kind, "", photo, ".jpg", "phone"); }
-            catch (com.tarun.kahani.app.Library.PhotoRefused e) { refused = true; assertTrue(e.getMessage().contains("animated")); }
-            assertTrue("a camera photo as a " + kind + " is refused", refused);
+        // v38 (the user: "as adult content is not made, allow the camera and photos again"): a camera photo given as a
+        // character, a view or a place is kept and offered
+        for (String kind : new String[]{"person", "view", "place"}) {
+            com.tarun.kahani.app.Library.Item it = lib.addBytes(com.tarun.kahani.app.Library.PIC, kind, "a photo " + kind, "", photo, ".jpg", "phone");
+            assertTrue("a camera photo as a " + kind + " is kept", lib.find(com.tarun.kahani.app.Library.PIC, kind, "").contains(it));
+            lib.remove(it);
         }
-        assertTrue("nothing was kept", lib.find(com.tarun.kahani.app.Library.PIC, "person", "").size() == before);
-        // an animated picture (no camera data) is kept
+        // an animated picture is kept as before
         java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
         bmp.compress(Bitmap.CompressFormat.PNG, 100, bo);
         com.tarun.kahani.app.Library.Item ok = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "drawn hero", "", bo.toByteArray(), ".png", "phone");
         assertTrue("an animated picture is kept", lib.find(com.tarun.kahani.app.Library.PIC, "person", "drawn hero").contains(ok));
-        // a photo avatar from an earlier version is never offered
-        ok.setMeta("avatar", "1");
-        assertTrue("an old photo avatar is not offered", !lib.find(com.tarun.kahani.app.Library.PIC, "person", "").contains(ok));
         lib.remove(ok);
-        // a photo of a place is still kept
-        com.tarun.kahani.app.Library.Item place = lib.addBytes(com.tarun.kahani.app.Library.PIC, "place", "a street photo", "", photo, ".jpg", "phone");
-        assertTrue("a photo of a place is kept", lib.find(com.tarun.kahani.app.Library.PIC, "place", "").contains(place));
-        lib.remove(place);
     }
 
     // ======================================================================== v38
@@ -4662,7 +4654,7 @@ public class AppTest {
                 {"angles", "obj", "drawn_thing_phone_saved.jpg", true},
                 {"angles", "scene", "drawn_place_phone_saved.jpg", true},
                 {"angles", "scene", "camera_photo.jpg", true},
-                {"angles", "char", "camera_photo.jpg", false},
+                {"angles", "char", "camera_photo.jpg", true},
                 {"image", "char", "drawn_character_phone_saved.jpg", true},
                 {"image", "scene", "drawn_place_phone_saved.jpg", true},
         };
@@ -4712,15 +4704,6 @@ public class AppTest {
         }
         System.out.println("UPLOADS v38:\n" + report);
         assertTrue(report.toString(), ok);
-        // a drawn picture v37 marked as a camera photo (only the phone's make and model in it) comes back once read again
-        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
-        lf.setAccessible(true);
-        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
-        com.tarun.kahani.app.Library.Item old = lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "old drawn", "", Files.readAllBytes(new File(dir, "drawn_character_phone_saved.jpg").toPath()), ".jpg", "phone");
-        old.setMeta("camera", "1");
-        old.setMeta("camchk", "");
-        assertTrue("offered again after the recheck", lib.find(com.tarun.kahani.app.Library.PIC, "person", "").contains(old));
-        assertTrue("0".equals(old.meta("camera")) && "2".equals(old.meta("camchk")));
         ac.pause().stop().destroy();
     }
 
@@ -4779,11 +4762,97 @@ public class AppTest {
             List<String> seen = texts(dlg.getWindow().getDecorView(), new ArrayList<String>());
             String all = seen.toString();
             System.out.println("ANGLES v38 " + tgt + ": " + all);
-            assertTrue("the gallery choice is there: " + all, all.contains("Gallery"));
+            assertTrue("the gallery choice is there: " + all, all.toLowerCase(java.util.Locale.ROOT).contains("gallery"));
+            assertTrue("the camera choice is there: " + all, all.contains("Camera"));
             assertTrue("the files choice is there: " + all, all.contains("Files"));
             assertTrue("the library choice is there: " + all, all.contains("tarunkahani library"));
             dlg.dismiss();
         }
         ac.pause().stop().destroy();
+    }
+
+    /**
+     * v38 (the user: "not able to upload multiple pictures, pictures of objects, and pictures at the film-making place"):
+     * the whole way, as on the phone — the angles pop-up for a character, a place and a thing (also as the make-film
+     * dialog opens it), its Gallery button, the picker it starts (several at once), and three pictures handed back.
+     */
+    @Test
+    public void v38SeveralPicturesThroughTheButtonsForEveryKind() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File dir = new File(ASSETS.getParentFile().getParentFile().getParentFile().getParentFile(), "tools/testdata/upload");
+        Project p = Project.create(ctx);
+        Files.copy(new File(ASSETS, "sample_story.txt").toPath(), new File(p.dir, "script.txt").toPath());
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        String key = (String) keyFor.invoke(a, st.cast().get(0));
+        Method angles = MainActivity.class.getDeclaredMethod("anglesFor", String.class, String.class, String.class);
+        angles.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        String[][] cases = {
+                {"angles:char:" + key + ":" + st.cast().get(0).shown(), "char|" + key + "|", null},
+                {"angles:scene:1:बगीचा", "scene|1|", null},
+                {"angles:obj:छाता:छाता", "|छाता|", null},
+                {"angles:obj:लालटेन:लालटेन", "|लालटेन|", "make"},
+                {"angles:scene:2:महल", "scene|2|", "make"},
+        };
+        String[] files = {"drawn_character_phone_saved.jpg", "drawn_character_plain.png", "drawn_place_phone_saved.jpg"};
+        StringBuilder report = new StringBuilder();
+        for (String[] c : cases) {
+            org.robolectric.shadows.ShadowToast.reset();
+            angles.invoke(a, c[0], "x", c[2]);
+            idle();
+            android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            android.widget.Button gallery = null;
+            for (View v : allViews(dlg.getWindow().getDecorView(), new ArrayList<View>()))
+                if (v instanceof android.widget.Button && String.valueOf(((android.widget.Button) v).getText()).contains("gallery")) gallery = (android.widget.Button) v;
+            assertNotNull("a gallery button for " + c[0], gallery);
+            shadowOf(a).clearNextStartedActivities();
+            gallery.performClick();
+            idle();
+            android.content.Intent started = shadowOf(a).getNextStartedActivity();
+            assertNotNull("the gallery button starts a picker for " + c[0], started);
+            boolean many = started.getBooleanExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, false) || started.hasExtra("android.provider.extra.PICK_IMAGES_MAX")
+                    || (started.getParcelableExtra(android.content.Intent.EXTRA_INTENT) != null && ((android.content.Intent) started.getParcelableExtra(android.content.Intent.EXTRA_INTENT)).getBooleanExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, false));
+            assertTrue("several at once: " + started, many);
+            android.content.ClipData clip = null;
+            for (String f : files) {
+                android.net.Uri u = android.net.Uri.fromFile(new File(dir, f));
+                if (clip == null) clip = android.content.ClipData.newRawUri("pictures", u); else clip.addItem(new android.content.ClipData.Item(u));
+            }
+            android.content.Intent data = new android.content.Intent();
+            data.setClipData(clip);
+            String before = p.read("cast.txt");
+            onResult.invoke(a, 24, android.app.Activity.RESULT_OK, data);
+            String toast = null;
+            for (int i = 0; i < 900; i++) {
+                idle();
+                toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+                if (toast != null && (uploadDone() || toast.startsWith("Please") || toast.startsWith("Open a story"))) break;
+                Thread.sleep(100);
+            }
+            idle();
+            String after = p.read("cast.txt");
+            boolean saved = !after.equals(before) && after.contains(c[1]);
+            report.append(c[0]).append(c[2] != null ? " (make-film)" : "").append(": ").append(saved ? "saved" : "NOT saved").append(" — ").append(toast).append('\n');
+            android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            if (open != null && open.isShowing()) open.dismiss();
+        }
+        System.out.println("SEVERAL v38:\n" + report);
+        assertTrue(report.toString(), !report.toString().contains("NOT saved"));
+        ac.pause().stop().destroy();
+    }
+
+    static List<View> allViews(View v, List<View> out) {
+        out.add(v);
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) allViews(((ViewGroup) v).getChildAt(i), out);
+        return out;
     }
 }

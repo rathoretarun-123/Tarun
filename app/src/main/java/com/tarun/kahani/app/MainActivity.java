@@ -446,14 +446,14 @@ public class MainActivity extends Activity {
 
     /** Pictures, voices and sounds into the tarunkahani library from the home screen — no film needed (item 12). */
     private void addToLibrary() {
-        // v37: animated pictures only — no camera (a camera takes photos of real people)
-        final String[] opts = {"🖼  Animated pictures from the phone (many at once)", "🎙  Record a voice", "🔊  Sounds from files", "🎙  Voice samples from files"};
+        final String[] opts = {"🖼  Pictures from the phone (many at once)", "📷  Camera", "🎙  Record a voice", "🔊  Sounds from files", "🎙  Voice samples from files"};
         new AlertDialog.Builder(this).setTitle("➕ Add to the library").setItems(opts, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface d, int w) {
                 project = null;
                 if (w == 0) { target = "lib:pic"; pickMany("auto", "image/*"); }
-                else if (w == 1) { target = "lib:voice"; record(Library.VOICE, ""); }
-                else if (w == 2) { target = "lib:sound"; pickMany("sound", "audio/*"); }
+                else if (w == 1) { target = "lib:pic"; camera(); }
+                else if (w == 2) { target = "lib:voice"; record(Library.VOICE, ""); }
+                else if (w == 3) { target = "lib:sound"; pickMany("sound", "audio/*"); }
                 else { target = "lib:voice"; pickMany("voice", "audio/*"); }
             }
         }).setNegativeButton("Cancel", null).show();
@@ -476,7 +476,7 @@ public class MainActivity extends Activity {
         Prefs.put(this, "angles.from", from == null ? "" : from);
         Prefs.put(this, "angles.project", project == null ? "" : project.dir.getAbsolutePath());
         final boolean more = tgt.startsWith("angles:char:") || tgt.startsWith("angles:scene:");
-        final String[] optsAll = {"🖼  Gallery — up to 10 at once (animated pictures only)", "📁  Files (Downloads, WhatsApp…) — up to 10", "📚  From the tarunkahani library", "🌐  Search the internet / make with AI"};
+        final String[] optsAll = {"🖼  Photos / gallery — up to 10 at once", "📁  Files (Downloads, WhatsApp…) — up to 10", "📷  Camera — one at a time", "📚  From the tarunkahani library", "🌐  Search the internet / ✨ make with AI (the old chooser)"};
         final String[] opts = more ? optsAll : java.util.Arrays.copyOf(optsAll, optsAll.length - 1);
         // v38: the explanation and the choices as buttons in one view — a dialog with both a message and a list of
         // items shows only the message on a phone (the choices were never seen: "a pop-up with no option to upload")
@@ -500,12 +500,13 @@ public class MainActivity extends Activity {
         dlg[0].show();
     }
 
-    /** v38: what each choice of the angles dialog does (0 gallery, 1 files, 2 the library, 3 the internet / AI). */
+    /** v38: what each choice of the angles dialog does (0 gallery, 1 files, 2 the camera, 3 the library, 4 the internet / AI). */
     private void angleChoice(int w, final String tgt, final String what) {
         target = "angles";
         if (w == 0) pickPhotos(REQ_ANGLES, 10);
         else if (w == 1) pick("image/*", REQ_ANGLES, true);
-        else if (w == 3) {
+        else if (w == 2) camera();
+        else if (w == 4) {
             // v33: the old chooser (a free picture from the internet, one made with AI) for a character or a place
             String[] q = tgt.split(":", 4);
             choosePicture((q[1].equals("char") ? "char:" : "scene:") + q[2], q.length > 3 ? q[3] : q[2]);
@@ -1725,13 +1726,12 @@ public class MainActivity extends Activity {
         target = tgt;
         Picker pk = new Picker(this, library);
         pk.forViews = tgt.startsWith("view:");
-        // v37: a character's picture is animated only — no camera, and no internet search (it finds photos of real people)
-        boolean place = tgt.startsWith("scene:") || tgt.equals("title") || tgt.equals("end");
         pk.show("Picture: " + targetName(tgt), Library.PIC, query,
-                place ? new String[]{"phone", "online", "ai", "auto"} : new String[]{"phone", "ai", "auto"}, new Picker.Listener() {
+                new String[]{"phone", "camera", "online", "ai", "auto"}, new Picker.Listener() {
                     public void picked(Library.Item it) { usePicture(it); }
                     public void action(String a) {
                         if (a.equals("phone")) pick("image/*", REQ_IMAGE, false);
+                        else if (a.equals("camera")) camera();
                         else if (a.equals("online")) searchPictures(query);
                         else if (a.equals("ai")) aiPicture();
                         else { clearTarget(tgt); showStudio(); }
@@ -1896,20 +1896,14 @@ public class MainActivity extends Activity {
             return;
         }
         boolean camera = "camera".equals(fileName) || Library.cameraPhoto(data);
-        // v37: a character's picture is animated only: a photo of a real person is refused (it is never turned into an
-        // avatar any more), and an animated picture is kept as it is — no question asked
-        if (person) {
-            if (camera) { toast(Library.NO_PHOTOS); return; }
-            savePicture(data, fileName, tgt, false, true);
-            return;
-        }
         if (camera) {
-            toast("📷 Photo of a place — turning it into the animated style…");
-            savePicture(data, fileName, tgt, true, false);
+            toast("📷 Real photo — turning it into an animated avatar…");
+            savePicture(data, fileName, tgt, true, person);
             return;
         }
         new AlertDialog.Builder(this).setTitle("Is this a real photo?")
-                .setMessage("Real photos of places can be turned into the animated style of the film.")
+                .setMessage(person ? "Real photos of people are turned into an animated avatar so they fit the cartoon world (the background is removed)."
+                        : "Real photos of places can be turned into the animated style of the film.")
                 .setPositiveButton("🎨 Make animated avatar", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) { savePicture(data, fileName, tgt, true, person); }
                 })
@@ -1926,15 +1920,6 @@ public class MainActivity extends Activity {
                     List<Library.Item> fam = SheetSaver.saveToLibrary(library, fileName == null ? "" : fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), tgt.equals("lib:place") ? "place" : "", data, "phone");
                     if (!fam.isEmpty()) return fam.get(0);
                 }
-                // v37: with an AI key set, the AI also looks: a photograph of a real person is not kept as a character
-                if (person && !toon) {
-                    Cloud cl = Prefs.online(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null;
-                    if (cl != null && cl.hasGemini()) {
-                        try {
-                            if (ScriptAI.look(cl, shrink(data, 640), new ArrayList<String[]>()).realPhoto) throw new Library.PhotoRefused();
-                        } catch (Library.PhotoRefused refused) { throw refused; } catch (Exception ignored) { /* no answer: EXIF decides */ }
-                    }
-                }
                 byte[] bytes = toon ? toonify(data, person) : data;
                 String kind = tgt.startsWith("char:") ? "person" : tgt.startsWith("scene:") ? "place" : tgt.startsWith("view:") ? "view" : tgt.equals("title") || tgt.equals("end") ? tgt : "";
                 String name = targetName(tgt);
@@ -1949,7 +1934,6 @@ public class MainActivity extends Activity {
             }
         }, new Done() {
             public void done(Object r, Exception e) {
-                if (e instanceof Library.PhotoRefused) { toast(e.getMessage()); return; }
                 if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
                 usePicture((Library.Item) r);
             }
@@ -2686,7 +2670,7 @@ public class MainActivity extends Activity {
     private void addMany(final List<Uri> uris, final String audioAs) {
         background("Adding " + uris.size() + (uris.size() == 1 ? " file" : " files") + " to your library…", new Work() {
             public Object run() throws Exception {
-                int pics = 0, voices = 0, sounds = 0, bad = 0, refused = 0;
+                int pics = 0, voices = 0, sounds = 0, bad = 0;
                 final List<Library.Item> added = new ArrayList<Library.Item>();
                 for (Uri u : uris) {
                     try {
@@ -2713,8 +2697,6 @@ public class MainActivity extends Activity {
                         Library.Item it = library.addBytes(voice ? Library.VOICE : Library.SOUND, voice ? "voice" : "amb", base, name, b, ext, "phone");
                         if (AudioIO.decode(MainActivity.this, it.path) == null) { library.remove(it); bad++; continue; }
                         if (voice) voices++; else sounds++;
-                    } catch (Library.PhotoRefused e) {
-                        refused++;          // v38: said as what it is, not as a file that could not be opened
                     } catch (Exception e) {
                         bad++;
                     }
@@ -2727,7 +2709,6 @@ public class MainActivity extends Activity {
                 if (pics + voices + sounds == 0) m = new StringBuilder("Nothing could be added");
                 if (bad > 0) m.append(" (").append(bad).append(" could not be opened)");
                 m.append(". The director uses them by itself in every story.");
-                if (refused > 0) m.append(" ").append(refused).append(refused == 1 ? " camera photo of a person was" : " camera photos of people were").append(" left out (animated pictures only).");
                 return new Object[]{m.toString(), added};
             }
         }, new Done() {
@@ -3227,7 +3208,6 @@ public class MainActivity extends Activity {
     /** Many pictures at once: the director recognises each from the story's descriptions and places it. */
     private void bulkPictures(final List<Uri> uris) {
         final Story st = loadStory();
-        final int[] photosRefused = {0};      // v37: photos of real people left out (character pictures are animated only)
         background("The director is looking at " + uris.size() + " pictures…", new Work() {
             public Object run() throws Exception {
                 List<Placement> ps = new ArrayList<Placement>();
@@ -3238,26 +3218,16 @@ public class MainActivity extends Activity {
                     p.fileName = displayName(u);
                     List<Library.Item> fam = new ArrayList<Library.Item>();
                     try { fam = SheetSaver.saveToLibrary(library, p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), "", data, "phone"); } catch (Throwable ignored) { fam = new ArrayList<Library.Item>(); }
-                    try {
-                        p.item = !fam.isEmpty() ? fam.get(0)       // v31: a sheet is split at once; its front is what gets placed
-                                : library.addBytes(Library.PIC, "", p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), p.fileName, data, ".jpg", "phone");
-                    } catch (Library.PhotoRefused refused) { photosRefused[0]++; continue; }     // v37: animated pictures only
+                    p.item = !fam.isEmpty() ? fam.get(0)       // v31: a sheet is split at once; its front is what gets placed
+                            : library.addBytes(Library.PIC, "", p.fileName.replaceAll("\\.[A-Za-z0-9]+$", ""), p.fileName, data, ".jpg", "phone");
                     ps.add(p);
                 }
                 identify(ps, st, true, false);
-                // real photos of places become the animated style before they are used; v37: a real photo of a person
-                // is never used (the AI may only now have recognised one) — it is taken out of the library
-                for (java.util.Iterator<Placement> pi = ps.iterator(); pi.hasNext(); ) {
-                    Placement p = pi.next();
-                    boolean real = "1".equals(p.item.meta("camera")) || "1".equals(p.item.meta("realphoto"));
-                    if (real && (Library.realPersonPhoto(p.item) || (p.target != null && p.target.startsWith("char:")))) {
-                        library.remove(p.item); pi.remove(); photosRefused[0]++;
-                    }
-                }
+                // real photos of people and places become animated avatars before they are used
                 for (Placement p : ps) {
                     boolean real = "1".equals(p.item.meta("camera")) || "1".equals(p.item.meta("realphoto"));
                     if (!real || p.target == null) continue;
-                    boolean person = false;
+                    boolean person = p.target.startsWith("char:");
                     byte[] av = toonify(Project.readAll(library.open(p.item)), person);
                     Library.Item a = library.addBytes(Library.PIC, person ? "person" : "place", p.label, p.item.tags, av, person ? ".png" : ".jpg", "photo → avatar");
                     a.setMeta("avatar", "1");
@@ -3271,7 +3241,6 @@ public class MainActivity extends Activity {
             @SuppressWarnings("unchecked")
             public void done(Object r, Exception e) {
                 if (e != null) { toast("Could not do it: " + e.getMessage()); return; }
-                if (photosRefused[0] > 0) toast(photosRefused[0] + (photosRefused[0] == 1 ? " picture was" : " pictures were") + " left out: " + Library.NO_PHOTOS);
                 reviewPlacements((List<Placement>) r, "Where your pictures go");
             }
         });
@@ -4440,9 +4409,10 @@ public class MainActivity extends Activity {
         body.addView(tabs);
         LinearLayout add = Ui.card(this);
         if (libTab.equals(Library.PIC)) {
-            add.addView(Ui.text(this, "Animated, drawn or 3D-rendered pictures only — photos of real people are not accepted. They can be used in every film.", 13, Ui.SUB, false));
+            add.addView(Ui.text(this, "Your pictures can be used in every film. Real photos can be turned into cartoon avatars.", 13, Ui.SUB, false));
             LinearLayout r = Ui.row(this);
             r.addView(Ui.small(this, "📂 From phone", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; pickMany("auto", "image/*"); } }));
+            r.addView(Ui.small(this, "📷 Camera", Ui.PRIMARY, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; camera(); } }));
             r.addView(Ui.small(this, "🌐 Search", Ui.BLUE, new View.OnClickListener() { public void onClick(View v) { target = "lib:pic"; searchPictures(""); } }));
             add.addView(r);
         } else if (libTab.equals(Library.VOICE)) {
@@ -4564,7 +4534,7 @@ public class MainActivity extends Activity {
             }));
             keys.addView(row);
         }
-        keys.addView(Ui.text(this, "Every picture, voice and sound you upload, find or make here is kept in the app's own library \"tarunkahani\" (with a private backup in Downloads/tarunkahani) — never in the camera or photos library. "
+        keys.addView(Ui.text(this, "Every picture, voice and sound you upload, photograph, find or make here is kept in the app's own library \"tarunkahani\" (with a private backup in Downloads/tarunkahani) — never in the camera or photos library. "
                 + "Built in, no key: Microsoft neural voices, Pollinations AI pictures and story reading, Openverse and Wikimedia pictures, the studio's own 3D figure model, the phone's own voice offline. "
                 + "No keys come inside the app because its code is public — a key built in would be misused and switched off within days.", 12, Ui.SUB, false));
         body.addView(keys);

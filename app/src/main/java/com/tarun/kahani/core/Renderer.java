@@ -1037,7 +1037,8 @@ public final class Renderer {
         p.holdL = k.holdL;
         p.eyesClosed = k.eyesShut;
         p.blink = blink(tp, a.order);
-        gaze(p, s, a, t);
+        // the eyes look (not behind dark glasses, a blindfold or an eye patch: nothing there to move)
+        if (look.glasses != 2 && look.glasses != 4 && look.glasses != 5) gaze(p, s, a, t);
         if (film != null && Sets.outdoorSet(s.set)) {
             p.wind = film.wind(t); p.wet = film.wetness(t);
             // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)

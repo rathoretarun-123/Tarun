@@ -254,6 +254,8 @@ What this does not show: these numbers say the mouth follows the voice smoothly 
 * "रोहन घर चला जाता है": he goes and is gone; "मीरा दूर चली जाती है" followed by her own line: she goes only to the edge and is still seen when she speaks;
 * the sample story's own staging is unchanged (no move added there).
 
+Sentences checked to move nobody, or the right people: "Maya runs to the door and Kabir follows her with grace" (no run to Kabir: he is not named after "to"; "grace" is not "race"), "Maya takes off her cap" ("off" counts only right after a verb of going), "the small pond" ("small" is not "all"); "They all walk home together" (no names: everyone on the stage goes — Maya off and gone, Kabir to the edge because he speaks again).
+
 **Found and fixed while building it:** a run off the stage was slowed to a walk by the speed limit (the exit's running speed was above the limit for a child) — it is now under it; the turned-back rule planned a "turn round" 2.4 s ahead that blocked the walk off — leaving words keep the back turned until the character has gone; a character who walked off had to stand at the edge when she came back later in the scene — "comes back" now brings her back after a moment off the stage.
 
 ## 14. Characters with no picture: borrowed from your uploads

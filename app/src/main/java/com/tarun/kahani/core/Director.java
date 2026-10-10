@@ -3394,7 +3394,8 @@ public final class Director {
     /** v34: verbs of going on foot (or on wheels) that "home", "away", "across" or "to someone" can follow at a distance. */
     static final String[] WALK_VERBS = {"walks", "walked", "runs", "ran", "heads", "headed", "hurries", "hurried", "wanders", "wandered", "limps", "limped",
             "rolls", "rolled", "wheels", "wheeled", "strolls", "strolled", "trudges", "trudged", "stomps", "stomped", "storms", "stormed", "dashes", "dashed",
-            "races", "raced", "rushes", "rushed", "skips", "skipped", "marches", "marched", "tiptoes", "tiptoed"};
+            "races", "raced", "rushes", "rushed", "skips", "skipped", "marches", "marched", "tiptoes", "tiptoed",
+            "walk", "run", "head", "hurry", "wander", "limp", "roll", "stroll", "rush", "dash", "race", "march"};
     /** v34: going up to someone. */
     static final String[] GO_TO = {"runs to", "ran to", "walks to", "walked to", "goes to", "went to", "comes to", "came to", "runs towards", "runs toward",
             "ran towards", "walks towards", "walks toward", "walks up to", "runs up to", "goes up to", "walks over to", "runs over to", "rushes to", "hurries to",
@@ -3412,11 +3413,19 @@ public final class Director {
      */
     private float travelFrom(String s, float t, Film.Actor subj, Film.Actor target, List<Film.Actor> group) {
         if (subj == null) return 0;
+        // "They all walk home", "Both run off", "सब घर चले जाते हैं": with no names, everyone on the stage
+        String head = s.trim().toLowerCase(java.util.Locale.ROOT);
+        if (group.size() <= 1 && (head.startsWith("they ") || head.startsWith("both ") || head.startsWith("all ") || head.startsWith("everyone ")
+                || head.startsWith("everybody ") || head.startsWith("सब") || head.startsWith("दोनों") || head.startsWith("तीनों") || head.startsWith("वे "))) {
+            List<Film.Actor> on = new ArrayList<Film.Actor>();
+            for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) on.add(a);
+            if (on.size() > 1) group = on;
+        }
         if (Txt.has(s, RETURN)) {
             // back after walking off: in from the side they left by, to where they stood (a change of clothes on the
             // way is already on them: the reveal follows)
             float d = 0;
-            List<Film.Actor> back = new ArrayList<Film.Actor>(group.size() > 1 && Txt.has(s, "सब ", "सभी", "दोनों", "तीनों", "all ", "both", "everyone", "together") ? group : java.util.Collections.singletonList(subj));
+            List<Film.Actor> back = new ArrayList<Film.Actor>(group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे ")) ? group : java.util.Collections.singletonList(subj));
             for (Film.Actor a : back) {
                 Film.Key now = a.stateAt(t);
                 Float to = leftFrom.get(a);
@@ -3427,7 +3436,7 @@ public final class Director {
                 float from = now.x;
                 Film.Key in = a.at(tr);
                 in.visible = true; in.x = from; in.moveDur = 0; in.facing = to > from ? 1 : -1; in.backTurned = false;
-                boolean run = Txt.has(s, "run", "ran ", "rush", "दौड़", "भाग");
+                boolean run = running(s);
                 float dur = Math.max(0.8f, Math.abs(to - from) / ((run ? 240f : 170f) * weightSpeed(a)));
                 Film.Key k = a.at(tr + 0.05f);
                 k.x = to; k.moveDur = dur; k.run = run; k.facing = to > from ? 1 : -1;
@@ -3443,13 +3452,17 @@ public final class Director {
         boolean walkVerb = Txt.hasWord(s, WALK_VERBS);
         boolean leave = leaving(s);
         boolean cross = Txt.has(s, CROSS) || (walkVerb && Txt.hasWord(s, "across", "around", "round", "about"));
-        boolean goTo = (Txt.has(s, GO_TO) || (walkVerb && target != null && Txt.hasWord(s, "to", "towards", "toward")))
+        boolean goTo = (Txt.has(s, GO_TO) || (walkVerb && Txt.hasWord(s, "to", "towards", "toward")))
                 && !Txt.has(s, "to know", "to realise", "to realize", "to understand", "to an end", "to life", "to terms", "to sleep", "to bed", "to school");
+        // whom they go up to: the one named right after "to" / "towards", or right before "के पास" / "की ओर" — not
+        // just anyone the sentence mentions ("Maya runs to the door and Kabir follows" is not a run to Kabir)
+        target = goTo ? goalOf(s, subj, group) : null;
+        if (goTo && target == null && !Txt.has(s, CROSS)) goTo = false;
         if (!leave && !cross && !goTo) return 0;
-        boolean all = group.size() > 1 && Txt.has(s, "सब ", "सभी", "दोनों", "तीनों", "all ", "both", "everyone", "together");
+        boolean all = group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे "));
         List<Film.Actor> who = new ArrayList<Film.Actor>();
         if (all) who.addAll(group); else who.add(subj);
-        boolean run = Txt.has(s, "run", "ran ", "rush", "dash", "race", "hurr", "दौड़", "भाग", "तेज़ी से");
+        boolean run = running(s);
         boolean slow = Txt.has(s, "slowly", "sadly", "धीरे", "उदास");
         boolean turning = Txt.has(s, TURN_AWAY);
         float d = 0;
@@ -3504,9 +3517,42 @@ public final class Director {
         return d;
     }
 
-    /** v34: the sentence has someone leave ("walks slowly home", "runs off", "घर चला जाता है"). */
+    /** v34: the sentence has someone leave ("walks slowly home", "runs off", "घर चला जाता है"); "off" only right after the verb ("takes off her hat" is not leaving). */
     static boolean leaving(String s) {
-        return Txt.has(s, LEAVE) || (Txt.hasWord(s, WALK_VERBS) && Txt.hasWord(s, "home", "away", "off")) || (Txt.hasWord(s, "goes", "went") && Txt.hasWord(s, "home", "away"));
+        if (Txt.has(s, LEAVE)) return true;
+        if (Txt.hasWord(s, WALK_VERBS) && Txt.hasWord(s, "home", "away")) return true;
+        for (String v : WALK_VERBS) if (Txt.has(s, v + " off")) return true;
+        return Txt.hasWord(s, "goes", "went") && Txt.hasWord(s, "home", "away");
+    }
+
+    /** v34: a word for everyone in the sentence ("all", "both", "together", "सब", "दोनों") — whole words only ("small" is not "all"). */
+    static boolean everyone(String s) {
+        return Txt.has(s, "सब ", "सभी", "दोनों", "तीनों") || Txt.hasWord(s, "all", "both", "everyone", "together");
+    }
+
+    /** v34: running words ("runs", "rushed", "दौड़", "भाग", "तेज़ी से") — whole English words ("grace" is not "race"). */
+    static boolean running(String s) {
+        return Txt.has(s, "दौड़", "भाग", "तेज़ी से") || Txt.hasWord(s, "run", "runs", "ran", "running", "rush", "rushes", "rushed", "dash", "dashes", "dashed",
+                "race", "races", "raced", "hurry", "hurries", "hurried", "sprint", "sprints", "sprinted");
+    }
+
+    /** v34: the one named right after "to" / "towards" / "up to" (English), or right before "के पास" / "की ओर" / "की तरफ" (Hindi). */
+    private static Film.Actor goalOf(String s, Film.Actor subj, List<Film.Actor> group) {
+        String n = Txt.norm(s).toLowerCase(java.util.Locale.ROOT);
+        for (Film.Actor o : group) {
+            if (o == subj) continue;
+            for (String al : o.c.aliases) {
+                if (al == null || al.length() < 2) continue;
+                String a = Txt.norm(al).toLowerCase(java.util.Locale.ROOT);
+                for (int i = n.indexOf(a); i >= 0; i = n.indexOf(a, i + 1)) {
+                    String before = n.substring(Math.max(0, i - 12), i), after = n.substring(Math.min(n.length(), i + a.length()));
+                    if (before.endsWith("to ") || before.endsWith("towards ") || before.endsWith("toward ") || before.endsWith("to the ")) return o;
+                    if (after.startsWith(" के पास") || after.startsWith(" की ओर") || after.startsWith(" की तरफ") || after.startsWith(" के निकट")
+                            || after.startsWith("जी के पास") || after.startsWith("जी की ओर")) return o;
+                }
+            }
+        }
+        return null;
     }
 
     /** True when a move of this actor already starts at t or later (another rule staged this sentence). */

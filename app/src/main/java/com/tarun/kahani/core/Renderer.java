@@ -348,12 +348,29 @@ public final class Renderer {
     private boolean camReverse;
 
     /** The place picture behind this moment: the reverse angle in a reverse shot when there is one, else the plate. */
-    private Art.Backdrop bd(Film.Seg s) { return camReverse && s.backdropReverse != null ? s.backdropReverse : s.backdrop; }
+    private Art.Backdrop bd(Film.Seg s) {
+        if (camReverse && s.backdropReverse != null) return s.backdropReverse;
+        if (camView >= 0 && s.backdropViews != null && camView < s.backdropViews.size()) return s.backdropViews.get(camView);
+        return s.backdrop;
+    }
+    /** v39: the user's other view of the place behind this close single (index into Seg.backdropViews), or -1. */
+    private int camView = -1;
 
     private void camera(Film.Seg s, float t) {
         Film.Cam cur = null, prev = null;
         for (Film.Cam c : s.cams) { if (c.t <= t) { prev = cur; cur = c; } else break; }
         camReverse = cur != null && cur.reverse;
+        camView = -1;
+        if (!camReverse && s.backdropViews != null && !s.backdropViews.isEmpty() && s.backdrop != null) {
+            // v39: a close single of one character: that character's own view of the place behind them (the feet
+            // are out of the frame, so the ground of the other picture never shows)
+            Film.Shot sh = shotAt(t);
+            if (sh != null && sh.type == ShotPlanner.SINGLE && sh.size >= ShotPlanner.MCU && sh.subject != null && sh.subject.length() > 0 && sh.ots.length() == 0) {
+                int order = -1;
+                for (Film.Actor a : s.actors) if (a.c.shown().equals(sh.subject) || a.c.displayName.equals(sh.subject)) order = a.order;
+                if (order >= 0) camView = order % (s.backdropViews.size() + 1) - 1;      // -1: the main picture for one of them
+            }
+        }
         float moodLight = s.mood == Film.M_TENSE || s.mood == Film.M_VILLAIN || s.mood == Film.M_ACTION ? 0.75f
                 : s.mood == Film.M_HAPPY || s.mood == Film.M_CELEBRATE || s.mood == Film.M_PLAYFUL ? 0.2f : 0.4f;
         if (cur == null) { camX = 640; camY = 360; camZ = 1; camRoll = 0; camAngle = 0; camLight = moodLight; camStill = false; }
@@ -2420,10 +2437,11 @@ public final class Renderer {
                     // v39: the seat's front in front of the sitter's legs — a front picture folded onto the seat cannot
                     // show its knees coming forward, so the legs go into the sofa and the body sits in its cushion
                     // (with the legs standing in front of the seat it read as one standing before the sofa)
-                    g.linear(0, st + h * 0.015f, 0, -h * 0.05f, 0xFF7A4A86, 0xFF4E2E5A);
-                    g.roundRect(-sw * 0.47f, st + h * 0.015f, sw * 0.94f, -st - h * 0.065f, h * 0.035f);
+                    // down to the floor (a skirted base): the shoes never show under it
+                    g.linear(0, st + h * 0.015f, 0, h * 0.005f, 0xFF7A4A86, 0xFF4E2E5A);
+                    g.roundRect(-sw * 0.47f, st + h * 0.015f, sw * 0.94f, -st - h * 0.01f, h * 0.035f);
                     g.color(0x33FFFFFF); g.line(-sw * 0.44f, st + h * 0.03f, sw * 0.44f, st + h * 0.03f, h * 0.006f);
-                    g.color(0xFF3E2723); g.rect(-sw * 0.46f, -h * 0.05f, h * 0.035f, h * 0.05f); g.rect(sw * 0.46f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
+                    g.color(0x22000000); g.line(-sw * 0.45f, -h * 0.045f, sw * 0.45f, -h * 0.045f, h * 0.006f);
                 }
                 g.linear(0, -h * 0.42f, 0, -h * 0.05f, 0xFF9A64A8, 0xFF5E3A6A);
                 g.roundRect(-sw / 2 - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);

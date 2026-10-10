@@ -242,7 +242,6 @@ public final class FilmJob implements Runnable {
             String fromLib = remake ? "" : AutoLibrary.fill(ctx, project, story);
             if (fromLib.length() > 0) info = "Taken from your library: " + fromLib;
             check();
-            if (!remake && Prefs.online(ctx) && Prefs.autoArt(ctx)) makeMissingPictures(story, ed);
             // free pictures of the story's important objects (Fluent Emoji 3D on GitHub, MIT), for inserts
             if (Prefs.online(ctx) && Prefs.freeObjects(ctx)) {
                 check();
@@ -276,6 +275,9 @@ public final class FilmJob implements Runnable {
                     if (pictureChoice == 0) info = "Thank you — every picture is there now";
                 }
             }
+            // v39: pictures made with AI only after the user was asked and chose to have the rest made — never before
+            // ("it is still creating pictures on its own"): the user's own pictures and the library come first
+            if (!remake && Prefs.online(ctx) && Prefs.autoArt(ctx) && (!askForPictures || pictureChoice == 1) && build3d && !neededPictures(story).isEmpty()) makeMissingPictures(story, ed);
             // Studio 3D: whatever still has no picture (AI off, offline, or the service down) is built in three
             // dimensions on the phone — characters with their face points, places with their floor line
             if (build3d && !remake) {

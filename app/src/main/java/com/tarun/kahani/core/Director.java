@@ -915,6 +915,7 @@ public final class Director {
         if (seg.festive && seg.set != Sets.CAVE_IN) seg.set = Sets.CELEBRATION;
         seg.backdrop = nParts > 1 ? art.sceneBackdrop(sc.number, pi) : art.sceneBackdrop(sc.number, 0);
         seg.backdropReverse = art.reverseBackdrop(sc.number);      // the user's reverse angle of the place, for the reverse shots
+        seg.backdropViews = art.placeViews(sc.number);              // v39: the other views of the place, behind the close singles
         if (nParts == 1 && seg.backdrop == null) seg.backdrop = art.scenes.get(String.valueOf(sc.number));
         seg.ground = seg.backdrop != null ? seg.backdrop.ground * 720f : Sets.GROUND;
         ground = seg.ground;

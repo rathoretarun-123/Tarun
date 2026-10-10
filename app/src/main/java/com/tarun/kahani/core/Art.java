@@ -233,6 +233,17 @@ public final class Art {
         if (m > 20 && dark > m * 0.2f) s.mouthOpen = true;
     }
 
+    /**
+     * v39: the user's other views of a scene's place (manifest lines scene|<number>v1|file … v98): whole pictures of
+     * the same place from other sides, drawn behind the close singles (each character keeps its own view, as a film
+     * shoots each actor's coverage against its own wall). Empty when there are none.
+     */
+    public java.util.List<Backdrop> placeViews(int number) {
+        java.util.List<Backdrop> out = new java.util.ArrayList<Backdrop>();
+        for (int i = 1; i <= 98; i++) { Backdrop b = scenes.get(number + "v" + i); if (b != null) out.add(b); }
+        return out;
+    }
+
     /** The user's reverse angle of a scene's place (manifest line scene|<number>r|file), or null. */
     public Backdrop reverseBackdrop(int number) { return scenes.get(number + "r"); }
 

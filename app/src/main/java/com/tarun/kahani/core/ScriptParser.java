@@ -745,7 +745,7 @@ public final class ScriptParser {
         return Txt.has(who, "कथावाचक", "सूत्रधार", "वाचक", "narrator", "voice over", "voiceover", "वॉयस ओवर", "कथाकार");
     }
 
-    static boolean isTitleWord(String w) {
+    public static boolean isTitleWord(String w) {
         String n = Txt.norm(w);
         for (String t : TITLE_WORDS) if (Txt.norm(t).equals(n)) return true;
         return false;
@@ -816,7 +816,7 @@ public final class ScriptParser {
     }
 
     /** v38: a looser form of a name for spelling variants ("वृन्दा" = "वृंदा", "मीणा" ≈ "मीना" is not merged; long and short vowels are). */
-    static String loose(String s) {
+    public static String loose(String s) {
         String n = Txt.norm(s).replaceAll("[\\s\\-_.']+", "");
         n = n.replaceAll("[नमणङञ]्(?=[क-ह])", "");      // a half nasal before a consonant is the anusvara
         n = n.replace("ं", "").replace("ी", "ि").replace("ू", "ु").replace("ई", "इ").replace("ऊ", "उ");

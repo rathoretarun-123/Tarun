@@ -228,6 +228,11 @@ final class AutoLibrary {
                 float byText = PicSense.textMatch(it.name + " " + it.tags, targets.get(t)[1], targets.get(t)[2]);
                 s = Math.max(s, byText);
                 if (byName != null && byName.equals(targets.get(t)[1])) s = 1f;
+                // v39: named by the character's relation or another spelling ("पापा", "papa", "वाणुशा" for वनुशा)
+                if (tg.startsWith("char:") && it.name.trim().length() > 0 && !"place".equals(it.kind)) {
+                    Story.CharacterDef c = ScriptParser.resolve(st, tg.substring(5));
+                    if (c != null && namedFor(it.name, c)) s = 1f;
+                }
                 if ((tg.equals("title") || tg.equals("end")) && byName == null) s = Math.min(s, 0.5f);   // only when named so
                 if (tg.startsWith("shot:") && ("person".equals(it.kind) || "place".equals(it.kind) || "view".equals(it.kind))) s = 0;   // a character, a place or a view is not an object (v33)
                 // v25: a picture with no name and no words fitting the target is placed by its look only when very sure
@@ -319,7 +324,9 @@ final class AutoLibrary {
                 project.setManifest("char", key, "char|" + key + "|" + f);
             } else if (t[0].startsWith("shot:")) {
                 String[] sk = t[0].split(":", 3);
-                project.setManifest("shot", sk[1] + ":" + sk[2], "shot|" + sk[1] + "|" + sk[2] + "|" + f);
+                // v39: a thing's own picture (an object on a clear background) is an insert of the thing, as when it is uploaded
+                boolean object = "object".equals(it.kind) || it.path.toLowerCase(java.util.Locale.US).endsWith(".png") && SheetSaver.isCutOut(data);
+                project.setManifest("shot", sk[1] + ":" + sk[2], "shot|" + sk[1] + "|" + sk[2] + "|" + f + (object ? "|object" : ""));
             } else if (t[0].equals("title") || t[0].equals("end")) {
                 project.setManifest(t[0], t[0], t[0] + "|" + f + "|1");
             } else {
@@ -451,6 +458,28 @@ final class AutoLibrary {
             project.setSetting("auto.voice." + c.displayName, "1");
             notes.add(c.shown() + " ← voice \"" + it.label() + "\"");
         }
+    }
+
+    /**
+     * v39: a picture's name names this character — its name, an alias, its relation (पापा, mummy, papa) or the same
+     * name spelt another way (ण for न, a long vowel for a short one).
+     */
+    static boolean namedFor(String itemName, Story.CharacterDef c) {
+        if (itemName == null || c == null) return false;
+        List<String> names = new ArrayList<String>();
+        names.add(c.displayName);
+        names.addAll(c.aliases);
+        if (ScriptAI.matchName(itemName, names) != null) return true;
+        String n = itemName.replace('_', ' ').replace('-', ' ').replace('.', ' ').replace('(', ' ').replace(')', ' ');
+        for (String w : n.split("\\s+")) {
+            if (w.length() < 2) continue;
+            String lw = ScriptParser.loose(w);
+            for (String nm : names) for (String part : nm.split("\\s+")) {
+                if (part.length() < 2 || ScriptParser.isTitleWord(part)) continue;
+                if (lw.equals(ScriptParser.loose(part))) return true;
+            }
+        }
+        return false;
     }
 
     /** The voice's name is the name of a character of this story (who already has a voice). */

@@ -1244,13 +1244,13 @@ public class AppTest {
         call(a, "showStudio", new Class<?>[0]);
         idle();
         View root = a.findViewById(android.R.id.content);
-        View b = byText(root, "📷 Pictures (up to 10)", new int[]{0});
+        View b = byText(root, "📷 Pictures (up to 100)", new int[]{0});
         assertNotNull("the character's upload button", b);
         b.performClick(); idle();
         firstDialogItem();
         rep.append("studio character: ").append(pickerStarted(a)).append('\n');
         int chars = story.cast().size();
-        View pb = byText(root, "📷 Pictures (up to 10)", new int[]{chars});
+        View pb = byText(root, "📷 Pictures (up to 100)", new int[]{chars});
         assertNotNull("the place's upload button", pb);
         pb.performClick(); idle();
         firstDialogItem();
@@ -2603,7 +2603,7 @@ public class AppTest {
         View root = a.findViewById(android.R.id.content);
         List<String> tx = texts(root, new ArrayList<String>());
         int up = 0, objUp = 0;
-        for (String t : tx) { if (t.equals("📷 Pictures (up to 10)")) up++; if (t.equals("📷 Angles") || t.equals("📷 More angles")) objUp++; }
+        for (String t : tx) { if (t.equals("📷 Pictures (up to 100)")) up++; if (t.equals("📷 Angles") || t.equals("📷 More angles")) objUp++; }
         assertTrue("one upload button per character and place: " + up + " for " + st.cast().size() + " + " + st.scenes.size(), up == st.cast().size() + st.scenes.size());
         assertTrue("one upload button per thing: " + objUp + " for " + ts.size(), objUp >= Math.min(20, ts.size()));
         // 6. the progress screen's card: a row for every character, place, added scene and thing
@@ -5110,6 +5110,148 @@ public class AppTest {
         keep.mkdirs();
         for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
         ac.pause().stop().destroy();
+    }
+
+    /**
+     * v39 (the user: "60 pictures for each character and it takes only a few"; "places, objects and backgrounds are
+     * not split, saved or counted"; "many pictures into the library and it takes only a few"): more than ten pictures
+     * at once for a character, every whole view of a place kept in the film with its count shown, the angles of a
+     * thing kept and counted, the library's bulk add keeping every good picture past a bad one, and the pose lines
+     * read before the framing reader read again (seated, half-length).
+     */
+    @Test
+    public void v39HundredPicturesPlacesThingsLibraryAndReframe() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets38");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/chai_par_baat.txt").toPath()), "UTF-8");
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Story st = ScriptParser.parse(script);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        Story.CharacterDef papa = null;
+        for (Story.CharacterDef x : st.cast()) if (x.fullName.equals("तरुण")) papa = x;
+        assertNotNull(papa);
+        // 1. twelve sheets at once for one character (it was cut at ten)
+        String[] papaFiles = {"08_papa_sheet_a.png", "09_papa_sheet_b.png", "21_papa_beard_a.png", "22_papa_beard_b.png", "23_papa_beard_c.png", "24_papa_beard_d.png",
+                "25_papa_5views.png", "26_papa_sheet_c.png", "27_papa_sheet_d.png", "28_papa_beard_laugh.png", "08_papa_sheet_a.png", "09_papa_sheet_b.png"};
+        String papaKey = (String) keyFor.invoke(a, papa);
+        String t1 = upload(a, onResult, tf, "angles:char:" + papaKey + ":" + papa.shown(), dir, papaFiles);
+        int papaPoses = 0;
+        for (String l : p.read("cast.txt").split("\n")) if (l.startsWith("pose|" + papaKey + "|")) papaPoses++;
+        System.out.println("V39 papa 12 sheets: " + papaPoses + " pose pictures — " + t1);
+        assertTrue("more than the first ten sheets were read: " + papaPoses, papaPoses > 59);
+        for (String l : p.read("cast.txt").split("\n")) if (l.startsWith("pose|")) assertEquals("every new pose line carries the cut mark: " + l, 18, l.split("\\|").length);
+        // 2. the place: every whole view kept, counted on its card
+        String[] placeFiles = {"02_place_livingroom_6views.jpg", "36_place_livingroom_6views_b.jpg", "30_place_tv_wall.jpg", "31_place_living_details.jpg", "33_place_doors_kitchen.jpg", "34_place_kitchen.jpg", "35_place_rooms.jpg"};
+        String t2 = upload(a, onResult, tf, "angles:scene:1:लिविंग रूम", dir, placeFiles);
+        int views = 0;
+        for (String l : p.read("cast.txt").split("\n")) if (l.startsWith("scene|1v")) views++;
+        Method pp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("placePictures", Project.class, String.class);
+        pp.setAccessible(true);
+        int placeN = (Integer) pp.invoke(null, p, "1");
+        System.out.println("V39 place: " + placeN + " pictures, " + views + " views — " + t2);
+        assertTrue("the place keeps its wide view, reverse and more views: " + placeN, placeN >= 7 && views >= 5);
+        assertTrue("the message counts them: " + t2, t2.contains("pictures of this place in the film"));
+        // the film draws the other views behind the close singles
+        com.tarun.kahani.core.Art art = com.tarun.kahani.core.Art.fromManifest(p.read("cast.txt"), st, p.loader());
+        assertEquals(views, art.placeViews(1).size());
+        // the Studio's place card shows the count
+        Method showStudio = MainActivity.class.getDeclaredMethod("showStudio");
+        showStudio.setAccessible(true);
+        showStudio.invoke(a);
+        idle();
+        String studio = texts(a.getWindow().getDecorView(), new ArrayList<String>()).toString();
+        assertTrue("the place card counts the pictures: " + studio.substring(0, Math.min(400, studio.length())), studio.contains(placeN + " pictures of this place in the film"));
+        // 3. a thing: a sheet of props split, every angle kept and counted
+        String t3 = upload(a, onResult, tf, "angles:obj:कप:चाय का कप", dir, new String[]{"32_place_props.jpg", "05_mummy_tray_a.png"});
+        Method tp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("thingPictures", Project.class, String.class);
+        tp.setAccessible(true);
+        int thingN = (Integer) tp.invoke(null, p, "कप");
+        System.out.println("V39 thing: " + thingN + " pictures — " + t3);
+        assertTrue("the thing keeps more than its insert: " + thingN, thingN >= 2);
+        assertTrue("the message counts them: " + t3, t3.contains("pictures of this thing in the film"));
+        // 4. the library: a dozen pictures with a broken one among them — the rest are all kept
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        int before = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        File tmp = new File(ctx.getCacheDir(), "dozen");
+        tmp.mkdirs();
+        android.content.ClipData clip = null;
+        String[] dozen = {"20_pari_toddler_a.png", "29_pari_toddler_b.png", "30_place_tv_wall.jpg", "31_place_living_details.jpg", "34_place_kitchen.jpg", "35_place_rooms.jpg",
+                "01_scene_family_sofa.jpg", "03_scene_end_card.jpg", "04_scene_title_card.jpg", "17_siya_braids.png", "11_mummy_green_bg.png"};
+        for (String f : dozen) {
+            android.net.Uri u = android.net.Uri.fromFile(new File(dir, f));
+            if (clip == null) clip = android.content.ClipData.newRawUri("pictures", u); else clip.addItem(new android.content.ClipData.Item(u));
+        }
+        File broken = new File(tmp, "broken.jpg");
+        Files.write(broken.toPath(), new byte[]{(byte) 0xFF, (byte) 0xD8, 1, 2, 3, 4, 5, 6, 7, 8});
+        clip.addItem(new android.content.ClipData.Item(android.net.Uri.fromFile(broken)));
+        android.content.Intent data = new android.content.Intent();
+        data.setClipData(clip);
+        org.robolectric.shadows.ShadowToast.reset();
+        onResult.invoke(a, 23, android.app.Activity.RESULT_OK, data);
+        for (int i = 0; i < 3000 && !uploadDone() && !String.valueOf(org.robolectric.shadows.ShadowToast.getTextOfLatestToast()).startsWith("Nothing"); i++) { idle(); Thread.sleep(100); }
+        idle();
+        int after = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        String t4 = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+        System.out.println("V39 library: " + before + " → " + after + " — " + t4);
+        assertTrue("every good picture is kept (sheets split into more): " + (after - before), after - before >= dozen.length);
+        assertTrue("the broken file is counted, not kept: " + t4, t4.contains("1 could not be opened"));
+        // 5. pose lines written before the framing reader: read again once, seated pictures sit
+        File fam = new File(OUT.getParentFile(), "v39family");
+        File seatedPic = new File(fam, "pose_35277722.png");
+        if (seatedPic.exists()) {
+            Project q = Project.create(ctx);
+            Files.copy(seatedPic.toPath(), new File(q.dir, "pose_35277722.png").toPath());
+            q.write("cast.txt", "pose|तरुण|pose_35277722.png|0|2|2|0.880|0.4714|0.2762|0.0230|0.4167|0.2115|0.5260|0.2115|0.0187|1.00|1\n");
+            Method rf = Class.forName("com.tarun.kahani.app.Studio3DArt").getDeclaredMethod("reframe", Project.class);
+            rf.setAccessible(true);
+            int changed = (Integer) rf.invoke(null, q);
+            String line = q.read("cast.txt").trim();
+            System.out.println("V39 reframe: " + changed + " — " + line);
+            assertEquals(1, changed);
+            assertEquals("the cross-legged picture now sits: " + line, String.valueOf(com.tarun.kahani.core.PoseSense.SIT), line.split("\\|")[4]);
+            assertEquals(18, line.split("\\|").length);
+            assertEquals("read once", 0, ((Integer) rf.invoke(null, q)).intValue());
+        }
+        ac.pause().stop().destroy();
+    }
+
+    /** v39: the angles upload of these files for the target, as the gallery returns them; the director's message. */
+    static String upload(MainActivity a, Method onResult, java.lang.reflect.Field tf, String tgt, File dir, String[] files) throws Exception {
+        tf.set(a, tgt);
+        android.content.ClipData cc = null;
+        for (String f : files) {
+            android.net.Uri u = android.net.Uri.fromFile(new File(dir, f));
+            if (cc == null) cc = android.content.ClipData.newRawUri("pictures", u); else cc.addItem(new android.content.ClipData.Item(u));
+        }
+        android.content.Intent d2 = new android.content.Intent();
+        d2.setClipData(cc);
+        org.robolectric.shadows.ShadowToast.reset();
+        onResult.invoke(a, 24, android.app.Activity.RESULT_OK, d2);
+        String toast = null;
+        for (int i = 0; i < 9000; i++) {
+            idle();
+            toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+            if (toast != null && (uploadDone() || toast.startsWith("Please") || toast.startsWith("Open a story"))) break;
+            Thread.sleep(100);
+        }
+        idle();
+        android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        if (open != null && open.isShowing()) open.dismiss();
+        idle();
+        return String.valueOf(toast);
     }
 
     static void deleteTree(File f) {

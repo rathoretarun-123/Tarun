@@ -84,6 +84,8 @@ public final class Film {
         public Art.Backdrop backdrop;     // user picture for this set, or null for the painted set
         /** The user's reverse angle of the place (the phone guide §5.2), drawn behind reverse shots; null = the same picture. */
         public Art.Backdrop backdropReverse;
+        /** v39: the user's other views of the place (Art.placeViews), behind the close singles; empty when none. */
+        public java.util.List<Art.Backdrop> backdropViews = new java.util.ArrayList<Art.Backdrop>();
         public float ground = Sets.GROUND; // y of the floor line in stage coordinates
         public boolean festive;           // celebration lights
         public int mood = -1;

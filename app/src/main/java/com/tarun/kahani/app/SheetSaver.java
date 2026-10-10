@@ -243,6 +243,70 @@ final class SheetSaver {
         return s;
     }
 
+    /** v39: a picture with a clear background (a cut-out thing or figure), read small. */
+    static boolean isCutOut(byte[] data) {
+        try {
+            int[] d = MainActivity.decodeBytes(data, 320);
+            if (d == null) return false;
+            int[] px = new int[d[0] * d[1]];
+            System.arraycopy(d, 2, px, 0, px.length);
+            return opaqueShare(px) < 0.9f;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** v39: the share of a picture's pixels that are opaque (a whole photo or panel: 1; a cut-out on a clear background: less). */
+    static float opaqueShare(int[] px) {
+        if (px == null || px.length == 0) return 0;
+        int step = Math.max(1, px.length / 40000), on = 0, n = 0;
+        for (int i = 0; i < px.length; i += step) { n++; if ((px[i] >>> 24) > 200) on++; }
+        return on / (float) Math.max(1, n);
+    }
+
+    /** v39: how many pictures of a place (its part number) the film has: the wide view, the reverse angle, the other views. */
+    static int placePictures(Project project, String key) {
+        int n = 0;
+        if (project.manifestLine("scene", key) != null) n++;
+        if (project.manifestLine("scene", key + "r") != null) n++;
+        for (int i = 1; i <= 98; i++) if (project.manifestLine("scene", key + "v" + i) != null) n++;
+        return n;
+    }
+
+    /** v39: how many pictures of a thing the film has: its insert and its other angles. */
+    static int thingPictures(Project project, String key) {
+        int n = 0;
+        for (String l : project.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 5 && f[0].equals("shot") && f[2].trim().equals(key) && f[4].trim().equals("object")) n++;
+            else if (f.length >= 3 && f[0].equals("objview") && f[1].equals(key)) n++;
+        }
+        return n;
+    }
+
+    /** v39: {pixels, w, h} at most maxSide on the longer side (an area average, transparency kept); the same when small enough. */
+    static Object[] shrinkPixels(int[] px, int w, int h, int maxSide) {
+        int big = Math.max(w, h);
+        if (big <= maxSide || w < 2 || h < 2) return new Object[]{px, w, h};
+        float sc = maxSide / (float) big;
+        int nw = Math.max(1, Math.round(w * sc)), nh = Math.max(1, Math.round(h * sc));
+        int[] out = new int[nw * nh];
+        for (int y = 0; y < nh; y++) {
+            int y0 = y * h / nh, y1 = Math.max(y0 + 1, (y + 1) * h / nh);
+            for (int x = 0; x < nw; x++) {
+                int x0 = x * w / nw, x1 = Math.max(x0 + 1, (x + 1) * w / nw);
+                long a = 0, r = 0, g = 0, b = 0; int n = 0;
+                for (int yy = y0; yy < y1; yy++) for (int xx = x0; xx < x1; xx++) {
+                    int c = px[yy * w + xx], al = c >>> 24;
+                    a += al; r += ((c >> 16) & 255) * al; g += ((c >> 8) & 255) * al; b += (c & 255) * al; n++;
+                }
+                int al = (int) (a / Math.max(1, n));
+                out[y * nw + x] = a == 0 ? 0 : (al << 24) | ((int) (r / a) << 16) | ((int) (g / a) << 8) | (int) (b / a);
+            }
+        }
+        return new Object[]{out, nw, nh};
+    }
+
     /** The target string of the split-and-save for a character key, a scene number or a thing. */
     static String target(String kind, String key, String shown) { return "angles:" + kind + ":" + key + ":" + shown; }
 
@@ -308,7 +372,8 @@ final class SheetSaver {
         int split = 0;
         int unreadable = 0, files = 0;
         for (byte[] d : datas) {
-            if (++files > 10) break;                                    // v26: up to 10 pictures, each up to 10 angles
+            if (++files > MainActivity.MAX_ANGLE_PICTURES) break;       // v39: up to 100 pictures (v26: 10), each up to 10 angles
+            if (d == null || d.length < 16) { unreadable++; continue; }
             // v28: a sheet is read at up to 2600 px wide where the heap allows, so every figure cut from it
             // (a tenth of the sheet) is sharp enough for a close-up and its face large enough to read
             int[] dec = MainActivity.decodeBytes(d, Project.bigSide());
@@ -341,7 +406,12 @@ final class SheetSaver {
             } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             if (parts.size() >= 2) camera = false;
             if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }
-            else pics.add(new Object[]{px, w, h, Boolean.FALSE, camera});
+            else {
+                // v39: a single picture is kept at up to 1400 px (a hundred of them read at the sheet size would fill the phone's memory)
+                Object[] sm = shrinkPixels(px, w, h, 1400);
+                pics.add(new Object[]{sm[0], sm[1], sm[2], Boolean.FALSE, camera});
+            }
+            px = null;
             if (pics.size() >= 100) break;
         }
         if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG) or a smaller picture" : "No picture could be read";
@@ -508,56 +578,91 @@ final class SheetSaver {
             if (posesMade > 0) done.append(posesMade).append(" pose pictures for the shots; ");
             Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
         } else if (kind.equals("scene")) {
-            // v33: new pictures of a place replace its wide view and reverse angle (the earlier ones stay in the library)
-            boolean haveMain = false, haveRev = false;
+            // v39: every whole picture of the place stays in the film (it kept two: "places do not take many pictures
+            // and do not show how many"): the first new one is the wide view, the next the reverse angle, the rest the
+            // other views drawn behind the close singles; the earlier wide view and reverse stay as views. A cut-out
+            // piece of a sheet (a lamp, a sofa, a door on white) is a thing of the place, kept in the library.
+            java.util.List<String> keepViews = new java.util.ArrayList<String>();
             for (String old : new String[]{project.manifestLine("scene", key), project.manifestLine("scene", key + "r")}) {
                 if (old == null) continue;
                 String[] of = old.split("\\|");
-                if (of.length < 3 || !project.has(of[2].trim())) continue;
-                try {
-                    byte[] ob = com.tarun.kahani.app.AudioIO.readFile(project.file(of[2].trim()));
-                    if (ob != null && ob.length > 0) { Library.Item prev = library.addBytes(Library.PIC, "place", shown + " (earlier)", "", ob, ".jpg", "angles"); prev.setMeta("ofName", shown); }
-                } catch (Exception ignored) { }
+                if (of.length >= 3 && project.has(of[2].trim())) keepViews.add(of[2].trim());
             }
+            for (int i = 1; i <= 98; i++) {
+                String old = project.manifestLine("scene", key + "v" + i);
+                if (old == null) continue;
+                String[] of = old.split("\\|");
+                if (of.length >= 3 && project.has(of[2].trim()) && !keepViews.contains(of[2].trim())) keepViews.add(of[2].trim());
+                project.setManifest("scene", key + "v" + i, null);
+            }
+            boolean haveMain = false, haveRev = false;
+            java.util.List<String> newViews = new java.util.ArrayList<String>();
+            int things = 0;
             for (int i = 0; i < pics.size(); i++) {
                 Object[] o = pics.get(i);
-                byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], false);
+                int[] ppx = (int[]) o[0];
+                boolean whole = opaqueShare(ppx) >= 0.97f;
+                byte[] b = Studio3DArt.encode(ppx, (Integer) o[1], (Integer) o[2], !whole);
+                if (!whole) {
+                    things++;
+                    Library.Item it = library.addBytes(Library.PIC, "object", shown + " — thing " + things, shown, b, ".png", "angles");
+                    it.setMeta("ofName", shown);
+                    continue;
+                }
                 if ((Boolean) o[4]) { try { b = MainActivity.toonify(b, false); } catch (Exception ignored) { /* the photo itself then */ } }
+                String f = project.savePicture(b, "scene");
                 if (!haveMain) {
-                    String f = project.savePicture(b, "scene");
                     project.setManifest("scene", key + "a", null); project.setManifest("scene", key + "b", null);
                     project.setManifest("scene", key, "scene|" + key + "|" + f);
                     library.addBytes(Library.PIC, "place", shown, "wide view", b, ".jpg", "angles");
                     haveMain = true;
                     done.append("the place (wide); ");
                 } else if (!haveRev) {
-                    String f = project.savePicture(b, "scene");
                     project.setManifest("scene", key + "r", "scene|" + key + "r|" + f);
                     Library.Item it = library.addBytes(Library.PIC, "place", shown + " (reverse angle)", "reverse angle", b, ".jpg", "angles");
                     it.setMeta("view", "reverse");
+                    it.setMeta("ofName", shown);
                     haveRev = true;
                     done.append("the reverse angle (behind the reverse shots); ");
                 } else {
-                    Library.Item it = library.addBytes(Library.PIC, "place", shown + " (angle " + (i + 1) + ")", "", b, ".jpg", "angles");
+                    newViews.add(f);
+                    Library.Item it = library.addBytes(Library.PIC, "place", shown + " (view " + (newViews.size() + 2) + ")", "", b, ".jpg", "angles");
                     it.setMeta("ofName", shown);
-                    done.append("angle ").append(i + 1).append(" (library); ");
                 }
             }
+            // the views: the new ones first, then the earlier pictures of the place (the newest kept when over 98)
+            java.util.List<String> views = new java.util.ArrayList<String>(newViews);
+            if (haveMain) for (String f : keepViews) if (!views.contains(f)) views.add(f);
+            int n = 0;
+            for (String f : views) { if (++n > 98) break; project.setManifest("scene", key + "v" + n, "scene|" + key + "v" + n + "|" + f); }
+            if (!newViews.isEmpty()) done.append(newViews.size()).append(" more views (behind the close shots); ");
+            if (things > 0) done.append(things).append(" things of the place (library); ");
+            done.append("— ").append(placePictures(project, key)).append(" pictures of this place in the film ");
         } else {
-            // a thing: its first picture is the insert of the thing itself; every angle goes to the library
+            // a thing: its first picture is the insert of the thing itself; v39: every other angle stays in the story
+            // too (objview lines, counted on its card) and in the library
             boolean haveObj = false;                                                  // v33: the first new picture is the thing's insert from now on
+            int angles = 0;
             for (int i = 0; i < pics.size(); i++) {
                 Object[] o = pics.get(i);
                 boolean cut = (Boolean) o[3];
-                byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], cut);
+                byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], cut || opaqueShare((int[]) o[0]) < 0.97f);
                 if (!haveObj) {
                     String f = project.savePicture(b, "obj");
                     setObjectLine(project, key, "shot||" + key + "|" + f + "|object");      // v34: replaces the earlier insert of this thing
                     haveObj = true;
                     done.append("the insert picture; ");
-                } else done.append("angle ").append(i + 1).append(" (library); ");
-                library.addBytes(Library.PIC, "object", shown + (i == 0 ? "" : " (angle " + (i + 1) + ")"), key.replace(',', ' '), b, cut ? ".png" : ".jpg", "angles");
+                } else {
+                    String f = project.savePicture(b, "obj");
+                    String cur = project.read("cast.txt");
+                    project.write("cast.txt", cur + (cur.length() == 0 || cur.endsWith("\n") ? "" : "\n") + "objview|" + key + "|" + f + "\n");
+                    angles++;
+                }
+                Library.Item it = library.addBytes(Library.PIC, "object", shown + (i == 0 ? "" : " (angle " + (i + 1) + ")"), key.replace(',', ' '), b, cut ? ".png" : ".jpg", "angles");
+                it.setMeta("ofName", shown);
             }
+            if (angles > 0) done.append(angles).append(" more angles; ");
+            done.append("— ").append(thingPictures(project, key)).append(" pictures of this thing in the film ");
         }
         library.save();
         return "✅ " + shown + ": " + done + (split > 0 ? "(" + split + " figures split from a sheet) " : "") + "— all in the library";

@@ -154,6 +154,12 @@ public final class Casting {
     public static int choose(Art.Sprite sp, Want w, int keep) {
         List<Art.PoseSprite> ps = sp.poses;
         if (ps == null || ps.isEmpty()) return MAIN;
+        // v39 (the user: "use the rigged and animated picture instead of the poses I uploaded, for smooth movement of
+        // the full body including the face"): the front picture made from the user's pictures, rigged on the finest
+        // mesh, plays every shot — it walks, sits, gestures, speaks, blinks and shows each feeling; its made and real
+        // views (three-quarter, side, back) turn it. A still picture of the user's is used only where the rig cannot
+        // show what the shot needs: the back over the shoulder, or a back turned with no back view.
+        if (rigged(sp) && !w.ots && !(sameAngle(w.angle, Angles.BACK) && (sp.views == null || sp.view(2) == null))) return MAIN;
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
         // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the
@@ -186,6 +192,9 @@ public final class Casting {
         }
         return best;
     }
+
+    /** v39: the front picture has a whole-body rig (legs, arms, head, face) — it can play every shot itself. */
+    public static boolean rigged(Art.Sprite sp) { return sp != null && sp.rig != null && !sp.rig.still && !sp.rig.animal; }
 
     /** v39: a picture whose face is animated — a front or three-quarter with a face found gets a rig (full or face-only). */
     public static boolean live(Art.PoseSprite p) { return p.faceKnown() && isFrontish(p.angle) && !p.beast; }

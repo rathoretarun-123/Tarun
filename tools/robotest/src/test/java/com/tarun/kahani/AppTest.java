@@ -730,26 +730,25 @@ public class AppTest {
             boolean moving = false;
             float mid = sh.t + Math.max(0.05f, Math.min(sh.dur * 0.5f, 1.2f));
             for (Film.Key kk : her.keys) if (kk.moveDur > 0 && mid >= kk.t && mid < kk.t + kk.moveDur) moving = true;
-            if (sh.ots.length() > 0 && sh.ots.equals(vrinda.shown())) { assertTrue("behind her shoulder: her back picture, got " + idx, idx == 2); backShots++; }
-            else if (k.body == com.tarun.kahani.core.Pose.SIT) { assertTrue("sitting: her sitting picture, got " + idx, idx == 4); sitShots++; }
-            else if (moving && k.body == com.tarun.kahani.core.Pose.STAND) {
-                assertTrue("walking: her sideways walking picture, got " + idx, idx == 1);
-                int[] cyc = sh.cycles.get(vrinda.id);
-                assertTrue("a step cycle of her two sideways pictures: " + java.util.Arrays.toString(cyc), cyc != null && cyc.length == 2 && cyc[0] == 1 && cyc[1] == 5);
-                walkShots++;
-            }
-            else if (cry.t0 < sh.t + sh.dur && cry.t1 > sh.t && k.body == com.tarun.kahani.core.Pose.STAND) { assertTrue("crying: her crying picture, got " + idx, idx == 0); cryShots++; }
+            // v39 (the user: "use the rigged and animated picture instead of the poses I uploaded"): the rigged front
+            // picture plays every shot — it walks, sits and cries through its rig and face; her own back picture only
+            // behind her shoulder, where the rig cannot show its back
+            if (sh.ots.length() > 0 && sh.ots.equals(vrinda.shown())) { assertTrue("behind her shoulder: her back picture, got " + idx, idx == 2); backShots++; continue; }
+            assertEquals("the rigged picture plays this shot", com.tarun.kahani.core.Casting.MAIN, idx.intValue());
+            if (k.body == com.tarun.kahani.core.Pose.SIT) sitShots++;
+            else if (moving && k.body == com.tarun.kahani.core.Pose.STAND) walkShots++;
+            else if (cry.t0 < sh.t + sh.dur && cry.t1 > sh.t && k.body == com.tarun.kahani.core.Pose.STAND) cryShots++;
         }
         System.out.println("CASTING of " + vrinda.shown() + ":\n" + log);
         System.out.println("CASTING: walking " + walkShots + ", crying " + cryShots + ", sitting " + sitShots + ", back " + backShots + ", real pictures in " + realShots + " of " + film.shots.size() + " shots");
         assertTrue("a walking shot", walkShots >= 1);
         assertTrue("a crying shot", cryShots >= 1);
         assertTrue("a sitting shot", sitShots >= 1);
-        assertTrue("real pictures used in most of her shots: " + realShots, realShots >= 3);
-        assertTrue("the shot list says which picture: " + film.shotList, film.shotList.contains("your picture 1 (front, standing, sad)") && film.shotList.contains("your picture 5 (front, sitting, neutral)"));
-        // the renderer draws a frame of the crying shot with the real picture, without error
+        assertTrue("the rig in nearly every shot: " + realShots, realShots <= backShots);
+        assertTrue("the shot list says which picture: " + film.shotList, film.shotList.contains("the front picture (rigged)"));
+        // the renderer draws a frame of the crying shot with the rigged picture, without error
         Film.Shot crying = null;
-        for (Film.Shot sh : film.shots) { Integer idx = sh.pictures.get(vrinda.id); if (idx != null && idx == 0) { crying = sh; break; } }
+        for (Film.Shot sh : film.shots) if (cry.t0 < sh.t + sh.dur && cry.t1 > sh.t && crying == null) crying = sh;
         assertNotNull(crying);
         Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
         AndroidGfx g = new AndroidGfx(bmp, 4);
@@ -5016,6 +5015,9 @@ public class AppTest {
             String castAfter = p.read("cast.txt");
             int added = count(castAfter, (String) c[1]) - count(castBefore, (String) c[1]);
             int items = toast == null ? 0 : toast.split(";").length;
+            // v39: a place's message counts its pictures in the film ("— 12 pictures of this place in the film")
+            java.util.regex.Matcher pm = java.util.regex.Pattern.compile("(\\d+) pictures of this (place|thing) in the film").matcher(toast == null ? "" : toast);
+            if (pm.find()) items = Math.max(items, Integer.parseInt(pm.group(1)));
             report.append(c[0]).append(": ").append(items).append(" pictures named in the message (want ").append(c[3]).append("), cast lines +").append(added).append(" — ").append(toast).append('\n');
             assertTrue("every figure / view saved for " + c[0] + ": " + toast, toast != null && toast.startsWith("✅") && items >= (Integer) c[3]);
             android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();

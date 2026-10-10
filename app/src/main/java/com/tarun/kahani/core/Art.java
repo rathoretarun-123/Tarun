@@ -883,6 +883,13 @@ public final class Art {
                 Sprite main = art.sprites.get(c.id);
                 int idx = Figure3D.viewIndex(Float.parseFloat(f[2].trim()));
                 if (main == null || idx < 0) continue;
+                // v39: a view turns the rigged figure, so it is a whole standing figure — never a half-length or a
+                // seated picture of the sheet (the front would turn into a bust)
+                try {
+                    int[] dd = L.decode(f[3], 320);
+                    boolean[] fr = dd != null && dd[1] > 0 ? framingOf(dd, -1) : null;
+                    if (fr != null && (fr[0] || fr[1])) { art.notes.add("view of " + f[1] + " at " + f[2].trim() + "° left out: " + (fr[0] ? "a half-length picture" : "a seated picture")); continue; }
+                } catch (RuntimeException ignored) { }
                 Sprite v = makeSprite(L, f[3], spriteSide, false);
                 if (v == null) continue;
                 v.faceKnown = false;
@@ -896,6 +903,16 @@ public final class Art {
                     }
                 }
                 v.skin = main.skin; v.lip = main.lip; v.lid = main.lid;
+                // v39: nor a bending, crouching or reaching one (a mother serving tea is no three-quarter of her standing)
+                if (v.pixelsForSampling != null && !(c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD))) {
+                    try {
+                        int vp = PoseSense.tag(v.pixelsForSampling, 0, false).pose;
+                        if (vp == PoseSense.BEND || vp == PoseSense.SIT || vp == PoseSense.LIE || vp == PoseSense.CROUCH || vp == PoseSense.FIGHT) {
+                            art.notes.add("view of " + f[1] + " at " + f[2].trim() + "° left out: " + PoseSense.poseName(vp));
+                            continue;
+                        }
+                    } catch (RuntimeException ignored) { }
+                }
                 mouthFromPicture(v.pixelsForSampling, v);
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L); } catch (RuntimeException e) { v.rig = null; }
                 if (v.rig != null && v.pixelsForSampling != null) {
@@ -994,6 +1011,8 @@ public final class Art {
         return typical;
     }
 
+    static float parseOr(String s, float or) { try { return Float.parseFloat(s.trim()); } catch (RuntimeException e) { return or; } }
+
     /** v39: PoseSense.framing of a decoded picture ({w, h, pixels...}) when it is a cut-out (a clear background), else null. */
     public static boolean[] framingOf(int[] d, float eyeY) {
         int w = d[0], h = d[1], n = w * h;
@@ -1011,20 +1030,32 @@ public final class Art {
      * sitting picture), the best full-length standing front picture among the character's own (eyes near the top, a
      * tall figure, a calm or happy face) as a char line, or null when the front is fine or there is none.
      */
-    static String[] fullLengthFront(Loader L, String[] charLine, java.util.List<String[]> poses) {
+    public static String[] fullLengthFront(Loader L, String[] charLine, java.util.List<String[]> poses) {
         try {
             int[] d = L.decode(charLine[2], 320);
             if (d == null) return null;
             boolean[] mf = framingOf(d, -1);
             boolean whole = mf != null ? !mf[0] && !mf[1] : d[1] >= d[0] * 1.35f;
-            if (whole) return null;           // not cut by the frame and not seated (or, without a clear background, tall enough): a whole figure
-            float mainAspect = mf != null && (mf[0] || mf[1]) ? 0 : d[1] / (float) Math.max(1, d[0]);
+            // v39: and a face — a back read as a front (no eyes, no mouth) never plays the film: the rig speaks with it
+            boolean face = true;
+            if (whole && (charLine.length < 11 || parseOr(charLine[3], 0) <= 0)) {
+                try {
+                    int[] px = new int[d[0] * d[1]];
+                    System.arraycopy(d, 2, px, 0, px.length);
+                    Cutout.Result cr = Cutout.process(px, d[0], d[1]);
+                    face = cr.faceFound && Math.abs(Angles.guess(cr, false)) < 100;     // eyes found in the hair of a back are no face
+                } catch (RuntimeException e) { face = true; }
+            }
+            if (whole && face) return null;           // not cut by the frame, not seated, with a face: a whole figure that can play
+            float mainAspect = (mf != null && (mf[0] || mf[1])) || !face ? 0 : d[1] / (float) Math.max(1, d[0]);
             String[] best = null;
             float bestScore = -1;
             for (String[] p : poses) {
                 float angle = Float.parseFloat(p[3].trim());
                 int pose = Integer.parseInt(p[4].trim()), emo = Integer.parseInt(p[5].trim());
-                if (Math.abs(angle) > 1 || (pose != PoseSense.STAND && pose != PoseSense.WAVE) || (emo != PoseSense.NEUTRAL && emo != PoseSense.HAPPY)) continue;
+                // v39: a front (else a three-quarter), standing, with a face — a calm or happy one first, any other
+                // feeling but sorrow or anger if that is all there is (the rig gives it every feeling anyway)
+                if (Math.abs(angle) > 46 || (pose != PoseSense.STAND && pose != PoseSense.WAVE) || emo == PoseSense.NO_FACE || emo == PoseSense.SAD || emo == PoseSense.ANGRY || emo == PoseSense.ASLEEP) continue;
                 float eyeY = (Float.parseFloat(p[11].trim()) + Float.parseFloat(p[13].trim())) / 2, mouthX = Float.parseFloat(p[7].trim());
                 // a child's head is a bigger part of the figure: the eyes up to a third of the way down
                 if (mouthX <= 0 || eyeY <= 0 || eyeY > 0.35f) continue;
@@ -1034,7 +1065,8 @@ public final class Art {
                 if (pf != null && (pf[0] || pf[1])) continue;                  // v39: a half-length or a seated picture is no standing front
                 float aspect = pd[1] / (float) Math.max(1, pd[0]);
                 if (aspect < Math.max(1.3f, mainAspect + 0.3f)) continue;       // clearly more of the figure than the front
-                float sc = aspect - 2 * eyeY + (emo == PoseSense.NEUTRAL ? 0.3f : 0) + (pose == PoseSense.STAND ? 0.3f : 0);
+                float sc = aspect - 2 * eyeY + (emo == PoseSense.NEUTRAL ? 0.3f : emo == PoseSense.HAPPY ? 0.15f : -0.4f) + (pose == PoseSense.STAND ? 0.3f : 0)
+                        + (Math.abs(angle) < 1 ? 1f : 0);                      // a front before a three-quarter
                 if (sc > bestScore) { bestScore = sc; best = p; }
             }
             if (best == null) return null;

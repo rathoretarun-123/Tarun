@@ -223,6 +223,8 @@ final class SheetSaver {
         float a = Math.abs(angle), s = 0;
         s += a < 1 ? 4 : Math.abs(a - Math.abs(com.tarun.kahani.core.Angles.THREE_QUARTER)) < 1 ? 2 : Math.abs(a - com.tarun.kahani.core.Angles.BACK) < 1 ? -6 : 0;
         if (r != null && r.faceFound) s += 2;
+        else s -= 8;                            // v39: a front with no face found is a back or a hidden face — never the one that plays
+        if (t != null && t.emotion == com.tarun.kahani.core.PoseSense.NO_FACE) s -= 8;
         if (t != null) {
             s += t.pose == com.tarun.kahani.core.PoseSense.STAND ? 2 : t.pose == com.tarun.kahani.core.PoseSense.WALK ? 0.5f : t.pose == com.tarun.kahani.core.PoseSense.LIE ? -2 : 0;
             s += t.emotion == com.tarun.kahani.core.PoseSense.NEUTRAL ? 1.5f : t.emotion == com.tarun.kahani.core.PoseSense.HAPPY ? 1.2f : t.emotion == com.tarun.kahani.core.PoseSense.NO_FACE ? -2 : 0;
@@ -480,6 +482,9 @@ final class SheetSaver {
                 int best = -1; long bestArea = -1;
                 for (int i = 0; i < pics.size(); i++) {
                     if (i == mainI || guessed[i] != sa) continue;
+                    // v39: a view turns the rigged figure: a whole standing figure only (never half-length or seated)
+                    if (tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
+                            || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
                     long area = (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2];
                     if (area > bestArea) { bestArea = area; best = i; }
                 }
@@ -512,7 +517,9 @@ final class SheetSaver {
                 if (!Studio3DArt.realView(project, key, sa)) Studio3DArt.setView(project, key, sa, null);
             }
             project.setSetting("realangles." + key, "1");
-            project.setSetting("rejected3d.view." + key, "1");
+            // v39: the angles the user gave nothing for (or only a half-length or seated picture) are made by Studio 3D
+            // from the user's own front picture, for the rig to turn — as proposals the user accepts or rejects
+            project.setSetting("rejected3d.view." + key, "0");
             String libKey = project.setting("pic.char:" + key, "");
             int posesMade = 0;
             for (int i = 0; i < pics.size(); i++) {

@@ -1356,7 +1356,7 @@ public class MainActivity extends Activity {
         r.addView(Ui.small(this, "📷 Pictures (up to 100)", Ui.PRIMARY, new View.OnClickListener() {
             public void onClick(View v) { anglesFor("angles:char:" + keyFor(c) + ":" + c.shown(), c.shown()); }          // v33: one button, several pictures at once, split and saved
         }));
-        if (Studio3DArt.realAngles(project, keyFor(c))) info.addView(Ui.text(this, "📷 " + countAngles(c.shown()) + " real pictures of " + c.shown() + " in the library (angles, poses) — no drawn view is used", 13, Ui.GREEN, false));
+        if (Studio3DArt.realAngles(project, keyFor(c))) info.addView(Ui.text(this, "📷 " + countAngles(c.shown()) + " real pictures of " + c.shown() + " in the library (angles, poses) — the film is played by the rigged, animated picture made from them; angles you did not give are made from your front picture for you to approve", 13, Ui.GREEN, false));
         r.addView(Ui.small(this, "🎙 Voice", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { chooseVoice(c.displayName, st, c); }
         }));

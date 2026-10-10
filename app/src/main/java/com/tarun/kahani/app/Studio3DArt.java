@@ -163,6 +163,25 @@ final class Studio3DArt {
         return out;
     }
 
+    /**
+     * v39: the view files that can turn the rigged figure — a whole standing figure; a half-length or seated picture
+     * in a view slot counts as empty (Studio 3D makes that angle from the front picture).
+     */
+    static String[] wholeViewFiles(Project project, String key) {
+        String[] out = viewFiles(project, key);
+        com.tarun.kahani.core.Art.Loader L = null;
+        for (int i = 0; i < out.length; i++) {
+            if (out[i] == null) continue;
+            try {
+                if (L == null) L = project.loader();
+                int[] d = L.decode(out[i], 320);
+                boolean[] fr = d == null ? null : com.tarun.kahani.core.Art.framingOf(d, -1);
+                if (fr != null && (fr[0] || fr[1])) out[i] = null;
+            } catch (Throwable ignored) { }
+        }
+        return out;
+    }
+
     static boolean hasViews(Project project, String key) { for (String f : viewFiles(project, key)) if (f != null) return true; return false; }
 
     /** v26: the user gave real pictures of this character from several angles — no view is ever drawn for it (the drawn ones read as very bad). */
@@ -258,6 +277,41 @@ final class Studio3DArt {
             if (l.trim().length() > 0) sb.append(l).append('\n');
         }
         if (changed > 0) project.write("cast.txt", sb.toString());
+        // v39: a character whose front picture is a half-length or seated one (a sheet's close-up chosen as the
+        // front) gets its best whole standing front picture as the front: the rig that plays the film is built from
+        // it, and Studio 3D makes the missing angles from it
+        try {
+            String cur = project.read("cast.txt");
+            java.util.Map<String, java.util.List<String[]>> poses = new java.util.HashMap<String, java.util.List<String[]>>();
+            for (String l : cur.split("\n")) {
+                String[] f = l.trim().split("\\|");
+                if (f.length >= 15 && f[0].equals("pose")) {
+                    java.util.List<String[]> ps = poses.get(f[1]);
+                    if (ps == null) { ps = new java.util.ArrayList<String[]>(); poses.put(f[1], ps); }
+                    ps.add(f);
+                }
+            }
+            StringBuilder out = new StringBuilder();
+            int fronts = 0;
+            for (String l : cur.split("\n")) {
+                String[] f = l.trim().split("\\|");
+                if (f.length >= 3 && f[0].equals("char") && poses.containsKey(f[1]) && !"1".equals(project.setting("frontchecked." + f[1], ""))) {
+                    if (L == null) L = project.loader();
+                    String[] better = com.tarun.kahani.core.Art.fullLengthFront(L, f, poses.get(f[1]));
+                    project.setSetting("frontchecked." + f[1], "1");
+                    if (better != null) {
+                        StringBuilder nl = new StringBuilder();
+                        for (int i = 0; i < better.length; i++) nl.append(i > 0 ? "|" : "").append(better[i]);
+                        l = nl.toString();
+                        fronts++;
+                    }
+                }
+                if (l.trim().length() > 0) out.append(l).append('\n');
+            }
+            if (fronts > 0) { project.write("cast.txt", out.toString()); changed += fronts; }
+        } catch (Throwable e) {
+            // the front stays as it was
+        }
         return changed;
     }
 
@@ -655,7 +709,7 @@ final class Studio3DArt {
     static int makeViews(Project project, Story story, Story.CharacterDef c, Library lib, Context ctx, StyleCue cue, boolean ask, String meshyKey, Cloud cloud, Progress p, boolean freeSpace) throws IOException {
         String file = charFile(project, story, c);
         if (file == null) return 0;
-        if (realAngles(project, keyFor(project, story, c))) return 0;       // v26: real angles, never drawn ones
+        // v39: with real angles too: only the angles still missing are made (the user's own views stay)
         Look look = c.look != null ? c.look : new Look();
         boolean beast = look.kind == Look.ANIMAL || look.kind == Look.BIRD;
         int[] d = project.loader().decode(file, Math.min(2600, Project.bigSide()));
@@ -703,7 +757,7 @@ final class Studio3DArt {
         int[] ratings = SceneMaker.ratings(true, face != null, partsOk, false, 1f, true);
         String verdict = SceneMaker.verdict(ratings, "") + " — made from " + source;
         dropProposals(project, P_VIEW, key, null, true);
-        String[] own = viewFiles(project, key);
+        String[] own = wholeViewFiles(project, key);
         int made = 0;
         for (int i = 0; i < views.length; i++) {
             Doll3D.Result v = views[i];
@@ -828,7 +882,10 @@ final class Studio3DArt {
         int made = 0;
         for (Story.CharacterDef c : story.cast()) {
             String key = keyFor(project, story, c);
-            if (charFile(project, story, c) == null || allViews(project, key) || realAngles(project, key) || !viewProposals(project, key).isEmpty() || rejected(project, P_VIEW, key)) continue;
+            // v39: real angles no longer stop it — the angles still missing are made from the user's front picture
+            boolean all = true;
+            for (String f : wholeViewFiles(project, key)) if (f == null) all = false;
+            if (charFile(project, story, c) == null || all || !viewProposals(project, key).isEmpty() || rejected(project, P_VIEW, key)) continue;
             try { if (makeViews(project, story, c, lib, ctx, cue, ask, meshyKey, cloud, p, freeSpace) > 0) made++; } catch (Throwable e) { android.util.Log.w("Kahani", "3D views: " + e); }
         }
         return made;

@@ -4090,6 +4090,8 @@ public final class Director {
             "walks away", "walked away", "leaves", "goes away", "back to the camera", "back to us"};
 
     static final String[] STAND_UP = {"उठ खड़", "उठकर खड़", "खड़ा हो गया", "खड़ी हो गई", "खड़े हो गए", "खड़ी हो गयी", "उठ गया", "उठ गई", "उठ गए",
+            // v39: "सोफे से उठकर खिड़की के पास आता है" — getting up on the way somewhere (उठाकर, lifting, is another word)
+            "उठकर", "उठ कर", "उठता है", "उठती है", "उठते हैं", "उठ जाता", "उठ जाती", "उठ जाते", "उठी और", "उठे और",
             "stood up", "stands up", "got up", "gets up", "rose to", "uth khada"};
     static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "लेट जाता", "लेट जाती", "लेटता", "लेटती", "सो गया", "सो गई", "सो गए", "सो जाता", "सो जाती",
             "सो रहा", "सो रही", "सो रहे", "सोता है", "सोती है", "सोने चल", "lay down", "lies down", "lie down", "fell asleep", "falls asleep", "goes to sleep",
@@ -4230,7 +4232,7 @@ public final class Director {
                 } else d = Math.max(d, 0.8f);
             }
         }
-        if (Txt.has(s, STAND_UP)) {
+        if (Txt.has(s, STAND_UP) && !Txt.has(s, "उठकर बैठ", "उठ कर बैठ", "उठ बैठ", "sits up", "sat up")) {
             for (Film.Actor a : who) {
                 // v35: one lying sits up first (0.9 s), then stands; from the floor, a sofa or a bed the rise takes a second.
                 // When the same sentence woke them, they stand after sitting up and stretching on the bed

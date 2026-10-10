@@ -240,6 +240,9 @@ public final class FilmJob implements Runnable {
             // the phone's library first: pictures and voices that clearly fit, no button needed
             step("Director is looking through your library…", 0.025f);
             String fromLib = remake ? "" : AutoLibrary.fill(ctx, project, story);
+            // v39: earlier uploads read again (seated, half-length) and each front made a whole standing figure — the
+            // rigged picture that plays the film, and the source of the angles Studio 3D makes
+            try { Studio3DArt.reframe(project); } catch (Throwable ignored) { }
             if (fromLib.length() > 0) info = "Taken from your library: " + fromLib;
             check();
             // free pictures of the story's important objects (Fluent Emoji 3D on GitHub, MIT), for inserts

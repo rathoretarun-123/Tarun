@@ -72,7 +72,7 @@ in its Exif directory):
 | angles · thing · drawn, saved by a phone | taken | taken |
 | angles · place · drawn, saved by a phone | taken | taken |
 | angles · place · camera photo | taken | taken |
-| angles · character · camera photo | refused | refused |
+| angles · character · camera photo | refused | refused (v37 rule) → **taken** as an animated avatar after §3b |
 | one picture · character · drawn, saved by a phone | **refused** | taken |
 | one picture · place · drawn, saved by a phone | taken, but turned into the "animated style" as a photo | taken as artwork |
 
@@ -93,6 +93,17 @@ The v37 test's "camera photo" carried only a make; it now carries a real exposur
   (`onActivityResult`, ten addresses at once) — 0 → 10 in the library; the angles pop-up for a character, a place and a thing
   shows the Gallery, Files and library buttons.
 
+### 3b. Then: "you can again implement the check and also allow using camera … not able to upload multiple pictures, pictures of objects and pictures at the film-making place"
+
+* The v37 restriction is removed: the camera is back in every picture menu (`Ui` pickers, the angles pop-up's "📷 Camera — one at a
+  time" button), a camera photo of a person is taken as a character and turned into the animated avatar, costume photos are
+  accepted (`SheetSaver`, `SituationsGuide` as in v36), the AI refusal and `Library.PhotoRefused` are gone.
+* The angles pop-up's buttons: Photos / gallery (Android's photo picker, up to 10), Files (the document picker, several at once),
+  Camera, the tarunkahani library, and for characters and places the internet / AI chooser.
+* Test `v38SeveralPicturesThroughTheButtonsForEveryKind`: for a character, a place and a thing, from the Studio and from the
+  make-film dialog, three pictures handed over at once through Gallery and through Files — all three saved as that one's views
+  every time. Test `v38PhotosAndTheCameraAllowedAgain`: a camera photo as a character is taken; the menus offer the camera.
+
 ## 4. Thorough checks
 
 * 64 frames across the whole 12-minute sample film (every 11.3 s), plus frames around every fix, checked by eye.
@@ -104,7 +115,7 @@ The v37 test's "camera photo" carried only a make; it now carries a real exposur
 ## 5. Tests
 
 New: `v38CraftGuideTrainedAndReported`, `v38EditListAndSubtitlesByInstruction`, `v38BeatLookAndFlush`,
-`v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio`, `v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
+`v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio`, `v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices`, `v38SeveralPicturesThroughTheButtonsForEveryKind`, `v38PhotosAndTheCameraAllowedAgain` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
 `directorUsesTheRightPictureForEachShot` and `framesRenderThroughAndroidCanvas` (7 of 7).
 
 Full suite: see below.

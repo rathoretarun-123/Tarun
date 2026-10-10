@@ -1,4 +1,4 @@
-# Kahani Film — v37
+# Kahani Film — v38
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,18 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v38
+
+* **The director trained on the animated director's craft guide** — the studio-style (Pixar / Disney tradition) directing in the guide you gave is hardcoded in `FilmCraft` (15 rules, each naming the code that applies it, shown in the protocols screen) and reported in every film's shot list ("THE ANIMATED DIRECTOR'S CRAFT"):
+  * **Colour follows the beat** — at the peak of a scene the picture is a little richer and deeper, a tender, quiet shot a little warmer, blended in over half a second (never a jump at the cut).
+  * **Faces that read** — the cheeks flush with anger, pride, laughter and effort, more strongly at the peak of a scene, softly in calm talk: on drawn faces the cheeks deepen, on your pictures a soft warm glow comes over the cheeks.
+  * **Pictures asked for, never invented** — the shots that wanted a side or a back view, or a feeling your sheet of expressions does not have, are counted per character and listed ("PICTURES THAT WOULD HELP"); a character with no picture is asked for one.
+  * **The checklist** — every speaker on the stage and facing us for most of their line, breathing room after every peak line, every hug, held hand or peck only where the script wrote it (the director never adds one).
+  * **Delivery with markers** — every film is saved with `subtitles.srt` (every line with its speaker, long lines split at their sentence ends) and `edit_list.txt` (a marker for every scene with its name and every shot with its timecode, size, camera move, beat and line, so a change can be asked for by shot number); both can be downloaded from the film screen ("💬 Subtitles (.srt) and edit list").
+  Tests `v38CraftGuideTrainedAndReported`, `v38SubtitlesAndEditList`, `v38BeatLookAndFlush`.
+* **Also fixed:** "तितली उड़कर एक कली पर बैठ जाती है" (the butterfly settles on a bud) made the girl in the scene sit down, and her close-up then showed only the top of her head; a butterfly, a bird, a bee, a leaf or dust that settles is no longer taken for the character.
+* **Not trained from that guide, said plainly:** its sexual and nude content (sex acts, nudity, sexual vocabulary and dirty talk, choosing pictures by nudity, adult sounds) — the studio makes family films and does not recognise, draw, voice or score any of it. It does not claim Pixar or Disney quality: it follows their craft on a phone.
 
 ## New in v37
 

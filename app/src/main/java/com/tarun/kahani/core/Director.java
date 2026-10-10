@@ -110,6 +110,7 @@ public final class Director {
                 List<Story.CharacterDef> m = ScriptParser.mentions(story, sent);
                 if (m.isEmpty()) continue;
                 Story.CharacterDef c = m.get(0);
+                if (pose == PoseSense.SIT && creatureSits(sent, c)) continue;
                 if (c.look == null || !c.look.isHumanoid() || c.look.aid == Look.AID_WHEELCHAIR) continue;
                 boolean dup = false;
                 for (PoseNeed n : out) if (n.c == c && n.pose == pose) dup = true;
@@ -722,6 +723,7 @@ public final class Director {
         // v30: the training guide's weighted score of the film (§12), before the final QC refines it
         b.append(DirectorTraining.scoreCard(film, this.art, story, null));
         b.append(SituationsGuide.report(story, film, eyeLevelShots, blindNoPov, reveals, concernBeats, reliefBeats));
+        b.append(FilmCraft.report(this.art, film));          // v38: the animated director's craft guide
         b.append("• Static shots: ").append(statics).append(" of ").append(n).append(still > 0 ? " (" + still + " made still)" : "").append('\n');
         b.append("• Reactions shown and allowed to breathe: ").append(reactions).append('\n');
         b.append("• Relationships shown with both characters in the frame: ").append(twos).append(" two-shots\n");
@@ -4010,6 +4012,31 @@ public final class Director {
     static final String[] NOD = {"हाँ में सिर", "सिर हिलाकर हाँ", "nodded", "nods"};
     static final String[] TURN = {"पीछे मुड़", "मुड़कर", "मुड़ गया", "मुड़ गई", "turned around", "turns around", "turned back"};
 
+    /** v38: small creatures and things that settle on something — "the butterfly sits on a bud" is not the girl sitting down. */
+    static final String[] SETTLERS = {"तितली", "तितलियाँ", "चिड़िया", "पंछी", "पक्षी", "कबूतर", "तोता", "मैना", "गौरैया", "कौआ", "कौवा", "मक्खी", "मधुमक्खी", "भौंरा",
+            "जुगनू", "पत्ता", "पत्ती", "धूल", "butterfly", "butterflies", "bird", "sparrow", "pigeon", "parrot", "crow", "bee", "fly ", "firefly", "leaf", "dust"};
+
+    /**
+     * v38: true when the one who sits in this sentence is a creature or a thing named before the character (or
+     * with no character named at all): its sitting is not the character's.
+     */
+    public static boolean creatureSits(String s, Story.CharacterDef c) {
+        int creature = -1;
+        String low = s.toLowerCase(java.util.Locale.ROOT);
+        for (String w : SETTLERS) { int i = low.indexOf(w); if (i >= 0 && (creature < 0 || i < creature)) creature = i; }
+        if (creature < 0) return false;
+        if (c == null) return true;
+        String[] names = {c.displayName, c.label, c.shown()};
+        int named = -1;
+        for (String n : names) {
+            if (n == null || n.length() == 0) continue;
+            int i = low.indexOf(n.toLowerCase(java.util.Locale.ROOT));
+            if (i < 0 && n.indexOf(' ') > 0) i = low.indexOf(n.substring(n.lastIndexOf(' ') + 1).toLowerCase(java.util.Locale.ROOT));
+            if (i >= 0 && (named < 0 || i < named)) named = i;
+        }
+        return named < 0 || creature < named;
+    }
+
     /** Sitting down, getting up, lying down, bowing, waving, nodding, turning — for the subject (or the whole group). */
     private float postureFrom(String s, float t, Film.Actor subj, List<Film.Actor> group) {
         if (subj == null) return 0;
@@ -4060,7 +4087,8 @@ public final class Director {
                 d = Math.max(d, tt - t + 1.0f);
             }
             d = Math.max(d, 1.0f);
-        } else if (Txt.has(s, SIT_DOWN) && !birdLike && !Txt.has(s, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") && vehicleIn(s, false) == 0) {
+        } else if (Txt.has(s, SIT_DOWN) && !birdLike && !Txt.has(s, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") && vehicleIn(s, false) == 0
+                && !creatureSits(s, subj.c)) {
             int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, SOFA) ? Film.SEAT_SOFA : Txt.has(s, BED) ? Film.SEAT_BED : Txt.has(s, CHAIR) ? Film.SEAT_CHAIR
                     : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
             for (Film.Actor a : who) {

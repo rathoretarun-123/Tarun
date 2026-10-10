@@ -62,6 +62,8 @@ public final class Pose {
     public float kajal, lipstick, bindi, mehndi, powder, facePaint;
     /** v37: a towel round the shoulders after a bath (0..1). */
     public float towel;
+    /** v38: how strongly the cheeks flush with the feeling of the beat (0..1; FilmCraft.flush). */
+    public float flush;
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
 
@@ -76,7 +78,7 @@ public final class Pose {
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld;
-        q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel;
+        q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel; q.flush = flush;
         return q;
     }
 
@@ -87,6 +89,6 @@ public final class Pose {
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
         sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; toMouth = 0; toMouthItem = 0;
         gazeX = 0; gazeY = 0; gazeHeld = 0;
-        kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0;
+        kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0; flush = 0;
     }
 }

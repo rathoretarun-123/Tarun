@@ -604,6 +604,11 @@ public final class FilmJob implements Runnable {
             film.shotList += "\n" + review(film);
             // the director's shot list with every check (validation, Human QC, the final QC of steps 6 and 8), kept with the film
             project.write("qc.txt", film.shotList);
+            // v38 (the animated director's craft): the subtitle file and the edit list with scene markers, beside the film
+            try {
+                project.write("subtitles.srt", com.tarun.kahani.core.FilmCraft.srt(film));
+                project.write("edit_list.txt", com.tarun.kahani.core.FilmCraft.editList(film, fps, film.story != null ? film.story.title : project.name()));
+            } catch (Exception e) { android.util.Log.w("Kahani", "delivery files: " + e); }
             project.setSetting("saved", "0");
             if (aiLines > 0) project.setSetting("aiLines", String.valueOf(aiLines));
             // the thumbnail and the poster, made separately in their own formats (extras: the film is done without them)

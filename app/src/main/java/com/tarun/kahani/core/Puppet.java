@@ -1765,9 +1765,11 @@ public final class Puppet {
         float ex = f * r * 0.12f; // features shifted toward facing side
         // cheeks blush
         if (!witch) {
-            g.color(alpha(0xFFFF6F61, l.isChild() ? 0.28f : 0.16f));
-            g.oval(-r * 0.5f + ex, r * 0.35f, r * 0.17f, r * 0.1f);
-            g.oval(r * 0.5f + ex, r * 0.35f, r * 0.17f, r * 0.1f);
+            // v38: the cheeks flush with the feeling of the beat (FilmCraft.flush): deeper and a little wider
+            float fl = Math.max(0, Math.min(1, p.flush));
+            g.color(alpha(0xFFFF6F61, (l.isChild() ? 0.28f : 0.16f) + 0.3f * fl));
+            g.oval(-r * 0.5f + ex, r * 0.35f, r * 0.17f * (1 + 0.35f * fl), r * 0.1f * (1 + 0.35f * fl));
+            g.oval(r * 0.5f + ex, r * 0.35f, r * 0.17f * (1 + 0.35f * fl), r * 0.1f * (1 + 0.35f * fl));
         }
         if (l.wrinkles && !p.disguised) {
             g.color(alpha(shade(skin, 0.55f), 0.8f));

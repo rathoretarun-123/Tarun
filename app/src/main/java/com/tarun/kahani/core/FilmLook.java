@@ -69,9 +69,17 @@ public final class FilmLook {
         return out;
     }
 
-    /** The look at time t, blended over a second around each change of part (no sudden colour jumps). */
+    /**
+     * The look at time t, blended over a second around each change of part (no sudden colour jumps); v38: with the
+     * colour of the beat over it (FilmCraft.beatLook: richer at the peak of a scene, warmer in a tender shot).
+     */
     public static Params at(Film film, float t, Params out) {
         if (film == null) return forSeg(null, out);
+        return FilmCraft.beatLook(film, t, scriptAt(film, t, out));
+    }
+
+    /** The colour script alone at time t. */
+    static Params scriptAt(Film film, float t, Params out) {
         Film.Seg s = film.segAt(t);
         forSeg(s, out);
         if (s == null) return out;

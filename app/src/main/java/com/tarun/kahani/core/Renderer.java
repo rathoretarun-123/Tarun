@@ -1270,6 +1270,8 @@ public final class Renderer {
         }
         madeUp(a, p, t);
         applyActs(a, p, tp);
+        // v38: the cheeks flush with the feeling, more strongly at the peak of the scene (FilmCraft)
+        p.flush = FilmCraft.flush(p.emotion, FilmCraft.beatIntensity(film, t));
         // lip-sync protocol: a speaker seen close keeps the head still — a gesture may still move the arms, but
         // never bob or rock the whole body (on a narrow screen the face is the whole frame, and a bob reads as
         // a shake; the frame-by-frame check measured it at 15–19 per cell on 9:16 before this rule)
@@ -1516,7 +1518,7 @@ public final class Renderer {
             p.body = Pose.STAND; p.sit = 0; p.bob = 0; p.armL = 8; p.armR = 8; p.elbowL = 10; p.elbowR = 10;
             if (!stepping || real.rig != null) p.walkAmt = 0;                              // a rigged picture never steps through its mesh; a still one keeps the step's pulse
             p.wave = 0; p.swing = false; p.twirl = false; p.headTilt = 0; p.tilt = 0; p.nod = 0;
-            if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; }
+            if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; p.flush = 0; }
             if (chosen.pose != PoseSense.STAND) p.blink = 0;
             if (Math.abs(chosen.angle) > 170 || chosen.emotion == PoseSense.NO_FACE) { p.mouth = 0; p.blink = 0; p.eyesClosed = false; }   // v34: a back never talks or blinks
             mo.sy = 1 + (float) Math.sin(tp * 2.1f + a.order) * 0.004f; mo.sx = 1;
@@ -3045,6 +3047,16 @@ public final class Renderer {
                     g.moveTo(ex - er * 1.3f, ey + er * 0.1f);
                     g.quadTo(ex, ey + er * 0.75f, ex + er * 1.3f, ey + er * 0.1f);
                     g.strokePath(Math.max(1.5f, er * 0.18f));
+                }
+            }
+            if (p.flush > 0.03f && !p.redFace && (look == null || look.isHumanoid())) {
+                // v38: the cheeks flush (FilmCraft.flush): a soft warm glow under each eye, toward the mouth
+                float fcy = ey1 + (top + sp.mouthY * h - ey1) * 0.55f, fcr = Math.abs(ex2 - ex1) * 0.32f + er;
+                int fa = Math.round(p.flush * 0x48);
+                for (int fi = 0; fi < 2; fi++) {
+                    float fcx = (fi == 0 ? ex1 : ex2) + (fi == 0 ? -1 : 1) * er * 0.4f;
+                    g.radial(fcx, fcy, fcr, (fa << 24) | 0xFF4A4A, 0x00FF4A4A);
+                    g.oval(fcx, fcy, fcr, fcr * 0.75f);
                 }
             }
             if (p.redFace) {

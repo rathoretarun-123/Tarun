@@ -1,5 +1,6 @@
 package com.tarun.kahani;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
@@ -4463,5 +4464,126 @@ public class AppTest {
         com.tarun.kahani.app.Library.Item place = lib.addBytes(com.tarun.kahani.app.Library.PIC, "place", "a street photo", "", photo, ".jpg", "phone");
         assertTrue("a photo of a place is kept", lib.find(com.tarun.kahani.app.Library.PIC, "place", "").contains(place));
         lib.remove(place);
+    }
+
+    // ======================================================================== v38
+
+    static final String CRAFT = "पात्र और रूप-रंग (Characters):\n1. माँ (35 वर्ष):\n * चेहरा: लंबे बाल, जूड़ा।\n * पहनावा: नीली साड़ी।\n"
+            + "2. अनु (8 वर्ष):\n * चेहरा: दो चोटियाँ।\n * पहनावा: पीली फ्रॉक।\n\n"
+            + "दृश्य 1: बगीचा\n(स्थान: बगीचा। सुबह का समय।)\n(तितली उड़कर एक फूल पर बैठ जाती है। अनु ताली बजाती है।)\n"
+            + "अनु (खुशी से): \"माँ, देखो! तितली कितनी सुंदर है।\"\nमाँ (मुस्कुराकर): \"हाँ बेटा, बहुत सुंदर। चलो, अब घर चलते हैं।\"\n\n"
+            + "दृश्य 2: घर का कमरा\n(स्थान: घर का कमरा। शाम का समय।)\n(अनु माँ को गले लगाती है।)\nअनु (प्यार से): \"आप सबसे अच्छी हो, माँ! मैं आपसे बहुत प्यार करती हूँ।\"\n"
+            + "माँ (गुस्से से): \"पर पहले अपना कमरा साफ़ करो!\"\n\nसमाप्त\n";
+
+    /**
+     * v38 (the user's additional guide for the AI director, Pixar / Disney style): its film craft is trained and
+     * reported — readable speakers, breathing room after peaks, touches only as written, pictures asked for instead
+     * of invented; its sexual content is not trained. And a butterfly settling on a flower is not the girl sitting.
+     */
+    @Test
+    public void v38CraftGuideTrainedAndReported() {
+        assertTrue(com.tarun.kahani.core.FilmCraft.RULES.length >= 12);
+        assertTrue(com.tarun.kahani.core.FilmCraft.SUMMARY.contains("Not trained from the guide"));
+        Story st = ScriptParser.parse(CRAFT);
+        Film film = directed(st);
+        keysInOrder(film);
+        assertTrue("the shot list reports the craft", film.shotList.contains("THE ANIMATED DIRECTOR'S CRAFT"));
+        Story.CharacterDef anu = null;
+        for (Story.CharacterDef c : st.characters) if (c.displayName.equals("अनु")) anu = c;
+        assertNotNull(anu);
+        // the butterfly sits, not अनु
+        assertTrue(Director.creatureSits("तितली उड़कर एक फूल पर बैठ जाती है।", anu));
+        assertTrue(!Director.creatureSits("अनु घास पर बैठ जाती है और तितली को देखती है।", anu));
+        Film.Seg first = null;
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE && first == null) first = sg;
+        for (Film.Actor a : first.actors) if (a.c == anu) for (Film.Key k : a.keys) assertTrue("अनु does not sit when the butterfly does (" + k.t + ")", k.body != Pose.SIT);
+        // the checklist
+        com.tarun.kahani.core.FilmCraft.Check c = com.tarun.kahani.core.FilmCraft.check(film);
+        System.out.println("CRAFT v38: lines " + c.lines + " readable " + c.readable + " peaks " + c.peaks + " breathed " + c.breathed + " touches " + c.touches + " peak shots " + c.peakShots + " tender " + c.tenderShots);
+        assertTrue(c.lines >= 3);
+        assertEquals("every speaker readable", c.lines, c.readable);
+        assertEquals("breathing room after every peak line", c.peaks, c.breathed);
+        assertTrue("the hug the script wrote", c.touches > 0);
+        Film calm = directed(ScriptParser.parse(CRAFT.replace("(अनु माँ को गले लगाती है।)\n", "")));
+        assertEquals("no touch the script did not write", 0, com.tarun.kahani.core.FilmCraft.check(calm).touches);
+        // no pictures: each character is asked for one
+        java.util.List<String> wants = com.tarun.kahani.core.FilmCraft.pictureWants(new Art(), film);
+        assertEquals(2, wants.size());
+        for (String w : wants) assertTrue(w, w.contains("a picture"));
+    }
+
+    /** v38: the film comes with a subtitle file and an edit list with scene markers. */
+    @Test
+    public void v38SubtitlesAndEditList() {
+        Film film = directed(ScriptParser.parse(CRAFT));
+        String srt = com.tarun.kahani.core.FilmCraft.srt(film);
+        String[] blocks = srt.trim().split("\n\n");
+        assertTrue("subtitles: " + blocks.length, blocks.length >= 4);
+        float last = -1;
+        for (int i = 0; i < blocks.length; i++) {
+            String[] l = blocks[i].split("\n");
+            assertEquals(String.valueOf(i + 1), l[0]);
+            assertTrue(l[1], l[1].matches("\\d\\d:\\d\\d:\\d\\d,\\d\\d\\d --> \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d"));
+            float t0 = secs(l[1].substring(0, 12)), t1 = secs(l[1].substring(17));
+            assertTrue("in time order", t0 >= last - 0.001f && t1 > t0);
+            last = t0;
+        }
+        assertTrue(srt.contains("अनु: "));
+        // a long line is split at its sentence ends, the last part ending with the line
+        Film f = new Film();
+        Film.Seg sg = new Film.Seg(); sg.type = Film.S_SCENE; sg.t0 = 0; sg.t1 = 20; f.segs.add(sg);
+        Film.Sub sb = new Film.Sub(); sb.t0 = 1; sb.t1 = 10; sb.who = "माँ"; sb.text = "पहला वाक्य यहाँ पर है। दूसरा वाक्य भी यहाँ पर है। तीसरा वाक्य सबसे अंत में।"; sg.subs.add(sb);
+        String split = com.tarun.kahani.core.FilmCraft.srt(f);
+        assertEquals(split, 3, split.trim().split("\n\n").length);
+        assertTrue(split, split.contains("--> 00:00:10,000"));
+        String edl = com.tarun.kahani.core.FilmCraft.editList(film, 30, "Test");
+        int markers = 0, shots = 0;
+        for (String l : edl.split("\n")) { if (l.startsWith("* MARKER")) markers++; if (l.matches("^\\d\\d\\d  .*")) shots++; }
+        int scenes = 0;
+        for (Film.Seg s : film.segs) if (s.type == Film.S_SCENE) scenes++;
+        assertTrue("a marker per scene: " + markers + " / " + scenes, markers >= scenes);
+        assertEquals("a line per shot", film.shots.size(), shots);
+        assertTrue(edl, edl.contains("SCENE 1 — ") && edl.contains("* LINE: "));
+    }
+
+    private static float secs(String t) {
+        return Integer.parseInt(t.substring(0, 2)) * 3600 + Integer.parseInt(t.substring(3, 5)) * 60 + Integer.parseInt(t.substring(6, 8)) + Integer.parseInt(t.substring(9, 12)) / 1000f;
+    }
+
+    /** v38: the colour follows the beat (richer at the peak, warmer when tender) and the cheeks flush with the feeling. */
+    @Test
+    public void v38BeatLookAndFlush() {
+        assertTrue(com.tarun.kahani.core.FilmCraft.flush(Pose.ANGRY, 1f) > com.tarun.kahani.core.FilmCraft.flush(Pose.ANGRY, 0.3f));
+        assertTrue(com.tarun.kahani.core.FilmCraft.flush(Pose.ANGRY, 0.3f) > 0);
+        assertEquals(0f, com.tarun.kahani.core.FilmCraft.flush(Pose.SAD, 1f), 1e-6);
+        Film f = new Film();
+        Film.Seg sg = new Film.Seg(); sg.type = Film.S_SCENE; sg.t0 = 0; sg.t1 = 9; f.segs.add(sg);
+        int[] stages = {com.tarun.kahani.core.ShotPlanner.DEVELOP, com.tarun.kahani.core.ShotPlanner.PEAK, com.tarun.kahani.core.ShotPlanner.RELEASE};
+        float[] light = {0.45f, 0.7f, 0.2f};
+        for (int i = 0; i < 3; i++) { Film.Shot sh = new Film.Shot(); sh.t = i * 3; sh.dur = 3; sh.stage = stages[i]; sh.light = light[i]; f.shots.add(sh); }
+        com.tarun.kahani.core.FilmLook.Params dev = com.tarun.kahani.core.FilmLook.at(f, 1.5f, new com.tarun.kahani.core.FilmLook.Params());
+        com.tarun.kahani.core.FilmLook.Params peak = com.tarun.kahani.core.FilmLook.at(f, 4.5f, new com.tarun.kahani.core.FilmLook.Params());
+        com.tarun.kahani.core.FilmLook.Params tender = com.tarun.kahani.core.FilmLook.at(f, 7.5f, new com.tarun.kahani.core.FilmLook.Params());
+        assertTrue("richer at the peak", peak.saturation > dev.saturation + 0.04f);
+        assertTrue("warmer when tender", tender.warmth > dev.warmth + 0.04f);
+        com.tarun.kahani.core.FilmLook.Params cut = com.tarun.kahani.core.FilmLook.at(f, 3.05f, new com.tarun.kahani.core.FilmLook.Params());
+        assertTrue("blended in, not a jump", cut.saturation < peak.saturation - 0.03f);
+        // the drawn cheeks: redder with the flush
+        Story st = ScriptParser.parse(CRAFT);
+        Look girl = null;
+        for (Story.CharacterDef c : st.characters) if (c.displayName.equals("अनु")) girl = c.look;
+        float[] red = new float[2];
+        for (int i = 0; i < 2; i++) {
+            Bitmap bmp = Bitmap.createBitmap(400, 420, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 400, 420);
+            g.save(); g.translate(200, 400);
+            Pose p = new Pose(); p.reset(); p.facing = 1; p.emotion = Pose.ANGRY; p.flush = i;
+            Puppet.draw(g, girl, p, 380);
+            g.restore();
+            for (int y = 0; y < 420; y++) for (int x = 0; x < 400; x++) { int c = bmp.getPixel(x, y); red[i] += Math.max(0, (c >> 16 & 255) - (c >> 8 & 255)); }
+        }
+        System.out.println("FLUSH v38: red over green " + red[0] + " -> " + red[1]);
+        assertTrue("the cheeks flush", red[1] > red[0] * 1.01f);
     }
 }

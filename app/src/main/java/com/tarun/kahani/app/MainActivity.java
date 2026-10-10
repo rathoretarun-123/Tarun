@@ -4000,6 +4000,7 @@ public class MainActivity extends Activity {
         try { reference = new String(Project.readAll(getAssets().open("director_reference_training_guide.md")), "UTF-8"); } catch (Exception e) { reference = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.DirectorTraining.SUMMARY + "\n\n" + reference;
         handbook += "\n\n" + com.tarun.kahani.core.SituationsGuide.SUMMARY;
+        handbook += "\n\n" + com.tarun.kahani.core.FilmCraft.SUMMARY;      // v38
         String emo;
         try { emo = new String(Project.readAll(getAssets().open("director_reference_emotion_activity_guide.md")), "UTF-8"); } catch (Exception e) { emo = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.EmotionActivityGuide.SUMMARY + "\n\n" + emo;
@@ -4187,6 +4188,11 @@ public class MainActivity extends Activity {
             public void onClick(View v) { saveToGallery(true); }
         }));
         panel.addView(r);
+        // v38: the subtitle file and the edit list with scene markers (the animated director's craft: delivery)
+        final File srt = project.file("subtitles.srt"), edl = project.file("edit_list.txt");
+        if (srt.exists() || edl.exists()) panel.addView(Ui.button(this, "💬  Subtitles (.srt) and edit list with scene markers", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { deliveryFiles(srt, edl); }
+        }));
         final File thumb = project.file("thumbnail.jpg"), poster = project.file("poster.jpg");
         final File shotsDir = project.file("shots");
         final String[] shotFiles = shotsDir.isDirectory() ? shotsDir.list() : null;
@@ -4307,6 +4313,23 @@ public class MainActivity extends Activity {
                 box.setText("");
             }
         });
+    }
+
+    /** v38: download or read the film's subtitle file and its edit list (scene markers, every shot's timecode). */
+    private void deliveryFiles(final File srt, final File edl) {
+        final String base = safeName(project.name());
+        final String srtText = srt.exists() ? project.read("subtitles.srt") : "", edlText = edl.exists() ? project.read("edit_list.txt") : "";
+        new AlertDialog.Builder(this).setTitle("💬 Subtitles and edit list")
+                .setMessage("subtitles.srt — every line with its speaker and timing, for YouTube or any player.\nedit_list.txt — every scene marker and every shot with its timecode, size, camera move and line: ask for a change by shot number.")
+                .setPositiveButton("💾 Subtitles", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { if (srtText.length() > 0) saveTextFile(base + ".srt", srtText); else toast("No subtitles in this film"); }
+                })
+                .setNeutralButton("💾 Edit list", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { if (edlText.length() > 0) saveTextFile(base + "_edit_list.txt", edlText); }
+                })
+                .setNegativeButton("👁 Read the edit list", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { showText("Edit list", edlText); }
+                }).show();
     }
 
     private boolean pendingShare;

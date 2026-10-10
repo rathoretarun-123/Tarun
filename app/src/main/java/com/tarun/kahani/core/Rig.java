@@ -107,14 +107,29 @@ public final class Rig {
      * Finds the bones from the cut-out picture's outline. Standing people get head, arms, legs and a face;
      * animals (and any long, lying shape) get a head with a jaw and ears, a tail and legs.
      */
-    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) {
+    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) { return build(r, s, look, L, false); }
+
+    /**
+     * v39: a face-only rig for a person's picture whose body must stay as the picture has it — sitting, drinking,
+     * waving, a half-length picture: the body is drawn exactly as it is (it never bends), the face speaks, blinks,
+     * looks and shows the feeling through its own mesh. Null when no face was found.
+     */
+    public static Rig buildStill(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) {
+        if (s == null || !s.faceKnown) return null;
+        return build(r, s, look, L, true);
+    }
+
+    static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, boolean stillOnly) {
         if (r == null || r.px == null || r.w < 40 || r.h < 40) return null;
         int w = r.w, h = r.h;
         float aspect = h / (float) w;
         boolean beast = look != null && (look.kind == Look.ANIMAL || look.kind == Look.BIRD);
         // v34: a rider on her animal is wider than tall, but she is a person (her lips speak) with the animal's jaw
         boolean rider = look != null && (look.mount >= 0 || look.aid == Look.AID_WHEELCHAIR) && !beast;
-        if (beast || (aspect < 1.25f && !rider)) {
+        // v39: a person's half-length or sitting picture (wider than a standing figure) with a face found is no
+        // animal: it gets the face-only rig (before, it got an animal's jaw and no face — no lips, no blinks)
+        boolean still = stillOnly || (!beast && !rider && aspect < 1.25f && s != null && s.faceKnown);
+        if (!still && (beast || (aspect < 1.25f && !rider))) {
             // an upright animal picture (a monkey, a bear standing) moves like a person
             if (beast && aspect >= 1.5f && r.h >= 80) beast = false;
             else {
@@ -137,8 +152,9 @@ public final class Rig {
             for (int x = 0; x < w; x++) if ((r.px[y * w + x] >>> 24) > 128) { if (left[y] < 0) left[y] = x; right[y] = x; }
             if (left[y] >= 0) { if (topRow < 0) topRow = y; botRow = y; }
         }
-        if (topRow < 0 || botRow - topRow < h / 2) return null;
+        if (topRow < 0 || (!still && botRow - topRow < h / 2)) return null;
         Rig g = new Rig();
+        g.still = still;
         g.srcW = r.w; g.srcH = r.h;
         g.top = topRow / (float) h;
         g.bottom = botRow / (float) h;
@@ -571,6 +587,7 @@ public final class Rig {
 
     /** Where one point of the picture (local coordinates) goes in this frame. */
     private void move(Frame f, State s, float x, float y, float[] o) {
+        if (still) { o[0] = x; o[1] = y; return; }          // v39: the body exactly as the picture has it
         if (animal) { moveAnimal(f, s, x, y, o); return; }
         if (mountJaw && s.mountJaw > 0.02f) {
             // v34: the rider's animal speaks — the lower front of its snout drops open about a hinge behind the mouth
@@ -725,6 +742,9 @@ public final class Rig {
      */
     public void bodyMesh(Frame f, State s, float left, float top, float w, float h, float screenPx) {
         frame(f, s, left, top, w, h);
+        if (still) {        // v39: no lean, no head turn: the face layer stays exactly on the picture's face
+            f.hCos = 1; f.hSin = 0; f.lCos = 1; f.lSin = 0; f.nodS = 1; f.nodDy = 0;
+        }
         f.screenPx = screenPx;
         // as fine as the picture's size on screen allows: about one cell per CELL_PX pixels
         int rows, cols;
@@ -924,6 +944,7 @@ public final class Rig {
 
     /** How far the feet come up (sitting, kneeling), so the picture can be lowered to keep them on the ground. */
     public float feetRise(State s, float h) {
+        if (still) return 0;
         if (animal) return 0.8f * s.sit * (bottom - legTop) * h;
         float rise = (1 - s.legScale) * (bottom - hipY) * h;
         if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
@@ -936,6 +957,8 @@ public final class Rig {
 
     /** Four-legged animals and birds (and any lying-down shape): head, jaw, tail, ears, legs. */
     public boolean animal;
+    /** v39: a face-only rig — the body is drawn as the picture has it, the face speaks, blinks and shows feelings. */
+    public boolean still;
     public int headSide;                      // -1 head on the picture's left, +1 on the right
     public float bodyTop, belly, headX0, headX1, headTop, headBottom, tailX, tailY, neckX, neckY2;
     public float frontLegX, backLegX, legTop, jawX, jawY, jawTipX;

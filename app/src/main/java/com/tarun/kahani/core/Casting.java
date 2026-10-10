@@ -23,6 +23,8 @@ public final class Casting {
         public float angle = Angles.FRONT;
         public int pose = PoseSense.STAND, emotion = PoseSense.NEUTRAL;
         public boolean speaking, ots;
+        /** v39: the shot is close enough for a picture of the face and shoulders only. */
+        public boolean closeOk;
         public String toString() { return Angles.name(angle) + " " + PoseSense.poseName(pose) + " " + PoseSense.emotionName(emotion) + (speaking ? " (speaking)" : ""); }
     }
 
@@ -52,11 +54,12 @@ public final class Casting {
                     }
                     if (best == MAIN) best = MAIN_STILL;                       // no such picture: the front itself, drawn as it is
                 }
+                int[] cyc = best >= 0 && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN) ? stepCycle(sp, best, w) : null;
+                // v39: one still picture would glide across the floor: without a step cycle of the user's own walking
+                // pictures the rigged picture walks (its legs step) — unless it is a beast that is never bent
+                if (best >= 0 && cyc == null && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN) && !live(sp.poses.get(best)) && !beast) best = MAIN;
                 sh.pictures.put(a.c.id, best);
-                if (best >= 0 && (w.pose == PoseSense.WALK || w.pose == PoseSense.RUN)) {
-                    int[] cyc = stepCycle(sp, best, w);
-                    if (cyc != null) sh.cycles.put(a.c.id, cyc);
-                }
+                if (cyc != null && best >= 0) sh.cycles.put(a.c.id, cyc);
             }
         }
     }
@@ -64,6 +67,7 @@ public final class Casting {
     /** What the shot asks of this character at its middle. */
     public static Want want(Film film, Film.Seg s, Film.Shot sh, Film.Actor a, float t) {
         Want w = new Want();
+        w.closeOk = sh.size >= ShotPlanner.MCU;
         Film.Key k = a.stateAt(t);
         Film.Key mv = null;
         for (Film.Key kk : a.keys) if (kk.moveDur > 0 && t >= kk.t && t < kk.t + kk.moveDur) mv = kk;
@@ -142,15 +146,29 @@ public final class Casting {
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
         // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the
         // user's own picture of the moment wins whenever it fits as well
-        float mainScore = score(Angles.FRONT, PoseSense.STAND, PoseSense.NEUTRAL, sp.faceKnown, w) + (w.speaking && sp.faceKnown ? 0.3f : 0f);
+        // v39: the rigged front picture sits, kneels, walks and lies down through its rig: it takes the pose wanted
+        // (it lost to any standing picture of the right feeling while the character sat — and that one stood on the sofa)
+        int mainPose = sp.rig != null && !sp.rig.animal && !sp.rig.still ? w.pose : PoseSense.STAND;
+        float mainScore = score(Angles.FRONT, mainPose, PoseSense.NEUTRAL, sp.faceKnown, w) + (w.speaking && sp.faceKnown ? 0.3f : 0f);
         int best = MAIN; float bestScore = mainScore;
         for (int i = 0; i < ps.size(); i++) {
             Art.PoseSprite p = ps.get(i);
+            if (p.closeUp && !w.closeOk) continue;          // v39: a face-and-shoulders picture only in a face shot
+            // v39: never a standing picture for one who sits (or a seated one for one who stands) — except a close-up,
+            // where the body is out of the frame
+            if (!p.closeUp && (lowPose(p.pose) != lowPose(w.pose) || (p.pose == PoseSense.LIE) != (w.pose == PoseSense.LIE))) continue;
             float sc = score(p.angle, p.pose, p.emotion, p.faceKnown(), w);
+            // v39 (the user: "no lip syncing, no movement, no expressions with my pictures"): a picture whose face
+            // cannot move (a side or a back, no face found) is used only where it is needed — the back over the
+            // shoulder — or where it fits clearly better; otherwise the picture that lives (lips, blinks, feelings) plays
+            if (!live(p) && !w.ots && !sameAngle(w.angle, Angles.BACK)) sc -= 1.5f;
             if (sc > bestScore) { bestScore = sc; best = i; }
         }
         return best;
     }
+
+    /** v39: a picture whose face is animated — a front or three-quarter with a face found gets a rig (full or face-only). */
+    public static boolean live(Art.PoseSprite p) { return p.faceKnown() && isFrontish(p.angle) && !p.beast; }
 
     static float score(float angle, int pose, int emotion, boolean face, Want w) {
         float s = 0;

@@ -231,6 +231,12 @@ final class SheetSaver {
         }
         s += 2f * area / Math.max(1f, maxArea);
         if (hRatio > 0) s += 1 - Math.min(1, Math.abs(1 - hRatio));
+        // v39: the front picture is a whole standing figure, never a sheet's close-up of the face (as wide as it is
+        // tall): everything else is sized against it, and a close-up front made giants of the others
+        if (r != null && r.w > 0) {
+            float aspect = r.h / (float) r.w;
+            s += aspect >= 1.8f ? 3 : aspect >= 1.45f ? 1 : aspect < 1.3f ? -5 : 0;
+        }
         return s;
     }
 

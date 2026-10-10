@@ -865,6 +865,8 @@ public final class Director {
     private float ts(float t) { return estab ? seg.t0 : t; }
     private Story.CharacterDef lastSubject;
     private List<Story.CharacterDef> lastGroup = new ArrayList<Story.CharacterDef>();
+    /** v39: the last group named together anywhere in the story (kept from scene to scene). */
+    private final List<Story.CharacterDef> storyGroup = new ArrayList<Story.CharacterDef>();
     /** The shot planner's plan for each dialogue beat of the part being staged. */
     private final Map<Integer, ShotPlanner.Plan> partPlan = new HashMap<Integer, ShotPlanner.Plan>();
     private int partNo = -1;
@@ -2931,6 +2933,43 @@ public final class Director {
             if (subj != null && subj.stateAt(t).visible) group.add(subj);
             for (Film.Actor a : seg.actors) if (a != subj && a.stateAt(t).visible && a.look != null) group.add(a);
         }
+        // v39: "तीनों एक दूसरे को देखकर मुस्कुराते हैं", "चारों चाय का कप उठाते हैं और चाय पीने लगते हैं": a group word is
+        // that many of those on the stage — the ones named with it, then the group last named together, then the
+        // others — and everything the sentence says they do, each of them does
+        groupSubject = false;
+        int gn = groupWordCount(s);
+        if (gn == 0 && !ms.isEmpty()) gn = -1;          // "सब" with someone named: that one does it, to everyone
+        if (gn >= 0 && seg != null) {
+            List<Film.Actor> on = new ArrayList<Film.Actor>();
+            for (Film.Actor a : seg.actors) if (a.look != null && (a.stateAt(t).visible || a.keys.get(0).t >= t - 0.01f) && !a.c.voiceOnly) on.add(a);
+            List<Film.Actor> pick = new ArrayList<Film.Actor>();
+            for (Story.CharacterDef c : ms) { Film.Actor a = actor(c); if (a != null && !pick.contains(a)) pick.add(a); }
+            int want = gn == 0 ? on.size() : gn;
+            // "तीनों और बोल्ट …", "राजू और तीनों …": the ones named beside the group word are more than the three
+            if (gn > 0 && !ms.isEmpty() && Txt.norm(s).matches("(?s).*(" + groupWordRe() + ")\\s+(और|तथा|,)\\s.*|.*\\s(और|तथा)\\s+(" + groupWordRe() + ")(\\s.*|$)")) want = gn + ms.size();
+            if (gn > 0 && on.size() == gn) { for (Film.Actor a : on) if (!pick.contains(a)) pick.add(a); }
+            for (Story.CharacterDef c : lastGroup) { Film.Actor a = actor(c); if (pick.size() < want && a != null && on.contains(a) && !pick.contains(a)) pick.add(a); }
+            // then: those on the stage now, those of the last group named together in an earlier scene, those on the
+            // same side as the ones named (the three friends, not the villain who comes in later)
+            final float tt = t;
+            final boolean heroSide = pick.isEmpty() || pick.get(0).look == null || pick.get(0).look.hero;
+            List<Film.Actor> rest = new ArrayList<Film.Actor>(on);
+            java.util.Collections.sort(rest, new java.util.Comparator<Film.Actor>() {
+                int score(Film.Actor a) { return (a.stateAt(tt).visible ? 4 : 0) + (storyGroup.contains(a.c) ? 2 : 0) + (a.look.hero == heroSide ? 1 : 0); }
+                public int compare(Film.Actor a, Film.Actor b) { return score(b) - score(a); }
+            });
+            for (Film.Actor a : rest) if (pick.size() < want && !pick.contains(a) && (a.look.hero == heroSide || pick.size() < 2)) pick.add(a);
+            if (pick.size() >= 2) {
+                group = pick;
+                if (subj == null || !pick.contains(subj)) subj = pick.get(0);
+                others.clear();
+                for (Film.Actor a : pick) if (a != subj) others.add(a);
+                target = null;
+                groupSubject = true;
+                groupSentences++;
+                if (DEBUG_GROUPS) { StringBuilder b = new StringBuilder(); for (Film.Actor a : pick) b.append(a.c.shown()).append(','); System.out.println("GROUP[" + gn + "] " + b + " ← " + s); }
+            }
+        } else if (group.size() > 1 && joinedPlural(s)) groupSubject = true;
         float d = 1.4f;
         boolean focusSet = false;
         // thought before action (handbook ch. 6): a sound or a sudden sight is perceived first — a pause, the head
@@ -2964,6 +3003,8 @@ public final class Director {
         if (group.size() > 1) {
             lastGroup.clear();
             for (Film.Actor a : group) lastGroup.add(a.c);
+            storyGroup.clear();
+            storyGroup.addAll(lastGroup);
         }
 
         // ---- actions
@@ -2988,6 +3029,24 @@ public final class Director {
             subj.acts.add(new Film.Act(t, t + 1.8f, Film.G_LAUGH));
             Film.Key k2 = subj.at(t + 1.9f); k2.emotion = Pose.HAPPY;
             d = Math.max(d, 2f);
+        }
+        if (groupSubject && group.size() > 1) {
+            // v39: the whole group feels it and shows it — a smile, a laugh — and "एक दूसरे को देखकर" they look at one another
+            boolean laugh = Txt.has(s, "हँस", "हंस", "खिलखिला", "laugh") && !Txt.has(s, "हँसी गूँज");
+            boolean smile = Txt.has(s, "मुस्कुरा", "मुस्करा", "मुस्कान", "smile", "grin");
+            for (Film.Actor a : group) {
+                if (a == subj && laugh) continue;          // the subject's laugh is staged above
+                if (laugh) { Film.Key k = a.at(t + 0.1f); k.emotion = Pose.LAUGH; a.acts.add(new Film.Act(t + 0.1f, t + 1.9f, Film.G_LAUGH)); Film.Key k2 = a.at(t + 2.0f); k2.emotion = Pose.HAPPY; d = Math.max(d, 2f); }
+                else if (smile) { Film.Key k = a.at(t + 0.1f); k.emotion = Pose.HAPPY; d = Math.max(d, 1.8f); }
+            }
+            if (Txt.has(s, "एक दूसरे", "एक-दूसरे", "आपस में", "each other", "one another")) {
+                for (int i = 0; i < group.size(); i++) {
+                    Film.Actor a = group.get(i), b = group.get((i + 1) % group.size());
+                    if (a.look != null && !a.look.cannotSee()) film.watches.add(new Film.Watch(a, b, t, t + 2.6f));
+                }
+                d = Math.max(d, 2.4f);
+            }
+            if (!focusSet) { float[] xs = new float[group.size()]; for (int i = 0; i < xs.length; i++) xs[i] = xAt(group.get(i), t); frameCut(t, xs); focusSet = true; }
         }
         if (Txt.has(s, "फूल में बदल", "फूल खिल", "खिल उठ", "पप-पप")) {
             for (Film.Fx f : seg.fx) if (f.type == Film.FX_MAGIC_FLOWER && f.t2 > t) f.t2 = t + 0.4f;
@@ -4078,6 +4137,58 @@ public final class Director {
     }
 
     /** Sitting down, getting up, lying down, bowing, waving, nodding, turning — for the subject (or the whole group). */
+    /** v39: the sentence being staged has a group as its subject (set by sentence()). */
+    private boolean groupSubject;
+    static final boolean DEBUG_GROUPS = System.getProperty("kahani.debugGroups") != null;
+    /** v39: sentences whose subject was a group ("तीनों …", "चारों …"). */
+    public int groupSentences;
+
+    /** v39: a group word anywhere in a sentence: how many ("तीनों" 3, "चारों" 4), 0 = all of them ("सब", "सभी"), -1 = none. */
+    static int groupWordCount(String s) {
+        String[][] nums = {{"दोनों", "2"}, {"तीनों", "3"}, {"चारों", "4"}, {"पाँचों", "5"}, {"पांचों", "5"}, {"छहों", "6"}, {"both", "2"}, {"all three", "3"},
+                {"all four", "4"}, {"all five", "5"}, {"the three of them", "3"}, {"the four of them", "4"}, {"the two of them", "2"}};
+        for (String[] n : nums) if (ScriptParser.wordIn(s, n[0]) && !objectOf(s, n[0]) && !thingsAfter(s, n[0])) return Integer.parseInt(n[1]);
+        // "सब / सभी" as the subject: first in the sentence, or "सब लोग", "सब मिलकर" (not "सब कुछ", not "सारे फूल")
+        String h = Txt.norm(s).trim().replaceFirst("^(फिर|तब|और|अब|then|and)\\s+", "");
+        for (String w : new String[]{"सब", "सभी"}) {
+            String x = Txt.norm(w);
+            if ((h.startsWith(x + " ") || h.equals(x) || Txt.has(s, w + " लोग", w + " मिलकर", w + " एक साथ", w + " बच्चे")) && !objectOf(s, w) && !Txt.has(s, w + " कुछ", "सबकुछ")) return 0;
+        }
+        if (Txt.hasWord(s, "everyone", "everybody", "all of them")) return 0;
+        return -1;
+    }
+
+    static String groupWordRe() { return Txt.norm("दोनों") + "|" + Txt.norm("तीनों") + "|" + Txt.norm("चारों") + "|" + Txt.norm("पाँचों") + "|" + Txt.norm("पांचों"); }
+
+    /** v39: "चारों तरफ", "दोनों हाथों", "तीनों solar flowers": the number counts things or sides, not people. */
+    static boolean thingsAfter(String s, String w) {
+        String n = Txt.norm(s), x = Txt.norm(w);
+        int i = n.indexOf(x);
+        if (i < 0) return false;
+        String[] after = n.substring(i + x.length()).trim().split("[\\s,।.!?]+");
+        if (after.length == 0 || after[0].length() == 0) return false;
+        String next = after[0];
+        if (next.matches("[a-z].*") && !next.equals("and")) return true;            // "तीनों solar flowers"
+        String[] things = {"तरफ", "ओर", "हाथ", "हाथों", "आँखें", "आँखों", "आंखें", "आंखों", "पैर", "पैरों", "कान", "कानों", "गाल", "गालों", "फूल", "फूलों",
+                "पेड़", "दरवाज़े", "दरवाजे", "कप", "कपों", "किताबें", "चीज़ें", "चीजें", "बातें", "दिन", "रात", "बार", "रंग", "चीज़ों", "कोने", "दीवारें", "पहिये",
+                "sides", "hands", "eyes", "cups", "times"};
+        for (String t : things) if (next.equals(Txt.norm(t))) return true;
+        return false;
+    }
+
+    /** v39: the group word is the object, not the subject ("राजू दोनों को देखता है", "सब से छोटा"). */
+    static boolean objectOf(String s, String w) {
+        String n = Txt.norm(s), x = Txt.norm(w);
+        int i = n.indexOf(x);
+        while (i >= 0) {
+            String after = n.substring(Math.min(n.length(), i + x.length())).trim();
+            boolean obj = after.startsWith("को") || after.startsWith("से") || after.startsWith("के ") || after.startsWith("की ") || after.startsWith("का ") || after.startsWith("में ");
+            if (!obj) return false;
+            i = n.indexOf(x, i + 1);
+        }
+        return true;
+    }
+
     /** v38: two or more names joined ("और", ",", "and") with a plural verb — the sentence is about all of them. */
     static boolean joinedPlural(String s) {
         boolean joined = Txt.has(s, " और ", ",", " तथा ", " एवं ") || Txt.hasWord(s, "and");
@@ -4091,7 +4202,7 @@ public final class Director {
         float d = 0;
         List<Film.Actor> who = group != null && group.size() > 1 && Txt.has(s, "सब", "सभी", "दोनों", "तीनों", "all", "both", "everyone") ? group : null;
         // v38: names joined with a plural verb ("पापा, सिया और परी सोफ़े पर बैठे हैं", "Maya and Kabir sit down"): all of them
-        if (who == null && group != null && group.size() > 1 && joinedPlural(s)) who = group;
+        if (who == null && group != null && group.size() > 1 && (joinedPlural(s) || groupSubject)) who = group;
         if (who == null) { who = new ArrayList<Film.Actor>(); who.add(subj); }
         boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
         if (Txt.has(s, TURN_AWAY)) {

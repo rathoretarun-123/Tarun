@@ -10,6 +10,8 @@ import java.util.Map;
  * scene backgrounds, full-screen cinematic shots, and the title / ending pictures.
  */
 public final class Art {
+    /** v39: what the loading changed (a close-up front picture swapped for the full-length one), for the shot list. */
+    public final java.util.List<String> notes = new java.util.ArrayList<String>();
 
     /** Platform image loading: returns ARGB pixels (for cut-out) and creates drawable handles. */
     public interface Loader {
@@ -76,6 +78,10 @@ public final class Art {
         /** The face points given with it (mouth x, y, half-width, eyes), or null to find them in the picture. */
         public float[] facePoints;
         public boolean beast;
+        /** v39: a picture of the face and shoulders only (a close-up of the sheet): used in face shots, never in a wide one. */
+        public boolean closeUp;
+        /** v39: the main picture's eye distance in its own heights (the measure every picture of the character is sized by), 0 = unknown. */
+        float mainEye;
         Sprite sprite, main;
         Loader loader;
         public boolean faceKnown() { return facePoints != null && facePoints[0] > 0 || (sprite != null && sprite.faceKnown); }
@@ -90,11 +96,23 @@ public final class Art {
                 v.faceKnown = true;
             }
             if (main != null) { v.skin = main.skin; v.lip = main.lip; v.lid = main.lid; }
+            // v39: sized by the face — the eyes are as far apart in every picture of the same person, so the picture's
+            // height against the standing one is the main picture's eye distance over this one's (a close-up drawn by a
+            // sheet as large as a whole figure is no giant)
+            float eyeHere = v.faceKnown && Math.abs(angle) < 46 && v.h > 0 ? Math.abs(v.eyeRX - v.eyeLX) * v.w / (float) v.h : 0;
+            float faceGeo = v.faceKnown && Math.abs(v.eyeRX - v.eyeLX) > 0.001f ? (v.mouthY - (v.eyeLY + v.eyeRY) / 2) * v.h / (Math.abs(v.eyeRX - v.eyeLX) * v.w) : 0;
+            float sized = sizeBy(mainEye, eyeHere, faceGeo, pose, v.w, v.h, (v.eyeLY + v.eyeRY) / 2);
+            if (sized > 0) { hRatio = sized; closeUp = sized < 0.5f; }
             // the rig only where the face must speak (a front or three-quarter with a face); a picture of a pose is drawn as it is
             boolean frontish = Math.abs(angle) < 46;
             mouthFromPicture(v.pixelsForSampling, v);
             if (frontish && v.faceKnown && pose == PoseSense.STAND) {
                 try { v.rig = Rig.build(v.pixelsForSampling, v, main == null ? new Look() : mainLook, loader); } catch (RuntimeException e) { v.rig = null; }
+            }
+            // v39: every other picture with a face (sitting, drinking, waving, bending, a half-length picture) keeps its
+            // body as it is but its face lives: the lips speak, the eyes blink and look, the feeling shows
+            if (v.rig == null && frontish && v.faceKnown && !beast) {
+                try { v.rig = Rig.buildStill(v.pixelsForSampling, v, main == null ? new Look() : mainLook, loader); } catch (RuntimeException e) { v.rig = null; }
             }
             if (v.pixelsForSampling != null) {
                 try {
@@ -677,10 +695,31 @@ public final class Art {
         java.util.List<String[]> views = new java.util.ArrayList<String[]>();
         java.util.List<String[]> poses = new java.util.ArrayList<String[]>();
         java.util.List<String[]> costumeLines = new java.util.ArrayList<String[]>();
+        // v39: every character's own pictures first: a front picture that is only a face and shoulders (a sheet's
+        // close-up chosen as the front) is swapped for the user's full-length standing front picture, and kept as a
+        // close-up — everything is sized against the front picture, so a close-up front made giants of the others
+        java.util.Map<String, java.util.List<String[]>> poseLines = new java.util.HashMap<String, java.util.List<String[]>>();
+        for (String raw : text.split("\n")) {
+            String[] f = raw.trim().split("\\|");
+            if (f[0].equals("pose") && f.length >= 15) {
+                java.util.List<String[]> l = poseLines.get(f[1]);
+                if (l == null) { l = new java.util.ArrayList<String[]>(); poseLines.put(f[1], l); }
+                l.add(f);
+            }
+        }
+        java.util.List<String> extra = new java.util.ArrayList<String>();
         for (String raw : text.split("\n")) {
             String line = raw.trim();
             if (line.length() == 0 || line.startsWith("#")) continue;
             String[] f = line.split("\\|");
+            if (f[0].equals("char") && f.length >= 3 && poseLines.containsKey(f[1])) {
+                String[] better = fullLengthFront(L, f, poseLines.get(f[1]));
+                if (better != null) {
+                    extra.add("pose|" + f[1] + "|" + f[2] + "|0|0|0|1");      // the close-up stays, for the face shots
+                    f = better;
+                    art.notes.add("front picture of " + f[1] + ": the full-length one (" + f[2] + ") instead of a close-up");
+                }
+            }
             try {
                 if (f[0].equals("pose") && f.length >= 6) {
                     poses.add(f);            // v27: after the characters, below
@@ -859,6 +898,7 @@ public final class Art {
                 // a bad line must never stop the film; skip it
             }
         }
+        for (String e : extra) poses.add(e.split("\\|"));
         // v27: the user's own pictures of each character (pose|name|file|angle|pose|emotion|hRatio|mouthX|mouthY|mouthHW|eyeLX|eyeLY|eyeRX|eyeRY|eyeR)
         for (String[] f : poses) {
             try {
@@ -879,6 +919,21 @@ public final class Art {
                 }
                 p.beast = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD);
                 p.main = main; p.mainLook = c.look != null ? c.look : new Look(); p.loader = L;
+                // v39: sized by the face (see sprite()): estimated now from the picture's proportions, exact when it is read
+                if (main.faceKnown && main.h > 0) p.mainEye = Math.abs(main.eyeRX - main.eyeLX) * main.w / (float) main.h;
+                if (p.mainEye > 0 && p.facePoints != null && Math.abs(p.angle) < 46 && !p.beast) {
+                    try {
+                        int[] d = L.decode(p.file, 64);
+                        if (d != null && d[1] > 0) {
+                            float[] fp = p.facePoints;
+                            float ed = Math.abs(fp[5] - fp[3]);
+                            float eyeHere = ed * d[0] / (float) d[1];
+                            float faceGeo = ed > 0.001f ? (fp[1] - (fp[4] + fp[6]) / 2) * d[1] / (ed * d[0]) : 0;
+                            float sized = sizeBy(p.mainEye, eyeHere, faceGeo, p.pose, d[0], d[1], (fp[4] + fp[6]) / 2);
+                            if (sized > 0) { p.hRatio = sized; p.closeUp = sized < 0.5f; }
+                        }
+                    } catch (RuntimeException ignored) { }
+                }
                 if (main.poses == null) main.poses = new java.util.ArrayList<PoseSprite>();
                 main.poses.add(p);
             } catch (RuntimeException e) {
@@ -886,6 +941,60 @@ public final class Art {
             }
         }
         return art;
+    }
+
+    /**
+     * v39: a picture's height against the standing front picture, from its face: the main picture's eye distance over
+     * this one's (both in their own pictures' heights), when the face found is a plausible face (the mouth below the
+     * eyes about as far as the eyes are apart) and the size fits the pose; otherwise the pose's usual size — a face and
+     * shoulders a third, a seated figure three fifths, a standing one the whole. 0 = leave it as it is.
+     */
+    static float sizeBy(float mainEye, float eyeHere, float faceGeo, int pose, int w, int h, float eyeY) {
+        if (w <= 0 || h <= 0) return 0;
+        float aspect = h / (float) w;
+        boolean bust = aspect < 1.3f && eyeY > 0.28f;            // the face fills the top half: a face-and-shoulders picture
+        boolean seated = pose == PoseSense.SIT || pose == PoseSense.CROUCH;
+        float lo = bust ? 0.18f : seated ? 0.42f : pose == PoseSense.LIE ? 0.25f : 0.75f, hi = bust ? 0.55f : seated ? 0.82f : pose == PoseSense.LIE ? 0.6f : 1.12f;
+        float typical = bust ? 0.34f : seated ? 0.62f : pose == PoseSense.LIE ? 0.4f : 1f;
+        if (mainEye > 0 && eyeHere > 0.005f && faceGeo > 0.45f && faceGeo < 1.7f) {
+            float r = mainEye / eyeHere;
+            if (r >= lo && r <= hi) return r;
+        }
+        return typical;
+    }
+
+    /**
+     * v39: when the front picture is no full-length figure (about as wide as it is tall: a face and shoulders, a
+     * sitting picture), the best full-length standing front picture among the character's own (eyes near the top, a
+     * tall figure, a calm or happy face) as a char line, or null when the front is fine or there is none.
+     */
+    static String[] fullLengthFront(Loader L, String[] charLine, java.util.List<String[]> poses) {
+        try {
+            int[] d = L.decode(charLine[2], 64);
+            if (d == null || d[1] >= d[0] * 1.35f) return null;           // tall enough: a whole figure
+            float mainAspect = d[1] / (float) Math.max(1, d[0]);
+            String[] best = null;
+            float bestScore = -1;
+            for (String[] p : poses) {
+                float angle = Float.parseFloat(p[3].trim());
+                int pose = Integer.parseInt(p[4].trim()), emo = Integer.parseInt(p[5].trim());
+                if (Math.abs(angle) > 1 || (pose != PoseSense.STAND && pose != PoseSense.WAVE) || (emo != PoseSense.NEUTRAL && emo != PoseSense.HAPPY)) continue;
+                float eyeY = (Float.parseFloat(p[11].trim()) + Float.parseFloat(p[13].trim())) / 2, mouthX = Float.parseFloat(p[7].trim());
+                // a child's head is a bigger part of the figure: the eyes up to a third of the way down
+                if (mouthX <= 0 || eyeY <= 0 || eyeY > 0.35f) continue;
+                int[] pd = L.decode(p[2], 64);
+                if (pd == null) continue;
+                float aspect = pd[1] / (float) Math.max(1, pd[0]);
+                if (aspect < Math.max(1.3f, mainAspect + 0.3f)) continue;       // clearly more of the figure than the front
+                float sc = aspect - 2 * eyeY + (emo == PoseSense.NEUTRAL ? 0.3f : 0) + (pose == PoseSense.STAND ? 0.3f : 0);
+                if (sc > bestScore) { bestScore = sc; best = p; }
+            }
+            if (best == null) return null;
+            // char|name|file|mouthX|mouthY|mouthHW|eyeLX|eyeLY|eyeRX|eyeRY|eyeR|turbanY
+            return new String[]{"char", charLine[1], best[2], best[7], best[8], best[9], best[10], best[11], best[12], best[13], best[14], "0"};
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     static boolean mentions(Story st, String... words) {

@@ -179,6 +179,7 @@ public class MakeFilm {
                 ImageIO.write(img, png ? "png" : "jpg", new File(stills, String.format(png ? "t_%08.3f.png" : "t_%08.3f.jpg", t)));
             }
             System.out.println("frames written");
+            System.out.println("STATS " + com.tarun.kahani.core.Renderer.stats());
             return;
         }
         for (int f = 0; f < frames; f++) {
@@ -194,6 +195,7 @@ public class MakeFilm {
         ff.waitFor();
         long ms = System.currentTimeMillis() - tr;
         System.out.println("rendered " + frames + " frames in " + ms + "ms (" + (frames * 1000f / Math.max(1, ms)) + " fps) -> " + out);
+        System.out.println("STATS " + com.tarun.kahani.core.Renderer.stats());
         if (meter != null) { film.shotList += meter.report(); System.out.print(meter.report()); }
         if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));
     }

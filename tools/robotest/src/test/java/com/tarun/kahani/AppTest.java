@@ -5030,4 +5030,90 @@ public class AppTest {
         for (int i = s.indexOf(what); i >= 0; i = s.indexOf(what, i + 1)) n++;
         return n;
     }
+
+    /**
+     * v39: the user's own family pictures (tools/testdata/sheets38) uploaded for the user's own script "चाय पर बात"
+     * exactly as the phone does it — the 📷 pop-up's Gallery button for each character and for the place, all sheets
+     * of one character at once — then the project (cast.txt and the saved pictures) is kept in build/v39family for
+     * the desktop film checks of lips, blinks, expressions and movement.
+     */
+    @Test
+    public void v39FamilyPicturesUploadedForChaiParBaat() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets38");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/chai_par_baat.txt").toPath()), "UTF-8");
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Story st = ScriptParser.parse(script);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method angles = MainActivity.class.getDeclaredMethod("anglesFor", String.class, String.class, String.class);
+        angles.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        String[][] who = {
+                {"तरुण", "08_papa_sheet_a.png,09_papa_sheet_b.png,21_papa_beard_a.png,22_papa_beard_b.png,23_papa_beard_c.png,24_papa_beard_d.png,25_papa_5views.png,26_papa_sheet_c.png,27_papa_sheet_d.png,28_papa_beard_laugh.png"},
+                {"प्रिया", "05_mummy_tray_a.png,06_mummy_sheet_b.png,07_mummy_sheet_c.png,10_mummy_sheet_d.png,11_mummy_green_bg.png,12_mummy_5views.png,13_mummy_sheet_e.png"},
+                {"वृंदा", "14_siya_glasses_a.png,15_siya_glasses_b.png,16_siya_glasses_c.png,18_siya_glasses_d.png,19_siya_5views_staggered.png"},
+                {"वनुशा", "20_pari_toddler_a.png,29_pari_toddler_b.png"},
+                {"scene:1", "02_place_livingroom_6views.jpg,36_place_livingroom_6views_b.jpg,30_place_tv_wall.jpg,31_place_living_details.jpg"}};
+        StringBuilder report = new StringBuilder();
+        for (String[] w : who) {
+            String tgt;
+            if (w[0].startsWith("scene:")) tgt = "angles:scene:1:लिविंग रूम";
+            else {
+                Story.CharacterDef c = null;
+                for (Story.CharacterDef x : st.cast()) if (x.fullName.equals(w[0])) c = x;
+                assertNotNull(w[0], c);
+                tgt = "angles:char:" + keyFor.invoke(a, c) + ":" + c.shown();
+            }
+            org.robolectric.shadows.ShadowToast.reset();
+            angles.invoke(a, tgt, "x", null);
+            idle();
+            android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            android.widget.Button gallery = null;
+            for (View v : allViews(dlg.getWindow().getDecorView(), new ArrayList<View>()))
+                if (v instanceof android.widget.Button && String.valueOf(((android.widget.Button) v).getText()).contains("gallery")) gallery = (android.widget.Button) v;
+            assertNotNull(gallery);
+            gallery.performClick();
+            idle();
+            android.content.ClipData cc = null;
+            for (String f : w[1].split(",")) {
+                android.net.Uri u = android.net.Uri.fromFile(new File(dir, f));
+                if (cc == null) cc = android.content.ClipData.newRawUri("pictures", u); else cc.addItem(new android.content.ClipData.Item(u));
+            }
+            android.content.Intent d2 = new android.content.Intent();
+            d2.setClipData(cc);
+            onResult.invoke(a, 24, android.app.Activity.RESULT_OK, d2);
+            String toast = null;
+            for (int i = 0; i < 6000; i++) {
+                idle();
+                toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+                if (toast != null && (uploadDone() || toast.startsWith("Please") || toast.startsWith("Open a story"))) break;
+                Thread.sleep(100);
+            }
+            idle();
+            report.append(w[0]).append(" ← ").append(w[1].split(",").length).append(" sheets: ").append(toast).append('\n');
+            android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            if (open != null && open.isShowing()) open.dismiss();
+        }
+        System.out.println("FAMILY v39:\n" + report + "\ncast.txt:\n" + p.read("cast.txt"));
+        File keep = new File(OUT.getParentFile(), "v39family");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        ac.pause().stop().destroy();
+    }
+
+    static void deleteTree(File f) {
+        if (f.isDirectory()) for (File c : f.listFiles()) deleteTree(c);
+        f.delete();
+    }
 }

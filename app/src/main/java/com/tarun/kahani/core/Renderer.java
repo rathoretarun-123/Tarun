@@ -1496,6 +1496,9 @@ public final class Renderer {
         // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
         // it is for the whole shot (nothing bent, nothing swaying, no step cycle): the pose is in the picture
         Art.PoseSprite chosen = k.costume > 0 ? null : chosenPicture(sp, a, t, p);     // pose pictures show the character's own clothes
+        if (DEBUG_DRAW) System.out.printf(java.util.Locale.US, "DRAW t=%.2f %s body=%d sit=%.2f seat=%d chosen=%s rig=%s legs=%s%n", t, a.c.shown(), p.body, p.sit, p.seat,
+                chosen == null ? "-" : chosen.file + "(" + PoseSense.poseName(chosen.pose) + ")", sp == null || sp.rig == null ? "none" : sp.rig.still ? "still" : sp.rig.animal ? "animal" : "full",
+                sp == null || sp.rig == null ? "-" : String.valueOf(sp.rig.legs));
         if (chosen != null && chosen.sprite() != null) {
             Art.Sprite real = chosen.sprite();
             g.restore();
@@ -1513,6 +1516,9 @@ public final class Renderer {
                 pys += (-h + sp.mouthY * h) - (-hReal + real.mouthY * hReal);
                 pxs += ((sp.mouthX - 0.5f) * wMain - (real.mouthX - 0.5f) * wReal) * (p.facing < 0 ? -1 : 1);
             }
+            // v39: a sitting picture on a sofa, a chair or a bed sits on its cushion, not on the floor in front of it
+            if (chosen.pose == PoseSense.SIT && (k.body == Pose.SIT || p.sit > 0.5f) && p.seat > 0 && p.seat != Film.SEAT_WHEELCHAIR && camZ <= 1.6f)
+                pys -= seatTopOf(p.seat) * h;
             if (camStill && pixelStep > 0) { pxs = Math.round(pxs / pixelStep) * pixelStep; pys = Math.round(pys / pixelStep) * pixelStep; }
             g.save();
             g.translate(pxs, pys);
@@ -1523,11 +1529,12 @@ public final class Renderer {
             if (!stepping || real.rig != null) p.walkAmt = 0;                              // a rigged picture never steps through its mesh; a still one keeps the step's pulse
             p.wave = 0; p.swing = false; p.twirl = false; p.headTilt = 0; p.tilt = 0; p.nod = 0;
             if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; p.flush = 0; }
-            if (chosen.pose != PoseSense.STAND) p.blink = 0;
+            if (chosen.pose != PoseSense.STAND && (real.rig == null || !real.rig.face)) p.blink = 0;     // v39: a face rig blinks in any pose
             if (Math.abs(chosen.angle) > 170 || chosen.emotion == PoseSense.NO_FACE) { p.mouth = 0; p.blink = 0; p.eyesClosed = false; }   // v34: a back never talks or blinks
             mo.sy = 1 + (float) Math.sin(tp * 2.1f + a.order) * 0.004f; mo.sx = 1;
             float facing = p.facing;
             if (Math.abs(chosen.angle) > 1 && Math.abs(chosen.angle) < 179) p.facing = facing;      // a side or three-quarter picture faces the way of the picture; mirrored when the character faces the other way
+            else p.facing = 1;       // v39: a front (or back) picture is never mirrored — writing in it ("doctor!") would read backwards
             // v33: a step's picture fades in over the first third of the step (no flip between two pictures)
             float phase = p.walk / (float) Math.PI;
             float fade = phase - (float) Math.floor(phase);
@@ -1546,6 +1553,7 @@ public final class Renderer {
             return;
         }
         if (sp != null) {
+            if (DEBUG_DRAW) { Art.Sprite vv = k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t); System.out.printf(java.util.Locale.US, "  VIEW %s %s %dx%d rig=%s sit=%.2f%n", a.c.shown(), vv == sp ? "main" : "view", vv.w, vv.h, vv.rig == null ? "none" : vv.rig.still ? "still" : vv.rig.animal ? "animal" : "full", p.sit); }
             drawSprite(g, k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t), look, p, h, mo.rot, a);
             if (p.umbrellaOpen) spriteUmbrella(g, look, p, h);
         }
@@ -2352,6 +2360,18 @@ public final class Renderer {
         g.restore();
     }
 
+    /** v39: the top of a seat's cushion, in the sitter's standing heights (where a sitting picture's seat goes). */
+    static float seatTopOf(int seat) {
+        switch (seat) {
+            case Film.SEAT_SOFA: return 0.25f;
+            case Film.SEAT_CHAIR: return 0.30f;
+            case Film.SEAT_BED: return BED_TOP;
+            case Film.SEAT_THRONE: return 0.335f;
+            case Film.SEAT_STOOL: case Film.SEAT_ROCK: return 0.24f;
+            default: return 0;
+        }
+    }
+
     /** v35: the height of a bed's mattress top, in the sleeper's standing heights. */
     static final float BED_TOP = 0.27f;
 
@@ -2893,6 +2913,18 @@ public final class Renderer {
         });
     }
 
+    /** v39: picture drawings, with a living face, speaking frames, speaking with the jaw moving, blinks, feelings shown. */
+    public static final java.util.concurrent.atomic.AtomicLong[] STAT = {new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(),
+            new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong()};
+
+    static final boolean DEBUG_DRAW = System.getProperty("kahani.debugDraw") != null;
+
+    public static String stats() {
+        long n = STAT[0].get(), alive = STAT[1].get(), sp = STAT[2].get(), spa = STAT[3].get();
+        return String.format(java.util.Locale.US, "pictures drawn %d, living face %.0f%%, speaking %d, lips moving %.0f%%, blinks %d, feelings %d",
+                n, n == 0 ? 0 : 100f * alive / n, sp, sp == 0 ? 0 : 100f * spa / sp, STAT[4].get(), STAT[5].get());
+    }
+
     private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot, Film.Actor actor) {
         float scale = h / sp.h;
         float w = sp.w * scale;
@@ -2904,6 +2936,16 @@ public final class Renderer {
         boolean rigged = rig != null && (!beast || p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
         Rig.State st = rigged ? rigState(p, actor, sp) : null;
         if (rigged && beast) animalState(st, p);
+        // v39: what the film's pictures really did (MakeFilm STATS=1, tests): drawn with a living face, and speaking
+        // frames whose jaw moved
+        if (actor != null) {
+            boolean alive = rigged && !beast && rig.face && rig.faceImg != null;
+            STAT[0].incrementAndGet();
+            if (alive) STAT[1].incrementAndGet();
+            if (p.mouth > 0.06f) { STAT[2].incrementAndGet(); if (alive && st.jaw > 0.02f) STAT[3].incrementAndGet(); }
+            if (p.blink > 0.5f || p.eyesClosed) STAT[4].incrementAndGet();
+            if (p.emotion != Pose.NEUTRAL && alive) STAT[5].incrementAndGet();
+        }
         g.save();
         if (p.body == Pose.LIE && !beast) {
             // v35: by the lie amount (lying back, sitting up), onto the mattress of a bed

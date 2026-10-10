@@ -277,8 +277,19 @@ public final class ScriptParser {
     }
 
     private static boolean isPlaceHeader(String l) {
-        return !NUMBERED.matcher(l).matches() && Txt.has(l, "स्थानों", "स्थान का", "स्थान :", "स्थान:", "जगहों", "places", "locations", "settings")
-                && l.length() < 120;
+        if (NUMBERED.matcher(l).matches()) return false;
+        if (Txt.has(l, "स्थानों", "स्थान का", "स्थान :", "स्थान:", "जगहों", "places", "locations", "settings") && l.length() < 120) return true;
+        // v39: a short heading line ("जगह का परिचय", "लोकेशन", "Location") — never a sentence of a description
+        String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
+        return h.length() <= 30 && !h.contains("।") && h.split("\\s+").length <= 4
+                && (Txt.has(h, "जगह", "लोकेशन", "स्थान परिचय", "सेटिंग") || Txt.hasWord(h, "location", "place", "setting"))
+                && !Txt.has(h, "मुख्य जगह", "main location", "main place");
+    }
+
+    /** v39: the end of the lists before the script ("---", "स्क्रिप्ट शुरू", "Script starts"). */
+    private static boolean listsEnd(String l) {
+        String h = l.trim();
+        return h.matches("^[-–—_*=~]{3,}$") || Txt.has(h, "स्क्रिप्ट शुरू", "कहानी शुरू", "पटकथा शुरू") || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|story) (starts|begins).*");
     }
 
     /** A line that can be the film's title: short, not a sentence, list entry, heading or "Name: words" line. */
@@ -296,7 +307,8 @@ public final class ScriptParser {
     /** Words that start a description line ("Face: …", "पहनावा: …"), never a new character or place. */
     static final String[] FIELDS = {"चेहरा", "पहनावा", "पोशाक", "कपड़े", "शरीर", "रूप", "आवाज़", "आवाज", "उम्र", "स्वभाव", "बाल", "आँखें", "कद",
             "face", "dress", "outfit", "clothes", "costume", "body", "hair", "voice", "age", "personality", "nature", "look", "looks",
-            "appearance", "height", "eyes", "skin", "role", "note", "notes", "description", "features", "behaviour", "behavior", "accessories"};
+            "appearance", "height", "eyes", "skin", "role", "note", "notes", "description", "features", "behaviour", "behavior", "accessories",
+            "सपना", "शौक", "पसंद", "आदत", "रिश्ता", "dream", "dreams", "hobby", "hobbies", "likes", "habit", "relation"};   // v39
 
     private static boolean fieldLabel(String head) {
         String h = Txt.norm(head.replaceAll("[*•\\-&]", " ")).trim();
@@ -358,6 +370,7 @@ public final class ScriptParser {
             if (i == titleIdx) continue;
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
+            if (listsEnd(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 0; numbered = false; continue; }
             if (isPlaceHeader(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 2; continue; }
             if (isCharHeader(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 1; continue; }
             Matcher m = NUMBERED.matcher(l);
@@ -421,6 +434,11 @@ public final class ScriptParser {
         if (mode == 2) {
             Story.PlaceDef p = new Story.PlaceDef();
             p.name = header;
+            // v39: "मुख्य जगह: एक मॉडर्न फ्लैट का लिविंग रूम" — the label is no name; the words after it are
+            if (Txt.has(header, "मुख्य जगह", "मुख्य स्थान", "जगह", "स्थान", "लोकेशन") && header.split("\\s+").length <= 2 || Txt.hasWord(header, "main location", "main place", "location", "place")) {
+                String first = d.split("\n")[0].trim();
+                if (first.length() > 0 && first.length() <= 80) p.name = first;
+            }
             p.description = d;
             story.places.add(p);
             return;
@@ -459,10 +477,43 @@ public final class ScriptParser {
                 && Txt.has(paren, "robo", "robot", "dog", "witch", "kid", "boss", "chief", "captain", "रोबो", "बॉस", "कप्तान")) role = paren;
         // the description keeps the name, age and details; the role stays apart (c.role)
         String hdr = role.length() > 0 ? name + (paren.length() > 0 && !paren.equals(role) ? " (" + paren + ")" : "") : header;
+        // v39: "वृंदा - 11 साल, बड़ी बेटी": an age and a relation after the name are who they are (a daughter is a girl),
+        // not a role like "The Corporate Rakshas" — they stay in the description the look is read from
+        if (role.length() > 0 && relationIn(role).length() > 0) hdr = name + " — " + role;
         Story.CharacterDef c = newChar(story, name, hdr + "\n" + d, age);
         c.fullName = name;
         c.role = role;
         c.voiceOnly = voiceOnlyName(name);
+        // v39: what the family calls them is a name for them too ("पिता" → पापा, "माँ" → मम्मी): the library's pictures
+        // of "पापा" are his, and "पापा" in a direction is him
+        for (String al : relationAliases(relationIn(header + " " + role + " " + paren))) if (!c.aliases.contains(al)) c.aliases.add(al);
+    }
+
+    /** v39: relation words and what the family calls such a one. */
+    static final String[][] RELATIONS = {
+            {"पिता", "पापा", "पिताजी", "पापाजी", "डैडी", "papa", "dad", "daddy", "father"},
+            {"पापा", "पिता", "पिताजी", "papa", "dad", "daddy", "father"},
+            {"father", "papa", "dad", "daddy", "पापा", "पिता"},
+            {"माँ", "मम्मी", "मां", "माता", "मम्मा", "मॉम", "mummy", "mom", "mommy", "mother", "maa"},
+            {"माता", "मम्मी", "माँ", "मां", "mummy", "mom", "mother"},
+            {"मम्मी", "माँ", "मां", "माता", "mummy", "mom", "mother"},
+            {"mother", "mummy", "mom", "माँ", "मम्मी"},
+            {"दादी", "दादी माँ", "grandma", "granny"}, {"दादा", "दादाजी", "grandpa"}, {"नानी", "नानी माँ", "nani"}, {"नाना", "नानाजी", "nana"}};
+
+    /** The first relation word named in a header or role ("42 साल, पिता" → "पिता"), or "". */
+    static String relationIn(String s) {
+        if (s == null) return "";
+        for (String[] r : RELATIONS) if (wordIn(s, r[0])) return r[0];
+        if (Txt.has(s, "बेटी", "बेटा", "पत्नी", "पति", "बहन", "भाई", "दीदी", "भैया", "daughter", "son", "wife", "husband", "sister", "brother", "साल", "वर्ष", "years"))
+            return "_";
+        return "";
+    }
+
+    static List<String> relationAliases(String rel) {
+        List<String> out = new ArrayList<String>();
+        if (rel.length() == 0 || rel.equals("_")) return out;
+        for (String[] r : RELATIONS) if (r[0].equals(rel)) for (int i = 1; i < r.length; i++) out.add(r[i]);
+        return out;
     }
 
     /** Sound words: a quoted "खटाक!" or "धड़ाम!" is a noise in the direction, not a line someone says. */
@@ -769,6 +820,8 @@ public final class ScriptParser {
         String n = Txt.norm(s).replaceAll("[\\s\\-_.']+", "");
         n = n.replaceAll("[नमणङञ]्(?=[क-ह])", "");      // a half nasal before a consonant is the anusvara
         n = n.replace("ं", "").replace("ी", "ि").replace("ू", "ु").replace("ई", "इ").replace("ऊ", "उ");
+        // v39: the sounds written several ways ("वनुशा" = "वानुषा" = "वाणुशा"): ण → न, ष / श → स, the long ा dropped
+        n = n.replace("ण", "न").replace("ष", "स").replace("श", "स").replace("ा", "").replace("आ", "अ");
         return n;
     }
 

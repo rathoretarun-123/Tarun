@@ -41,6 +41,8 @@ public final class Pose {
     public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
     public boolean swing;
     public boolean umbrellaOpen;       // v34: an umbrella held open over the head (rain outdoors)
+    /** v34: where the eyes look, on screen (-1 left .. +1 right, -1 up .. +1 down), and how much they rest on someone (0..1). */
+    public float gazeX, gazeY, gazeHeld;
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
 
@@ -54,6 +56,7 @@ public final class Pose {
         q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen;
+        q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld;
         return q;
     }
 
@@ -63,5 +66,6 @@ public final class Pose {
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
         sit = 0; nod = 0; wave = 0; twirl = false; umbrellaOpen = false;
+        gazeX = 0; gazeY = 0; gazeHeld = 0;
     }
 }

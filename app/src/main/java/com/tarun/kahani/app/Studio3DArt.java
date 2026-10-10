@@ -363,7 +363,7 @@ final class Studio3DArt {
             project.setSetting("rejected3d.refplace." + key, "1");
             return;
         }
-        if (kind.equals(P_CHAR) && f[f.length - 1].contains("recoloured to the description")) {
+        if (kind.equals(P_CHAR) && (f[f.length - 1].contains("recoloured to the description") || f[f.length - 1].contains("in the style of your picture"))) {
             // the picture made from the user's own picture is turned down: the studio's own doll is proposed next time
             project.setSetting("rejected3d.ref." + key, "1");
             project.setSetting("credit3d." + key, "");
@@ -494,7 +494,10 @@ final class Studio3DArt {
     /**
      * v34 (the still-picture manual §6, the cleaning rule): a library picture smaller than 512 px on its long side
      * is never the 3D maker's reference (a figure cut from a sheet is tall and narrow: its height is what counts).
-     * The size is read once from the file and kept with the picture.
+     * A figure cut from a sheet of several counts from 300 px: a sheet of ten from a 1024-1600 px picture gives
+     * figures about 450-500 px tall, the film draws the user's own characters from exactly such figures, and at 512
+     * px none of the user's sheets could ever lend a made character its style (the user: "it is still not taking
+     * cues from already uploaded pics"). The size is read once from the file and kept with the picture.
      */
     static boolean bigEnough(Library lib, Library.Item it) {
         String dim = it.meta("dim");
@@ -511,7 +514,8 @@ final class Studio3DArt {
         try {
             String[] d = dim.split("x");
             int w = Integer.parseInt(d[0]), h = Integer.parseInt(d[1]);
-            return w <= 0 || h <= 0 || Math.max(w, h) >= 512;
+            boolean fromSheet = it.meta("sheet") != null || it.meta("sheetMain") != null;
+            return w <= 0 || h <= 0 || Math.max(w, h) >= (fromSheet ? 300 : 512);
         } catch (Throwable e) { return true; }
     }
 
@@ -894,19 +898,79 @@ final class Studio3DArt {
         Library.Item best = null;
         float bestS = 0.6f;
         int seen = 0;
+        // v34 (the user: "it is still not taking cues from already uploaded pics"): when no uploaded picture is this
+        // character, the closest uploaded figure of the same kind becomes its base — a person for a person, an animal
+        // for an animal, the description's traits agreeing (hair, beard, skirt or trousers, turban, grey hair), a
+        // child's proportions for a child — recoloured to the description, with its glasses, goggles, blindfold,
+        // eye patch or bandage painted on, so every made character is drawn in the user's own style. Never a picture
+        // another character of the story already uses, never one named as someone else; and not for a character the
+        // picture could not show (a wheelchair, a walking frame, crutches, a sling or plaster, a mount, more heads or
+        // arms): the 3D doll shows those.
+        Library.Item base = null;
+        float baseS = 0;
+        Look cl = c.look;
+        boolean showsMore = cl.aid == Look.AID_WHEELCHAIR || cl.aid == Look.AID_WALKER || cl.aid == Look.AID_CRUTCHES || (cl.injury & (Look.INJ_ARM | Look.INJ_LEG)) != 0
+                || cl.mount >= 0 || cl.arms > 2 || cl.heads > 1 || cl.kind == Look.MONSTER || cl.robot;
+        java.util.Set<String> taken = new java.util.HashSet<String>(java.util.Arrays.asList(project.setting("auto.pics", "").split(",")));
+        java.util.List<String> others = new java.util.ArrayList<String>();
+        for (Story.CharacterDef o : story.characters) {
+            if (o == c) continue;
+            others.add(o.displayName);
+            for (String k : new String[]{"pic.char:" + o.displayName, "auto.pic.char:" + o.displayName, "base3d.char:" + o.displayName}) {
+                String v = project.setting(k, "");
+                if (v.length() > 0) taken.add(v);
+            }
+        }
+        java.util.List<float[]> heads = new java.util.ArrayList<float[]>();
         try {
             for (Library.Item it : lib.find(Library.PIC, null, null)) {
                 if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
                 if (seen++ > 200) break;
                 com.tarun.kahani.core.PicSense.Info in = lib.info(it);
                 if (in == null || !in.figure || !bigEnough(lib, it)) continue;          // v34: the manual's cleaning rule
-                float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta), c);
-                if (com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null) sc = Math.min(1f, sc + 0.3f);
+                com.tarun.kahani.core.PicSense.Traits tr = com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta);
+                if (tr != null && tr.headRatio > 0) heads.add(new float[]{tr.headRatio});
+                boolean own = com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null;
+                // v34: never another character's own picture (two characters of a story would share one face), and
+                // for a character a standing figure cannot show (a wheelchair, crutches, a sling…) only its own picture
+                if (!own && (taken.contains(it.id) || (!others.isEmpty() && com.tarun.kahani.core.ScriptAI.matchName(it.name, others) != null) || showsMore)) continue;
+                float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, tr, c);
+                if (own) sc = Math.min(1f, sc + 0.3f);
                 if (sc > bestS) { bestS = sc; best = it; }
+            }
+            if (best == null && !showsMore) {
+                float median = 0;
+                if (!heads.isEmpty()) {
+                    float[] hr = new float[heads.size()];
+                    for (int i = 0; i < hr.length; i++) hr[i] = heads.get(i)[0];
+                    java.util.Arrays.sort(hr);
+                    median = hr[hr.length / 2];
+                }
+                seen = 0;
+                for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                    if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
+                    if (seen++ > 200) break;
+                    if (taken.contains(it.id) || (!others.isEmpty() && com.tarun.kahani.core.ScriptAI.matchName(it.name, others) != null)) continue;
+                    com.tarun.kahani.core.PicSense.Info in = lib.info(it);
+                    if (in == null || !in.figure || !bigEnough(lib, it)) continue;
+                    // a front picture of the figure standing (a side, back or sitting picture is a poor base for the whole film)
+                    String vw = it.meta("view"), ps = it.meta("pose");
+                    if ((vw != null && vw.length() > 0) || (ps != null && ps.length() > 0 && !ps.toLowerCase(Locale.ROOT).startsWith("stand"))) continue;
+                    com.tarun.kahani.core.PicSense.Traits tr = com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta);
+                    if (tr == null) continue;
+                    float[] tm = com.tarun.kahani.core.PicSense.traitMatch(tr, c);
+                    if (tm[1] < 2f || tm[0] < 0.6f) continue;
+                    // a child from a child's proportions (a bigger head for its height), a grown-up from a grown-up's
+                    if (median > 0 && tr.headRatio > 0 && (cl.isChild() ? tr.headRatio < median * 0.95f : tr.headRatio > median * 1.12f)) continue;
+                    float q = tm[0] + 0.02f * Math.min(10, tm[1]) + 0.1f * com.tarun.kahani.core.PicSense.matchCharacter(in, tr, c);
+                    if (q > baseS) { baseS = q; base = it; }
+                }
             }
         } catch (Throwable e) {
             return null;
         }
+        boolean styleBase = false;
+        if (best == null && base != null) { best = base; bestS = Math.min(0.6f, baseS * 0.6f); styleBase = true; }
         if (best == null) return null;
         try {
             byte[] data = Project.readAll(lib.open(best));
@@ -918,6 +982,8 @@ final class Studio3DArt {
             boolean beast = c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD;
             Cutout.Result r = Cutout.process(px, w, h, beast);
             int[] out = recolour(r.px, r.w, r.h, c.look.primary, c.look.secondary);
+            // v34: what the description puts on the face (spectacles, goggles, a blindfold, an eye patch, a bandage)
+            if (r.faceFound && !beast) com.tarun.kahani.core.FaceProps.paint(out, r.w, r.h, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR, c.look);
             if (cue != null && cue.pictures > 0) cue.grade(out, r.w, r.h);
             String key = keyFor(project, story, c);
             String file = project.savePicture(encode(out, r.w, r.h, true), "3d_char");
@@ -925,14 +991,19 @@ final class Studio3DArt {
             com.tarun.kahani.core.PicSense.Info refIn = lib.info(best);
             com.tarun.kahani.core.StillQa.Result qa = com.tarun.kahani.core.StillQa.check(out, r.w, r.h, r.faceFound ? new float[]{r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR} : null,
                     refIn != null ? refIn.hue : null, false, com.tarun.kahani.core.StillQa.HANDS_SOURCE);
-            String verdict = SceneMaker.verdict(ratings, "") + String.format(Locale.US, " — made from your picture \"%s\" (fit %.0f%%), recoloured to the description; reject it if %s must not look like that picture",
-                    best.label(), bestS * 100, c.shown()) + " — " + qa.summary();
+            String verdict = SceneMaker.verdict(ratings, "") + (styleBase
+                    ? String.format(Locale.US, " — drawn in the style of your picture \"%s\" (the closest of your uploads of the same kind), recoloured to %s's description%s; reject it to get the 3D doll instead, or upload a picture of %s",
+                            best.label(), c.shown(), com.tarun.kahani.core.FaceProps.any(c.look) ? " with the face details painted on" : "", c.shown())
+                    : String.format(Locale.US, " — made from your picture \"%s\" (fit %.0f%%), recoloured to the description%s; reject it if %s must not look like that picture",
+                            best.label(), bestS * 100, com.tarun.kahani.core.FaceProps.any(c.look) ? " with the face details painted on" : "", c.shown())) + " — " + qa.summary();
             String points = r.faceFound ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR, 0f)
                     : "0|0|0|0|0|0|0|0|0";
             dropProposals(project, P_CHAR, key, null, true);
             dropProposals(project, P_VIEW, key, null, true);
             addProposal(project, "propose|char|" + key + "|" + file + "|" + points + "|" + SceneMaker.score(ratings) + "|" + verdict);
-            project.setSetting("credit3d." + key, "from your picture \"" + best.label() + "\" (recoloured)");
+            project.setSetting("credit3d." + key, (styleBase ? "in the style of your picture \"" : "from your picture \"") + best.label() + "\" (recoloured)");
+            // the figure lent is this character's now: no other made character borrows it too
+            project.setSetting("base3d.char:" + c.displayName, best.id);
             if (!ask) accept(project, lib, ctx, proposalFor(project, P_CHAR, key));
             return file;
         } catch (Throwable e) {

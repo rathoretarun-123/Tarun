@@ -385,6 +385,8 @@ public final class Angles {
     /**
      * The figures among the pieces (v26): at least 30% as tall as the tallest, 12% of the sheet's height and 4% of
      * its width (labels, arrows, crumbs and grid bits dropped), the twelve largest (a sheet of ten, with room for an eleventh). Fewer than two: not a sheet.
+     * v34: a part that came loose from a figure (a raised sword with the tip of a braid, a foot in a leap) is joined
+     * back to the figure it touches instead of being dropped.
      */
     public static List<Piece> figures(List<Piece> parts, int w, int h) {
         List<Piece> out = new ArrayList<Piece>();
@@ -402,6 +404,7 @@ public final class Angles {
             out = kept;
         }
         if (out.size() < 2) return new ArrayList<Piece>();
+        out = rejoin(parts, out, w, h);
         if (out.size() > 12) {
             java.util.Collections.sort(out, new java.util.Comparator<Piece>() {
                 public int compare(Piece a, Piece b) { return Long.compare((long) b.w * b.h, (long) a.w * a.h); }
@@ -409,6 +412,70 @@ public final class Angles {
             out = new ArrayList<Piece>(out.subList(0, 12));
         }
         return order(out, h);
+    }
+
+    /**
+     * v34: the dropped parts that touch a kept figure (an opaque pixel within half a percent of the sheet's smaller
+     * side of one of the figure's, at least 3 pixels) are joined back to it — a sword and a braid tip cut off by the
+     * split, a foot in a leap. Only cut-out pieces: the panels of a place sheet are whole crops and stay as they are;
+     * crumbs (under 0.05% of the sheet) stay dropped.
+     */
+    static List<Piece> rejoin(List<Piece> parts, List<Piece> figs, int w, int h) {
+        java.util.Set<Piece> kept = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Piece, Boolean>());
+        kept.addAll(figs);
+        List<Piece> loose = new ArrayList<Piece>();
+        for (Piece pc : parts) if (!kept.contains(pc) && opaqueShare(pc) < 0.9f && opaqueCount(pc) >= 0.0005f * w * h) loose.add(pc);
+        if (loose.isEmpty()) return figs;
+        int r = Math.max(3, Math.min(w, h) / 200);
+        List<Piece> out = new ArrayList<Piece>(figs);
+        // twice round: a part touching a part that touches the figure comes back too
+        for (int pass = 0; pass < 2 && !loose.isEmpty(); pass++) {
+            for (java.util.Iterator<Piece> it = loose.iterator(); it.hasNext(); ) {
+                Piece f = it.next();
+                for (int i = 0; i < out.size(); i++) {
+                    Piece q = out.get(i);
+                    if (opaqueShare(q) >= 0.97f || !touches(f, q, r)) continue;
+                    out.set(i, join(q, f));
+                    it.remove();
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** True when an opaque pixel of p lies within r sheet pixels of an opaque pixel of q. */
+    static boolean touches(Piece p, Piece q, int r) {
+        int ax = Math.max(p.x0, q.x0 - r), ay = Math.max(p.y0, q.y0 - r);
+        int bx = Math.min(p.x0 + p.w, q.x0 + q.w + r), by = Math.min(p.y0 + p.h, q.y0 + q.h + r);
+        for (int y = ay; y < by; y++) for (int x = ax; x < bx; x++) {
+            if ((p.px[(y - p.y0) * p.w + x - p.x0] >>> 24) <= 100) continue;
+            int yy1 = Math.min(q.y0 + q.h - 1, y + r), xx1 = Math.min(q.x0 + q.w - 1, x + r);
+            for (int yy = Math.max(q.y0, y - r); yy <= yy1; yy++)
+                for (int xx = Math.max(q.x0, x - r); xx <= xx1; xx++)
+                    if ((q.px[(yy - q.y0) * q.w + xx - q.x0] >>> 24) > 100) return true;
+        }
+        return false;
+    }
+
+    /** The two pieces as one: the box around both, each pixel the more opaque of the two. */
+    static Piece join(Piece a, Piece b) {
+        Piece m = new Piece();
+        m.x0 = Math.min(a.x0, b.x0); m.y0 = Math.min(a.y0, b.y0);
+        m.w = Math.max(a.x0 + a.w, b.x0 + b.w) - m.x0; m.h = Math.max(a.y0 + a.h, b.y0 + b.h) - m.y0;
+        m.px = new int[m.w * m.h];
+        for (Piece s : new Piece[]{a, b})
+            for (int y = 0; y < s.h; y++) for (int x = 0; x < s.w; x++) {
+                int c = s.px[y * s.w + x], i = (y + s.y0 - m.y0) * m.w + x + s.x0 - m.x0;
+                if ((c >>> 24) > (m.px[i] >>> 24)) m.px[i] = c;
+            }
+        return m;
+    }
+
+    static int opaqueCount(Piece p) {
+        int n = 0;
+        for (int c : p.px) if ((c >>> 24) > 100) n++;
+        return n;
     }
 
     /** True when a piece is under 30% of the median piece area (a part of a figure, not a figure). */

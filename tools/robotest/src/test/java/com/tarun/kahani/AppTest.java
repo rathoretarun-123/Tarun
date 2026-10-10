@@ -483,8 +483,26 @@ public class AppTest {
             assertTrue(f.getName() + ": " + figs.size() + " figures", figs.size() >= 10 && figs.size() <= 12);
             assertTrue(f.getName() + ": a piece under 30% of the median (a part of a figure)", areas.isEmpty() || areas.get(0) >= 0.3f * median);
             assertTrue(f.getName() + ": " + overlaps + " overlapping pieces", overlaps == 0);
+            if (f.getName().equals("sheet12.jpg")) {
+                // v34: the leaping girl's raised sword (with the tip of her braid) and her foot came loose in the split;
+                // they are joined back to her, not dropped
+                int sword = opaqueIn(figs, 841, 147, 965, 314), foot = opaqueIn(figs, 921, 378, 965, 462);
+                report.append("(sheet12 sword ").append(sword).append(" px, foot ").append(foot).append(" px) ");
+                assertTrue("sheet12: the sword was dropped (" + sword + " px)", sword >= 3000);
+                assertTrue("sheet12: the foot was dropped (" + foot + " px)", foot >= 1200);
+            }
         }
         System.out.println("SHEETS: " + total + " sheets, " + figures + " figures, none cut — " + report);
+    }
+
+    /** The opaque pixels the figures hold inside a box of the sheet. */
+    static int opaqueIn(List<com.tarun.kahani.core.Angles.Piece> figs, int x0, int y0, int x1, int y1) {
+        int n = 0;
+        for (com.tarun.kahani.core.Angles.Piece p : figs)
+            for (int y = Math.max(y0, p.y0); y < Math.min(y1, p.y0 + p.h); y++)
+                for (int x = Math.max(x0, p.x0); x < Math.min(x1, p.x0 + p.w); x++)
+                    if ((p.px[(y - p.y0) * p.w + x - p.x0] >>> 24) > 100) n++;
+        return n;
     }
 
     /**
@@ -3371,6 +3389,151 @@ public class AppTest {
         for (String[] t : asked) assertTrue("no longer asked for Monu's new look: " + t[0], !t[0].equals("costume:" + key + "#1"));
         Art art = Art.fromManifest(p.read("cast.txt"), st, p.loader());
         assertNotNull("Monu's new-look doll is loaded", art.costumeSprite(monu.id, 1));
+    }
+
+    /**
+     * v34 (the user: "use the 3D maker only if absolutely necessary … it is still not taking cues from already uploaded
+     * pics"): a character with no picture of its own is drawn from the closest uploaded figure of the same kind (a girl
+     * from a girl), recoloured to its description, with its spectacles painted on — never from a picture another
+     * character of the story uses; a character the picture could not show (a wheelchair) gets the 3D doll; rejecting
+     * the style base gives the doll next time.
+     */
+    /**
+     * v34: the director reads any story's stage directions as moves, not only the sample story's phrases — "Kabir
+     * runs across the grass" (a run to the other side, heard as running steps), "Maya runs to Kabir" (beside him),
+     * "Kabir turns away and walks slowly home" (off the stage and gone while the others finish the scene), "Maya runs
+     * out of the room" and "comes back wearing a red frock" (out, a moment off the stage, back in the new clothes),
+     * a Hindi "घर चला जाता है"; one who speaks again in the scene goes only to the edge; the sample story's own
+     * choreography is untouched (nothing is staged twice).
+     */
+    @Test
+    public void storyDirectionsMoveTheCharacters() throws Exception {
+        String script = "Characters:\n1. Maya (9 years):\n * Face: two ponytails.\n * Clothes: a blue hoodie.\n2. Kabir (10 years):\n * Face: short curly hair.\n * Clothes: a red t-shirt.\n"
+                + "3. Grandpa (70 years):\n * Face: white hair.\n * Clothes: a white kurta.\n\n"
+                + "Scene 1: The Park\n(Place: a green park. Morning.)\nMaya: \"Kabir, look!\"\nKabir: \"Let's play!\"\n(Kabir runs across the grass.)\nMaya: \"Wait for me!\"\n"
+                + "(Maya runs to Kabir.)\nKabir: \"I am tired.\"\n(Kabir turns away and walks slowly home.)\nMaya: \"Bye, Kabir!\"\n\n"
+                + "Scene 2: The Room\n(Place: a cosy living room. Evening.)\nMaya: \"Grandpa, today is my party!\"\nGrandpa: \"Then go and get ready.\"\n(Maya runs out of the room.)\n"
+                + "(Maya comes back wearing a red frock.)\nMaya: \"How do I look?\"\nGrandpa: \"Like a princess.\"\n\nThe End\n";
+        Story st = ScriptParser.parse(script);
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(new Art());
+        List<Film.Seg> scenes = new ArrayList<Film.Seg>();
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) scenes.add(sg);
+        assertTrue("two scenes: " + scenes.size(), scenes.size() == 2);
+        Film.Actor kabir = null, maya1 = null, maya2 = null;
+        for (Film.Actor a : scenes.get(0).actors) { if (a.c.displayName.equals("Kabir")) kabir = a; if (a.c.displayName.equals("Maya")) maya1 = a; }
+        for (Film.Actor a : scenes.get(1).actors) if (a.c.displayName.equals("Maya")) maya2 = a;
+        assertNotNull("Kabir in the park", kabir); assertNotNull("Maya in the park", maya1); assertNotNull("Maya in the room", maya2);
+        StringBuilder rep = new StringBuilder();
+        // Kabir runs across, then walks off and is gone
+        Film.Key run = null, off = null, gone = null;
+        for (Film.Key k : kabir.keys) {
+            if (k.moveDur > 0.5f && k.run && run == null) run = k;
+            if (k.moveDur > 0.5f && (k.x < 0 || k.x > 1280)) off = k;
+            if (off != null && k.t > off.t && !k.visible && gone == null) gone = k;
+        }
+        assertNotNull("Kabir runs across the grass", run);
+        assertNotNull("Kabir walks off the stage", off);
+        assertNotNull("and is gone after it", gone);
+        assertTrue("walks (slowly), not runs, home", !off.run && off.moveDur >= 1.5f);
+        boolean steps = false;
+        for (Film.Sfx x : film.sfx) if (x.type == Film.SFX_STEPS_RUN && x.t <= run.t + 0.1f && x.t + x.dur >= run.t + run.moveDur - 0.1f) steps = true;
+        assertTrue("the run is heard", steps);
+        rep.append(String.format(java.util.Locale.US, "Kabir runs at %.1f for %.1f s, walks off at %.1f for %.1f s, gone at %.1f; ", run.t, run.moveDur, off.t, off.moveDur, gone.t));
+        // Maya runs to Kabir: she ends beside him
+        Film.Key to = null;
+        for (Film.Key k : maya1.keys) if (k.moveDur > 0.3f && k.t > run.t && k.t < off.t) to = k;
+        assertNotNull("Maya runs to Kabir", to);
+        float kx = Director.xAt(kabir, to.t + to.moveDur);
+        assertTrue("beside him, an arm's length away: " + to.x + " / " + kx, Math.abs(to.x - kx) <= 220 && Math.abs(to.x - kx) >= 120);
+        // Maya runs out of the room, is off the stage a moment, comes back in the red frock
+        Film.Key out = null, gone2 = null, back = null;
+        for (Film.Key k : maya2.keys) {
+            if (out == null && k.moveDur > 0.5f && k.run && (k.x < 0 || k.x > 1280)) out = k;
+            else if (out != null && gone2 == null && !k.visible) gone2 = k;
+            else if (gone2 != null && back == null && k.visible && k.moveDur > 0.5f && k.x > 100 && k.x < 1180) back = k;
+        }
+        assertNotNull("Maya runs out", out);
+        assertNotNull("and is off the stage", gone2);
+        assertNotNull("and comes back on stage", back);
+        assertTrue("a moment off the stage first: " + (back.t - gone2.t), back.t - gone2.t >= 0.9f);
+        assertTrue("back in the new clothes", back.costume == 1);
+        rep.append(String.format(java.util.Locale.US, "Maya out at %.1f, gone at %.1f, back at %.1f in costume %d; ", out.t, gone2.t, back.t, back.costume));
+        assertTrue(film.shotList, film.shotList.contains("2 leaving, 1 coming back, 1 across or around, 1 up to someone"));
+        // Hindi: "रोहन घर चला जाता है" — he leaves; "मीरा दूर चली जाती है" but speaks again: only to the edge, still seen
+        String hi = "पात्र:\n1. रोहन (10 वर्ष): लड़का।\n2. मीरा (10 वर्ष): लड़की।\n\nदृश्य 1: गली\n(स्थान: गाँव की गली। शाम।)\nरोहन: \"मैं चलता हूँ।\"\n(रोहन घर चला जाता है।)\n"
+                + "मीरा: \"कल मिलेंगे!\"\n(मीरा दूर चली जाती है।)\nमीरा: \"रुको, मेरा बस्ता!\"\n\nसमाप्त\n";
+        Story hs = ScriptParser.parse(hi);
+        Director hd = new Director(hs, new Director.Options());
+        hd.prepare();
+        Film hf = hd.direct(new Art());
+        Film.Actor rohan = null, meera = null;
+        for (Film.Seg sg : hf.segs) for (Film.Actor a : sg.actors) { if (a.c.displayName.contains("रोहन")) rohan = a; if (a.c.displayName.contains("मीरा")) meera = a; }
+        assertNotNull(rohan); assertNotNull(meera);
+        boolean rohanGone = false, meeraSeen = true;
+        for (Film.Key k : rohan.keys) if (!k.visible && k.t > rohan.keys.get(0).t + 1) rohanGone = true;
+        for (Film.Key k : meera.keys) if (!k.visible && k.t > meera.keys.get(0).t + 1) meeraSeen = false;
+        assertTrue("Rohan goes home and is gone", rohanGone);
+        assertTrue("Meera speaks again: she only goes to the edge, still in view", meeraSeen);
+        // the sample story's own choreography: nothing staged twice
+        Story sample = ScriptParser.parse(new String(Files.readAllBytes(new File(ASSETS, "sample_story.txt").toPath()), "UTF-8"));
+        Director sd = new Director(sample, new Director.Options());
+        sd.prepare();
+        Film sf = sd.direct(new Art());
+        assertTrue("the sample story's moves are its own", sf.shotList.contains("0 leaving, 0 coming back, 0 across or around, 0 up to someone"));
+        System.out.println("MOVES: " + rep);
+    }
+
+    @Test
+    public void madeCharactersFollowTheUploadedPictures() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File dir = userSheets()[0].getParentFile();
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        Class<?> ss = Class.forName("com.tarun.kahani.app.SheetSaver");
+        Method save = ss.getDeclaredMethod("saveToLibrary", com.tarun.kahani.app.Library.class, String.class, String.class, byte[].class, String.class);
+        save.setAccessible(true);
+        String[][] sheetFor = {{"Asha", "sheet04.jpg"}, {"मीना", "sheet15.jpg"}, {"Khan", "sheet11.jpg"}, {"राजू", "sheet01.jpg"}};
+        for (String[] sf : sheetFor) save.invoke(null, lib, sf[0], "person", Files.readAllBytes(new File(dir, sf[1]).toPath()), "test");
+        String script = "पात्र और रूप-रंग (Characters):\n1. Asha (10 वर्ष): लड़की, नीला कुर्ता।\n2. नेहा (10 वर्ष):\n * चेहरा: दो चोटियाँ, गोल चश्मा।\n * पहनावा: पीला फ्रॉक।\n"
+                + "3. दादी (75 वर्ष):\n * चेहरा: सफ़ेद बाल।\n * पहनावा: हरी साड़ी। वह व्हीलचेयर पर रहती हैं।\n\nदृश्य 1: आँगन\n(स्थान: घर का आँगन। सुबह।)\nAsha: \"नमस्ते!\"\nनेहा: \"चलो खेलें!\"\nदादी: \"धीरे खेलना।\"\n\nसमाप्त\n";
+        Story st = ScriptParser.parse(script);
+        Story.CharacterDef asha = null, neha = null, dadi = null;
+        for (Story.CharacterDef c : st.characters) { if (c.displayName.contains("Asha")) asha = c; else if (c.displayName.contains("नेहा")) neha = c; else if (c.displayName.contains("दादी")) dadi = c; }
+        assertNotNull(asha); assertNotNull(neha); assertNotNull(dadi);
+        assertTrue("Neha wears spectacles", neha.look.glasses == 1 && neha.look.isChild());
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        // the director places Asha's own pictures first (her name is in the library)
+        call("com.tarun.kahani.app.AutoLibrary", "fill", ctx, p, st);
+        String ashaPic = p.setting("auto.pic.char:" + asha.displayName, p.setting("pic.char:" + asha.displayName, ""));
+        System.out.println("STYLE BASE: Asha placed from the library " + ashaPic + "; used " + p.setting("auto.pics", ""));
+        // Neha has no picture: the 3D maker draws her in the style of an uploaded girl, never from Asha's own pictures
+        String nehaKey = (String) s3d("keyFor", p, st, neha);
+        s3d("makeCharacter", p, st, neha, lib, ctx, null, true, null, false);
+        String[] prop = (String[]) s3d("proposalFor", p, "char", nehaKey);
+        assertNotNull("a picture of Neha is proposed: " + p.read("cast.txt"), prop);
+        String verdict = prop[prop.length - 1];
+        String baseId = p.setting("base3d.char:" + neha.displayName, "");
+        com.tarun.kahani.app.Library.Item baseIt = lib.byId(baseId);
+        System.out.println("STYLE BASE: Neha ← " + (baseIt == null ? "none" : baseIt.label()) + " | " + verdict);
+        assertTrue("Neha is drawn from an uploaded picture: " + verdict, (verdict.contains("in the style of your picture") || verdict.contains("made from your picture")) && baseIt != null);
+        assertTrue("never from Asha's own pictures: " + baseIt.name, !baseIt.name.contains("Asha") && !p.setting("auto.pics", "").contains(baseId));
+        assertTrue("never an animal for a girl: " + baseIt.name, !baseIt.name.contains("राजू"));
+        assertTrue("the spectacles are painted on: " + verdict, verdict.contains("face details painted on"));
+        // Dadi in her wheelchair: an uploaded standing figure could not show the chair — the 3D doll does
+        String dadiKey = (String) s3d("keyFor", p, st, dadi);
+        s3d("makeCharacter", p, st, dadi, lib, ctx, null, true, null, false);
+        String[] dprop = (String[]) s3d("proposalFor", p, "char", dadiKey);
+        assertNotNull(dprop);
+        assertTrue("Dadi's wheelchair: the doll, not a borrowed figure: " + dprop[dprop.length - 1], !dprop[dprop.length - 1].contains("in the style of your picture") && !dprop[dprop.length - 1].contains("made from your picture"));
+        // rejecting Neha's style base gives the 3D doll next time
+        s3d("reject", p, prop);
+        s3d("makeCharacter", p, st, neha, lib, ctx, null, true, null, false);
+        String[] again = (String[]) s3d("proposalFor", p, "char", nehaKey);
+        assertNotNull(again);
+        assertTrue("after a rejection, the doll: " + again[again.length - 1], !again[again.length - 1].contains("in the style of your picture") && !again[again.length - 1].contains("made from your picture"));
     }
 
     /** Every visible view with a click action, in screen order. */

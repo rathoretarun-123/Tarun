@@ -3967,6 +3967,7 @@ public class MainActivity extends Activity {
         String reference;
         try { reference = new String(Project.readAll(getAssets().open("director_reference_training_guide.md")), "UTF-8"); } catch (Exception e) { reference = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.DirectorTraining.SUMMARY + "\n\n" + reference;
+        handbook += "\n\n" + com.tarun.kahani.core.SituationsGuide.SUMMARY;
         String emo;
         try { emo = new String(Project.readAll(getAssets().open("director_reference_emotion_activity_guide.md")), "UTF-8"); } catch (Exception e) { emo = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.EmotionActivityGuide.SUMMARY + "\n\n" + emo;

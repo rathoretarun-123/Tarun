@@ -417,9 +417,13 @@ public final class Renderer {
         camX = Math.max(hw, Math.min(W - hw, camX));
     }
 
+    /** Places of nature (leaves and flowers in front of the lens, rays through the trees). */
     static boolean outdoor(int set) {
         return set == Sets.GARDEN || set == Sets.FOREST || set == Sets.VILLAGE || set == Sets.COURTYARD || set == Sets.GATE;
     }
+
+    /** v34: places under the open sky (the park, a street, a rooftop, a festival ground, a cave's mouth too): the sun lights them, casts shadows, rain wets their ground. */
+    static boolean sunlit(int set) { return Sets.outdoorSet(set); }
 
     /** Light in the air: sun rays through the scene in the morning/day, a warm key light, haze in caves. */
     /**
@@ -434,7 +438,7 @@ public final class Renderer {
         // 1. the key (a basement's tubelight flickers)
         float kx = vw * (0.5f + 0.42f * key.dir) - (camX - 640) * 0.1f;
         int kc = key.color & 0xFFFFFF;
-        float ka = key.strength * (cave ? 0.22f : s.tod == Sets.NIGHT ? 0.3f : day && outdoor(s.set) ? 0.38f : 0.28f);
+        float ka = key.strength * (cave ? 0.22f : s.tod == Sets.NIGHT ? 0.3f : day && sunlit(s.set) ? 0.38f : 0.28f);
         if (s.set == Sets.BASEMENT) ka *= 0.6f + 0.6f * Sets.flicker(t);
         g.radial(kx, -vh * 0.12f, vw * (cave ? 0.6f : 0.95f), Puppet.alpha(0xFF000000 | kc, ka), kc);
         g.rect(0, 0, vw, vh);
@@ -936,6 +940,53 @@ public final class Renderer {
         return null;
     }
 
+    /**
+     * v34 (realism): where the eyes look. A listener's eyes go to whoever speaks, a speaker's to the one nearest;
+     * between, small quick shifts of the eyes (saccades) every one and a half to two and a half seconds keep a face
+     * alive — fewer and smaller while the eyes rest on someone. A function of time only (frames drawn by different
+     * threads agree): the target is averaged over the last tenth of a second, so the eyes move quickly but never jump.
+     */
+    private void gaze(Pose p, Film.Seg s, Film.Actor a, float t) {
+        float held = 0, tx = 0;
+        for (int i = 0; i < 3; i++) {
+            float d = gazeTarget(s, a, t - i * 0.05f);
+            if (!Float.isNaN(d)) { held += 1f / 3; tx += d / 3; }
+        }
+        float slot = 1.4f + (a.order % 4) * 0.33f;
+        float u = (t + a.order * 0.61f) / slot;
+        int n = (int) Math.floor(u);
+        float mix = Rig.smooth(0, 0.06f, (u - n) * slot);       // the shift itself takes 60 ms
+        float sx = (hash01(n - 1, a.order) + (hash01(n, a.order) - hash01(n - 1, a.order)) * mix - 0.5f) * 0.5f;
+        float sy = (hash01(n - 1, a.order + 7) + (hash01(n, a.order + 7) - hash01(n - 1, a.order + 7)) * mix - 0.5f) * 0.3f;
+        float calm = 1 - 0.6f * held;
+        p.gazeHeld = held;
+        p.gazeX = held * tx + sx * calm;
+        p.gazeY = sy * calm;
+    }
+
+    /** Which way (-0.9 left, +0.9 right on screen) this actor looks now: at the one speaking, or — speaking — at the nearest; NaN for nobody. */
+    private float gazeTarget(Film.Seg s, Film.Actor a, float t) {
+        float x = Director.xAt(a, t);
+        boolean speaking = speakingAt(a, t) != null;
+        Film.Actor best = null;
+        float bestD = Float.MAX_VALUE;
+        for (Film.Actor o : s.actors) {
+            if (o == a || !o.stateAt(t).visible) continue;
+            float ox = Director.xAt(o, t), d = Math.abs(ox - x);
+            if (d < 1) continue;
+            if (!speaking && speakingAt(o, t) != null) return Math.signum(ox - x) * 0.9f;
+            if (speaking && d < bestD) { bestD = d; best = o; }
+        }
+        return best == null ? Float.NaN : Math.signum(Director.xAt(best, t) - x) * 0.9f;
+    }
+
+    /** A steady pseudo-random number in 0..1 for slot n of actor seed. */
+    private static float hash01(int n, int seed) {
+        int h = n * 374761393 + seed * 668265263;
+        h = (h ^ (h >>> 13)) * 1274126177;
+        return ((h ^ (h >>> 16)) & 0xFFFFFF) / (float) 0x1000000;
+    }
+
     /** Body motion for cut-out pictures (which cannot bend their arms). */
     static final class Motion { float dx, dy, rot, sx = 1, sy = 1; }
     private final Motion mo = new Motion();
@@ -986,6 +1037,7 @@ public final class Renderer {
         p.holdL = k.holdL;
         p.eyesClosed = k.eyesShut;
         p.blink = blink(tp, a.order);
+        gaze(p, s, a, t);
         if (film != null && Sets.outdoorSet(s.set)) {
             p.wind = film.wind(t); p.wet = film.wetness(t);
             // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)
@@ -1247,6 +1299,16 @@ public final class Renderer {
             if (p.umbrellaOpen) spriteUmbrella(g, look, p, h);
         }
         else {
+            // v34 (realism): a drawn character's shadow from the sun, a soft flattened oval thrown away from it
+            float[] sun = p.body != Pose.LIE && p.body != Pose.HANG && a.look.mount < 0 ? sunShadow() : null;
+            if (sun != null) {
+                float len = sun[1] * h, sq = sun[2] * h;
+                for (int i = 0; i < 3; i++) {
+                    float kk = 1 - i * 0.22f;
+                    g.color(Puppet.alpha(0xFF000000, sun[3] * 0.45f));
+                    g.oval(sun[0] * len * 0.48f, -sq * 0.45f, (len * 0.5f + h * 0.09f) * kk, (sq * 0.5f + h * 0.012f) * kk);
+                }
+            }
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
             int boil = (int) (t * 12) * 31 + a.order * 17;
@@ -1683,6 +1745,57 @@ public final class Renderer {
         Puppet.drawUmbrella(g, p.facing * h * 0.03f, top, h * 0.3f, p.facing * h * 0.15f, top + h * 0.5f, Puppet.umbrellaColor(look), p.facing, p.time, p.wind);
     }
 
+    private static final int SH_C = 10, SH_R = 16;
+    private final float[] shadowVerts = new float[(SH_C + 1) * (SH_R + 1) * 2];
+    private final float[] sunNow = new float[4];
+
+    /**
+     * v34 (realism): the sun's shadow on the ground now — {direction (+1 to the right), length, squash (both × the
+     * character's height), strength}; null at night, indoors, or when rain, cloud, fog or snow hide the sun. The sun
+     * is the rim light's: from the left in the morning and by day, from the right in the evening; long and soft in
+     * the morning and evening, short and darker at noon.
+     */
+    private float[] sunShadow() {
+        Film.Seg ls = curSeg;
+        if (ls == null || film == null || !sunlit(ls.set) || ls.set == Sets.CAVE_MOUTH || ls.tod == Sets.NIGHT) return null;
+        float over = Math.min(1f, 1.3f * film.weather(Film.W_RAIN, curT) + film.weather(Film.W_STORM, curT) + 0.7f * film.weather(Film.W_CLOUDS, curT)
+                + 0.8f * film.weather(Film.W_FOG, curT) + 0.6f * film.weather(Film.W_SNOW, curT));
+        float a = (ls.tod == Sets.DAY ? 0.34f : 0.27f) * (1 - over);
+        if (a < 0.03f) return null;
+        sunNow[0] = ls.tod == Sets.EVENING ? -1 : 1;
+        sunNow[1] = ls.tod == Sets.DAY ? 0.28f : 0.8f;
+        sunNow[2] = ls.tod == Sets.DAY ? 0.07f : 0.13f;
+        sunNow[3] = a;
+        return sunNow;
+    }
+
+    /**
+     * v34: lays a picture on the ground through a coarse copy of its body mesh (so the shadow bends with the body):
+     * shadow = its soft silhouette thrown away from the sun and flattened; reflection = the picture itself mirrored
+     * under the feet on wet ground. mesh null: the picture's plain rectangle.
+     */
+    private void onGround(Gfx g, Object img, float[] mesh, int cols, int rows, float left, float top, float w, float h,
+                          boolean reflection, float dx, float squash, float alpha) {
+        if (img == null || alpha <= 0.005f) return;
+        int cc = mesh == null ? 1 : Math.min(SH_C, cols), rr = mesh == null ? 1 : Math.min(SH_R, rows);
+        int k = 0;
+        for (int j = 0; j <= rr; j++) for (int i = 0; i <= cc; i++) {
+            float x, y;
+            if (mesh == null) { x = left + w * i / cc; y = top + h * j / rr; }
+            else {
+                int ci = Math.round(i * cols / (float) cc), rj = Math.round(j * rows / (float) rr), idx = (rj * (cols + 1) + ci) * 2;
+                x = mesh[idx]; y = mesh[idx + 1];
+            }
+            float up = Math.max(0, -y) / h;                  // height above the ground: 0 at the feet, 1 at the top of the picture
+            if (reflection) { shadowVerts[k++] = x; shadowVerts[k++] = up * h * 0.42f; }
+            else { shadowVerts[k++] = x + dx * up; shadowVerts[k++] = -up * squash; }
+        }
+        g.save();
+        g.setAlpha(alpha);
+        g.imageMesh(img, cc, rr, shadowVerts);
+        g.restore();
+    }
+
     private static void wheel(Gfx g, float cx, float cy, float R, float spin, int tyre, int metal) {
         g.color(tyre);
         g.strokeOval(cx, cy, R * 0.95f, R * 0.95f, R * 0.11f);
@@ -1839,6 +1952,9 @@ public final class Renderer {
         } else {
             faceFor(p.emotion, st, 1f);
         }
+        // v34: the eyes (the picture is mirrored when facing left)
+        st.gazeX = p.gazeX * (p.facing < 0 ? -1 : 1);
+        st.gazeY = p.gazeY;
         return st;
     }
 
@@ -2036,6 +2152,11 @@ public final class Renderer {
             }
         }
         float left = -w / 2, top = -h;
+        // v34 (realism): the sun's cast shadow and, on wet ground, a faint reflection under the feet
+        boolean upright = p.body != Pose.LIE && p.body != Pose.HANG;
+        float[] sun = upright ? sunShadow() : null;
+        float sunDx = sun == null ? 0 : sun[0] * sun[1] * h * mirror, sunSq = sun == null ? 0 : sun[2] * h, sunA = sun == null ? 0 : sun[3];
+        float wetA = upright && curSeg != null && sunlit(curSeg.set) ? 0.14f * Math.min(1f, p.wet * 1.5f) : 0;
         if (p.noHeadwear && sp.turbanY > 0 && !bare) {
             float cut = sp.turbanY;
             float fx = left + sp.mouthX * w;
@@ -2060,6 +2181,8 @@ public final class Renderer {
             float rise = rig.feetRise(st, h);
             if (rise > 0) g.translate(0, rise);
             rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
+            if (wetA > 0.01f) onGround(g, bare ? sp.bareImg : sp.img, rf.body, rf.cols, rf.rows, left, top, w, h, true, 0, 0, wetA);
+            if (sunA > 0) onGround(g, sp.shadowImg, rf.body, rf.cols, rf.rows, left, top, w, h, false, sunDx, sunSq, sunA);
             g.imageMesh(bare ? sp.bareImg : sp.img, rf.cols, rf.rows, rf.body);
             if (p.wet > 0.02f && sp.wetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
             Object faceLayer = bare ? rig.faceBareImg : rig.faceImg;
@@ -2073,7 +2196,7 @@ public final class Renderer {
             Film.Seg ls = curSeg;
             if (sp.rimL != null && sp.rimR != null && !bare && ls != null) {
                 boolean fromLeft = !(ls.tod == Sets.EVENING || ls.tod == Sets.NIGHT);
-                float k = outdoor(ls.set) ? (ls.tod == Sets.NIGHT ? 0.22f : ls.tod == Sets.EVENING || ls.tod == Sets.MORNING ? 0.45f : 0.32f) : 0.24f;
+                float k = sunlit(ls.set) ? (ls.tod == Sets.NIGHT ? 0.22f : ls.tod == Sets.EVENING || ls.tod == Sets.MORNING ? 0.45f : 0.32f) : 0.24f;
                 k /= 1 + 0.3f * Math.max(0, camZ - 1);     // closer in, the edge is larger on screen: keep it subtle
                 Object rim = fromLeft == (p.facing >= 0) ? sp.rimL : sp.rimR;
                 g.save();
@@ -2097,6 +2220,8 @@ public final class Renderer {
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);
         } else {
+            if (wetA > 0.01f) onGround(g, sp.img, null, 1, 1, left, top, w, h, true, 0, 0, wetA);
+            if (sunA > 0) onGround(g, sp.shadowImg, null, 1, 1, left, top, w, h, false, sunDx, sunSq, sunA);
             g.image(sp.img, left, top, w, h);
             if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.image(sp.wetImg, left, top, w, h); g.restore(); }
         }

@@ -1,0 +1,73 @@
+package com.tarun.kahani.core;
+
+import java.util.Locale;
+
+/**
+ * v34: the director's training for the situations of everyday stories — glasses and goggles, a walking stick,
+ * crutches, a walking frame, a wheelchair, a sling, a plaster, a bandage, a blindfold, an eye patch, an umbrella in
+ * the rain, a change of clothes in the middle of the story — and for the realism of the picture and the sound. Each
+ * rule is written with the code that applies it; the film's shot list says what was done for its own story; the
+ * protocols screen shows this summary beside the other guides.
+ */
+public final class SituationsGuide {
+    private SituationsGuide() {}
+
+    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34)";
+
+    /** {the rule, where the studio applies it}. */
+    public static final String[][] RULES = {
+            {"Read what the story says a character wears or uses", "LookDesigner: spectacles, dark glasses, goggles, a blindfold, an eye patch; a walking stick (a bare \"छड़ी\" only for an old person), crutches, a walking frame, a wheelchair; an arm in a sling, a leg in plaster, a bandaged head; an umbrella — from the description or from the action (ScriptParser.aidsFromActions)"},
+            {"A change of look is an event in time", "ScriptParser.costumesFromActions: new clothes, glasses on or off, a bandage or plaster put on or taken off become a costume from that beat; only the named part heals; crutches go with the plaster; in \"the doctor bandages Rohan's leg\" the owner of the leg is the one hurt"},
+            {"Stage the change, do not just swap it", "Director.newLook: new clothes get a reveal — medium-wide, a slow push-in, a sparkle, the character proud, the others surprised then delighted; a new injury: a wince and the others' concern; a bandage off: relief all round; glasses: no fuss"},
+            {"How they move is who they are", "Director.mobility: a wheelchair rolls seated and never stands, runs or jumps; a stick, crutches, a walking frame or a leg in plaster walk a third slower with a limp (Renderer: the step onto the weak leg sinks deeper), hands on the stick, crutches or frame; never running, never jumping"},
+            {"Never a joke, never pity", "Director: comic beats never go to a character with a walking aid or an injury; the aid is drawn plainly, as part of the character"},
+            {"Frame a seated character at their own eye level", "Director.camOn: a character in a wheelchair or on a chair is framed at their eye height, the camera never looking down on them; close-ups by the face (faceCam) as for everyone"},
+            {"A blindfolded character does not look", "Director.pointOfView: no point-of-view shot for a blindfold; she turns toward the sound and listens; no blinks painted over a blindfold, dark glasses or an eye patch (Renderer)"},
+            {"Weather touches the characters", "Renderer: an umbrella opens over the head of whoever carries one while it rains outdoors, and keeps them dry; rain drums on it (Director.umbrellaRain); wet ground shows a faint reflection under the feet"},
+            {"Light grounds the characters", "Renderer.sunShadow: under the open sky the sun casts each character's soft shadow across the ground — long in the morning and evening, short at noon, away from the sun (the rim light's side), none at night, indoors, or under rain, cloud, fog or snow; the park, the street, the rooftop and the festival ground count as under the sky (Renderer.sunlit)"},
+            {"Eyes on whoever speaks", "Renderer.gaze: a listener's eyes go to the one speaking, a speaker's to the one nearest; between, a small quick shift of the eyes every one and a half to two and a half seconds (fewer and smaller while they rest on someone); in a photograph the iris moves inside the face mesh while the corners of the eyes stay (Rig.faceMesh), in a drawn character the pupils move — so the shot list's GAZE line is what the frames do"},
+            {"Stage directions move people", "Director.travelFrom: \"runs across the grass\" runs to the other side, \"walks slowly home\", \"runs out of the room\" or \"घर चला जाता है\" walks off the stage and is gone (only to the edge when they speak again in the scene), \"comes back\" or \"वापस आती है\" walks back in after a moment off the stage (in the new clothes when they changed), \"runs to Maya\" ends beside her; running only when the words say so and never faster than the body allows; the sample story's own staging is never doubled"},
+            {"Every movement is heard", "Director: footsteps for every walk on the floor of the place (stone rings, earth thuds), running steps, a stick's tap, crutches, a wheelchair rolling — for entrances and for every move across the stage (walkSounds)"},
+            {"The user's pictures come first", "FilmJob: the film waits for the user's pictures before the 3D maker makes any; Studio3DArt.referencePicture: a character with no picture is drawn from the closest uploaded figure of the same kind, recoloured, its face details painted on (FaceProps); the 3D doll only for what an uploaded figure cannot show (a wheelchair, crutches, a sling, a mount, more heads or arms) or when the user rejects the borrowed figure"},
+            {"Lips glide, they do not flap", "Mixer.envelope: the mouth keeps half its opening through a dip shorter than 90 ms, changes at most a quarter of a full opening per frame, opens from closed at the start of a line and closes at its end; shut in every pause"},
+    };
+
+    /** What these rules cannot do on a phone, said plainly. */
+    public static final String[][] LIMITS = {
+            {"A picture the user gave does not show a wheelchair, a stick or a sling", "the director cannot draw them onto a photograph convincingly: it asks for a picture that shows them, or the 3D doll shows them"},
+            {"Shadows are a soft silhouette on the ground", "not a ray-traced shadow; it follows the body's bend but not the exact shape of a hand"},
+            {"Studio quality", "these rules make the staging, light and sound more natural; they do not make a phone's 2.5D film the equal of a studio's hand-animated, ray-traced one"},
+    };
+
+    public static final String SUMMARY;
+    static {
+        StringBuilder b = new StringBuilder(TITLE).append('\n');
+        for (String[] r : RULES) b.append("  • ").append(r[0]).append(" — ").append(r[1]).append('\n');
+        b.append("What a phone cannot do, said plainly:\n");
+        for (String[] r : LIMITS) b.append("  • ").append(r[0]).append(" → ").append(r[1]).append('\n');
+        SUMMARY = b.toString();
+    }
+
+    /** The shot list's line for this film: what the director did for its situations. */
+    public static String report(Story story, Film film, int eyeLevel, int blindNoPov, int reveals, int concern, int relief) {
+        int aids = 0, glasses = 0, injured = 0, umbrellas = 0, changes = 0;
+        for (Story.CharacterDef c : story.characters) {
+            if (c.look == null) continue;
+            if (c.look.aid != Look.AID_NONE) aids++;
+            if (c.look.glasses > 0) glasses++;
+            if (c.look.injury != 0) injured++;
+            if (c.look.umbrella) umbrellas++;
+            changes += c.costumes.size();
+        }
+        int aidSounds = 0, umbrellaRain = 0, steps = 0;
+        for (Film.Sfx x : film.sfx) {
+            if (x.type == Film.SFX_STICK || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR) aidSounds++;
+            else if (x.type == Film.SFX_UMBRELLA_RAIN) umbrellaRain++;
+            else if (x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN) steps++;
+        }
+        return String.format(Locale.US, "• Situations (v34 training): %d with a walking aid, %d with glasses, goggles, a blindfold or a patch, %d hurt, %d with an umbrella, "
+                + "%d changes of look — %d reveals, %d moments of concern, %d of relief; %d shots framed at a seated character's eye level; %d point-of-view shots "
+                + "turned into listening for a blindfold; sounds: %d footsteps, %d of walking aids, %d of rain on an umbrella%n",
+                aids, glasses, injured, umbrellas, changes, reveals, concern, relief, eyeLevel, blindNoPov, steps, aidSounds, umbrellaRain);
+    }
+}

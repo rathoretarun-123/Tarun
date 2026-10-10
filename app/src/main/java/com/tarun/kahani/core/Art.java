@@ -36,6 +36,8 @@ public final class Art {
         public Rig rig;
         /** The same picture soaked by rain: darker, deeper colours (made only for rainy stories). */
         public Object wetImg;
+        /** v34: the picture's silhouette, small and soft (black with the outline's alpha): its shadow cast by the sun on the ground. */
+        public Object shadowImg;
         /** Rim light along the outline, lit from the left / from the right (null = none). */
         public Object rimL, rimR;
         /** The picture with its turban / cap taken off, and that headwear on its own (null = none found). */
@@ -96,6 +98,7 @@ public final class Art {
                     v.rimL = loader.create(rl[0], rl[2][0], rl[2][1]);
                     v.rimR = loader.create(rl[1], rl[2][0], rl[2][1]);
                 } catch (Throwable ignored) { v.rimL = v.rimR = null; }
+                v.shadowImg = castShadow(v.pixelsForSampling, loader);
             }
             v.pixelsForSampling = null;
             sprite = v;
@@ -208,8 +211,34 @@ public final class Art {
         int[] keep = cr.px;
         cr.px = px;
         try { v.rig = Rig.build(cr, v, look, L); } catch (RuntimeException e) { v.rig = null; } finally { cr.px = keep; }
-        v.rimL = base.rimL; v.rimR = base.rimR;
+        v.rimL = base.rimL; v.rimR = base.rimR; v.shadowImg = base.shadowImg;
         return v;
+    }
+
+    /** v34: a soft, small silhouette of a cut-out (at most 64 px on its long side, blurred once) for the sun's cast shadow. */
+    static Object castShadow(Cutout.Result cr, Loader L) {
+        if (cr == null || cr.px == null || cr.w < 4 || cr.h < 4) return null;
+        int big = Math.max(cr.w, cr.h);
+        int sw = Math.max(4, Math.round(cr.w * 64f / big)), sh = Math.max(4, Math.round(cr.h * 64f / big));
+        float[] a = new float[sw * sh];
+        for (int y = 0; y < sh; y++) for (int x = 0; x < sw; x++) {
+            int x0 = x * cr.w / sw, x1 = Math.max(x0 + 1, (x + 1) * cr.w / sw), y0 = y * cr.h / sh, y1 = Math.max(y0 + 1, (y + 1) * cr.h / sh);
+            long sum = 0; int n = 0;
+            for (int yy = y0; yy < y1; yy += Math.max(1, (y1 - y0) / 4)) for (int xx = x0; xx < x1; xx += Math.max(1, (x1 - x0) / 4)) { sum += cr.px[yy * cr.w + xx] >>> 24; n++; }
+            a[y * sw + x] = n == 0 ? 0 : sum / (float) n;
+        }
+        int[] out = new int[sw * sh];
+        for (int y = 0; y < sh; y++) for (int x = 0; x < sw; x++) {
+            float sum = 0; int n = 0;
+            for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+                int xx = x + dx, yy = y + dy;
+                if (xx < 0 || yy < 0 || xx >= sw || yy >= sh) { n++; continue; }
+                sum += a[yy * sw + xx]; n++;
+            }
+            int al = Math.min(255, Math.round(sum / n));
+            out[y * sw + x] = al << 24;
+        }
+        try { return L.create(out, sw, sh); } catch (RuntimeException e) { return null; }
     }
 
     private static void takeOffHeadwearImpl(Sprite s, Loader L) {
@@ -485,6 +514,7 @@ public final class Art {
                             s.rimL = s.rimR = null;
                         }
                     }
+                    s.shadowImg = castShadow(s.pixelsForSampling, L);
                     if (rainy && s.pixelsForSampling != null) {
                         Cutout.Result cr = s.pixelsForSampling;
                         s.wetImg = L.create(wetPixels(cr.px), cr.w, cr.h);
@@ -555,6 +585,7 @@ public final class Art {
                     resample(v);
                 }
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.costumes.get(n - 1).look, L); } catch (RuntimeException e) { v.rig = null; }
+                v.shadowImg = castShadow(v.pixelsForSampling, L);
                 v.pixelsForSampling = null;
                 art.costumes.put(c.id + "#" + n, v);
             } catch (RuntimeException ignored) { /* a broken line never stops the film */ }
@@ -587,6 +618,7 @@ public final class Art {
                         v.rimL = L.create(rl[0], rl[2][0], rl[2][1]);
                         v.rimR = L.create(rl[1], rl[2][0], rl[2][1]);
                     } catch (Throwable ignored) { v.rimL = v.rimR = null; }
+                    v.shadowImg = castShadow(v.pixelsForSampling, L);
                     if (rainy) v.wetImg = L.create(wetPixels(v.pixelsForSampling.px), v.pixelsForSampling.w, v.pixelsForSampling.h);
                 }
                 v.pixelsForSampling = null;

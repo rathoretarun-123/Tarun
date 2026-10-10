@@ -1524,12 +1524,14 @@ public final class Puppet {
                     g.color(0xFFFFFFFF);
                     g.oval(cx, ey, ew, h);
                     g.color(l.eyeColor);
-                    float ix = cx + p.facing * ew * 0.25f;
-                    g.oval(ix, ey + h * 0.05f, ew * 0.62f, Math.min(h, ew * 0.7f));
+                    // v34: the eyes look at whoever speaks (otherwise the way the head faces), with small shifts
+                    float gx = Math.max(-1f, Math.min(1f, p.gazeX + (1 - p.gazeHeld) * p.facing * 0.78f));
+                    float ix = cx + gx * ew * 0.32f, iy = ey + h * 0.05f + p.gazeY * h * 0.22f;
+                    g.oval(ix, iy, ew * 0.62f, Math.min(h, ew * 0.7f));
                     g.color(0xFF120A06);
-                    g.oval(ix, ey + h * 0.05f, ew * 0.32f, Math.min(h * 0.8f, ew * 0.38f));
+                    g.oval(ix, iy, ew * 0.32f, Math.min(h * 0.8f, ew * 0.38f));
                     g.color(0xFFFFFFFF);
-                    g.oval(ix - ew * 0.18f, ey - h * 0.25f, ew * 0.16f, ew * 0.16f);
+                    g.oval(ix - ew * 0.18f, iy - h * 0.3f, ew * 0.16f, ew * 0.16f);
                     g.color(INK);
                     g.begin(); g.moveTo(cx - ew * 1.1f, ey - h * 0.35f); g.quadTo(cx, ey - h * 1.25f, cx + ew * 1.1f, ey - h * 0.35f);
                     g.strokePath(l.female ? 2.8f : 2.2f);

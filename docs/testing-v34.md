@@ -210,4 +210,69 @@ The only changes near 0.4 are the first opening of a line; within a line the ope
 
 **Movement:** no character jumps while it is visible in any of the four stories. The large one-frame position changes the check first reported were characters placed off-screen just before they walk in.
 
+**Rerun on the final code** (after the eye-lines, the moves read from stage directions and the splitting fix), with a fifth story (the change of clothes) and the movement measured only while a character is seen:
+
+| Story | Open while loud | Shut in pauses | Shut before and after | Correlation | Openings per second | Largest change between two frames | Fastest visible move per frame (30 fps) | Jumps while seen |
+|---|---|---|---|---|---|---|---|---|
+| Situations | 99.4 % | 100 % | 100 % | 0.79 | 3.2 | 0.40 | 13.6 units | 0 |
+| Park | 100 % | 100 % | 100 % | 0.81 | 2.9 | 0.40 | 14.4 units | 0 |
+| Durga | 99.6 % | 100 % | 100 % | 0.78 | 3.4 | 0.40 | 9.2 units | 0 |
+| Ravana | 99.0 % | 100 % | 100 % | 0.72 | 4.0 | 0.40 | 17.5 units | 0 |
+| Costume | 100 % | 100 % | 100 % | 0.79 | 3.4 | 0.40 | 14.1 units | 0 |
+
+The stage is 1280 units wide, so the fastest visible move is under 1.4 % of the width a frame (a run); the larger one-frame changes the first count showed are placements made while a character is off the stage.
+
 What this does not show: these numbers say the mouth follows the voice smoothly and rests when it should. They do not make the drawing itself studio quality: a picture's mouth is still warped from the user's picture or the doll's mesh, not animated shape by shape by an animator.
+
+## 12. More realism: light, reflections, sounds and eye-lines
+
+| What | How | Checked |
+|---|---|---|
+| The sun's shadow | `Renderer.sunShadow` and `onGround`: each picture's own outline (a blurred 64-px silhouette made with the picture, `Art.castShadow`) laid on the ground away from the sun — long and to one side in the morning and evening, short at noon, fainter under cloud; none at night, indoors, in a cave mouth, or under rain, fog or snow | The park story at morning, frame by frame: the characters' shadows fall the same way as the 3D set's own shadows and bend with the body |
+| Wet ground | A faint reflection under the feet (14 % at full wetness) | The rain scene of the situations story |
+| Rain on an umbrella | `Director.umbrellaRain`: a drumming sound for as long as an open umbrella is in the rain | Situations story: from 15.0 s for 24.1 s |
+| Steps on the floor of the place | `Director.walkSounds`, `floorSteps`: stone rings, earth thuds, running steps; a stick's tap, crutches, a wheelchair's roll | Situations story: steps at 14.9 s, crutches at 20.3 s, a stick at 25.2 s; aids story: stick, running steps, wheelchair, crutches |
+| Eyes that look | `Renderer.gaze`: a listener's eyes on the speaker, a speaker's on the nearest listener, a small quick shift every 1.5–2.5 s between; in a picture the iris moves inside the face mesh while the corners stay (`Rig.faceMesh`), in a drawn character the pupils (`Puppet.drawEyes`) | The sample story's over-the-shoulder shot at 1:09: the listener's eyes turned to the speaker, the lids and the corners of the eyes in place, no tearing of the face |
+
+**Found and fixed:** the park, the street, the rooftop and the festival ground were not counted as places under the sky (`Renderer.outdoor` listed only nature's places), so they had no sun, no shadow and no wet ground. Light now follows `Sets.outdoorSet` (`Renderer.sunlit`); `outdoor` is kept only for leaves in front of the lens and rays through trees.
+
+## 13. The director trained for these situations
+
+`SituationsGuide` has fourteen rules, each with the code that applies it (shown on the protocols screen); every shot list ends with a line saying what was done for that story. On the test stories:
+
+| Story | Aids | Glasses, goggles, blindfold, patch | Hurt | Umbrella | Changes of look | Reveals | Concern / relief | Seated eye-level shots | Footsteps / aid sounds / rain on umbrella |
+|---|---|---|---|---|---|---|---|---|---|
+| Situations | 2 | 3 | 3 | 1 | 2 | 0 | 0 / 2 | 0 | 1 / 2 / 1 |
+| Aids | 3 | 2 | 0 | 0 | 0 | 0 | 0 / 0 | 1 | 1 / 3 / 0 |
+| Costume | 0 | 1 | 0 | 0 | 2 | 1 | 0 / 0 | 0 | 0 / 0 / 0 |
+| Sample (Hindi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 | 5 | 31 / 0 / 0 |
+
+**Stage directions move people (`Director.travelFrom`).** A check of the park story found that nobody moved at all: "Kabir runs across the grass" and "Kabir turns away and walks slowly home" were read for the turned back only, and the director's moves were phrases of the sample story. Now, in any story, a character runs across, walks off and is gone, comes back, or goes up to someone, whatever words stand between the verb and where they go. Test `storyDirectionsMoveTheCharacters`:
+
+* Kabir runs across the grass for 1.8 s (running steps heard), walks slowly home for 3.3 s and is gone; Maya ends an arm's length beside him after "Maya runs to Kabir" (155 stage units; the first try stopped her at 95, shoulder to shoulder with him in the doll film);
+* Maya runs out of the room, is off the stage for a second while the camera stays on Grandpa, and walks back in her red frock; the reveal follows;
+* "रोहन घर चला जाता है": he goes and is gone; "मीरा दूर चली जाती है" followed by her own line: she goes only to the edge and is still seen when she speaks;
+* the sample story's own staging is unchanged (no move added there).
+
+**Found and fixed while building it:** a run off the stage was slowed to a walk by the speed limit (the exit's running speed was above the limit for a child) — it is now under it; the turned-back rule planned a "turn round" 2.4 s ahead that blocked the walk off — leaving words keep the back turned until the character has gone; a character who walked off had to stand at the edge when she came back later in the scene — "comes back" now brings her back after a moment off the stage.
+
+## 14. Characters with no picture: borrowed from your uploads
+
+Test `madeCharactersFollowTheUploadedPictures`: four of the user's sheets (two girls, a monster, a monkey) saved to the library; a story with Asha (her own sheet), Neha (no picture; two plaits and round glasses) and Dadi (no picture; a wheelchair).
+
+| Checked | Result |
+|---|---|
+| Asha | her own picture, placed by the director from the library |
+| Neha | made from the other girl's front figure ("मीना (front, picture 7)", fit 83 %), recoloured to her yellow frock, her round glasses painted on; never Asha's picture, never the monkey's |
+| Dadi in her wheelchair | the 3D doll (a standing figure cannot show the chair) |
+| Neha's picture rejected | the 3D doll next time |
+
+**Found and fixed:** (1) the 3D maker's 512-px quality rule ruled out every figure cut from a sheet (a sheet of ten in a 1600-px picture gives figures about 490 px tall), so no made character could ever borrow from the user's sheets, nor take a doll's skin and hair colours from them — a figure from a sheet now counts from 300 px (a single picture still needs 512); (2) the older "fits the description" step could make Neha out of Asha's own picture (two characters with one face) — another character's picture is now never used; (3) that step also gave a standing figure to a character in a wheelchair — it now leaves those to the doll.
+
+## 15. Splitting rechecked on all 60 sheets
+
+Every sheet split as the app does it (`Angles.figures(Angles.split(…))`) and looked at as a strip of its pieces; then every piece the split threw away was measured (size, how far from the nearest figure).
+
+* All 60 sheets give the same number of figures as before: 10, 11 or 12.
+* Only three pieces were thrown away in all 60 sheets: a 29×21 speck beside one figure's feet (sheet 4), and on sheet 12 the leaping girl's raised sword with the tip of her braid (134×167 px) and one of her feet (54×84 px) — both touching her outline, cut loose by the split and dropped as crumbs.
+* **Fixed (`Angles.rejoin`):** a dropped part that touches a kept figure (an opaque pixel within half a percent of the sheet's smaller side) is joined back to it; crumbs under 0.05 % of the sheet stay dropped, and a place sheet's panels (whole crops) are never joined. Sheet 12's girl now has her sword (4 549 px back in place) and her foot (1 866 px); the strips of the other 59 sheets are unchanged pixel for pixel.

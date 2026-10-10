@@ -285,7 +285,12 @@ public final class Film {
             SFX_CRACKLE = 46,     // crackling (an old machine, fire, static)
             SFX_HISS_SHORT = 47,  // a short hiss ("फूँ", "फुस्स")
             SFX_TAP = 48,         // light taps ("टप-टप")
-            SFX_BOOM = 49;        // a boom, an explosion
+            SFX_BOOM = 49,        // a boom, an explosion
+            // v34: the sounds of walking aids and of rain on an umbrella
+            SFX_STICK = 50,       // slow steps with a walking stick's wooden tap (or a walking frame's)
+            SFX_CRUTCH = 51,      // crutches: the two rubber tips, then the step
+            SFX_WHEELCHAIR = 52,  // a wheelchair rolling: tyres on the floor, the hand-rims ticking
+            SFX_UMBRELLA_RAIN = 53; // rain drumming on an umbrella over the head
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

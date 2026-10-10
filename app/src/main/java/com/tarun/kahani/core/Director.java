@@ -277,6 +277,8 @@ public final class Director {
         film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
         mobility();
+        umbrellaRain();
+        walkSounds();
         scoreMusic();
         if (opt.technical) {
             // the Technical Director protocol, in its own order: lock the camera, then no shot may move a character
@@ -587,6 +589,7 @@ public final class Director {
             b.append(String.format(java.util.Locale.US, "• Shots longer than 4 s: %d%n", longest));
             b.append(String.format(java.util.Locale.US, "• Lip-sync shots (front close-ups, face filling the frame, at most 6 words): %d; with more than 6 words: %d%n", speech, over6));
             b.append(String.format(java.util.Locale.US, "• Runs slowed to walking pace: %d; characters who stop walking to speak: %d%n", calmed, stillToSpeak));
+            b.append(String.format(java.util.Locale.US, "• Moves read from the story's directions (v34): %d leaving, %d coming back, %d across or around, %d up to someone%n", exits, returns, crossings, approaches));
             b.append(String.format(java.util.Locale.US, "• Cuts made so no character moves 15%% of the frame in one shot: %d; shots still over the limit (very fast moves the story's timing leaves no room to slow): %d%n", motionCuts, overMotion));
             b.append(String.format(java.util.Locale.US, "• Cuts made so each shot holds one action: %d; shots with more than one: %d%n", actionCuts, multi));
             b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
@@ -629,6 +632,7 @@ public final class Director {
         }
         // v30: the training guide's weighted score of the film (§12), before the final QC refines it
         b.append(DirectorTraining.scoreCard(film, this.art, story, null));
+        b.append(SituationsGuide.report(story, film, eyeLevelShots, blindNoPov, reveals, concernBeats, reliefBeats));
         b.append("• Static shots: ").append(statics).append(" of ").append(n).append(still > 0 ? " (" + still + " made still)" : "").append('\n');
         b.append("• Reactions shown and allowed to breathe: ").append(reactions).append('\n');
         b.append("• Relationships shown with both characters in the frame: ").append(twos).append(" two-shots\n");
@@ -830,6 +834,8 @@ public final class Director {
         List<Story.CharacterDef> order = new ArrayList<Story.CharacterDef>();
         Map<Story.CharacterDef, Integer> entryBeat = new HashMap<Story.CharacterDef, Integer>();
         String voiceFromOutside = Txt.has(where, "बाहर से", "आवाज़ आती", "from outside") ? "y" : "";
+        // v34: only addressed or named in a manner so far (not seen speaking or acting): a later "… walks in" is their entrance
+        java.util.Set<Story.CharacterDef> soft = new java.util.HashSet<Story.CharacterDef>();
         for (int bi = b0; bi < b1; bi++) {
             Story.Beat b = sc.beats.get(bi);
             if (b.type == Story.Beat.DIALOGUE) {
@@ -842,16 +848,21 @@ public final class Director {
                     if ((voiceFromOutside.length() > 0 && bi > b0 && !mentionsAny(sc, b0, bi, c)) || far) entryBeat.put(c, bi);
                 }
                 // characters named in the manner (e.g. "वृंदा की तलवार को रोकते हुए") are on stage too
-                for (Story.CharacterDef m : ScriptParser.mentions(story, b.manner)) if (!order.contains(m)) order.add(m);
+                for (Story.CharacterDef m : ScriptParser.mentions(story, b.manner)) if (!order.contains(m)) { order.add(m); soft.add(m); }
                 // ...and so is anyone addressed by name ("और कृपा, तुम्हारी चतुराई...")
-                for (Story.CharacterDef m : vocatives(b.text)) if (!order.contains(m)) order.add(m);
+                for (Story.CharacterDef m : vocatives(b.text)) if (!order.contains(m)) { order.add(m); soft.add(m); }
+                if (c != null) soft.remove(c);
             } else {
                 String txt = b.text;
                 for (String sent : sentences(txt)) {
                     List<Story.CharacterDef> ms = presentWithGroups(sent);
                     for (int k = 0; k < ms.size(); k++) {
                         Story.CharacterDef m = ms.get(k);
-                        if (order.contains(m)) continue;
+                        if (order.contains(m)) {
+                            // "रोहन, बारिश में भीग जाओगे!" … "(रोहन बैसाखी के सहारे चलकर आता है)": called first, then he comes
+                            if (soft.remove(m) && bi > b0 && isEntry(sent) && !entryBeat.containsKey(m)) entryBeat.put(m, bi);
+                            continue;
+                        }
                         order.add(m);
                         if (bi > b0 && isEntry(sent)) entryBeat.put(m, bi);
                     }
@@ -902,6 +913,10 @@ public final class Director {
             k.disguised = bool(pDisguise.get(c));
             Integer ent = entryBeat.get(c);
             if (ent != null) k.visible = false;
+            // v34: a drawn character in a wheelchair is seated in it from the start of the part, so every shot of the
+            // part is planned for a seated figure (eye-level framing, the face where it is); mobility() keeps it so
+            Look lk0 = k.costume > 0 && k.costume <= c.costumes.size() ? c.costumes.get(k.costume - 1).look : c.look;
+            if (lk0 != null && lk0.aid == Look.AID_WHEELCHAIR && (art == null || !art.sprites.containsKey(c.id))) { k.body = Pose.SIT; k.seat = Film.SEAT_WHEELCHAIR; }
             a.keys.add(k);
             // Spider-Verse: the frame rate this character's poses step on (only when the user asks for it)
             a.stepFps = opt.onTwos ? PixarLead.stepFps(c) : 0;
@@ -963,15 +978,19 @@ public final class Director {
         for (int bi = b0; bi < b1; bi++) {
             Story.Beat b = sc.beats.get(bi);
             // v34: a change of clothes at this beat — from here on the character wears it (in this part and the next)
+            List<Object[]> changed = new ArrayList<Object[]>();
             for (Story.CharacterDef c : story.characters) for (int ci = 0; ci < c.costumes.size(); ci++) {
                 Story.Costume co = c.costumes.get(ci);
                 if (co.scene != sc.number || co.beat != bi) continue;
+                Integer was = costumeNow.get(c);
+                Look before = was == null || was == 0 ? c.look : c.costumes.get(was - 1).look;
                 costumeNow.put(c, ci + 1);
                 Film.Actor ca = actor(c);
                 if (ca != null) {
                     Film.Key ck = ca.at(tc + 0.05f);
                     ck.costume = ci + 1;
                     film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, tc, 0.5f, 0.3f));
+                    changed.add(new Object[]{ca, before, co});
                 }
                 film.notes.add("    ↳ " + c.shown() + " — a new look: " + co.text);
             }
@@ -986,6 +1005,7 @@ public final class Director {
             }
             if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
+            for (Object[] ch : changed) tc = newLook((Film.Actor) ch[0], (Look) ch[1], (Story.Costume) ch[2], tc);
             // Miyazaki's ma: after two fast beats, one quiet one — a still shot that lets the moment breathe
             boolean fastBeat = PixarLead.fast(b.text + " " + (b.manner == null ? "" : b.manner)) || (b.type == Story.Beat.DIALOGUE && partFast && beatLine[si][bi] >= 0
                     && (film.lines.get(beatLine[si][bi]).emotion == Pose.ANGRY || film.lines.get(beatLine[si][bi]).emotion == Pose.SCARED));
@@ -1054,7 +1074,8 @@ public final class Director {
 
     static boolean isEntry(String s) {
         return Txt.has(s, "बाहर निकल", "आता है", "आती है", "आते हैं", "आ जाता", "आ जाती", "आ बैठ", "प्रवेश", "घुसते", "घुसता",
-                "छलाँग", "उल्टा लटक", "दौड़ते हुए आते", "आगे आती", "आगे आता", "enters", "arrives", "comes in", "पहुँचते");
+                "छलाँग", "उल्टा लटक", "दौड़ते हुए आते", "आगे आती", "आगे आता", "enters", "arrives", "comes in", "पहुँचते", "पहुँचती", "पहुँचता",
+                "walks in", "walk in", "rolls in", "wheels in", "comes over", "limps in", "hobbles in");
     }
 
     static List<String> sentences(String text) {
@@ -1158,6 +1179,13 @@ public final class Director {
             tc += 1.6f;
         }
         if (a.look.kind == Look.MONSTER) film.sfx.add(new Film.Sfx(Film.SFX_THUD, tc, 1.4f, 0.8f));
+        else if (a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0) {
+            // v34: the sound of how they come: a wheelchair rolls, a stick or a walking frame taps, crutches knock and
+            // swing; all slower, as mobility() makes their moves a third longer
+            int aidSound = a.look.aid == Look.AID_WHEELCHAIR ? Film.SFX_WHEELCHAIR : a.look.aid == Look.AID_CRUTCHES ? Film.SFX_CRUTCH
+                    : a.look.aid == Look.AID_STICK || a.look.aid == Look.AID_WALKER ? Film.SFX_STICK : stepsSound(false);
+            film.sfx.add(new Film.Sfx(aidSound, tc, k.moveDur * 1.35f, a.look.aid == Look.AID_WHEELCHAIR ? 0.45f : 0.38f));
+        }
         else film.sfx.add(new Film.Sfx(stepsSound(run), tc, k.moveDur, 0.35f));
         if (a.look.anklets) film.sfx.add(new Film.Sfx(Film.SFX_ANKLET, tc, k.moveDur, 0.4f));
         return tc + (far ? 0.2f : 0.4f);
@@ -1619,7 +1647,8 @@ public final class Director {
     private void comicBeat(float tc, int mood) {
         if (mood == Film.M_SAD) return;
         Film.Actor who = null;
-        for (Film.Actor a : seg.actors) if (PixarLead.comic(a.c) && a.stateAt(tc - 0.5f).visible && a.stateAt(tc - 0.5f).anchor == Film.A_GROUND) { who = a; break; }
+        for (Film.Actor a : seg.actors) if (PixarLead.comic(a.c) && a.stateAt(tc - 0.5f).visible && a.stateAt(tc - 0.5f).anchor == Film.A_GROUND
+                && a.look.aid == Look.AID_NONE && a.look.injury == 0) { who = a; break; }      // v34: a walking aid or an injury is never a joke
         if (who == null) return;
         // at a quiet moment near the end of the part: nobody speaking, this character not acting
         float t0 = Math.max(seg.t0 + 1f, tc - 1.6f);
@@ -2230,6 +2259,139 @@ public final class Director {
         }
     }
 
+    /**
+     * v34 (realism): every walk is heard, not only an entrance — a move across the stage or out of it gets the steps
+     * of its floor (or the stick, crutches or wheelchair of the one moving) unless a step sound already covers it.
+     */
+    private void walkSounds() {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            if (a.look == null || a.look.kind == Look.BIRD || a.look.mount >= 0) continue;
+            for (Film.Key k : a.keys) {
+                if (k.moveDur < 0.5f || k.anchor != Film.A_GROUND || !k.visible || k.t < sg.t0 || k.t >= sg.t1) continue;
+                float t0 = k.t, t1 = k.t + k.moveDur;
+                boolean heard = false;
+                for (Film.Sfx x : film.sfx) {
+                    boolean step = x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN || x.type == Film.SFX_THUD
+                            || x.type == Film.SFX_STICK || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR;
+                    if (step && x.t < t1 && x.t + x.dur > t0) { heard = true; break; }
+                }
+                if (heard) continue;
+                Look lk = k.costume > 0 && k.costume <= a.c.costumes.size() ? a.c.costumes.get(k.costume - 1).look : a.look;
+                int type = lk.kind == Look.MONSTER ? Film.SFX_THUD : lk.aid == Look.AID_WHEELCHAIR ? Film.SFX_WHEELCHAIR : lk.aid == Look.AID_CRUTCHES ? Film.SFX_CRUTCH
+                        : lk.aid == Look.AID_STICK || lk.aid == Look.AID_WALKER ? Film.SFX_STICK : floorSteps(sg.set, k.run);
+                film.sfx.add(new Film.Sfx(type, t0, k.moveDur, lk.kind == Look.MONSTER ? 0.6f : 0.3f));
+            }
+        }
+    }
+
+    /** The steps of a place's floor (as stepsSound, for any part). */
+    private static int floorSteps(int set, boolean run) {
+        if (run) return Film.SFX_STEPS_RUN;
+        switch (set) {
+            case Sets.COURTYARD: case Sets.GATE: case Sets.HALL: case Sets.CAVE_IN: case Sets.CAVE_MOUTH: case Sets.CELEBRATION:
+            case Sets.ROOFTOP: case Sets.BASEMENT: case Sets.STREET: case Sets.ROOM: return Film.SFX_STEPS_HARD;
+            default: return Film.SFX_STEPS;
+        }
+    }
+
+    /** v34: rain drums on the umbrella of whoever holds one open in the rain outdoors (the renderer opens it there). */
+    private void umbrellaRain() {
+        for (Film.Seg sg : film.segs) {
+            if (!Sets.outdoorSet(sg.set)) continue;
+            for (Film.Actor a : sg.actors) {
+                if (a.look == null || !a.look.umbrella || !a.look.isHumanoid()) continue;
+                float start = -1;
+                for (int i = 0; ; i++) {
+                    float t = sg.t0 + i * 0.25f;
+                    boolean end = t >= sg.t1;
+                    boolean on = !end && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && a.stateAt(t).visible;
+                    if (on && start < 0) start = t;
+                    if (!on && start >= 0) {
+                        float e = Math.min(t, sg.t1);
+                        if (e - start >= 0.5f) film.sfx.add(new Film.Sfx(Film.SFX_UMBRELLA_RAIN, start, e - start, 0.3f));
+                        start = -1;
+                    }
+                    if (end) break;
+                }
+            }
+        }
+    }
+
+    /** v34: what a character looks like at a moment (the change of clothes, bandage or plaster worn then). */
+    private Look lookAt(Film.Actor a, float t) {
+        if (a == null) return null;
+        Film.Key k = a.stateAt(t);
+        return k.costume > 0 && k.costume <= a.c.costumes.size() ? a.c.costumes.get(k.costume - 1).look : a.look;
+    }
+
+    /** v34: a feeling held for a moment, then the one before it again. */
+    private void feel(Film.Actor a, float t0, float dur, int emotion) {
+        int before = a.stateAt(t0).emotion;
+        a.at(t0).emotion = emotion;
+        a.at(t0 + dur).emotion = before;
+    }
+
+    /** v34 (the situations guide): counts of what the director did for the situations of the story (in the shot list). */
+    int eyeLevelShots, blindNoPov, reveals, concernBeats, reliefBeats;
+
+    /**
+     * v34 (the situations guide): a change of look is staged, not just swapped. New clothes: a reveal — the whole
+     * figure framed medium-wide with a slow push-in, a sparkle, the character proud, the others surprised and then
+     * delighted. A new bandage or plaster: the hurt one winces, the others look on with concern. A bandage taken off
+     * or a plaster cut: relief all round. Glasses on or off: no fuss. Returns the time after it.
+     */
+    private float newLook(Film.Actor a, Look before, Story.Costume co, float tc) {
+        Look now = co.look;
+        if (a == null || now == null || !a.stateAt(tc).visible) return tc;
+        boolean hurt = (now.injury & ~before.injury) != 0, healed = (before.injury & ~now.injury) != 0;
+        boolean clothes = now.outfit != before.outfit || now.primary != before.primary || now.secondary != before.secondary;
+        List<Film.Actor> others = new ArrayList<Film.Actor>();
+        for (Film.Actor o : seg.actors) if (o != a && o.stateAt(tc).visible && o.look != null && o.look.isHumanoid()) others.add(o);
+        if (hurt) {
+            feel(a, tc, 1.4f, Pose.PAIN);
+            for (Film.Actor o : others) feel(o, tc + 0.2f, 1.6f, Pose.SAD);
+            camOn(a, tc, 1.5f);
+            Film.Shot sh = shot(tc, ShotPlanner.MEDIUM, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, a, others.isEmpty() ? null : others.get(0), ShotPlanner.ESCALATE);
+            sh.purpose = "Hurt: " + a.c.shown() + " — " + clip(co.text, 50);
+            sh.action = co.text;
+            sh.face = "A wince, then brave";
+            sh.body = "The hurt arm, leg or head held still";
+            sh.cutWhen = "the wince has passed";
+            sh.emotionalPurpose = "Concern: the others look on, worried";
+            concernBeats++;
+            return tc + 1.5f;
+        }
+        if (healed) {
+            feel(a, tc, 1.6f, Pose.RELIEVED);
+            for (Film.Actor o : others) feel(o, tc + 0.3f, 1.4f, Pose.HAPPY);
+            reliefBeats++;
+            return tc + 0.8f;
+        }
+        if (clothes) {
+            // the reveal: the whole new look, held a moment, a slow push-in, a sparkle; the others react
+            Film.Key k = a.stateAt(tc);
+            float h = heightOf(a), x = xAt(a, tc);
+            cam(tc, x, ground - h * 0.52f, 1.15f, 0);
+            Film.Shot sh = shot(tc, ShotPlanner.MWIDE, ShotPlanner.SINGLE, 0, ShotPlanner.PUSH_IN, a, null, ShotPlanner.PEAK);
+            sh.purpose = "Reveal: " + a.c.shown() + "'s new look — " + clip(co.text, 50);
+            sh.action = a.c.shown() + " shows the new look";
+            sh.face = faceOf(Pose.PROUD);
+            sh.body = "Standing tall, a little turn to show it";
+            sh.cutWhen = "the new look has been seen whole";
+            sh.emotionalPurpose = "Delight: the change is an event";
+            feel(a, tc, 1.8f, Pose.PROUD);
+            for (Film.Actor o : others) { feel(o, tc + 0.4f, 0.6f, Pose.SURPRISED); feel(o, tc + 1.0f, 1.0f, Pose.HAPPY); }
+            Film.Fx fx = new Film.Fx(Film.FX_SPARKLE, tc + 0.2f, tc + 1.4f);
+            fx.x = x; fx.y = ground - h * 0.6f;
+            seg.fx.add(fx);
+            film.sfx.add(new Film.Sfx(Film.SFX_TWINKLE, tc + 0.2f, 1.0f, 0.3f));
+            if (k.body != Pose.SIT && k.body != Pose.LIE && now.aid == Look.AID_NONE) a.acts.add(new Film.Act(tc + 0.3f, tc + 1.5f, Film.G_PROUD));
+            reveals++;
+            return tc + 1.8f;
+        }
+        return tc;
+    }
+
     /** v34: the clothes each character last changed into (CharacterDef.costumes, 1-based; absent = their own). */
     private final Map<Story.CharacterDef, Integer> costumeNow = new HashMap<Story.CharacterDef, Integer>();
 
@@ -2406,6 +2568,8 @@ public final class Director {
 
     private float direction(int si, int bi, Story.Beat b, float tc, boolean establishing, String where) {
         float t0 = tc;
+        dirScene = story.scenes.get(si);
+        dirBeat = bi;
         int li = beatLine[si][bi];
         String text = b.text.replaceFirst("^(स्थान|Location|Place|Setting)\\s*[:：]\\s*", "");
         List<String> sents = sentences(text);
@@ -2898,6 +3062,8 @@ public final class Director {
             d = Math.max(d, pointOfView(s, t, subj, target));
             focusSet = true;
         }
+        // v34: walking off, across or up to someone (last: its keys must come after every other key of the sentence)
+        d = Math.max(d, travelFrom(s, t, subj, target, group));
 
         if (!focusSet && !establishing) {
             List<Film.Actor> vis = new ArrayList<Film.Actor>();
@@ -2957,6 +3123,21 @@ public final class Director {
      * medium, or the place ahead of them. Returns the time it needs.
      */
     private float pointOfView(String s, float t, Film.Actor subj, Film.Actor target) {
+        Look sl = lookAt(subj, t);
+        if (sl != null && sl.glasses == 4) {
+            // v34 (the situations guide): a blindfolded character cannot look — no point-of-view shot; she turns her
+            // head toward the sound and listens
+            camOn(subj, t, 1.7f);
+            Film.Shot a = shot(t, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, subj, target, ShotPlanner.DEVELOP);
+            a.purpose = "Blindfolded: " + subj.c.shown() + " cannot see — she turns toward the sound and listens (no point-of-view shot)";
+            a.action = subj.c.shown() + " listens" + (target != null ? " toward " + target.c.shown() : "");
+            a.face = "The head turned a little toward the sound, the face still";
+            a.body = "Still";
+            a.cutWhen = "the turn has settled";
+            a.emotionalPurpose = "We share what she has: sound, not sight";
+            blindNoPov++;
+            return 1.4f;
+        }
         camOn(subj, t, 1.7f);
         Film.Shot a = shot(t, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, subj, target, ShotPlanner.DEVELOP);
         a.purpose = "The look (director's manual 3.4): " + subj.c.shown() + "'s eyes go to " + (target != null ? target.c.shown() : "what the sentence names");
@@ -3190,6 +3371,164 @@ public final class Director {
     static final String[] SIT_DOWN = {"बैठ गया", "बैठ गई", "बैठ गए", "बैठ गयी", "बैठ जाता", "बैठ जाती", "बैठ जाते", "बैठते हैं", "बैठा है", "बैठी है",
             "बैठे हैं", "बैठा हुआ", "बैठी हुई", "बैठे हुए", "पर बैठा", "पर बैठी", "पर बैठे", "बैठकर", "बैठ कर", "sat down", "sits down", "sat on", "sits on",
             "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi"};
+    /** v34: the scene and beat being directed — to look ahead (does a character who walks off speak again in this scene?). */
+    private Story.Scene dirScene;
+    private int dirBeat = -1;
+    private int exits, crossings, approaches, returns;
+    /** v34: where each character stood before walking off (they come back to it). */
+    private final java.util.Map<Film.Actor, Float> leftFrom = new java.util.IdentityHashMap<Film.Actor, Float>(), goneAt = new java.util.IdentityHashMap<Film.Actor, Float>();
+    /** v34: coming back after leaving. */
+    static final String[] RETURN = {"comes back", "came back", "come back", "returns", "returned", "is back", "walks back in", "runs back in",
+            "वापस आ", "लौट आ", "लौटकर आ", "लौटती है", "लौटता है", "लौटते हैं", "वापस लौट"};
+
+    /** v34: leaving the place (walking or running off, going home). */
+    static final String[] LEAVE = {"walks home", "walked home", "goes home", "went home", "heads home", "runs home", "ran home", "walks away", "walked away",
+            "runs away", "ran away", "goes away", "went away", "walks off", "walked off", "runs off", "ran off", "walks out", "walked out", "runs out of",
+            "goes out of", "leaves the", "leaves for", "leaves with", "leaves home", "left the", "घर चला", "घर चली", "घर चले", "घर की ओर चल", "घर की तरफ चल",
+            "घर लौट", "चला जाता", "चली जाती", "चले जाते", "चला गया", "चली गई", "चली गयी", "चले गए", "भाग जाता", "भाग जाती", "भाग जाते", "भाग गया", "भाग गई",
+            "भाग गयी", "भाग गए", "भागने लग", "भाग खड़ा", "भाग खड़ी", "भाग खड़े", "भाग निकल", "दूर चला", "दूर चली", "दूर चले"};
+    /** v34: moving across the place (or round it) without a goal named. */
+    static final String[] CROSS = {"runs across", "ran across", "walks across", "walked across", "dashes across", "races across", "rushes across",
+            "runs around", "ran around", "runs about", "runs round", "walks around", "walks about", "दौड़ता है", "दौड़ती है", "दौड़ते हैं", "दौड़ पड़",
+            "दौड़ लगा", "इधर-उधर दौड़", "इधर उधर दौड़", "इधर-उधर भाग", "चक्कर लगा"};
+    /** v34: verbs of going on foot (or on wheels) that "home", "away", "across" or "to someone" can follow at a distance. */
+    static final String[] WALK_VERBS = {"walks", "walked", "runs", "ran", "heads", "headed", "hurries", "hurried", "wanders", "wandered", "limps", "limped",
+            "rolls", "rolled", "wheels", "wheeled", "strolls", "strolled", "trudges", "trudged", "stomps", "stomped", "storms", "stormed", "dashes", "dashed",
+            "races", "raced", "rushes", "rushed", "skips", "skipped", "marches", "marched", "tiptoes", "tiptoed"};
+    /** v34: going up to someone. */
+    static final String[] GO_TO = {"runs to", "ran to", "walks to", "walked to", "goes to", "went to", "comes to", "came to", "runs towards", "runs toward",
+            "ran towards", "walks towards", "walks toward", "walks up to", "runs up to", "goes up to", "walks over to", "runs over to", "rushes to", "hurries to",
+            "moves to", "steps towards", "के पास जा", "के पास आ", "के पास दौड़", "की ओर दौड़", "की तरफ दौड़", "की ओर भाग", "की तरफ भाग", "के पास पहुँच"};
+
+    /**
+     * v34 (the director trained for any story's stage directions, not only the sample's): "Kabir runs across the
+     * grass", "he turns away and walks slowly home", "Maya runs to Kabir", "रोहन घर चला जाता है" — the character
+     * really moves. Leaving: off the stage on the nearer side and gone (unless they speak again in this scene: then
+     * to the edge and still in view); across: to the other side, or back and forth for "around"; up to someone:
+     * beside them. Running when the words say so ("runs", "दौड़", "भाग"), slowly when they say so; never faster than
+     * the character's weight allows (calmMoves keeps the run under it); walking aids are slowed later (mobility).
+     * Nothing moves twice: a sentence another rule has already staged as a move is left as it is; entrances are
+     * the entrance rule's.
+     */
+    private float travelFrom(String s, float t, Film.Actor subj, Film.Actor target, List<Film.Actor> group) {
+        if (subj == null) return 0;
+        if (Txt.has(s, RETURN)) {
+            // back after walking off: in from the side they left by, to where they stood (a change of clothes on the
+            // way is already on them: the reveal follows)
+            float d = 0;
+            List<Film.Actor> back = new ArrayList<Film.Actor>(group.size() > 1 && Txt.has(s, "सब ", "सभी", "दोनों", "तीनों", "all ", "both", "everyone", "together") ? group : java.util.Collections.singletonList(subj));
+            for (Film.Actor a : back) {
+                Film.Key now = a.stateAt(t);
+                Float to = leftFrom.get(a);
+                if (now.visible || to == null || now.anchor != Film.A_GROUND) continue;
+                Float gone = goneAt.get(a);
+                // a moment off the stage first (the camera stays on the others: time passes)
+                float tr = Math.max(Math.max(t + 0.1f, a.last().t + 0.01f), gone == null ? 0 : gone + 1.0f);
+                float from = now.x;
+                Film.Key in = a.at(tr);
+                in.visible = true; in.x = from; in.moveDur = 0; in.facing = to > from ? 1 : -1; in.backTurned = false;
+                boolean run = Txt.has(s, "run", "ran ", "rush", "दौड़", "भाग");
+                float dur = Math.max(0.8f, Math.abs(to - from) / ((run ? 240f : 170f) * weightSpeed(a)));
+                Film.Key k = a.at(tr + 0.05f);
+                k.x = to; k.moveDur = dur; k.run = run; k.facing = to > from ? 1 : -1;
+                leftFrom.remove(a);
+                goneAt.remove(a);
+                returns++;
+                d = Math.max(d, tr - t + 0.05f + dur);
+            }
+            return d;
+        }
+        if (isEntry(s)) return 0;
+        // the verb and where to may have words between them ("walks slowly home", "runs happily across the grass")
+        boolean walkVerb = Txt.hasWord(s, WALK_VERBS);
+        boolean leave = leaving(s);
+        boolean cross = Txt.has(s, CROSS) || (walkVerb && Txt.hasWord(s, "across", "around", "round", "about"));
+        boolean goTo = (Txt.has(s, GO_TO) || (walkVerb && target != null && Txt.hasWord(s, "to", "towards", "toward")))
+                && !Txt.has(s, "to know", "to realise", "to realize", "to understand", "to an end", "to life", "to terms", "to sleep", "to bed", "to school");
+        if (!leave && !cross && !goTo) return 0;
+        boolean all = group.size() > 1 && Txt.has(s, "सब ", "सभी", "दोनों", "तीनों", "all ", "both", "everyone", "together");
+        List<Film.Actor> who = new ArrayList<Film.Actor>();
+        if (all) who.addAll(group); else who.add(subj);
+        boolean run = Txt.has(s, "run", "ran ", "rush", "dash", "race", "hurr", "दौड़", "भाग", "तेज़ी से");
+        boolean slow = Txt.has(s, "slowly", "sadly", "धीरे", "उदास");
+        boolean turning = Txt.has(s, TURN_AWAY);
+        float d = 0;
+        for (Film.Actor a : who) {
+            Film.Key now = a.stateAt(t);
+            if (!now.visible || now.anchor != Film.A_GROUND || a.look.kind == Look.BIRD || a.look.mount >= 0 || movedFrom(a, t)) continue;
+            if (a.last().t > t + 0.149f) continue;          // keys are kept in time order: nothing may come after one already planned
+            float x = xAt(a, t);
+            float speed = (run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
+            if (goTo && target != null && target != a && !all) {
+                float tx = xAt(target, t);
+                // an arm's length apart, as people stand to talk (not shoulder to shoulder)
+                float gap = 155 + (a.look.kind == Look.MONSTER || target.look.kind == Look.MONSTER ? 80 : 0);
+                float dest = x < tx ? tx - gap : tx + gap;
+                if (Math.abs(dest - x) < 30) continue;
+                float dur = Math.max(0.6f, Math.abs(dest - x) / speed);
+                Film.Key k = a.at(t + 0.15f);
+                k.x = dest; k.moveDur = dur; k.run = run; k.facing = tx > dest ? 1 : -1;
+                approaches++;
+                d = Math.max(d, Math.min(dur + 0.3f, 2.6f));
+            } else if (leave) {
+                boolean back = speaksLater(a.c);
+                float edge = x < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
+                float start = t + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
+                float dur = Math.max(0.8f, Math.abs(edge - x) / ((run ? 245f : slow ? 150f : 200f) * weightSpeed(a)));
+                Film.Key k = a.at(start);
+                k.x = edge; k.moveDur = dur; k.run = run; k.facing = edge > x ? 1 : -1; k.backTurned = false;
+                // gone once off the stage; the story goes on when they have gone (no key may come before this one)
+                if (!back) { Film.Key gone = a.at(start + dur + 0.05f); gone.visible = false; d = Math.max(d, start - t + dur + 0.1f); leftFrom.put(a, x); goneAt.put(a, gone.t); }
+                else d = Math.max(d, Math.min(start - t + dur, 2.4f));
+                exits++;
+            } else {
+                Film.Key k;
+                float dur;
+                if (Txt.has(s, "around", "about", "round", "इधर-उधर", "इधर उधर", "चक्कर")) {
+                    // round the place: out to one side and back
+                    float far = x < 640 ? Math.min(1100, x + 360) : Math.max(180, x - 360);
+                    dur = Math.max(0.7f, Math.abs(far - x) / speed);
+                    k = a.at(t + 0.15f); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
+                    Film.Key k2 = a.at(t + 0.2f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
+                    d = Math.max(d, 0.25f + dur);                     // the way back is planned: nothing before it
+                    dur = dur * 2 + 0.05f;
+                } else {
+                    float dest = x < 640 ? Math.min(1100, x + 520) : Math.max(180, x - 520);
+                    dur = Math.max(0.8f, Math.abs(dest - x) / speed);
+                    k = a.at(t + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
+                }
+                crossings++;
+                d = Math.max(d, Math.min(dur + 0.3f, 2.6f));
+            }
+        }
+        return d;
+    }
+
+    /** v34: the sentence has someone leave ("walks slowly home", "runs off", "घर चला जाता है"). */
+    static boolean leaving(String s) {
+        return Txt.has(s, LEAVE) || (Txt.hasWord(s, WALK_VERBS) && Txt.hasWord(s, "home", "away", "off")) || (Txt.hasWord(s, "goes", "went") && Txt.hasWord(s, "home", "away"));
+    }
+
+    /** True when a move of this actor already starts at t or later (another rule staged this sentence). */
+    private static boolean movedFrom(Film.Actor a, float t) {
+        for (Film.Key k : a.keys) if (k.t >= t - 0.01f && k.moveDur > 0) return true;
+        return false;
+    }
+
+    /**
+     * True when the character speaks, or is named in an action, later in the scene being directed — unless the story
+     * first brings them back ("comes back", "वापस आती है"): then they may leave for good and return.
+     */
+    private boolean speaksLater(Story.CharacterDef c) {
+        if (dirScene == null) return false;
+        for (int i = dirBeat + 1; i < dirScene.beats.size(); i++) {
+            Story.Beat b = dirScene.beats.get(i);
+            if (b.type == Story.Beat.DIALOGUE && b.speaker == c) return true;
+            if (b.type == Story.Beat.DIRECTION && ScriptParser.mentions(story, b.text).contains(c)) return !Txt.has(b.text, RETURN);
+        }
+        return false;
+    }
+
     /** v34: words for turning the back to the camera (turning away, walking away, leaving). */
     static final String[] TURN_AWAY = {"पीठ फेर", "मुँह फेर", "मुंह फेर", "पीठ करके", "पीठ कर के", "पलटकर चल", "मुड़कर चल", "चला जाता", "चली जाती", "चले जाते",
             "चला गया", "चली गई", "चले गए", "दूर चला", "दूर चली", "turns away", "turned away", "turns his back", "turns her back", "turns their back",
@@ -3216,7 +3555,7 @@ public final class Director {
         boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
         if (Txt.has(s, TURN_AWAY)) {
             // v34: the back is to the camera for a while (or until the character has gone): the back picture is used
-            boolean leaves = Txt.has(s, "चला जा", "चली जा", "चले जा", "चला गया", "चली गई", "चले गए", "walks away", "leaves", "goes away", "walked away");
+            boolean leaves = Txt.has(s, "चला जा", "चली जा", "चले जा", "चला गया", "चली गई", "चले गए", "walks away", "leaves", "goes away", "walked away") || leaving(s);
             for (Film.Actor a : who) {
                 Film.Key k = a.at(t + 0.1f);
                 k.backTurned = true;
@@ -3468,6 +3807,9 @@ public final class Director {
         Film.Key k = a.stateAt(t + 0.5f);
         float x = k.moveDur > 0 ? k.x : xAt(a, t);
         float y = ground - h * (zoom > 1.6f ? 0.8f : 0.62f);
+        // v34 (the situations guide): a seated character — in a wheelchair, on a chair — is framed at their own eye
+        // level, not at a standing person's (the camera never looks down on them)
+        if (k.body == Pose.SIT) { y = ground - h * (zoom > 1.6f ? 0.64f : 0.48f); eyeLevelShots++; }
         if (k.anchor == Film.A_BRANCH) y = ground - 450;
         if (k.body == Pose.LIE) y = ground - 60;
         cam(t, x, y, zoom, 0);
@@ -3496,7 +3838,10 @@ public final class Director {
         Film.Key st = sp.stateAt(t);
         float faceY = ground - h * 0.8f;
         if (st.anchor == Film.A_SHOULDER || st.anchor == Film.A_BRANCH || st.anchor == Film.A_ON_FACE) faceY = ground - (st.anchor == Film.A_BRANCH ? 450 : 320);
-        if (st.body == Pose.LIE || st.body == Pose.SIT) faceY = ground - h * 0.35f;
+        if (st.body == Pose.LIE) faceY = ground - h * 0.35f;
+        // v34: a seated face (a chair, a throne, a wheelchair) is about two thirds of the standing height up, not a third:
+        // the close shot is at the sitter's own eye level and the face is never cut
+        else if (st.body == Pose.SIT) { faceY = ground - h * 0.64f; eyeLevelShots++; }
         int visible = 0;
         float nearest = 1e9f;
         for (Film.Actor a : seg.actors) {

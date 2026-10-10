@@ -78,8 +78,11 @@ public final class Rig {
         public float lipWide, lipRound;
         /** Follow-through: how far the head (degrees) and the body's lean have just turned (hair and cloth lag). */
         public float follow, followLean;
+        /** v34: where the eyes look in the picture (-1 .. +1 towards the picture's right / down). */
+        public float gazeX, gazeY;
         public void reset() {
             follow = followLean = 0;
+            gazeX = gazeY = 0;
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
             lipWide = lipRound = 0;
@@ -765,6 +768,17 @@ public final class Rig {
                     float g = (float) Math.exp(-q);
                     dx += g * d[b + 3];
                     dy += g * d[b + 4];
+                }
+                // v34: the eyes look: the iris (and the lids just round it) shift a little, the corners of the eyes stay
+                if (s.gazeX != 0 || s.gazeY != 0) {
+                    for (int e = 0; e < 2; e++) {
+                        float ux = (x - (e == 0 ? ex1 : ex2)) / (0.55f * er), uy = (y - (e == 0 ? ey1 : ey2)) / (0.32f * er);
+                        float q = (ux * ux + uy * uy) * 0.5f;
+                        if (q > 8) continue;
+                        float g = (float) Math.exp(-q);
+                        dx += g * s.gazeX * 0.2f * er;
+                        dy += g * s.gazeY * 0.08f * er;
+                    }
                 }
                 // the jaw: everything below the lips (lower lip, chin) drops together; the lips part at the mouth line
                 if (s.jaw > 0.02f) {

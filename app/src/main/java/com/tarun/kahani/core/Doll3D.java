@@ -278,7 +278,7 @@ public final class Doll3D {
                 m.capsule(0, shY - T * 0.1f, sw * 0.95f, 0, hipY + T * 0.2f, hw * 0.95f, 0.025f * H, 0.028f * H, 8, accent);   // the tie
                 m.capsule(0, shY - T * 0.05f, sw * 0.9f, 0, hipY + T * 0.1f, hw * 0.9f, 0.02f * H, 0.02f * H, 8, m.mat(Studio3D.cloth(0xFFF4F4F4)));
             }
-            if (l.outfit == Look.O_HOODIE) m.box(0, hipY + T * 0.12f, hw * 0.9f, hw * 1.2f, T * 0.22f, 0.03f * H, top);           // the pocket
+            if (l.outfit == Look.O_HOODIE) m.box(0, hipY + T * 0.12f, hw * 0.96f, hw * 1.1f, T * 0.2f, 0.012f * H, m.mat(Studio3D.cloth(Studio3D.shade(l.primary, 0.8f))));   // the pocket (a shade darker, nearly flat: a pale square read as a patch)
             if (l.outfit == Look.O_ARMOR) m.torus(0, hipY + T * 0.05f, 0, hw * 1.1f, 0.02f * H, 1, 10, gold);
             if (l.outfit == Look.O_UNIFORM || l.outfit == Look.O_ACHKAN) {
                 for (int i = 0; i < 4; i++) m.sphere(0, shY - T * (0.18f + 0.18f * i), hw * 1.05f, 0.012f * H, 0.012f * H, 0.012f * H, 6, gold);

@@ -54,6 +54,14 @@ public final class Synth {
             case Film.SFX_CRACKLE: { for (float t = 0; t < dur; t += 0.04f + Math.abs(rnd()) * 0.12f) burst(o, t, 0.015f, 0.8f, 0.25f); noiseBed(o, 0.006f, 0.2f, 0.8f, 0.5f); fadeEnds(o, 0.1f); break; }
             case Film.SFX_HISS_SHORT: { noiseBed(o, 0.3f, 0.3f, 3f, 0.6f); fadeEnds(o, Math.min(0.25f, dur / 2)); break; }
             case Film.SFX_TAP: { float t = 0; while (t < dur) { knock(o, t, 1400, 0.3f); t += 0.26f; } break; }
+            // v34: a walking stick — a slow step, and on every other step the stick's dry wooden tap a moment before the foot
+            case Film.SFX_STICK: { float t = 0.05f; int k = 0; while (t < dur) { if (k % 2 == 0) { knock(o, t - 0.04f, 720, 0.32f); burst(o, t - 0.04f, 0.01f, 0.95f, 0.12f); } thump(o, t, 120, 0.2f); burst(o, t, 0.05f, 0.35f, 0.08f); t += 0.44f; k++; } break; }
+            // crutches — the two rubber tips land together (a dull knock), the body swings, then the one foot
+            case Film.SFX_CRUTCH: { float t = 0.05f; while (t < dur) { knock(o, t, 380, 0.3f); knock(o, t + 0.015f, 340, 0.25f); thump(o, t + 0.3f, 115, 0.22f); burst(o, t + 0.3f, 0.05f, 0.35f, 0.08f); t += 0.62f; } break; }
+            // a wheelchair rolling — low tyre rumble and a soft tick of the hand-rims each push
+            case Film.SFX_WHEELCHAIR: { noiseBed(o, 0.02f, 0.14f, 1.6f, 0.4f); lowpass(o, 0.12f); float t = 0.1f; while (t < dur - 0.1f) { knock(o, t, 1500, 0.06f); burst(o, t + 0.02f, 0.03f, 0.3f, 0.04f); t += 0.7f; } fadeEnds(o, 0.25f); break; }
+            // rain on an umbrella — many soft, dull drops on taut fabric over a light hiss
+            case Film.SFX_UMBRELLA_RAIN: { float t = 0.02f; while (t < dur - 0.05f) { knock(o, t, 520 + Math.abs(rnd()) * 380, 0.05f + Math.abs(rnd()) * 0.05f); t += 0.012f + Math.abs(rnd()) * 0.045f; } noiseBedRange(o, 0, dur, 0.25f, 0.04f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

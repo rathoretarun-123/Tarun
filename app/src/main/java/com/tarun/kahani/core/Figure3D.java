@@ -207,7 +207,9 @@ public final class Figure3D {
         }
         smoothCores(m);
         m.look = look;
-        m.hairColor = average(px, w, m, m.topRow, m.topRow + Math.max(2, m.bandH), cxPx);
+        // (the band reaches at least a thirtieth of the figure down: a bun's or an ornament's thin tip alone holds too
+        // few pixels — the old background's halo used to widen it)
+        m.hairColor = average(px, w, m, m.topRow, m.topRow + Math.max(Math.max(2, m.bandH), Math.round(0.035f * m.h)), cxPx);
         m.bodyColor = average(px, w, m, Math.round(m.hipRow - 0.1f * body), Math.round(m.hipRow + 0.1f * body), cxPx);
         return m;
     }
@@ -221,7 +223,9 @@ public final class Figure3D {
             if (run == null) continue;
             for (int x = run[0]; x <= run[1]; x += 2) {
                 int c = px[y * w + x];
-                if ((c >>> 24) < 200) continue;
+                // (v37: the outline cleaned of the old background since v35 is part-transparent but carries the
+                // character's own colour — the top of the head is mostly outline, so it counts too)
+                if ((c >>> 24) < 64) continue;
                 r += c >> 16 & 255; g += c >> 8 & 255; b += c & 255; n++;
             }
         }

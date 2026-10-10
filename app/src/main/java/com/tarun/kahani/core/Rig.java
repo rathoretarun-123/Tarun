@@ -1,0 +1,1153 @@
+package com.tarun.kahani.core;
+
+/**
+ * Bones and a face for a picture character, so a flat picture can turn and nod its head, swing and lift its
+ * arms, step with its legs, lean, breathe and change its expression (smile, frown, raised or angry brows,
+ * wide or squinting eyes).
+ *
+ * The picture is drawn as a mesh: every mesh point follows the bones near it (head, arms, legs, upper body),
+ * blended smoothly so the picture bends instead of breaking. The face is drawn a second time as a finer mesh
+ * on top, where small shifts around the eyes, brows, cheeks and mouth corners make the expressions.
+ *
+ * All landmarks are fractions of the cut-out picture (0..1), found from its outline and the face points.
+ */
+public final class Rig {
+    // body landmarks (fractions of the picture)
+    public float cx, top, bottom, chinY, neckY, shoulderY, shoulderHalf, hipY, gapX, legHalf;
+    public boolean legs;          // two separate legs (trousers, bare legs) — otherwise a skirt / robe
+    public float armEnd;          // where the hands end (fraction of the picture height)
+    public float armInner;        // distance from the middle where the arms start (fraction of shoulderHalf)
+    public final boolean[] armUp = new boolean[2];   // an arm raised beside the face (e.g. a hand on the moustache)
+    /** v34: the arms never swing — a many-armed character (Durga) keeps her fan of arms as drawn. */
+    public boolean armsFixed;
+    /**
+     * v34: the jaw of the animal a rider sits on, found in the rider's picture (fractions of the picture): the hinge
+     * (mjX, mjY), the snout's tip mjTipX, the side the head points to (-1 left, +1 right) and the head's height mjH.
+     */
+    public boolean mountJaw;
+    public float mjX, mjY, mjTipX, mjSide = 1, mjH = 0.15f;
+    public float headHalf = 0.12f;                   // half the face width (fraction of the picture width)
+    public float eyeV;
+    // face landmarks
+    public boolean face;
+    public float eLX, eLY, eRX, eRY, eR, mX, mY, mHW;
+    // the face drawn a second time: a crop of the picture with soft edges
+    public Object faceImg, faceWetImg;
+    /** v35: the face layer at half and a quarter of its size (Art.mips), for when the face is small on the screen. */
+    public Object faceHalf, faceQuarter;
+    /** The face crop with the headwear taken off (null when the character has none). */
+    public Object faceBareImg;
+    public float fu0, fv0, fu1, fv1;
+    /** How much each body mesh point is loose hair (0..1), from the picture's dark hair colours. */
+    public float[] hairW;
+
+    /**
+     * Meshes down to pixel level. Every frame each picture gets as many mesh cells as it has room for on screen,
+     * about one cell per CELL_PX screen pixels: in a close-up a person is bent through up to 256 x 512 cells and
+     * the face through up to 256 x 256, so every bend, blink and lip movement is smooth to the pixel; never fewer
+     * than 80 x 160 (96 x 96 for the face), and never more cells than the picture has pixels.
+     * BW x BH is also the grid of the hair weights.
+     */
+    public static final int BW = 80, BH = 160, FW = 96, FH = 96;
+    public static final int MAX_ROWS = 1024, MAX_FACE = 512;
+    /** The shape of the mesh: tall for people (1 : 2), wide for animals (2 : 1). */
+    public int mw = BW, mh = BH;
+    /** Screen pixels per mesh cell (2 = pixel level: a cell is never bigger than two pixels). */
+    public static float CELL_PX = 1f;
+    /** The picture's and the face crop's size in pixels (the mesh never gets finer than the picture). */
+    public int srcW = 1100, srcH = 1100, faceW = 300, faceH = 300;
+    public static boolean DEBUG;   // fine meshes: smooth bends, lips and brows
+
+    /** What the rig does in one frame. Angles in degrees (positive = clockwise on screen). */
+    public static final class State {
+        public float headRot, nod;           // nod: +1 looks down, -1 looks up
+        public float lean;                   // upper body
+        public float armL, armR;             // outward swing of the arm on the picture's left / right side
+        public float legLAng, legRAng, legLLift, legRLift;
+        public float legScale = 1;           // < 1 when kneeling / crouching
+        public float sit;                    // 0 standing .. 1 seated: thighs fold towards the viewer, shins stay
+        /** v35: seated on the floor, cross-legged: the shins fold under too and the knees spread. */
+        public boolean floor;
+        public boolean twirl;                // the raised hand fidgets (twirling a moustache)
+        public float breathe;                // -1..1
+        // face, 0..1
+        public float smile, frown, innerUp, browUp, browUpR, anger, wide, squint;
+        public float wind;                   // + blows towards the picture's right
+        public float time;
+        // animals: tail swing (degrees), jaw open 0..1, ear twitch -1..1, ears folded back 0..1, walking
+        public float tail, jaw, ear, earBack, walkPhase, walkAmt;
+        /** v34: the rider's animal's jaw (0..1). */
+        public float mountJaw;
+        // lips (people): how wide (ee, s) or round (oo, o) the mouth is while it opens with the voice (jaw)
+        public float lipWide, lipRound;
+        /** Follow-through: how far the head (degrees) and the body's lean have just turned (hair and cloth lag). */
+        public float follow, followLean;
+        /** v34: where the eyes look in the picture (-1 .. +1 towards the picture's right / down). */
+        public float gazeX, gazeY;
+        public void reset() {
+            follow = followLean = 0;
+            gazeX = gazeY = 0;
+            headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
+            tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
+            lipWide = lipRound = 0;
+            legScale = 1; sit = 0; twirl = false; floor = false;
+            smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
+        }
+        /** Moves the face part of this state towards target (k = 0..1 per frame). */
+        public void easeFace(State target, float k) {
+            smile += (target.smile - smile) * k; frown += (target.frown - frown) * k; innerUp += (target.innerUp - innerUp) * k;
+            browUp += (target.browUp - browUp) * k; browUpR += (target.browUpR - browUpR) * k; anger += (target.anger - anger) * k;
+            wide += (target.wide - wide) * k; squint += (target.squint - squint) * k;
+        }
+    }
+
+    // ------------------------------------------------------------------ building
+
+    /**
+     * Finds the bones from the cut-out picture's outline. Standing people get head, arms, legs and a face;
+     * animals (and any long, lying shape) get a head with a jaw and ears, a tail and legs.
+     */
+    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) { return build(r, s, look, L, false); }
+
+    /**
+     * v39: a face-only rig for a person's picture whose body must stay as the picture has it — sitting, drinking,
+     * waving, a half-length picture: the body is drawn exactly as it is (it never bends), the face speaks, blinks,
+     * looks and shows the feeling through its own mesh. Null when no face was found.
+     */
+    public static Rig buildStill(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) {
+        if (s == null || !s.faceKnown) return null;
+        return build(r, s, look, L, true);
+    }
+
+    static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, boolean stillOnly) {
+        if (r == null || r.px == null || r.w < 40 || r.h < 40) return null;
+        int w = r.w, h = r.h;
+        float aspect = h / (float) w;
+        boolean beast = look != null && (look.kind == Look.ANIMAL || look.kind == Look.BIRD);
+        // v34: a rider on her animal is wider than tall, but she is a person (her lips speak) with the animal's jaw
+        boolean rider = look != null && (look.mount >= 0 || look.aid == Look.AID_WHEELCHAIR) && !beast;
+        // v39: a person's half-length or sitting picture (wider than a standing figure) with a face found is no
+        // animal: it gets the face-only rig (before, it got an animal's jaw and no face — no lips, no blinks)
+        boolean still = stillOnly || (!beast && !rider && aspect < 1.25f && s != null && s.faceKnown);
+        if (!still && (beast || (aspect < 1.25f && !rider))) {
+            // an upright animal picture (a monkey, a bear standing) moves like a person
+            if (beast && aspect >= 1.5f && r.h >= 80) beast = false;
+            else {
+                int[] ct = new int[w], cb = new int[w];
+                int x0 = -1, x1 = -1, y0 = h, y1 = -1;
+                for (int x = 0; x < w; x++) {
+                    ct[x] = -1; cb[x] = -1;
+                    for (int y = 0; y < h; y++) if ((r.px[y * w + x] >>> 24) > 128) { if (ct[x] < 0) ct[x] = y; cb[x] = y; }
+                    if (ct[x] >= 0) { if (x0 < 0) x0 = x; x1 = x; y0 = Math.min(y0, ct[x]); y1 = Math.max(y1, cb[x]); }
+                }
+                if (x0 < 0 || x1 - x0 < w / 3 || y1 - y0 < 20) return null;
+                return buildAnimal(r, s, ct, cb, x0, x1, y0, y1);
+            }
+        }
+        if (r.h < 80) return null;
+        int[] left = new int[h], right = new int[h];
+        int topRow = -1, botRow = -1;
+        for (int y = 0; y < h; y++) {
+            left[y] = -1; right[y] = -1;
+            for (int x = 0; x < w; x++) if ((r.px[y * w + x] >>> 24) > 128) { if (left[y] < 0) left[y] = x; right[y] = x; }
+            if (left[y] >= 0) { if (topRow < 0) topRow = y; botRow = y; }
+        }
+        if (topRow < 0 || (!still && botRow - topRow < h / 2)) return null;
+        Rig g = new Rig();
+        g.still = still;
+        g.srcW = r.w; g.srcH = r.h;
+        g.top = topRow / (float) h;
+        g.bottom = botRow / (float) h;
+        g.face = s.faceKnown;
+        g.eLX = s.eyeLX; g.eLY = s.eyeLY; g.eRX = s.eyeRX; g.eRY = s.eyeRY; g.eR = s.eyeR;
+        g.mX = s.mouthX; g.mY = s.mouthY; g.mHW = s.mouthHW;
+        float eyeY = (s.eyeLY + s.eyeRY) / 2;
+        if (s.faceKnown && s.mouthY > eyeY) {
+            g.cx = (s.eyeLX + s.eyeRX + 2 * s.mouthX) / 4;
+            g.chinY = Math.min(0.6f, s.mouthY + (s.mouthY - eyeY) * 0.95f);
+        } else {
+            g.cx = 0.5f;
+            g.chinY = g.top + (g.bottom - g.top) * 0.22f;
+        }
+        g.neckY = g.chinY + 0.015f;
+        float body = g.bottom - g.chinY;
+        // shoulders: first row under the chin that is clearly wider than the head
+        int headRow = (int) ((s.faceKnown ? eyeY : g.top + 0.1f) * h);
+        float headW = Math.max(4, right[Math.max(topRow, Math.min(botRow, headRow))] - left[Math.max(topRow, Math.min(botRow, headRow))]);
+        g.shoulderY = g.chinY + 0.05f * body;
+        for (int y = (int) (g.chinY * h); y < (int) ((g.chinY + 0.25f * body) * h) && y <= botRow; y++) {
+            if (left[y] >= 0 && right[y] - left[y] > headW * 1.25f) { g.shoulderY = y / (float) h + 0.01f; break; }
+        }
+        g.shoulderY = Math.max(g.shoulderY, g.chinY + 0.035f);   // the arms never reach into the face
+        int sr = Math.min(botRow, (int) ((g.shoulderY + 0.04f * body) * h));
+        g.shoulderHalf = left[sr] >= 0 ? (right[sr] - left[sr]) / 2f / w : 0.3f;
+        // hips: about 42 % down the body, moved to the narrowest middle part nearby
+        float hip = g.chinY + 0.42f * body;
+        int best = -1;
+        float bestW = 1e9f;
+        int cxPx = (int) (g.cx * w);
+        for (int y = (int) ((hip - 0.08f * body) * h); y <= (int) ((hip + 0.06f * body) * h); y++) {
+            if (y < topRow || y > botRow) continue;
+            int[] run = runAround(r.px, w, y, cxPx);
+            if (run == null) continue;
+            float rw = run[1] - run[0];
+            if (rw < bestW) { bestW = rw; best = y; }
+        }
+        g.hipY = best > 0 ? best / (float) h : hip;
+        // legs: two separate runs below the hips for a good part of the way down
+        int two = 0, rows = 0;
+        float gapSum = 0, halfSum = 0;
+        for (int y = (int) ((g.hipY + 0.12f * body) * h); y < (int) ((g.bottom - 0.03f) * h); y += 2) {
+            if (y < 0 || y >= h) continue;
+            rows++;
+            int[] runs = twoRuns(r.px, w, y, Math.max(2, w / 80));
+            if (runs != null) { two++; gapSum += (runs[1] + runs[2]) / 2f; halfSum += ((runs[1] - runs[0]) + (runs[3] - runs[2])) / 4f; }
+        }
+        g.legs = rows > 0 && two > rows * 0.35f;
+        // arms: rows where the outline splits into arm | body | arm show how far down the hands come
+        // and where the arms begin; otherwise a typical length is used
+        int last = -1, found = 0;
+        float innerSum = 0;
+        int y0 = (int) ((g.shoulderY + 0.04f * body) * h), y1 = (int) ((g.chinY + 0.62f * body) * h);
+        for (int y = Math.max(topRow, y0); y <= Math.min(botRow, y1); y++) {
+            int[] arm = threeRuns(r.px, w, y, Math.max(2, w / 120), cxPx);
+            if (arm == null) continue;
+            found++;
+            last = y;
+            innerSum += Math.min(cxPx - arm[0], arm[1] - cxPx) / (g.shoulderHalf * w);
+        }
+        if (found > 0.04f * body * h) {
+            g.armEnd = last / (float) h + 0.015f;
+            g.armInner = Math.max(0.35f, Math.min(0.85f, innerSum / found - 0.08f));
+        } else {
+            g.armEnd = g.chinY + 0.36f * body;
+            g.armInner = 0.55f;
+        }
+        // an arm raised to the face: skin beside the head, well outside the face, between the eyes and shoulders
+        g.eyeV = s.faceKnown ? eyeY : g.top + 0.1f;
+        g.headHalf = headW / 2f / w;
+        int eyeRow = (int) (g.eyeV * h), shRow = (int) (g.chinY * h);     // beside the face: from the eyes to the chin
+        int[] armRows = new int[2];
+        int rowsN = 0;
+        // the face width from the eyes (the outline at eye level may already include a raised arm)
+        if (s.faceKnown && Math.abs(s.eyeRX - s.eyeLX) > 0.02f) headW = Math.abs(s.eyeRX - s.eyeLX) * w * 2.6f;
+        g.headHalf = headW / 2f / w;
+        for (int y = Math.max(topRow, eyeRow); y < Math.min(botRow, shRow); y++) {
+            rowsN++;
+            for (int side = 0; side < 2; side++) {
+                // what sticks out beside the face on this side: bright (a sleeve, a hand), not dark hair
+                int from = side == 0 ? Math.max(0, left[y]) : (int) (cxPx + headW * 0.7f);
+                int to = side == 0 ? (int) (cxPx - headW * 0.7f) : Math.min(w - 1, right[y]);
+                if (left[y] < 0 || to - from < headW * 0.3f) continue;
+                float lum = 0;
+                int n = 0, skin = 0;
+                for (int x = from; x <= to; x += 2) {
+                    int c = r.px[y * w + x];
+                    if ((c >>> 24) < 128) continue;
+                    n++;
+                    lum += (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 765f;
+                    if (Cutout.isSkin(c)) skin++;
+                }
+                if (n > headW * 0.08f && (lum / n > 0.42f || skin > n * 0.3f)) armRows[side]++;
+            }
+        }
+        if (DEBUG) System.out.println("armRows " + armRows[0] + "/" + armRows[1] + " of " + rowsN);
+        for (int side = 0; side < 2; side++) g.armUp[side] = rowsN > 4 && armRows[side] > rowsN * 0.3f;
+        // v34: a many-headed character (Ravana): the heads beside the face are heads, not raised arms, and the whole
+        // row is the head (it nods and turns together; only the central face speaks)
+        if (r.heads > 1 || (look != null && look.heads > 1)) {
+            g.armUp[0] = g.armUp[1] = false;
+            int er = Math.max(topRow, Math.min(botRow, eyeRow));
+            if (left[er] >= 0 && right[er] > left[er]) g.headHalf = Math.max(g.headHalf, (right[er] - left[er]) / 2f / w);
+        }
+        // v34: many arms (Durga) stay as drawn — no swing, nothing beside the face is "a raised hand"; a rider's
+        // legs are the animal's: they never walk (the whole picture glides), and the arms keep still too
+        if (look != null && (look.arms > 2 || look.mount >= 0)) {
+            g.armsFixed = true;
+            g.armUp[0] = g.armUp[1] = false;
+            if (look.mount >= 0) { g.legs = false; findMountJaw(g, r, left, right, topRow, botRow); }
+        }
+        // v34: a picture with a wheelchair (the chair is in the picture) never walks; one with a walking stick or
+        // crutches keeps its arms on them (no swing that would leave the stick behind)
+        if (look != null && (look.aid != Look.AID_NONE || (look.injury & Look.INJ_ARM) != 0)) {
+            g.armsFixed = true;
+            g.armUp[0] = g.armUp[1] = false;
+            if (look.aid == Look.AID_WHEELCHAIR) g.legs = false;
+        }
+        // v35: a picture of someone with one arm or one leg: nothing on the missing side is moved as a limb (an empty
+        // sleeve is not swung like an arm; one leg does not "walk" as two — the picture glides with a limp instead)
+        if (look != null && (look.missingArm() != 0 || look.missingLeg() != 0)) {
+            if (look.missingArm() != 0) { g.armsFixed = true; g.armUp[0] = g.armUp[1] = false; }
+            if (look.missingLeg() != 0) g.legs = false;
+        }
+        g.gapX = g.legs ? gapSum / two / w : g.cx;
+        g.legHalf = g.legs ? halfSum / two / w : 0.1f;
+        g.hairW = new float[(BW + 1) * (BH + 1)];
+        for (int j = 0; j <= BH; j++) {
+            for (int i = 0; i <= BW; i++) {
+                int cxp = Math.min(w - 1, i * (w - 1) / BW), cyp = Math.min(h - 1, j * (h - 1) / BH);
+                int dark = 0, n = 0;
+                for (int dy = -4; dy <= 4; dy += 2) for (int dx = -4; dx <= 4; dx += 2) {
+                    int xx = cxp + dx * w / 200, yy = cyp + dy * h / 400;
+                    if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                    int c = r.px[yy * w + xx];
+                    if ((c >>> 24) < 128) continue;
+                    n++;
+                    int rr = (c >> 16) & 255, gg = (c >> 8) & 255, bb = c & 255;
+                    if (rr + gg + bb < 200 && !Cutout.isSkin(c)) dark++;
+                }
+                float v = j / (float) BH;
+                g.hairW[j * (BW + 1) + i] = n == 0 || v > g.hipY + 0.25f * (g.bottom - g.hipY) ? 0 : dark / (float) n;
+            }
+        }
+        // the face itself never sways like loose hair: brows, eyes, a moustache or a beard stay with the head
+        if (g.face) {
+            float fcx = (g.eLX + g.eRX) / 2, d = Math.max(0.02f, Math.abs(g.eRX - g.eLX)), ey = (g.eLY + g.eRY) / 2;
+            float dv = d * w / (float) h, fcy = (ey - 0.5f * dv + Math.max(g.chinY, g.mY + 0.4f * dv)) / 2;
+            float ry = Math.max(dv, (Math.max(g.chinY, g.mY + 0.4f * dv) - ey + 0.5f * dv) / 2) * 1.15f, rx = 1.25f * d;
+            for (int j = 0; j <= BH; j++) for (int i = 0; i <= BW; i++) {
+                float du = (i / (float) BW - fcx) / rx, dvv = (j / (float) BH - fcy) / ry;
+                float e = (float) Math.sqrt(du * du + dvv * dvv);
+                g.hairW[j * (BW + 1) + i] *= smooth(0.85f, 1.25f, e);
+            }
+        }
+        if (g.face && L != null) g.makeFace(r, L);
+        return g;
+    }
+
+    /** The opaque run of a row that contains x (or the nearest one). */
+    static int[] runAround(int[] px, int w, int y, int x) {
+        int row = y * w;
+        if (x < 0 || x >= w) return null;
+        if ((px[row + x] >>> 24) <= 128) return null;
+        int a = x, b = x;
+        while (a > 0 && (px[row + a - 1] >>> 24) > 128) a--;
+        while (b < w - 1 && (px[row + b + 1] >>> 24) > 128) b++;
+        return new int[]{a, b};
+    }
+
+    /** Two biggest opaque runs of a row, left to right, if the row splits in two (legs). */
+    static int[] twoRuns(int[] px, int w, int y, int minGap) {
+        int row = y * w;
+        int[] best = null;
+        int b1 = 0, b2 = 0;
+        int x = 0;
+        int[][] runs = new int[8][];
+        int n = 0;
+        while (x < w && n < 8) {
+            while (x < w && (px[row + x] >>> 24) <= 128) x++;
+            if (x >= w) break;
+            int a = x;
+            while (x < w && (px[row + x] >>> 24) > 128) x++;
+            runs[n++] = new int[]{a, x - 1};
+        }
+        if (n < 2) return null;
+        // the two widest runs, kept in left-to-right order
+        int i1 = 0, i2 = 1;
+        for (int i = 0; i < n; i++) {
+            int len = runs[i][1] - runs[i][0];
+            if (len > b1) { b2 = b1; i2 = i1; b1 = len; i1 = i; } else if (len > b2) { b2 = len; i2 = i; }
+        }
+        int l = Math.min(i1, i2), r = Math.max(i1, i2);
+        if (runs[r][0] - runs[l][1] < minGap || b2 < b1 * 0.35f) return null;
+        best = new int[]{runs[l][0], runs[l][1], runs[r][0], runs[r][1]};
+        return best;
+    }
+
+    /**
+     * For a row that splits into three or more parts (arm, body, arm): {inner edge of the left arm, inner edge
+     * of the right arm}, or null.
+     */
+    static int[] threeRuns(int[] px, int w, int y, int minGap, int cx) {
+        int row = y * w;
+        int x = 0, n = 0;
+        int[] starts = new int[12], ends = new int[12];
+        while (x < w && n < 12) {
+            while (x < w && (px[row + x] >>> 24) <= 128) x++;
+            if (x >= w) break;
+            int a = x;
+            while (x < w && (px[row + x] >>> 24) > 128) x++;
+            if (n > 0 && a - ends[n - 1] <= minGap) { ends[n - 1] = x; continue; }   // a tiny gap is no gap
+            starts[n] = a; ends[n] = x; n++;
+        }
+        if (n < 3) return null;
+        // the run holding the middle is the body; the runs either side are arms
+        int mid = -1;
+        for (int i = 0; i < n; i++) if (starts[i] <= cx && ends[i] >= cx) mid = i;
+        if (mid <= 0 || mid >= n - 1) return null;
+        return new int[]{starts[mid], ends[mid]};
+    }
+
+    /**
+     * v38: how much a point of the picture (u, v as fractions) belongs to a hand raised beside the face — the same
+     * weight moveBody gives the arm there. The face layer leaves it out: a hand twirling a moustache, and its sleeve,
+     * were cut into the face layer and drawn torn across the cheek when the arm and the head moved apart.
+     */
+    float raisedArm(float u, float v) {
+        float w = 0;
+        for (int side = 0; side < 2; side++) {
+            if (!armUp[side]) continue;
+            float out = side == 0 ? cx - u : u - cx;
+            float wr = smooth(headHalf * 1.0f, headHalf * 1.3f, out) * smooth(eyeV - 0.05f, eyeV - 0.01f, v) * (1 - smooth(shoulderY, shoulderY + 0.03f, v));
+            w = Math.max(w, wr);
+        }
+        return w;
+    }
+
+    /** Crops the face with soft edges so it can be drawn over the body with its own fine mesh. */
+    void makeFace(Cutout.Result r, Art.Loader L) {
+        float d = Math.abs(eRX - eLX);
+        if (d < 0.02f) { face = false; return; }
+        float fcx = (eLX + eRX) / 2;
+        float eyeY = (eLY + eRY) / 2;
+        float dv = d * r.w / (float) r.h;     // the eye distance in height units
+        fu0 = Math.max(0, fcx - 1.3f * d);
+        fu1 = Math.min(1, fcx + 1.3f * d);
+        fv0 = Math.max(0, eyeY - 1.15f * dv);
+        fv1 = Math.min(chinY, 1);
+        int x0 = (int) (fu0 * r.w), x1 = (int) Math.ceil(fu1 * r.w), y0 = (int) (fv0 * r.h), y1 = (int) Math.ceil(fv1 * r.h);
+        int cw = Math.min(r.w, x1) - x0, ch = Math.min(r.h, y1) - y0;
+        faceW = Math.max(1, cw); faceH = Math.max(1, ch);
+        if (cw < 12 || ch < 12) { face = false; return; }
+        int[] px = new int[cw * ch];
+        float feather = Math.min(cw, ch) * 0.16f;
+        for (int y = 0; y < ch; y++) {
+            for (int x = 0; x < cw; x++) {
+                int c = r.px[(y + y0) * r.w + x + x0];
+                float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
+                float k = Math.min(1, e / feather);
+                // v38: a hand raised beside the face (and its sleeve) moves with the arm, never with the face layer
+                k *= 1 - raisedArm((x + x0 + 0.5f) / r.w, (y + y0 + 0.5f) / r.h);
+                int a = (int) ((c >>> 24) * k * k * (3 - 2 * k));
+                px[y * cw + x] = (a << 24) | (c & 0xFFFFFF);
+            }
+        }
+        // exact crop edges as fractions
+        fu0 = x0 / (float) r.w; fu1 = (x0 + cw) / (float) r.w;
+        fv0 = y0 / (float) r.h; fv1 = (y0 + ch) / (float) r.h;
+        faceImg = L.create(px, cw, ch);
+        faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+        Object[] mm = Art.mips(L, px, cw, ch);
+        faceHalf = mm[0]; faceQuarter = mm[1];
+    }
+
+    /** How many times sharper the face layer is than the body picture (the face is cut from the full picture). */
+    public float faceScale = 1f;
+
+    /**
+     * The face layer again, from the full-resolution picture (up to twice as sharp as the body), so a close-up
+     * where the face fills most of the frame stays crisp. The outline (alpha) comes from the cut-out.
+     */
+    public void sharpFace(int[] hi, int hw, int hh, Cutout.Result r, Art.Loader L) {
+        if (!face || faceImg == null || hi == null || hw < r.w * 1.25f) return;
+        float k = hw / (float) r.w;
+        int x0 = Math.round(fu0 * hw), y0 = Math.round(fv0 * hh), cw = Math.min(hw - x0, Math.round((fu1 - fu0) * hw)), ch = Math.min(hh - y0, Math.round((fv1 - fv0) * hh));
+        if (cw < 24 || ch < 24) return;
+        int[] px = new int[cw * ch];
+        float feather = Math.min(cw, ch) * 0.16f;
+        for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
+            // the cut-out's alpha at this point (bilinear from the smaller picture)
+            float lx = (x + x0 + 0.5f) / k - 0.5f, ly = (y + y0 + 0.5f) / k - 0.5f;
+            int ix = Math.max(0, Math.min(r.w - 2, (int) lx)), iy = Math.max(0, Math.min(r.h - 2, (int) ly));
+            float fx = Math.max(0, Math.min(1, lx - ix)), fy = Math.max(0, Math.min(1, ly - iy));
+            float a = ((r.px[iy * r.w + ix] >>> 24) * (1 - fx) + (r.px[iy * r.w + ix + 1] >>> 24) * fx) * (1 - fy)
+                    + ((r.px[(iy + 1) * r.w + ix] >>> 24) * (1 - fx) + (r.px[(iy + 1) * r.w + ix + 1] >>> 24) * fx) * fy;
+            float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
+            float f = Math.min(1, e / feather) * (1 - raisedArm((x + x0 + 0.5f) / hw, (y + y0 + 0.5f) / hh));     // v38
+            int al = (int) (a * f * f * (3 - 2 * f));
+            px[y * cw + x] = (Math.max(0, Math.min(255, al)) << 24) | (hi[(y + y0) * hw + x + x0] & 0xFFFFFF);
+        }
+        faceImg = L.create(px, cw, ch);
+        faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+        Object[] mm = Art.mips(L, px, cw, ch);
+        faceHalf = mm[0]; faceQuarter = mm[1];
+        faceW = cw; faceH = ch;
+        faceScale = k;
+    }
+
+    /** The same face crop (same place, same soft edges) from another version of the picture, e.g. bare-headed. */
+    public Object faceFrom(int[] src, int w, int h, Art.Loader L) {
+        if (!face || faceImg == null) return null;
+        int x0 = Math.round(fu0 * w), y0 = Math.round(fv0 * h), cw = Math.round(fu1 * w) - x0, ch = Math.round(fv1 * h) - y0;
+        if (cw < 12 || ch < 12 || x0 < 0 || y0 < 0 || x0 + cw > w || y0 + ch > h) return null;
+        int[] px = new int[cw * ch];
+        float feather = Math.min(cw, ch) * 0.16f;
+        for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
+            int c = src[(y + y0) * w + x + x0];
+            float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
+            float k = Math.min(1, e / feather);
+            px[y * cw + x] = ((int) ((c >>> 24) * k * k * (3 - 2 * k)) << 24) | (c & 0xFFFFFF);
+        }
+        return L.create(px, cw, ch);
+    }
+
+    // ------------------------------------------------------------------ moving
+
+    static float smooth(float a, float b, float x) {
+        float t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+    }
+
+    /**
+     * Working values for one frame. Each renderer (thread) keeps its own, so several frames can be drawn at
+     * the same time from the same pictures.
+     */
+    public static final class Frame {
+        float L0, T0, W0, H0;
+        float nX, nY, hipCX, hipCY;          // neck pivot, hip centre
+        float hCos = 1, hSin, lCos = 1, lSin, nodS = 1, nodDy;
+        final float[] armC = new float[2], armS = new float[2], legC = new float[3], legS = new float[3];
+        final float[] tmp = new float[2], legTmp = new float[2], o = new float[2], bumps = new float[5 * 40];
+        public final float[] body = new float[(MAX_ROWS / 2 + 1) * (MAX_ROWS + 1) * 2];
+        /** The mesh size used in this frame (pass these to Gfx.imageMesh). */
+        public int cols = BW, rows = BH;
+        public final float[] face = new float[(MAX_FACE + 1) * (MAX_FACE + 1) * 2];
+        /** The face mesh size used in this frame. */
+        public int fcols = FW, frows = FH;
+        /** The picture's height on screen in this frame (pixels). */
+        public float screenPx = 1e9f;
+    }
+
+    private void frame(Frame f, State s, float left, float top, float w, float h) {
+        f.L0 = left; f.T0 = top; f.W0 = w; f.H0 = h;
+        f.nX = left + cx * w; f.nY = top + neckY * h;
+        f.hipCX = left + cx * w; f.hipCY = top + hipY * h;
+        // v38: a hand held up at the face holds the head with it — the head neither turns nor nods against the hand
+        // (the side of the head beside the hand moves with the arm, the face layer with the head: apart, they tore)
+        boolean handAtFace = !animal && (armUp[0] || armUp[1]);
+        double hr = Math.toRadians(handAtFace ? 0 : s.headRot), lr = Math.toRadians(s.lean);
+        f.hCos = (float) Math.cos(hr); f.hSin = (float) Math.sin(hr);
+        f.lCos = (float) Math.cos(lr); f.lSin = (float) Math.sin(lr);
+        for (int side = 0; side < 2; side++) {
+            float ang = side == 0 ? s.armL : -s.armR;
+            if (armsFixed) ang = 0;
+            else if (armUp[side]) {
+                // a hand held at the face stays where the picture has it (v38: its fidget about the shoulder swung the
+                // side of the head with it, away from the face layer)
+                ang = 0;
+            }
+            double a = Math.toRadians(ang);   // outward: the left arm turns clockwise
+            f.armC[side] = (float) Math.cos(a); f.armS[side] = (float) Math.sin(a);
+        }
+        float[] la = {s.legLAng, s.legRAng, (s.legLAng - s.legRAng) * 0.15f};
+        for (int i = 0; i < 3; i++) { double a = Math.toRadians(la[i]); f.legC[i] = (float) Math.cos(a); f.legS[i] = (float) Math.sin(a); }
+        float headH = (neckY - this.top) * h;
+        f.nodS = handAtFace ? 1 : 1 - 0.035f * Math.abs(s.nod);
+        f.nodDy = handAtFace ? 0 : s.nod * headH * 0.04f;
+        if (animal) {
+            // the eyes and mouth drawn on an animal follow its head about the neck
+            f.nX = left + neckX * w; f.nY = top + neckY2 * h;
+            double a = Math.toRadians(animalHeadAngle(s));
+            f.hCos = (float) Math.cos(a); f.hSin = (float) Math.sin(a);
+            f.lCos = 1; f.lSin = 0; f.nodS = 1; f.nodDy = 0;
+        }
+    }
+
+    /** The head angle of an animal: positive nod looks down (towards the ground in front of it). */
+    float animalHeadAngle(State s) {
+        return s.headRot + s.nod * 10 * headSide;
+    }
+
+    /** Head bone then upper-body lean: the exact transform applyHead() gives the canvas. */
+    private static void head(Frame f, float x, float y, float[] o) {
+        headLocal(f, x, y, o);
+        lean(f, o[0], o[1], o);
+    }
+
+    private static void headLocal(Frame f, float x, float y, float[] o) {
+        y += f.nodDy;
+        float dx = x - f.nX, dy = (y - f.nY) * f.nodS;
+        o[0] = f.nX + f.hCos * dx - f.hSin * dy;
+        o[1] = f.nY + f.hSin * dx + f.hCos * dy;
+    }
+
+    private static void lean(Frame f, float x, float y, float[] o) {
+        float dx = x - f.hipCX, dy = y - f.hipCY;
+        o[0] = f.hipCX + f.lCos * dx - f.lSin * dy;
+        o[1] = f.hipCY + f.lSin * dx + f.lCos * dy;
+    }
+
+    /**
+     * v34: where the rider's animal's open mouth is in this frame — {hinge x, y, upper tip x, y, lowered tip x, y}
+     * in the picture's drawing coordinates — or null while it is shut. The renderer fills it dark (with a tongue),
+     * as it does for an animal of its own, so the animal's words read as speech, not as a warp of its snout.
+     */
+    public float[] mountMouth(Frame f, State s) {
+        if (!mountJaw || s.mountJaw < 0.1f) return null;
+        float hx = f.L0 + mjX * f.W0, hy = f.T0 + mjY * f.H0;
+        float tx = hx + (mjTipX - mjX) * f.W0 * 0.92f;
+        double a = Math.toRadians(mjSide * 22 * s.mountJaw);
+        float lx = hx + (float) Math.cos(a) * (tx - hx), ly = hy + (float) Math.sin(a) * Math.abs(tx - hx);
+        float[] o = new float[6], q = new float[2];
+        moveBody(f, s, hx, hy, q); o[0] = q[0]; o[1] = q[1];
+        moveBody(f, s, tx, hy, q); o[2] = q[0]; o[3] = q[1];
+        moveBody(f, s, lx, ly, q); o[4] = q[0]; o[5] = q[1];
+        return o;
+    }
+
+    /** Where one point of the picture (local coordinates) goes in this frame. */
+    private void move(Frame f, State s, float x, float y, float[] o) {
+        if (still) { o[0] = x; o[1] = y; return; }          // v39: the body exactly as the picture has it
+        if (animal) { moveAnimal(f, s, x, y, o); return; }
+        if (mountJaw && s.mountJaw > 0.02f) {
+            // v34: the rider's animal speaks — the lower front of its snout drops open about a hinge behind the mouth
+            float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+            float zone = smooth(mjY - mjH * 0.04f, mjY + mjH * 0.08f, v) * (1 - smooth(mjY + mjH * 0.45f, mjY + mjH * 0.7f, v))
+                    * (mjSide < 0 ? smooth(mjX + 0.02f, mjX - 0.03f, u) : smooth(mjX - 0.02f, mjX + 0.03f, u));
+            if (zone > 0) {
+                float hx = f.L0 + mjX * f.W0, hy = f.T0 + mjY * f.H0;
+                double a = Math.toRadians(mjSide * 22 * s.mountJaw * zone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = x - hx, dy = y - hy;
+                x = hx + c * dx - sn * dy; y = hy + sn * dx + c * dy;
+            }
+        }
+        moveBody(f, s, x, y, o);
+        float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        float hair = 0;
+        if (hairW != null) {
+            // between the grid points smoothly, so the fine face mesh and the body mesh agree everywhere
+            float gu = Math.max(0, Math.min(BW, u * BW)), gv = Math.max(0, Math.min(BH, v * BH));
+            int i = Math.min(BW - 1, (int) gu), j = Math.min(BH - 1, (int) gv);
+            float fu = gu - i, fv = gv - j;
+            int k = j * (BW + 1) + i;
+            float hw = (hairW[k] * (1 - fu) + hairW[k + 1] * fu) * (1 - fv) + (hairW[k + BW + 1] * (1 - fu) + hairW[k + BW + 2] * fu) * fv;
+            hair = hw * smooth(top + 0.04f, top + 0.3f, v);
+        }
+        float cloth = smooth(hipY, bottom, v) * (legs ? 0.3f : 1f);
+        float t = s.time;
+        // always alive (follow-through): loose hair and a skirt's hem keep swaying a little after every move,
+        // more while walking; breathing lifts the shoulders and head
+        float alive = 1f + 2.2f * s.walkAmt;
+        o[0] += f.W0 * alive * (0.0045f * hair * (float) Math.sin(t * 1.7 + v * 5 + u * 2)
+                + 0.0035f * cloth * cloth * (float) Math.sin(t * 2.3 + v * 9 - u * 3));
+        o[1] -= f.H0 * 0.0022f * s.breathe * (1 - smooth(hipY - 0.12f, hipY, v)) * smooth(top, shoulderY, v + 0.05f);
+        // follow-through: loose hair and a hem are still on their way when the head or body has already turned
+        if (s.follow != 0 || s.followLean != 0)
+            o[0] -= f.W0 * (0.0035f * hair * s.follow * (0.5f + v) + 0.0025f * cloth * s.followLean);
+        if (s.wind == 0) return;
+        // wind: loose hair streams out (more the further it hangs), skirts bend and flutter at the hem
+        float flap = 0.75f + 0.35f * (float) Math.sin(t * 6.3 + v * 9 + u * 3);
+        float dx = s.wind * f.W0 * (0.07f * hair * flap + 0.05f * cloth * cloth * (0.8f + 0.4f * (float) Math.sin(t * 7.1 + v * 12)));
+        float dy = -Math.abs(s.wind) * f.H0 * 0.01f * hair * (float) Math.sin(t * 5 + u * 6);
+        o[0] += dx;
+        o[1] += dy;
+    }
+
+    private void moveBody(Frame f, State s, float x, float y, float[] o) {
+        float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        // ---- upper body: head, arms, breathing, then the lean
+        float wHead = 1 - smooth(chinY + 0.005f, chinY + 0.05f, v);
+        float armTop = shoulderY - 0.02f, armBot = armEnd;
+        float wArmV = smooth(armTop, armTop + 0.04f, v) * (1 - smooth(armBot - 0.03f, armBot + 0.02f, v));
+        float off = (u - cx) / Math.max(0.05f, shoulderHalf);
+        float wArmL = wArmV * smooth(-armInner + 0.1f, -armInner - 0.15f, off), wArmR = wArmV * smooth(armInner - 0.1f, armInner + 0.15f, off);
+        // a raised arm beside the face belongs to the arm, not the head
+        for (int side = 0; side < 2; side++) {
+            if (!armUp[side]) continue;
+            float out = (side == 0 ? cx - u : u - cx);
+            float wr = smooth(headHalf * 1.0f, headHalf * 1.3f, out) * smooth(eyeV - 0.05f, eyeV - 0.01f, v) * (1 - smooth(shoulderY, shoulderY + 0.03f, v));
+            if (wr <= 0) continue;
+            wHead *= 1 - wr;
+            if (side == 0) wArmL = Math.max(wArmL, wr); else wArmR = Math.max(wArmR, wr);
+        }
+        // breathing: the chest widens a little
+        float chest = smooth(shoulderY, shoulderY + 0.05f, v) * (1 - smooth(hipY - 0.08f, hipY, v));
+        float px = f.L0 + (cx + (u - cx) * (1 + 0.012f * s.breathe * chest)) * f.W0, py = y;
+        float qx = px, qy = py;
+        if (wHead > 0) {
+            headLocal(f, px, py, f.tmp);
+            qx += wHead * (f.tmp[0] - px); qy += wHead * (f.tmp[1] - py);
+        }
+        if (wArmL > 0 || wArmR > 0) {
+            float sy = f.T0 + (shoulderY + 0.015f) * f.H0;
+            for (int side = 0; side < 2; side++) {
+                float wa = side == 0 ? wArmL : wArmR;
+                if (wa <= 0) continue;
+                float sx = f.L0 + (cx + (side == 0 ? -1 : 1) * shoulderHalf * 0.62f) * f.W0;
+                float c = f.armC[side], sn = f.armS[side];
+                float dx = px - sx, dy = py - sy;
+                qx += wa * (sx + c * dx - sn * dy - px);
+                qy += wa * (sy + sn * dx + c * dy - py);
+            }
+        }
+        lean(f, qx, qy, f.tmp);
+        float ux = f.tmp[0], uy = f.tmp[1];
+        // ---- lower body: legs (or a skirt) from the hips
+        float wLow = smooth(hipY - 0.03f, hipY + 0.05f, v);
+        if (wLow <= 0) { o[0] = ux; o[1] = uy; return; }
+        float lx, ly;
+        float hy = f.T0 + hipY * f.H0;
+        // sitting: the thighs come towards the viewer (they shorten), the shins stay and the knees part a little
+        float sx2 = x, sy2 = y;
+        if (s.sit > 0) {
+            float knee = hipY + (bottom - hipY) * 0.5f;
+            // v35: on the floor the shins fold under as well (three quarters) and the knees part wider
+            float shin = s.floor ? 0.75f * s.sit : 0, ky = f.T0 + knee * f.H0;
+            if (legs) {
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = ky - (knee - hipY) * f.H0 * 0.8f * s.sit + (y - ky) * (1 - shin);
+                sx2 = x + (u < gapX ? -1 : 1) * (s.floor ? 0.09f : 0.035f) * f.W0 * s.sit * smooth(hipY, knee, v);
+            } else if (s.floor) {
+                // a skirt or a saree on the floor: the lap and the folded legs make a wide, low mound
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = ky - (knee - hipY) * f.H0 * 0.8f * s.sit + (y - ky) * (1 - shin);
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.32f * s.sit * smooth(hipY, knee, v))) * f.W0;
+            } else {
+                // v35: a skirt, a saree or a robe folds like a lap: from the hips to the knees it comes towards the
+                // camera and shortens as a pair of thighs would; from the knees it falls to the feet as before, spread
+                // a little over the knees (it used to shrink evenly, which read as a shorter person standing)
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = y - (knee - hipY) * f.H0 * 0.8f * s.sit;
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.14f * s.sit * smooth(hipY, knee, v))) * f.W0;
+            }
+        }
+        if (legs) {
+            float side = smooth(gapX - 0.02f, gapX + 0.02f, u);     // 0 = left leg, 1 = right leg
+            float jx = f.L0 + gapX * f.W0;
+            legPoint(f, sx2, sy2, jx - legHalf * f.W0, hy, 0, s.legLLift, s.legScale);
+            float rlx = f.legTmp[0], rly = f.legTmp[1];
+            legPoint(f, sx2, sy2, jx + legHalf * f.W0, hy, 1, s.legRLift, s.legScale);
+            lx = rlx + (f.legTmp[0] - rlx) * side;
+            ly = rly + (f.legTmp[1] - rly) * side;
+        } else {
+            legPoint(f, sx2, sy2, f.L0 + cx * f.W0, hy, 2, 0, Math.max(0.7f, s.legScale));
+            lx = f.legTmp[0]; ly = f.legTmp[1];
+        }
+        o[0] = ux + (lx - ux) * wLow;
+        o[1] = uy + (ly - uy) * wLow;
+    }
+
+    /** which: 0 left leg, 1 right leg, 2 skirt. */
+    private static void legPoint(Frame f, float x, float y, float jx, float jy, int which, float lift, float scale) {
+        float dy = (y - jy) * scale * (1 - lift);
+        float dx = x - jx;
+        float c = f.legC[which], s = f.legS[which];
+        f.legTmp[0] = jx + c * dx - s * dy;
+        f.legTmp[1] = jy + s * dx + c * dy;
+    }
+
+    /** Mesh points of the whole picture for this frame into f.body, at the finest detail. */
+    static int clampCells(float want, int min, int max) {
+        int n = Math.round(want);
+        return Math.max(Math.min(min, max), Math.min(max, n));
+    }
+
+    public void bodyMesh(Frame f, State s, float left, float top, float w, float h) {
+        bodyMesh(f, s, left, top, w, h, 1e9f);
+    }
+
+    /**
+     * Mesh points of the whole picture for this frame into f.body: (f.cols+1)*(f.rows+1) pairs. screenPx is the
+     * picture's height on screen in pixels: the mesh gets about one cell per CELL_PX pixels, up to the finest.
+     */
+    public void bodyMesh(Frame f, State s, float left, float top, float w, float h, float screenPx) {
+        frame(f, s, left, top, w, h);
+        if (still) {        // v39: no lean, no head turn: the face layer stays exactly on the picture's face
+            f.hCos = 1; f.hSin = 0; f.lCos = 1; f.lSin = 0; f.nodS = 1; f.nodDy = 0;
+        }
+        f.screenPx = screenPx;
+        // as fine as the picture's size on screen allows: about one cell per CELL_PX pixels
+        int rows, cols;
+        if (mw <= mh) {     // a person: rows along the height
+            rows = clampCells(screenPx / CELL_PX, BH, Math.min(MAX_ROWS, srcH));
+            cols = Math.max(BW, Math.min(Math.min(MAX_ROWS / 2, srcW), rows / 2));
+        } else {            // an animal: columns along the length
+            float wide = screenPx * (srcW / (float) Math.max(1, srcH));
+            cols = clampCells(wide / CELL_PX, BH, Math.min(MAX_ROWS, srcW));
+            rows = Math.max(BW, Math.min(Math.min(MAX_ROWS / 2, srcH), cols / 2));
+        }
+        f.rows = rows; f.cols = cols;
+        int k = 0;
+        for (int j = 0; j <= rows; j++) {
+            float y = top + h * j / rows;
+            for (int i = 0; i <= cols; i++) {
+                float x = left + w * i / cols;
+                move(f, s, x, y, f.o);
+                f.body[k++] = f.o[0];
+                f.body[k++] = f.o[1];
+            }
+        }
+    }
+
+    /** Mesh points of the face crop with the expression into f.face (call after bodyMesh). */
+    public void faceMesh(Frame f, State s) {
+        float left = f.L0, top = f.T0, w = f.W0, h = f.H0;
+        float x0 = left + fu0 * w, y0 = top + fv0 * h, cw = (fu1 - fu0) * w, ch = (fv1 - fv0) * h;
+        float ex1 = left + eLX * w, ey1 = top + eLY * h, ex2 = left + eRX * w, ey2 = top + eRY * h;
+        float er = Math.max(2, eR * w), mx = left + mX * w, my = top + mY * h, mh = Math.max(3, mHW * w);
+        if (ex1 > ex2) { float t = ex1; ex1 = ex2; ex2 = t; t = ey1; ey1 = ey2; ey2 = t; }
+        // the shifts that make the expression: centre x, y, size, move x, move y
+        float[] d = f.bumps;
+        int n = 0;
+        if (s.smile > 0) {           // mouth corners up and out, cheeks up
+            n = add(d, n, mx - mh, my, 0.65f * mh, -0.18f * mh * s.smile, -0.45f * mh * s.smile);
+            n = add(d, n, mx + mh, my, 0.65f * mh, 0.18f * mh * s.smile, -0.45f * mh * s.smile);
+            n = add(d, n, ex1, ey1 + 2.1f * er, 1.4f * er, 0, -0.35f * er * s.smile);
+            n = add(d, n, ex2, ey2 + 2.1f * er, 1.4f * er, 0, -0.35f * er * s.smile);
+        }
+        if (s.frown > 0) {           // corners down
+            n = add(d, n, mx - mh, my, 0.65f * mh, 0.05f * mh * s.frown, 0.4f * mh * s.frown);
+            n = add(d, n, mx + mh, my, 0.65f * mh, -0.05f * mh * s.frown, 0.4f * mh * s.frown);
+        }
+        // eyelids: squint (laughing, pain, anger) or wide open (surprise, fear)
+        float lid = 0.3f * s.squint + 0.3f * s.anger - 0.4f * s.wide;
+        float low = -0.45f * s.squint + 0.2f * s.wide;
+        if (lid != 0) { n = add(d, n, ex1, ey1 - 0.95f * er, 0.8f * er, 0, lid * er); n = add(d, n, ex2, ey2 - 0.95f * er, 0.8f * er, 0, lid * er); }
+        if (low != 0) { n = add(d, n, ex1, ey1 + 0.95f * er, 0.8f * er, 0, low * er); n = add(d, n, ex2, ey2 + 0.95f * er, 0.8f * er, 0, low * er); }
+        // brows: up (surprise), inner ends up (sad, worried), down and together (anger)
+        float by1 = ey1 - 1.75f * er, by2 = ey2 - 1.75f * er;
+        float up = s.browUp + 0.3f * s.wide;
+        if (up > 0) { n = add(d, n, ex1, by1, 1.3f * er, 0, -0.8f * er * up); n = add(d, n, ex2, by2, 1.3f * er, 0, -0.8f * er * up); }
+        if (s.browUpR > 0) n = add(d, n, ex2, by2, 1.3f * er, 0, -0.9f * er * s.browUpR);
+        if (s.innerUp > 0) {
+            n = add(d, n, ex1 + 0.6f * er, by1 + 0.2f * er, 0.95f * er, 0, -0.7f * er * s.innerUp);
+            n = add(d, n, ex2 - 0.6f * er, by2 + 0.2f * er, 0.95f * er, 0, -0.7f * er * s.innerUp);
+            n = add(d, n, ex1 - 1.0f * er, by1, 0.9f * er, 0, 0.25f * er * s.innerUp);
+            n = add(d, n, ex2 + 1.0f * er, by2, 0.9f * er, 0, 0.25f * er * s.innerUp);
+        }
+        // lips: the corners go out for "ee" / "s", in and forward for "oo" / "o"; the upper lip lifts a little
+        if (s.jaw > 0.02f) {
+            float cxm = (0.17f * s.lipWide - 0.24f * s.lipRound) * mh;
+            n = add(d, n, mx - mh, my + 0.08f * mh, 0.5f * mh, -cxm, 0.04f * mh * s.jaw);
+            n = add(d, n, mx + mh, my + 0.08f * mh, 0.5f * mh, cxm, 0.04f * mh * s.jaw);
+            n = add(d, n, mx, my - 0.42f * mh, 0.5f * mh, 0, -0.06f * mh * s.jaw);
+        }
+        if (s.anger > 0) {
+            n = add(d, n, ex1 + 0.6f * er, by1 + 0.2f * er, 0.95f * er, 0.3f * er * s.anger, 0.65f * er * s.anger);
+            n = add(d, n, ex2 - 0.6f * er, by2 + 0.2f * er, 0.95f * er, -0.3f * er * s.anger, 0.65f * er * s.anger);
+            n = add(d, n, mx - mh, my, 0.6f * mh, 0, 0.15f * mh * s.anger);
+            n = add(d, n, mx + mh, my, 0.6f * mh, 0, 0.15f * mh * s.anger);
+        }
+        // the face mesh: as fine as the face is large on screen (pixel level in a close-up)
+        int FW = clampCells((fv1 - fv0) * f.screenPx / CELL_PX, Rig.FW, Math.min(MAX_FACE, faceH)), FH = FW;
+        f.fcols = FW; f.frows = FH;
+        int k = 0;
+        for (int j = 0; j <= FH; j++) {
+            for (int i = 0; i <= FW; i++) {
+                float x = x0 + cw * i / FW, y = y0 + ch * j / FH;
+                float dx = 0, dy = 0;
+                for (int b = 0; b < n; b += 5) {
+                    float ddx = x - d[b], ddy = y - d[b + 1], sg = d[b + 2];
+                    float q = (ddx * ddx + ddy * ddy) / (2 * sg * sg);
+                    if (q > 12) continue;          // too far for this shift to move the point at all
+                    float g = (float) Math.exp(-q);
+                    dx += g * d[b + 3];
+                    dy += g * d[b + 4];
+                }
+                // v34: the eyes look: the iris (and the lids just round it) shift a little, the corners of the eyes stay
+                if (s.gazeX != 0 || s.gazeY != 0) {
+                    for (int e = 0; e < 2; e++) {
+                        float ux = (x - (e == 0 ? ex1 : ex2)) / (0.55f * er), uy = (y - (e == 0 ? ey1 : ey2)) / (0.32f * er);
+                        float q = (ux * ux + uy * uy) * 0.5f;
+                        if (q > 8) continue;
+                        float g = (float) Math.exp(-q);
+                        dx += g * s.gazeX * 0.2f * er;
+                        dy += g * s.gazeY * 0.08f * er;
+                    }
+                }
+                // the jaw: everything below the lips (lower lip, chin) drops together; the lips part at the mouth line
+                if (s.jaw > 0.02f) {
+                    float hx = (x - mx) / (1.7f * mh);
+                    dy += jawDrop(mh) * s.jaw * smooth(my - 0.05f * mh, my + 0.3f * mh, y) * (float) Math.exp(-hx * hx);
+                }
+                // nothing moves at the edges of the crop, so it melts into the picture below
+                float edge = Math.min(Math.min(i, FW - i) / (float) FW, Math.min(j, FH - j) / (float) FH);
+                float keep = smooth(0, 0.18f, edge);
+                // exactly the body's own motion (head, lean, breathing) plus the expression: the face layer and
+                // the picture under it never drift apart, so no second pair of lips or eyes can show
+                move(f, s, x + dx * keep, y + dy * keep, f.o);
+                f.face[k++] = f.o[0];
+                f.face[k++] = f.o[1];
+            }
+        }
+    }
+
+    /**
+     * v34: the animal under a rider (Durga's lion), found in the rider's picture: below the rider's hips the animal
+     * reaches further out on the side its head is; the snout's tip is the farthest point on that side, the head the
+     * rows that reach near it, the jaw's hinge a little behind the tip, a little below the head's middle.
+     */
+    static void findMountJaw(Rig g, Cutout.Result r, int[] left, int[] right, int topRow, int botRow) {
+        int w = r.w, h = r.h;
+        int y0 = Math.max(topRow, (int) (h * 0.42f)), y1 = Math.min(botRow, (int) (h * 0.9f));
+        if (y1 - y0 < 8) return;
+        float cx = g.cx * w;
+        int bestL = w, bestR = -1, rowL = -1, rowR = -1;
+        for (int y = y0; y <= y1; y++) {
+            if (left[y] < 0) continue;
+            if (left[y] < bestL) { bestL = left[y]; rowL = y; }
+            if (right[y] > bestR) { bestR = right[y]; rowR = y; }
+        }
+        if (rowL < 0 || rowR < 0) return;
+        // v34: the head is the bulky end, a tail the thin one — compare how much of the figure lies within a sixth
+        // of the picture's width of each end (a lion's tail can reach as far out as its muzzle); the farther end
+        // decides only when the two are close
+        int band = Math.max(4, w / 6);
+        long massL = 0, massR = 0;
+        for (int y = y0; y <= y1; y++) {
+            int row = y * w;
+            for (int x = bestL; x < Math.min(w, bestL + band); x++) if ((r.px[row + x] >>> 24) > 128) massL++;
+            for (int x = Math.max(0, bestR - band + 1); x <= bestR; x++) if ((r.px[row + x] >>> 24) > 128) massR++;
+        }
+        int side = massL > massR * 1.25f ? -1 : massR > massL * 1.25f ? 1 : (cx - bestL) > (bestR - cx) ? -1 : 1;
+        int tip = side < 0 ? bestL : bestR, tipRow = side < 0 ? rowL : rowR;
+        // the head: the rows near the tip that reach within a sixth of the picture's width of it
+        int top = tipRow, bot = tipRow;
+        for (int y = tipRow; y >= y0; y--) { int e = side < 0 ? left[y] : right[y]; if (e < 0 || Math.abs(e - tip) > w / 6) break; top = y; }
+        for (int y = tipRow; y <= y1; y++) { int e = side < 0 ? left[y] : right[y]; if (e < 0 || Math.abs(e - tip) > w / 6) break; bot = y; }
+        float headH = Math.max(0.05f, (bot - top) / (float) h);
+        g.mountJaw = true;
+        g.mjSide = side;
+        g.mjTipX = tip / (float) w;
+        g.mjH = headH;
+        g.mjY = (top + (bot - top) * 0.6f) / (float) h;
+        g.mjX = g.mjTipX - side * Math.min(0.12f, headH * 0.8f * h / w);
+    }
+
+    /** How far the lower lip comes down when the mouth is fully open (pixels, from the mouth's half width). */
+    public static float jawDrop(float mouthHalfW) { return 0.62f * mouthHalfW; }
+
+    private static int add(float[] d, int n, float x, float y, float sigma, float dx, float dy) {
+        if (n + 5 > d.length) return n;
+        d[n] = x; d[n + 1] = y; d[n + 2] = Math.max(1, sigma); d[n + 3] = dx; d[n + 4] = dy;
+        return n + 5;
+    }
+
+    /** Gives the canvas the head's transform (for the mouth, blinking eyes and tears drawn on the face). */
+    public static void applyHead(Frame f, Gfx g) {
+        g.translate(f.hipCX, f.hipCY);
+        rotate(g, f.lSin, f.lCos);
+        g.translate(-f.hipCX, -f.hipCY);
+        g.translate(f.nX, f.nY);
+        rotate(g, f.hSin, f.hCos);
+        g.scale(1, f.nodS);
+        g.translate(-f.nX, -f.nY);
+        g.translate(0, f.nodDy);
+    }
+
+    private static void rotate(Gfx g, float sin, float cos) {
+        float deg = (float) Math.toDegrees(Math.atan2(sin, cos));
+        if (deg != 0) g.rotate(deg);
+    }
+
+    /** Where the hand of one arm is in this frame (side 0 = the picture's left, 1 = right). Call after bodyMesh. */
+    public void handAt(Frame f, State s, int side, float[] o) {
+        if (animal) {   // an animal carries things in its mouth
+            float ax = f.L0 + (headSide < 0 ? headX0 + 0.05f : headX1 - 0.05f) * f.W0;
+            move(f, s, ax, f.T0 + jawY * f.H0, o);
+            return;
+        }
+        float hx = f.L0 + (cx + (side == 0 ? -1 : 1) * shoulderHalf * 0.85f) * f.W0;
+        float hy = f.T0 + (hipY + 0.02f) * f.H0;
+        move(f, s, hx, hy, o);
+    }
+
+    /** How far the feet come up (sitting, kneeling), so the picture can be lowered to keep them on the ground. */
+    public float feetRise(State s, float h) {
+        if (still) return 0;
+        if (animal) return 0.8f * s.sit * (bottom - legTop) * h;
+        float rise = (1 - s.legScale) * (bottom - hipY) * h;
+        if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
+        if (s.sit > 0 && s.floor) rise += 0.75f * 0.5f * s.sit * (bottom - hipY) * h;     // v35: and on the floor the shins fold under
+        return rise;
+    }
+
+
+    // ================================================================== animals
+
+    /** Four-legged animals and birds (and any lying-down shape): head, jaw, tail, ears, legs. */
+    public boolean animal;
+    /** v39: a face-only rig — the body is drawn as the picture has it, the face speaks, blinks and shows feelings. */
+    public boolean still;
+    public int headSide;                      // -1 head on the picture's left, +1 on the right
+    public float bodyTop, belly, headX0, headX1, headTop, headBottom, tailX, tailY, neckX, neckY2;
+    public float frontLegX, backLegX, legTop, jawX, jawY, jawTipX;
+    public float frontLegHalf = 0.08f, backLegHalf = 0.08f;   // half the width of each pair of legs
+    public boolean hasTail;
+    /** The face finder's eyes / mouth really lie on the animal's head (otherwise they are not drawn over). */
+    public boolean eyesOnHead, mouthOnHead;
+
+    static Rig buildAnimal(Cutout.Result r, Art.Sprite s, int[] top, int[] bot, int x0, int x1, int y0, int y1) {
+        int w = r.w, h = r.h;
+        Rig g = new Rig();
+        g.srcW = r.w; g.srcH = r.h;
+        g.animal = true;
+        g.top = y0 / (float) h;
+        g.bottom = y1 / (float) h;
+        int width = x1 - x0 + 1;
+        // the head: where the face was found, or the end of the body whose outline rises higher
+        if (s.faceKnown) g.headSide = (s.eyeLX + s.eyeRX) / 2 < (x0 + x1) / 2f / w ? -1 : 1;
+        else {
+            float l = 0, rr = 0;
+            int band = Math.max(1, width * 30 / 100);
+            for (int x = x0; x < x0 + band; x++) l += top[x] < 0 ? h : top[x];
+            for (int x = x1 - band + 1; x <= x1; x++) rr += top[x] < 0 ? h : top[x];
+            g.headSide = l < rr ? -1 : 1;
+        }
+        // body thickness along the length; the tail is a thin part at the far end
+        float maxThick = 0;
+        for (int x = x0; x <= x1; x++) if (top[x] >= 0) maxThick = Math.max(maxThick, bot[x] - top[x]);
+        int tailEnd = g.headSide < 0 ? x1 : x0, step = g.headSide < 0 ? -1 : 1;
+        int tailBase = tailEnd;
+        for (int x = tailEnd, n = 0; n < width * 0.35f; x += step, n++) {
+            if (x < x0 || x > x1 || top[x] < 0) continue;
+            if (bot[x] - top[x] > maxThick * 0.45f) { tailBase = x; break; }
+        }
+        g.tailX = tailBase / (float) w;
+        int tb = Math.max(x0, Math.min(x1, tailBase));
+        g.tailY = (top[tb] >= 0 ? top[tb] + (bot[tb] - top[tb]) * 0.25f : (y0 + y1) / 2f) / h;
+        // where the tail joins: the tail's own pixels just outside the body
+        int out = tb - step * 3;
+        if (out >= x0 && out <= x1 && top[out] >= 0) {
+            int sum = 0, n = 0;
+            for (int y = top[out]; y <= bot[out]; y++) if ((r.px[y * w + out] >>> 24) > 128) { sum += y; n++; if (n > Math.max(4, h / 25)) break; }
+            if (n > 0) g.tailY = sum / (float) n / h;
+        }
+        // the head block: the outer 30 % of the length on the head side
+        float hx0 = g.headSide < 0 ? x0 : x1 - width * 0.32f, hx1 = g.headSide < 0 ? x0 + width * 0.32f : x1;
+        g.headX0 = hx0 / w; g.headX1 = hx1 / w;
+        float ht = h, hb = 0;
+        for (int x = (int) hx0; x <= (int) hx1 && x <= x1; x++) if (x >= x0 && top[x] >= 0) { ht = Math.min(ht, top[x]); hb = Math.max(hb, bot[x]); }
+        g.headTop = ht / h;
+        // the legs start where the outline splits into separate legs (rows with gaps near the bottom)
+        // (the tail is left out, it hangs beside the legs; a few joined rows at the feet or shadow do not count)
+        int lx0 = g.headSide < 0 ? x0 : Math.min(x1, tailBase + 3), lx1 = g.headSide < 0 ? Math.max(x0, tailBase - 3) : x1;
+        int legRow = -1, split = 0, solid = 0, need = Math.max(3, (int) ((y1 - y0) * 0.04f));
+        for (int y = y1; y > y0 + (y1 - y0) * 0.3f; y--) {
+            int runs = 0;
+            boolean in = false;
+            for (int x = lx0; x <= lx1; x++) {
+                boolean o = (r.px[y * w + x] >>> 24) > 128;
+                if (o && !in) runs++;
+                in = o;
+            }
+            if (runs >= 2) { split++; solid = 0; if (split >= need) legRow = y; }
+            else if (split >= need && ++solid >= need) break;
+        }
+        g.legTop = (legRow > 0 ? legRow : y0 + (y1 - y0) * 0.62f) / (float) h;
+        // a real tail: a thin part joined to the body, attached above the legs
+        int filled = 0, cols = Math.abs(tailBase - tailEnd);
+        for (int x = Math.min(tailBase, tailEnd); x <= Math.max(tailBase, tailEnd); x++) if (x >= x0 && x <= x1 && top[x] >= 0) filled++;
+        g.hasTail = cols >= width * 0.03f && filled >= cols * 0.6f && g.tailY < g.legTop;
+        // the legs themselves: opaque runs a little below where they part, grouped into front and back pairs
+        int ly = Math.min(y1, (int) ((g.legTop * h + y1) / 2));
+        float mid = (x0 + x1) / 2f;
+        int fa = -1, fb = -1, ba = -1, bb = -1;
+        for (int x = lx0, a0 = -1; x <= lx1 + 1; x++) {
+            boolean o = x <= lx1 && (r.px[ly * w + x] >>> 24) > 128;
+            if (o && a0 < 0) a0 = x;
+            if (!o && a0 >= 0) {
+                int b0 = x - 1;
+                boolean front = g.headSide < 0 ? (a0 + b0) / 2f < mid : (a0 + b0) / 2f > mid;
+                if (front) { if (fa < 0) fa = a0; fb = b0; } else { if (ba < 0) ba = a0; bb = b0; }
+                a0 = -1;
+            }
+        }
+        g.belly = g.legTop;
+        // the head ends a little below the middle between its top and the legs (the chest and front legs are not head)
+        g.headBottom = Math.min(Math.min(g.legTop, hb / h), g.headTop + (g.legTop - g.headTop) * 0.72f);
+        float bodyMid = (x0 + x1) / 2f / w;
+        g.neckX = g.headSide < 0 ? g.headX1 : g.headX0;
+        g.neckY2 = g.headTop + (g.headBottom - g.headTop) * 0.65f;
+        g.frontLegX = g.headSide < 0 ? bodyMid - (bodyMid - x0 / (float) w) * 0.55f : bodyMid + (x1 / (float) w - bodyMid) * 0.55f;
+        g.backLegX = g.headSide < 0 ? bodyMid + (x1 / (float) w - bodyMid) * 0.5f : bodyMid - (bodyMid - x0 / (float) w) * 0.5f;
+        if (fa >= 0) { g.frontLegX = (fa + fb) / 2f / w; g.frontLegHalf = Math.max(0.03f, (fb - fa) / 2f / w); }
+        if (ba >= 0) { g.backLegX = (ba + bb) / 2f / w; g.backLegHalf = Math.max(0.03f, (bb - ba) / 2f / w); }
+        g.cx = bodyMid;
+        g.face = false;      // animals: no separate face crop; the head, jaw and ears carry the feeling
+        g.mX = s.mouthX; g.mY = s.mouthY; g.mHW = s.mouthHW;
+        float headH = g.headBottom - g.headTop;
+        boolean mouthOnHead = s.faceKnown && s.mouthY > g.headTop && s.mouthY < g.headBottom + 0.05f
+                && (g.headSide < 0 ? s.mouthX < g.neckX : s.mouthX > g.neckX);
+        g.mouthOnHead = mouthOnHead;
+        float eyeX = (s.eyeLX + s.eyeRX) / 2, eyeY = (s.eyeLY + s.eyeRY) / 2;
+        g.eyesOnHead = s.faceKnown && eyeY > g.headTop - 0.02f && eyeY < g.headBottom
+                && eyeX > Math.min(g.headX0, g.headX1) - 0.02f && eyeX < Math.max(g.headX0, g.headX1) + 0.02f;
+        // the jaw opens below the mouth line, from a hinge just behind the mouth
+        g.jawY = mouthOnHead ? s.mouthY : g.headTop + headH * 0.62f;
+        int jr = Math.max(0, Math.min(h - 1, (int) (g.jawY * h)));
+        g.jawTipX = g.headSide < 0 ? g.headX0 : g.headX1;
+        if (g.headSide < 0) { for (int x = x0; x <= x1; x++) if ((r.px[jr * w + x] >>> 24) > 128) { g.jawTipX = x / (float) w; break; } }
+        else for (int x = x1; x >= x0; x--) if ((r.px[jr * w + x] >>> 24) > 128) { g.jawTipX = x / (float) w; break; }
+        float headLen = Math.abs(g.headX1 - g.headX0);
+        float hinge = g.jawTipX - g.headSide * headLen * 0.4f;     // the jaw is the front of the snout
+        g.jawX = Math.max(Math.min(g.headX0, g.headX1), Math.min(Math.max(g.headX0, g.headX1), hinge));
+        g.mw = BH; g.mh = BW;
+        if (DEBUG) System.out.printf("animal head=%d tail=%.2f,%.2f legTop=%.2f headTop=%.2f neck=%.2f%n", g.headSide, g.tailX, g.tailY, g.legTop, g.headTop, g.neckX);
+        return g;
+    }
+
+    /** Where one point of an animal picture goes in this frame. */
+    private void moveAnimal(Frame f, State s, float x, float y, float[] o) {
+        float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        float px = x, py = y;
+        // breathing: the body swells a little
+        float bodyW = (1 - smooth(legTop - 0.05f, legTop, v));
+        py = f.T0 + (legTop + (v - legTop) * (1 + 0.015f * s.breathe * bodyW)) * f.H0;
+        // head (with jaw and ears): rotates about the neck
+        float hd = headSide < 0 ? smooth(neckX + 0.03f, neckX - 0.06f, u) : smooth(neckX - 0.03f, neckX + 0.06f, u);
+        hd *= 1 - smooth(headBottom - 0.04f, headBottom + 0.06f, v);
+        float qx = px, qy = py;
+        if (hd > 0) {
+            float nx = f.L0 + neckX * f.W0, ny = f.T0 + neckY2 * f.H0;
+            // jaw: the lower front of the head drops open with the voice
+            float jx = x, jy = py;
+            float headH = (headBottom - headTop);
+            float jawZone = smooth(jawY - headH * 0.05f, jawY + headH * 0.08f, v) * (headSide < 0 ? smooth(jawX + 0.02f, jawX - 0.04f, u) : smooth(jawX - 0.02f, jawX + 0.04f, u));
+            if (jawZone > 0 && s.jaw > 0) {
+                float hingeX = f.L0 + jawX * f.W0, hingeY = f.T0 + jawY * f.H0;
+                double a = Math.toRadians(headSide * 16 * s.jaw * jawZone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - hingeX, dy = jy - hingeY;
+                jx = hingeX + c * dx - sn * dy; jy = hingeY + sn * dx + c * dy;
+            }
+            // ears: the top of the head twitches (and folds back when angry or afraid)
+            float earZone = 1 - smooth(headTop + headH * 0.12f, headTop + headH * 0.3f, v);
+            if (earZone > 0) {
+                float ex = f.L0 + (headSide < 0 ? (headX0 + headX1) / 2 : (headX0 + headX1) / 2) * f.W0, ey = f.T0 + (headTop + headH * 0.3f) * f.H0;
+                double a = Math.toRadians((s.ear * 9 + s.earBack * 20 * -headSide) * earZone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - ex, dy = jy - ey;
+                jx = ex + c * dx - sn * dy; jy = ey + sn * dx + c * dy;
+            }
+            double a = Math.toRadians(animalHeadAngle(s));
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = jx - nx, dy = jy - ny;
+            float hx = nx + c * dx - sn * dy, hy = ny + sn * dx + c * dy;
+            qx += hd * (hx - qx); qy += hd * (hy - qy);
+        }
+        // tail: wags about its base
+        float tl = headSide < 0 ? smooth(tailX - 0.02f, tailX + 0.03f, u) : smooth(tailX + 0.02f, tailX - 0.03f, u);
+        if (tl > 0 && hasTail) {
+            float tx = f.L0 + tailX * f.W0, ty = f.T0 + tailY * f.H0;
+            float reach = Math.min(1, (float) Math.hypot((u - tailX) * f.W0, (v - tailY) * f.H0) / (0.12f * f.W0));
+            double a = Math.toRadians(-headSide * s.tail * reach);   // + tail = down
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = qx - tx, dy = qy - ty;
+            qx += tl * (tx + c * dx - sn * dy - qx); qy += tl * (ty + sn * dx + c * dy - qy);
+        }
+        // lying down or sitting: the legs fold under the body
+        if (s.sit > 0 && v > legTop) {
+            float ly = f.T0 + legTop * f.H0;
+            qy = ly + (qy - ly) * (1 - 0.8f * s.sit);
+        }
+        // legs: front and back pairs swing in turn when walking
+        float lg = smooth(legTop - 0.02f, legTop + 0.04f, v);
+        if (lg > 0 && s.walkAmt > 0) {
+            boolean front = Math.abs(u - frontLegX) < Math.abs(u - backLegX);
+            float lh = front ? frontLegHalf : backLegHalf;
+            lg *= 1 - smooth(lh + 0.01f, lh + 0.05f, Math.abs(u - (front ? frontLegX : backLegX)));
+            float lx = f.L0 + (front ? frontLegX : backLegX) * f.W0, ly = f.T0 + legTop * f.H0;
+            float ang = (float) Math.sin(s.walkPhase + (front ? 0 : Math.PI)) * 14 * s.walkAmt;
+            double a = Math.toRadians(ang);
+            float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = qx - lx, dy = qy - ly;
+            qx += lg * (lx + c * dx - sn * dy - qx); qy += lg * (ly + sn * dx + c * dy - qy);
+        }
+        if (s.wind != 0) {
+            // v36: the wind ruffles the fur of the back, the mane and the tail: small ripples that run along the coat
+            // (most along the top of the animal, none on the legs and hooves), the tail blown with the wind
+            float coat = (1 - smooth(legTop - 0.05f, legTop + 0.02f, v)) * (0.4f + 0.6f * (1 - smooth(headTop, legTop, v)));
+            float rip = (float) Math.sin(s.time * 8.3f - u * 38 - v * 21) * 0.6f + (float) Math.sin(s.time * 13.1f - u * 71) * 0.4f;
+            qx += s.wind * f.W0 * (0.006f * coat * rip + 0.03f * (hasTail ? tl : 0));
+            qy -= Math.abs(s.wind) * f.H0 * 0.003f * coat * (0.5f + 0.5f * rip);
+        }
+        o[0] = qx;
+        o[1] = qy;
+    }
+}

@@ -87,6 +87,8 @@ public final class Story {
         public boolean narrator;         // voice-over line (no character on screen)
         /** Spoken from off-screen ("एल्गोरा की आवाज़ …:"): the speaker is heard, not brought on to the stage. */
         public boolean offScreen;
+        /** v38: the others who say this line with the speaker ("तीनों:", "दोनों (एक साथ):", "मीना और राजू:") — never a character of its own. */
+        public final List<CharacterDef> chorus = new ArrayList<CharacterDef>();
         public String cue = "";          // nature cues read by the AI ("rain", "boat"…), not shown
         public static Beat direction(String t) { Beat b = new Beat(); b.type = DIRECTION; b.text = t; return b; }
     }

@@ -4855,4 +4855,158 @@ public class AppTest {
         if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) allViews(((ViewGroup) v).getChildAt(i), out);
         return out;
     }
+
+    /** v38: a family story in the user's style — a character list, then lines said by "तीनो" (all three) and "सब". */
+    static final String CHAI_STORY = "चाय और सपने\nपात्र:\n1. पापा (40 वर्ष): आदमी, हल्की नीली टी-शर्ट, ग्रे पायजामा, हल्की दाढ़ी\n"
+            + "2. मम्मी (38 वर्ष): औरत, क्रीम रंग का कुर्ता, ग्रे लेगिंग, जूड़ा, बिंदी\n3. सिया (9 वर्ष): लड़की, पीली टी-शर्ट, जींस, गोल चश्मा, पोनीटेल\n"
+            + "4. परी (4 वर्ष): छोटी लड़की, गुलाबी फ्रॉक, दो चोटियाँ\nस्थान:\n1. घर का लिविंग रूम: सोफ़ा, टीवी, लकड़ी की मेज़, शाम की रोशनी\n"
+            + "दृश्य 1: शाम की चाय\n(स्थान: घर का लिविंग रूम। शाम। पापा, सिया और परी सोफ़े पर बैठे हैं।)\n"
+            + "पापा (मुस्कुराते हुए): \"आज की चाय कौन लाएगा?\"\n(मम्मी चाय की ट्रे लेकर आती है।)\nमम्मी (प्यार से): \"चाय तैयार है!\"\n"
+            + "तीनो (एक साथ): \"वाह! धन्यवाद मम्मी!\"\n(तीनो हँसते हैं।)\nसिया: \"पापा, एक कहानी सुनाओ।\"\nपरी (खिलखिलाकर): \"हाँ, कहानी!\"\n"
+            + "दोनो (एक साथ): \"प्लीज़ पापा!\"\nपापा (हँसते हुए): \"ठीक है, सुनो।\"\nसब (हँसते हुए): \"हुर्रे!\"\n";
+
+    /**
+     * v38 (the user: "तीनो means all three, not a character — take only the characters of the character list"; and
+     * "see these pictures, save in library and also check upload and splitting"): the user's own sheets (tools/testdata/
+     * sheets38 — family members on a cut-out background, a staggered five-view sheet, place sheets of six views,
+     * three scene pictures) split as they should; added to the library many at once they are all kept; uploaded as a
+     * character's and a place's angles every figure and every view is saved; and in the story "तीनो", "दोनो" and "सब"
+     * are said by the characters of the list, never become characters, and are never asked a picture for.
+     */
+    @Test
+    public void v38UserSheetsSplitSavedAndGroupLinesSpokenByTheCast() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File dir = new File(ASSETS.getParentFile().getParentFile().getParentFile().getParentFile(), "tools/testdata/sheets38");
+        File[] sheets = dir.listFiles();
+        java.util.Arrays.sort(sheets);
+        assertEquals(36, sheets.length);
+        // 1) the story: only the four of the list; the group lines said by them together
+        Story st = ScriptParser.parse(CHAI_STORY);
+        StringBuilder names = new StringBuilder();
+        for (Story.CharacterDef c : st.characters) names.append(c.fullName).append(c.voiceOnly ? "(voice)" : "").append(", ");
+        System.out.println("CHAI cast: " + names + " warnings " + st.warnings);
+        assertEquals("only the listed four: " + names, 4, st.cast().size());
+        for (Story.CharacterDef c : st.characters) assertTrue("never a character: " + c.fullName, !com.tarun.kahani.core.Txt.has(c.fullName, "तीनो", "दोनो", "सब"));
+        int groupLines = 0;
+        for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type != Story.Beat.DIALOGUE) continue;
+            if (com.tarun.kahani.core.Txt.has(b.speakerRaw, "तीनो")) { assertEquals("तीनो is three: " + b.speaker.fullName + b.chorus.size(), 2, b.chorus.size()); groupLines++; }
+            if (com.tarun.kahani.core.Txt.has(b.speakerRaw, "दोनो")) { assertEquals("दोनो is two", 1, b.chorus.size()); groupLines++; }
+            if (b.speakerRaw.trim().equals("सब")) { assertTrue("सब is everyone in the scene", b.chorus.size() >= 3); groupLines++; }
+            if (!b.chorus.isEmpty()) System.out.println("CHAI line " + b.speakerRaw + " → " + b.speaker.fullName + " + " + b.chorus.size());
+        }
+        assertEquals(3, groupLines);
+        // the film: the others' lips move with the same line
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        d.direct(new com.tarun.kahani.core.Art());
+        assertTrue("lines said together: " + d.chorusLines, d.chorusLines >= 4);
+        // 2) the splitting, as the phone reads them (at most 1200 px)
+        int[] want = {0, 6, 0, 0, 6, 6, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+        Method isSheet = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("isSheet", byte[].class, boolean.class);
+        Method decode = MainActivity.class.getDeclaredMethod("decodeBytes", byte[].class, int.class);
+        decode.setAccessible(true);
+        isSheet.setAccessible(true);
+        StringBuilder split = new StringBuilder();
+        for (int i = 0; i < sheets.length; i++) {
+            byte[] data = Files.readAllBytes(sheets[i].toPath());
+            boolean place = sheets[i].getName().contains("place");
+            int[] dec = (int[]) decode.invoke(null, data, 1200);
+            int w = dec[0], h = dec[1];
+            int[] px = new int[w * h];
+            System.arraycopy(dec, 2, px, 0, px.length);
+            int n = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, !place), w, h).size();
+            boolean sheet = (Boolean) isSheet.invoke(null, data, place);
+            split.append(sheets[i].getName()).append(' ').append(n).append(n == want[i] ? "" : " (want " + want[i] + ")").append('\n');
+            assertEquals("a sheet or not: " + sheets[i].getName(), want[i] >= 2, sheet);
+        }
+        System.out.println("SPLIT v38:\n" + split);
+        assertTrue(split.toString(), !split.toString().contains("want"));
+        // 3) the library: all of them at once, all kept
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        int before = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        android.content.ClipData clip = null;
+        for (File f : sheets) {
+            android.net.Uri u = android.net.Uri.fromFile(f);
+            if (clip == null) clip = android.content.ClipData.newRawUri("pictures", u); else clip.addItem(new android.content.ClipData.Item(u));
+        }
+        android.content.Intent data = new android.content.Intent();
+        data.setClipData(clip);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        org.robolectric.shadows.ShadowToast.reset();
+        onResult.invoke(a, 23, android.app.Activity.RESULT_OK, data);
+        for (int i = 0; i < 3000 && !uploadDone() && !String.valueOf(org.robolectric.shadows.ShadowToast.getTextOfLatestToast()).startsWith("Nothing"); i++) { idle(); Thread.sleep(100); }
+        idle();
+        int after = lib.find(com.tarun.kahani.app.Library.PIC, null, null).size();
+        System.out.println("LIBRARY v38 sheets: " + before + " → " + after + " — " + org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+        assertTrue("all 36 kept: " + before + " → " + after, after >= before + 36);
+        // 4) the angles of a character (three of मम्मी's sheets: 6 + 6 + 5 figures) and of the place (two sheets of six)
+        Project p = Project.create(ctx);
+        p.write("script.txt", CHAI_STORY);
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Story ps = ScriptParser.parse(p.read("script.txt"));
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Story.CharacterDef mummy = null;
+        for (Story.CharacterDef c : ps.cast()) if (c.fullName.equals("मम्मी")) mummy = c;
+        assertNotNull(mummy);
+        String key = (String) keyFor.invoke(a, mummy);
+        Method angles = MainActivity.class.getDeclaredMethod("anglesFor", String.class, String.class, String.class);
+        angles.setAccessible(true);
+        Object[][] cases = {
+                {"angles:char:" + key + ":मम्मी", "|" + key + "|", new String[]{"05_mummy_tray_a.png", "06_mummy_sheet_b.png", "12_mummy_5views.png"}, 17},
+                {"angles:scene:1:घर का लिविंग रूम", "scene|1|", new String[]{"02_place_livingroom_6views.jpg", "34_place_kitchen.jpg"}, 12},
+        };
+        StringBuilder report = new StringBuilder();
+        for (Object[] c : cases) {
+            org.robolectric.shadows.ShadowToast.reset();
+            angles.invoke(a, c[0], "x", null);
+            idle();
+            android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            android.widget.Button gallery = null;
+            for (View v : allViews(dlg.getWindow().getDecorView(), new ArrayList<View>()))
+                if (v instanceof android.widget.Button && String.valueOf(((android.widget.Button) v).getText()).contains("gallery")) gallery = (android.widget.Button) v;
+            assertNotNull(gallery);
+            gallery.performClick();
+            idle();
+            android.content.ClipData cc = null;
+            for (String f : (String[]) c[2]) {
+                android.net.Uri u = android.net.Uri.fromFile(new File(dir, f));
+                if (cc == null) cc = android.content.ClipData.newRawUri("pictures", u); else cc.addItem(new android.content.ClipData.Item(u));
+            }
+            android.content.Intent d2 = new android.content.Intent();
+            d2.setClipData(cc);
+            String castBefore = p.read("cast.txt");
+            onResult.invoke(a, 24, android.app.Activity.RESULT_OK, d2);
+            String toast = null;
+            for (int i = 0; i < 3000; i++) {
+                idle();
+                toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+                if (toast != null && (uploadDone() || toast.startsWith("Please") || toast.startsWith("Open a story"))) break;
+                Thread.sleep(100);
+            }
+            idle();
+            String castAfter = p.read("cast.txt");
+            int added = count(castAfter, (String) c[1]) - count(castBefore, (String) c[1]);
+            report.append(c[0]).append(": ").append(added).append(" saved (want ").append(c[3]).append(") — ").append(toast).append('\n');
+            android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            if (open != null && open.isShowing()) open.dismiss();
+        }
+        System.out.println("SHEETS v38:\n" + report + "\ncast.txt:\n" + p.read("cast.txt"));
+        ac.pause().stop().destroy();
+    }
+
+    static int count(String s, String what) {
+        int n = 0;
+        for (int i = s.indexOf(what); i >= 0; i = s.indexOf(what, i + 1)) n++;
+        return n;
+    }
 }

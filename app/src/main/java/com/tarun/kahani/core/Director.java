@@ -946,6 +946,8 @@ public final class Director {
                     boolean far = Txt.has(b.manner, "दूर से");
                     if ((voiceFromOutside.length() > 0 && bi > b0 && !mentionsAny(sc, b0, bi, c)) || far) entryBeat.put(c, bi);
                 }
+                // v38: the others saying the line together ("तीनों:", "मीना और राजू:") are on the stage too
+                if (c != null) for (Story.CharacterDef m : b.chorus) if (!m.voiceOnly && !order.contains(m)) order.add(m);
                 // characters named in the manner (e.g. "वृंदा की तलवार को रोकते हुए") are on stage too
                 for (Story.CharacterDef m : ScriptParser.mentions(story, b.manner)) if (!order.contains(m)) { order.add(m); soft.add(m); }
                 // ...and so is anyone addressed by name ("और कृपा, तुम्हारी चतुराई...")
@@ -1387,6 +1389,24 @@ public final class Director {
         Film.Speak s = new Film.Speak();
         s.t0 = start; s.t1 = end; s.line = line.index; s.emotion = line.emotion; s.mount = mountLine;
         sp.speaks.add(s);
+        // v38: a line said together ("तीनों:", "दोनों (एक साथ):"): everyone of the group on the stage says it too —
+        // they come into view, face us and their lips move with the same words
+        List<Film.Actor> together = new ArrayList<Film.Actor>();
+        if (!mountLine) for (Story.CharacterDef m : b.chorus) {
+            Film.Actor ca = actor(m);
+            if (ca == null || ca == sp || together.contains(ca)) continue;
+            Film.Key ck = ca.stateAt(tc);
+            if (!ck.visible) { Film.Key k = ca.at(tc); k.visible = true; }
+            if (ck.anchor == Film.A_HIDDEN) { Film.Key k = ca.at(tc); k.anchor = Film.A_GROUND; }
+            if (ck.backTurned) { Film.Key k = ca.at(tc); k.backTurned = false; }
+            Film.Speak cs = new Film.Speak();
+            cs.t0 = start; cs.t1 = end; cs.line = line.index; cs.emotion = line.emotion;
+            ca.speaks.add(cs);
+            boolean cSigns = ca.look != null && ca.look.signs();
+            ca.acts.add(new Film.Act(start, end, cSigns ? Film.G_SIGN : Film.G_TALK));
+            together.add(ca);
+            chorusLines++;
+        }
         // v36: a phone call goes on while its caller speaks (the phone stays at the ear through the line)
         Film.Act call = null;
         for (Film.Act ac : sp.acts) if (ac.type == Film.G_TASK && ac.item == Film.T_PHONE && ac.t1 > start - 2f && ac.t0 < start) call = ac;
@@ -1406,7 +1426,9 @@ public final class Director {
         if (line.emotion == Pose.LAUGH && sp.look.hero && Txt.has(b.text, "हा हा", "हँस")) {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
         }
-        sub(start, end, b.speaker.shown(), line.shown);
+        String whoShown = b.speaker.shown();
+        for (Film.Actor ca : together) whoShown += ", " + ca.c.shown();
+        sub(start, end, whoShown, line.shown);
         if (signs) seg.subs.get(seg.subs.size() - 1).signed = true;
         ShotPlanner.Plan plan = partPlan.get(bi);
         if (opt.technical && plan != null) {
@@ -1423,6 +1445,22 @@ public final class Director {
             mp.size = ShotPlanner.MWIDE; mp.type = ShotPlanner.SINGLE; mp.move = ShotPlanner.STATIC;
             standStillToSpeak(sp, start, end);
             camDialogue(sp, null, start, line.emotion, mp, line);
+            lastSpeaker = sp;
+            lastSubject = b.speaker;
+            dlgCount++;
+            return end + 0.35f;
+        }
+        if (!together.isEmpty()) {
+            // everyone saying it is seen: one steady medium-wide frame on the group, no single close-up
+            ShotPlanner.Plan gp = new ShotPlanner.Plan();
+            if (plan != null) { gp.intensity = plan.intensity; gp.stage = plan.stage; gp.light = plan.light; gp.height = plan.height; }
+            gp.size = ShotPlanner.MWIDE; gp.type = ShotPlanner.TWO_SHOT; gp.move = ShotPlanner.STATIC;
+            standStillToSpeak(sp, start, end);
+            for (Film.Actor ca : together) standStillToSpeak(ca, start, end);
+            // the frame spans the speaker and the one of the group farthest from them: the others stand between
+            Film.Actor far = together.get(0);
+            for (Film.Actor ca : together) if (Math.abs(xAt(ca, start) - xAt(sp, start)) > Math.abs(xAt(far, start) - xAt(sp, start))) far = ca;
+            camDialogue(sp, far, start, line.emotion, gp, line);
             lastSpeaker = sp;
             lastSubject = b.speaker;
             dlgCount++;
@@ -3796,6 +3834,8 @@ public final class Director {
     private int watchCount, watchTurns, skyReactions, hurried, feltWay, doorsHeard, stepsPlaced;
     /** v35: lines said in sign language; moments a deaf character did not hear (no startle, no turn to a sound behind them). */
     private int signedLines, deafUnheard;
+    /** v38: lines said together by a group ("तीनों:"), counted per extra voice. */
+    public int chorusLines;
     /** v35: lines that waited until their speaker had walked onto the stage. */
     private int waitedToEnter;
 

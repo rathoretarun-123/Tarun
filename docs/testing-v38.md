@@ -104,6 +104,39 @@ The v37 test's "camera photo" carried only a make; it now carries a real exposur
   make-film dialog, three pictures handed over at once through Gallery and through Files — all three saved as that one's views
   every time. Test `v38PhotosAndTheCameraAllowedAgain`: a camera photo as a character is taken; the menus offer the camera.
 
+## 3c. Then: "It is taking तीनो as a character and asking for a picture — take only the characters of the character list"
+
+Reproduced: `तीनो (एक साथ): "…"` made a character named "तीनो" (only "तीनों", with the dot, was known as a group word,
+and only in stage directions); "वृंदा और कृपा:" was read as वृंदा doing something called "और कृपा"; "राजकुमार:" matched
+"राजकुमारी" as a part of the word.
+
+Fixed (`ScriptParser.resolveSpeakers`, `groupOf`, `looseResolve`, `byRole`, `Txt.norm`, `Director.dialogue`):
+
+| Speaker | Before | After |
+|---|---|---|
+| तीनो / तीनों / All three | a new character "तीनो", picture asked | the three: named together in the scene first, never the one spoken to |
+| दोनो / दोनों | a new character | the two |
+| सब / सभी / सभी बच्चे | a new character | everyone in the scene but the one spoken to |
+| वृंदा और कृपा / वानुषा, वृंदा और कृपा | the first name only | all of them |
+| वृन्दा (spelling) | a new character | वृंदा |
+| सिपाही, गार्ड, माँ (a role) | a new character | the listed guard / mother |
+| a name not in the list | a new character, picture asked | a voice off the stage, no picture asked |
+| a script with no character list | — | names still become characters (nothing else to go by); group words never |
+
+A group line: all of them on the stage, facing us, their lips moving with the same words, one medium-wide frame on the
+group, the subtitle naming them all (`Beat.chorus`, `Director.chorusLines`). Checked on a family story (पापा, मम्मी,
+सिया, परी): "तीनो: वाह! धन्यवाद मम्मी!" → पापा, सिया, परी; "दोनो: प्लीज़ पापा!" → सिया, परी; "सब: हुर्रे!" → all four.
+All 25 test stories (the sample, four test scripts, twenty soak stories): every speaker exactly as before.
+
+## 3d. The user's pictures: "save in library and check upload and splitting"
+
+36 pictures (kept, phone-sized, in `tools/testdata/sheets38`): 19 character sheets on a transparent background, 10 place
+sheets of six views, 4 scenes and title cards. Split at the phone's 1200 px: every one right except सिया's staggered
+five-view sheet (2 instead of 5) — no empty row or column separates staggered figures, and the touching-figure fallback
+only took side-by-side or stacked pairs. `Angles.erodeSplit(…, free)`: separate figure-sized parts in any layout are
+figures. The 60 earlier test sheets: identical. Test `v38UserSheetsSplitSavedAndGroupLinesSpokenByTheCast`: the
+splitting, all 36 added to the library at once, three of मम्मी's sheets and two place sheets uploaded as angles.
+
 ## 4. Thorough checks
 
 * 64 frames across the whole 12-minute sample film (every 11.3 s), plus frames around every fix, checked by eye.

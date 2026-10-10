@@ -24,6 +24,7 @@ public final class Txt {
             char c = s.charAt(i);
             if (c == '़') continue;                 // nukta
             if (c == 'ँ') c = 'ं';             // chandrabindu -> anusvara
+            if (c == 'ं' && b.length() > 0 && b.charAt(b.length() - 1) == 'ो') continue;   // v38: "तीनो" = "तीनों", "दोनो" = "दोनों" (the dot is often left out)
             if (c == '‌' || c == '‍') continue; // zero width joiners
             b.append(c);
         }

@@ -198,6 +198,10 @@ public final class Angles {
         boolean tooLongEither = rw > 0.9f * rh || rh > 3.0f * rw || (siblingMedian > 0 && along > 1.5f * siblingMedian);
         if (tooLongEither && labels != null) {
             List<int[]> parts = erodeSplit(on, w, r, labels);
+            // v38: figures set out in a staggered layout (two on top, one sitting between and below, one to the
+            // side lower down) never share an empty row or column, and are neither side by side nor stacked: when
+            // the part holds two or more separate figure-sized groups, each is a figure
+            if (parts == null) parts = erodeSplit(on, w, r, labels, 0.004f, true);
             if (parts != null) { out.addAll(parts); return; }
         }
         out.add(r);
@@ -220,7 +224,10 @@ public final class Angles {
         return null;
     }
 
-    static List<int[]> erodeSplit(boolean[] on, int w, int[] r, int[] labels, float fraction) {
+    static List<int[]> erodeSplit(boolean[] on, int w, int[] r, int[] labels, float fraction) { return erodeSplit(on, w, r, labels, fraction, false); }
+
+    /** free: groups in any layout (v38) — each at least 35% as tall or as wide as the part, none lying inside another. */
+    static List<int[]> erodeSplit(boolean[] on, int w, int[] r, int[] labels, float fraction, boolean free) {
         int x0 = r[0], y0 = r[1], rw = r[2] - r[0], rh = r[3] - r[1];
         if (rw < 8 || rh < 8) return null;
         int rad = Math.max(2, Math.round(Math.min(rw, rh) * fraction));
@@ -265,7 +272,7 @@ public final class Angles {
             int[] b = boxes.get(k);
             // a figure lying or sitting beside a standing one is well under its height, but never under 35% of it
             boolean tall = b[3] - b[1] >= 0.35f * rh && b[2] - b[0] >= 0.15f * rw, broad = b[2] - b[0] >= 0.35f * rw && b[3] - b[1] >= 0.15f * rh;
-            if ((wide ? tall : broad) && b[4] >= 0.02f * rw * rh) big.add(k + 1);
+            if ((free ? tall || broad : wide ? tall : broad) && b[4] >= 0.02f * rw * rh) big.add(k + 1);
         }
         if (big.size() < 2) return null;
         // the figures of a pair are alike in bulk: a fist, a horn or a sword tip beside a body is far smaller (under 40% of it)
@@ -276,6 +283,12 @@ public final class Angles {
             int[] a = boxes.get(big.get(i) - 1), b = boxes.get(big.get(j) - 1);
             int o = wide ? Math.min(a[2], b[2]) - Math.max(a[0], b[0]) : Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
             int small = wide ? Math.min(a[2] - a[0], b[2] - b[0]) : Math.min(a[3] - a[1], b[3] - b[1]);
+            if (free) {
+                // any layout: only a group lying within another's box (over half of it both ways) is one figure in pieces
+                int ox = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), oy = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+                if (ox > 0.5f * Math.min(a[2] - a[0], b[2] - b[0]) && oy > 0.5f * Math.min(a[3] - a[1], b[3] - b[1])) return null;
+                continue;
+            }
             if (o > 0.5f * small) return null;      // two groups over each other: one figure in pieces, not two figures
         }
         int[] owner = new int[rw * rh];

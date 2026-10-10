@@ -542,7 +542,10 @@ public final class ScriptParser {
                 Story.CharacterDef direct = bare.length() > 0 ? resolve(story, bare) : null;
                 boolean directOk = direct != null && (Txt.norm(direct.fullName).contains(Txt.norm(bare)) || aliasEquals(direct, bare));
                 // "इनाया अपने tote bag से diary निकालते हुए: "…"" — a known character's name, then what they do, then the line
-                String lead = quoted && !directOk ? leadingCharacter(story, who) : null;
+                // v38: "वृंदा और कृपा:", "वानुषा, वृंदा और कृपा (हँसते हुए):" — names joined: all of them say it (not the first one
+                // doing something called "और कृपा")
+                boolean joinedNames = !directOk && namesJoined(story, bare);
+                String lead = quoted && !directOk && !joinedNames ? leadingCharacter(story, who) : null;
                 if (lead != null) {
                     Story.Beat b = new Story.Beat();
                     b.type = Story.Beat.DIALOGUE;
@@ -589,6 +592,18 @@ public final class ScriptParser {
             if (!ms.isEmpty()) lastSpeaker = ms.get(0).fullName;
             sc.beats.add(Story.Beat.direction(l));
         }
+    }
+
+    /** v38: two or more character names joined by "और" / "," / "and" / "&" and nothing else ("वृंदा और कृपा"). */
+    static boolean namesJoined(Story story, String bare) {
+        String[] parts = bare.split("\\s+और\\s+|\\s*[,،&]\\s*|\\s+and\\s+|\\s+तथा\\s+|\\s+एवं\\s+");
+        if (parts.length < 2) return false;
+        for (String p : parts) {
+            String q = p.trim();
+            if (q.isEmpty() || q.split("\\s+").length > 3) return false;
+            if (resolve(story, q) == null && looseResolve(story, q) == null) return false;
+        }
+        return true;
     }
 
     static boolean aliasEquals(Story.CharacterDef c, String s) {
@@ -714,7 +729,7 @@ public final class ScriptParser {
             int score = 0;
             String full = Txt.norm(c.fullName);
             if (full.equals(s)) score = 1000;
-            else if (full.contains(s) && s.length() >= 2) score = 500 + s.length();
+            else if (full.contains(s) && s.length() >= 2 && wordIn(c.fullName, speaker.trim())) score = 500 + s.length();   // v38: whole words ("राजकुमार" is not in "राजकुमारी")
             for (String a : c.aliases) {
                 String na = Txt.norm(a);
                 if (na.length() >= 2 && s.contains(na)) score = Math.max(score, 100 + na.length() * 4);
@@ -725,22 +740,195 @@ public final class ScriptParser {
         return best;
     }
 
+    /** v38: words that name several characters at once ("all three", "both", "everyone") and how many (0 = all of them). */
+    static final String[][] GROUP_WORDS = {
+            {"दोनों", "2"}, {"तीनों", "3"}, {"चारों", "4"}, {"पाँचों", "5"}, {"पांचों", "5"}, {"छहों", "6"}, {"छः", "6"},
+            {"both", "2"}, {"the two", "2"}, {"two of them", "2"}, {"all three", "3"}, {"the three", "3"}, {"three of them", "3"},
+            {"all four", "4"}, {"the four", "4"}, {"four of them", "4"}, {"all five", "5"}, {"five of them", "5"},
+            {"सब", "0"}, {"सभी", "0"}, {"सारे", "0"}, {"सब लोग", "0"}, {"हम सब", "0"}, {"सब मिलकर", "0"}, {"एक साथ", "0"}, {"मिलकर", "0"},
+            {"कोरस", "0"}, {"all", "0"}, {"everyone", "0"}, {"everybody", "0"}, {"all of them", "0"}, {"together", "0"}, {"chorus", "0"}, {"they", "0"}, {"वे सब", "0"}};
+
+    /**
+     * v38: how many characters a speaker's name stands for when it is a group word ("तीनों" / "तीनो" → 3, "सब" → 0 = all
+     * of them); -1 when it is not one. Spelling marks are ignored (Txt.norm: "तीनो" = "तीनों").
+     */
+    public static int groupCount(String raw) {
+        String w = Txt.norm(Txt.withoutParens(raw)).replaceAll("[\\s,،:।.!\\-–—]+", " ").trim();
+        if (w.isEmpty()) return -1;
+        String[] ws = w.split(" ");
+        for (String[] g : GROUP_WORDS) {
+            String n = Txt.norm(g[0]);
+            // the whole name ("तीनों", "सब लोग") or the group word first ("तीनों बहनें", "दोनों दोस्त", "all three kids")
+            if (w.equals(n) || (w.startsWith(n + " ") && ws.length <= 4)) return Integer.parseInt(g[1]);
+        }
+        return -1;
+    }
+
+    /** v38: a looser form of a name for spelling variants ("वृन्दा" = "वृंदा", "मीणा" ≈ "मीना" is not merged; long and short vowels are). */
+    static String loose(String s) {
+        String n = Txt.norm(s).replaceAll("[\\s\\-_.']+", "");
+        n = n.replaceAll("[नमणङञ]्(?=[क-ह])", "");      // a half nasal before a consonant is the anusvara
+        n = n.replace("ं", "").replace("ी", "ि").replace("ू", "ु").replace("ई", "इ").replace("ऊ", "उ");
+        return n;
+    }
+
+    /** v38: role words a speaker may be called by instead of a name. */
+    static final String[][] ROLES = {
+            {"सिपाही", "गार्ड", "पहरेदार", "सैनिक", "संतरी", "दरबान", "guard", "soldier", "sentry"},
+            {"राजा", "महाराज", "king"}, {"रानी", "महारानी", "queen"}, {"राजकुमारी", "princess"}, {"राजकुमार", "prince"},
+            {"चुड़ैल", "डायन", "witch"}, {"राक्षस", "दैत्य", "monster", "demon"}, {"बंदर", "monkey"},
+            {"माँ", "मां", "मम्मी", "माता", "mother", "mom", "mummy"}, {"पिता", "पापा", "पिताजी", "father", "dad", "papa"},
+            {"दादी", "नानी", "grandma", "granny"}, {"दादा", "नाना", "grandpa"}, {"टीचर", "अध्यापक", "शिक्षक", "मास्टर", "teacher"},
+            {"डॉक्टर", "वैद्य", "doctor"}};
+
+    /**
+     * v38: a speaker called by a role ("सिपाही", "गार्ड", "माँ") when the list names one character of that role ("गार्ड
+     * रतनलाल", "रानी प्रिया राठौर (माँ)"): that character (the one seen most recently when several fit); null when none
+     * fits.
+     */
+    static Story.CharacterDef byRole(Story story, String raw, List<Story.CharacterDef> recent) {
+        String bare = Txt.withoutParens(raw).trim();
+        if (bare.split("\\s+").length > 3) return null;
+        for (String[] role : ROLES) {
+            if (!wordIn(bare, role)) continue;
+            List<Story.CharacterDef> fit = new ArrayList<Story.CharacterDef>();
+            for (Story.CharacterDef c : story.characters) {
+                if (!c.fromScript || c.voiceOnly) continue;
+                String head = c.fullName + " " + c.description.split("\n")[0];
+                if (wordIn(head, role)) fit.add(c);
+            }
+            if (fit.isEmpty()) return null;
+            for (Story.CharacterDef c : recent) if (fit.contains(c)) return c;
+            return fit.get(0);
+        }
+        return null;
+    }
+
+    /** v38: any of the words in the text as a whole word (Devanagari vowel signs count as part of the word). */
+    static boolean wordIn(String text, String... words) {
+        String t = Txt.norm(text);
+        for (String w : words) {
+            String n = Txt.norm(w);
+            int i = t.indexOf(n);
+            while (i >= 0) {
+                int e = i + n.length();
+                boolean okL = i == 0 || !isWordChar(t.charAt(i - 1));
+                boolean okR = e >= t.length() || !isWordChar(t.charAt(e));
+                if (okL && okR) return true;
+                i = t.indexOf(n, i + 1);
+            }
+        }
+        return false;
+    }
+
+    /** v38: the listed character a speaker's name means, allowing spelling variants; null when none. */
+    static Story.CharacterDef looseResolve(Story story, String raw) {
+        String r = loose(raw);
+        if (r.length() < 2) return null;
+        Story.CharacterDef best = null;
+        int bl = 0;
+        for (Story.CharacterDef c : story.characters) {
+            if (!c.fromScript) continue;
+            List<String> names = new ArrayList<String>(c.aliases);
+            names.add(c.fullName);
+            for (String a : names) {
+                String la = loose(a);
+                if (la.length() < 2) continue;
+                if ((r.equals(la) || (la.length() >= 3 && (r.startsWith(la) || (la.startsWith(r) && r.length() >= 3 && la.length() - r.length() <= 1)))) && la.length() > bl) { best = c; bl = la.length(); }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Every spoken line gets its speaker. v38 (the user: "तीनो means all three, not a character — take only the
+     * characters of the character list"): a group word ("तीनों", "तीनो", "दोनों", "सब", "all three") or names joined by
+     * "और" / "," / "and" never becomes a character: the line is said together by those characters (the ones in the
+     * scene, the most recent first; Beat.chorus). When the script has a character list, a speaker not in it is matched to
+     * a listed character by its spelling variants; failing that it is a voice heard from off the stage — never pictured,
+     * never asked for a picture. Only a script with no character list at all gets a new character for a new name.
+     */
     private static void resolveSpeakers(Story story) {
         buildAliases(story);
+        boolean listed = false;
+        for (Story.CharacterDef c : story.characters) if (c.fromScript) { listed = true; break; }
         Map<Story.CharacterDef, Map<String, Integer>> used = new HashMap<Story.CharacterDef, Map<String, Integer>>();
         for (Story.Scene sc : story.scenes) {
+            // who is in this scene (named in its directions or speaking under their own name), in order
+            List<Story.CharacterDef> inScene = new ArrayList<Story.CharacterDef>();
             for (Story.Beat b : sc.beats) {
-                if (b.type != Story.Beat.DIALOGUE) continue;
+                List<Story.CharacterDef> ms = b.type == Story.Beat.DIALOGUE ? new ArrayList<Story.CharacterDef>() : mentions(story, b.text);
+                if (b.type == Story.Beat.DIALOGUE && groupCount(b.speakerRaw) < 0) {
+                    Story.CharacterDef d = resolve(story, b.speakerRaw);
+                    if (d != null) ms.add(d);
+                }
+                for (Story.CharacterDef m : ms) if (!m.voiceOnly && !inScene.contains(m)) inScene.add(m);
+            }
+            List<Story.CharacterDef> recent = new ArrayList<Story.CharacterDef>();
+            List<List<Story.CharacterDef>> together = new ArrayList<List<Story.CharacterDef>>();   // named together in one sentence, the latest first
+            for (Story.Beat b : sc.beats) {
+                if (b.type != Story.Beat.DIALOGUE) {
+                    for (String sent : b.text.split("[।.!?]")) {
+                        List<Story.CharacterDef> named = new ArrayList<Story.CharacterDef>();
+                        for (Story.CharacterDef m : mentions(story, sent)) if (!m.voiceOnly) named.add(m);
+                        if (named.size() >= 2) together.add(0, named);
+                    }
+                    List<Story.CharacterDef> ms = mentions(story, b.text);
+                    for (int k = ms.size() - 1; k >= 0; k--) { Story.CharacterDef m = ms.get(k); if (m.voiceOnly) continue; recent.remove(m); recent.add(0, m); }
+                    continue;
+                }
                 if (isNarrator(b.speakerRaw)) { b.speaker = null; b.narrator = true; story.hasNarrator = true; continue; }
+                List<Story.CharacterDef> group = groupOf(story, b.speakerRaw, inScene, recent, b.text, together);
+                if (group != null) {
+                    b.speaker = group.get(0);
+                    b.chorus.clear();
+                    for (int k = 1; k < group.size(); k++) b.chorus.add(group.get(k));
+                    for (Story.CharacterDef g : group) { recent.remove(g); recent.add(0, g); }
+                    continue;           // a group word never names anyone (not counted for the display name)
+                }
+                // "मीना और राजू" in a script without a character list: each name is a character, the line is said together
+                String[] parts = Txt.withoutParens(b.speakerRaw).split("\\s+और\\s+|\\s*[,،&]\\s*|\\s+and\\s+|\\s+तथा\\s+");
+                if (parts.length >= 2 && groupCount(b.speakerRaw) < 0) {
+                    List<Story.CharacterDef> each = new ArrayList<Story.CharacterDef>();
+                    for (String part : parts) {
+                        String q = part.trim();
+                        if (q.isEmpty() || q.split("\\s+").length > 3) { each.clear(); break; }
+                        Story.CharacterDef d = resolve(story, q);
+                        if (d == null && listed) d = looseResolve(story, q);
+                        if (d == null && !listed) { d = newChar(story, q, "", -1); d.fromScript = false; d.aliases.add(q); d.voiceOnly = voiceOnlyName(q); }
+                        if (d != null && !d.voiceOnly && !each.contains(d)) each.add(d);
+                    }
+                    if (each.size() >= 2) {
+                        b.speaker = each.get(0);
+                        b.chorus.clear();
+                        for (int k = 1; k < each.size(); k++) b.chorus.add(each.get(k));
+                        for (Story.CharacterDef g : each) { recent.remove(g); recent.add(0, g); }
+                        continue;
+                    }
+                }
+                if (groupCount(b.speakerRaw) >= 0) {
+                    // a group word with nobody to stand for (no characters at all yet): a voice-over, never a character
+                    b.speaker = null; b.narrator = true; story.hasNarrator = true;
+                    continue;
+                }
                 Story.CharacterDef c = resolve(story, b.speakerRaw);
+                if (c == null && listed) c = looseResolve(story, b.speakerRaw);
+                if (c == null && listed) c = byRole(story, b.speakerRaw, recent);
                 if (c == null) {
                     c = newChar(story, b.speakerRaw, "", -1);
                     c.fromScript = false;
                     c.aliases.add(b.speakerRaw);
-                    c.voiceOnly = voiceOnlyName(b.speakerRaw);
-                    story.warnings.add("'" + b.speakerRaw + "' is not described in the character list — the studio designed a look.");
+                    if (listed) {
+                        // not in the character list: heard, never pictured, never asked for a picture
+                        c.voiceOnly = true;
+                        story.warnings.add("'" + b.speakerRaw + "' is not in the character list — heard as a voice, not shown and no picture asked. Add them to the list to see them.");
+                    } else {
+                        c.voiceOnly = voiceOnlyName(b.speakerRaw);
+                        story.warnings.add("'" + b.speakerRaw + "' is not described in the character list — the studio designed a look.");
+                    }
                 }
                 b.speaker = c;
+                if (!c.voiceOnly) { recent.remove(c); recent.add(0, c); }
                 Map<String, Integer> m = used.get(c);
                 if (m == null) { m = new HashMap<String, Integer>(); used.put(c, m); }
                 Integer n = m.get(b.speakerRaw);
@@ -763,6 +951,62 @@ public final class ScriptParser {
                 c.displayName = sb.length() > 0 ? sb.toString() : c.fullName;
             }
         }
+    }
+
+    /**
+     * v38: the characters a group speaker stands for, or null when the name is not a group. "मीना और राजू", "Meena,
+     * Raju": the named ones. "तीनों" / "तीनो" / "दोनों" / "all three": that many of the scene's characters, the most
+     * recently seen or heard first (then the others of the scene, then the listed cast). "सब" / "everyone": everyone in
+     * the scene. The order follows the scene, so the first one named in it leads (their voice is heard).
+     */
+    static List<Story.CharacterDef> groupOf(Story story, String raw, List<Story.CharacterDef> inScene, List<Story.CharacterDef> recent) {
+        return groupOf(story, raw, inScene, recent, "", new ArrayList<List<Story.CharacterDef>>());
+    }
+
+    /**
+     * With the line's words and the groups named together earlier in the scene: the one the line speaks to ("धन्यवाद
+     * मम्मी!") is not among those saying it, and a group of that size named together ("पापा, सिया और परी सोफ़े पर बैठे
+     * हैं") is the group.
+     */
+    static List<Story.CharacterDef> groupOf(Story story, String raw, List<Story.CharacterDef> inScene, List<Story.CharacterDef> recent,
+                                            String line, List<List<Story.CharacterDef>> together) {
+        String bare = Txt.withoutParens(raw).trim();
+        // a listed name that happens to be a group word in another language is the character
+        for (Story.CharacterDef c : story.characters) if (aliasEquals(c, bare)) return null;
+        List<Story.CharacterDef> named = new ArrayList<Story.CharacterDef>();
+        for (Story.CharacterDef c : mentions(story, bare)) if (!c.voiceOnly) named.add(c);
+        boolean joined = Txt.has(bare, " और ", ",", "،", " & ", " तथा ", " एवं ") || Txt.hasWord(bare, "and");
+        if (named.size() >= 2 && joined) return named;
+        int n = groupCount(bare);
+        if (n < 0) return null;
+        List<Story.CharacterDef> addressed = new ArrayList<Story.CharacterDef>();
+        for (Story.CharacterDef c : mentions(story, line == null ? "" : line)) if (!named.contains(c)) addressed.add(c);
+        List<Story.CharacterDef> pool = new ArrayList<Story.CharacterDef>();
+        if (!named.isEmpty()) pool.addAll(named);        // "तीनों, मीना के साथ"
+        if (n > 0 && named.isEmpty()) for (List<Story.CharacterDef> g : together) {
+            boolean ok = g.size() == n;
+            for (Story.CharacterDef c : g) if (addressed.contains(c)) ok = false;
+            if (ok) { pool.addAll(g); break; }
+        }
+        if (n == 0) { for (Story.CharacterDef c : inScene) if (!pool.contains(c) && !addressed.contains(c)) pool.add(c); }
+        else if (inScene.size() == n) { for (Story.CharacterDef c : inScene) if (!pool.contains(c) && !addressed.contains(c)) pool.add(c); }
+        for (Story.CharacterDef c : recent) if (!pool.contains(c) && !c.voiceOnly && !addressed.contains(c)) pool.add(c);
+        for (Story.CharacterDef c : inScene) if (!pool.contains(c) && !addressed.contains(c)) pool.add(c);
+        for (Story.CharacterDef c : story.characters) if (!c.voiceOnly && !pool.contains(c) && !addressed.contains(c)) pool.add(c);
+        // only when there is nobody else: the one spoken to as well
+        for (Story.CharacterDef c : addressed) if (!c.voiceOnly && !pool.contains(c)) pool.add(c);
+        int want = n == 0 ? Math.max(2, inScene.size() - addressed.size()) : n;
+        List<Story.CharacterDef> out = new ArrayList<Story.CharacterDef>(pool.subList(0, Math.min(want, pool.size())));
+        if (out.isEmpty()) return null;
+        // in the scene's order (the first one in the scene leads)
+        final List<Story.CharacterDef> ord = inScene;
+        java.util.Collections.sort(out, new java.util.Comparator<Story.CharacterDef>() {
+            public int compare(Story.CharacterDef a, Story.CharacterDef b) {
+                int ia = ord.indexOf(a), ib = ord.indexOf(b);
+                return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+            }
+        });
+        return out;
     }
 
     /** Characters mentioned in a piece of text (word-boundary aware), in order of first mention. */

@@ -63,4 +63,11 @@ pool, a rim and a soft shadow on the ground — not light bouncing off every sur
 
 ## 6. Full suite
 
-(filled in after the run)
+Robolectric, all tests, on the v36 commit: **52 tests, 50 passed, 1 skipped (the soak), 1 failed — 41 minutes.** All four v36 tests
+passed (on the phone's canvas: the wind moves 2 532 / 2 452 pixels of the saree and the dupatta, 1 222 / 1 394 flutter between moments;
+the campfire night has 412 warm firelit samples, the diya room 69; the flame's centre leans from 120.0 to 135.7 in the wind).
+
+**Found and fixed:** `freeGithubSourcesGuidesAndDescriptionDetails` — the 3D figure made from Vanusha's picture no longer read her
+hair colour. It came from v35's cleaner cut-out: the outline is now part-transparent (the old background's halo removed), and the
+hair band at the top of her head was almost all outline, too few opaque pixels to read. The outline pixels count again and the band
+reaches at least 3.5 % of the figure down; her hair now reads dark brown (before v35 it read the grey of the halo). The fix is in v37.

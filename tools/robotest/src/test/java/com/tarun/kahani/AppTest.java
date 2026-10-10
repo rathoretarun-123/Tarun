@@ -1203,8 +1203,15 @@ public class AppTest {
     static void firstDialogItem() {
         android.app.AlertDialog dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
         assertNotNull("a dialog", dlg);
-        assertNotNull("a list dialog", dlg.getListView());
-        dlg.getListView().performItemClick(dlg.getListView(), 0, 0);
+        if (dlg.getListView() != null) { dlg.getListView().performItemClick(dlg.getListView(), 0, 0); idle(); return; }
+        // v38: the pictures pop-up shows its choices as buttons (a dialog with a message hides a list): the first choice
+        android.widget.Button first = null;
+        for (View v : allViews(dlg.getWindow().getDecorView(), new ArrayList<View>())) {
+            if (!(v instanceof android.widget.Button) || v.getId() == android.R.id.button1 || v.getId() == android.R.id.button2 || v.getId() == android.R.id.button3) continue;
+            if (v.getVisibility() == View.VISIBLE) { first = (android.widget.Button) v; break; }
+        }
+        assertNotNull("a list of choices, or a button for each", first);
+        first.performClick();
         idle();
     }
 
@@ -1291,6 +1298,7 @@ public class AppTest {
                 nxt.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick(); idle();
                 firstDialogItem();
             }
+            else if (nxt != null && nxt != list && nxt.isShowing()) firstDialogItem();      // v38: the pictures pop-up's buttons
             rep.append("popup pictures first: ").append(pickerStarted(a)).append('\n');
         } else rep.append("popup pictures first: no list (nothing missing)\n");
         // 4. the progress screen's rows ("Pictures in this film")
@@ -4996,7 +5004,9 @@ public class AppTest {
             idle();
             String castAfter = p.read("cast.txt");
             int added = count(castAfter, (String) c[1]) - count(castBefore, (String) c[1]);
-            report.append(c[0]).append(": ").append(added).append(" saved (want ").append(c[3]).append(") — ").append(toast).append('\n');
+            int items = toast == null ? 0 : toast.split(";").length;
+            report.append(c[0]).append(": ").append(items).append(" pictures named in the message (want ").append(c[3]).append("), cast lines +").append(added).append(" — ").append(toast).append('\n');
+            assertTrue("every figure / view saved for " + c[0] + ": " + toast, toast != null && toast.startsWith("✅") && items >= (Integer) c[3]);
             android.app.AlertDialog open = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
             if (open != null && open.isShowing()) open.dismiss();
         }

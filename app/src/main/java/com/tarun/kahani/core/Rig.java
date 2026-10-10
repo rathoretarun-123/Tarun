@@ -362,6 +362,22 @@ public final class Rig {
         return new int[]{starts[mid], ends[mid]};
     }
 
+    /**
+     * v38: how much a point of the picture (u, v as fractions) belongs to a hand raised beside the face — the same
+     * weight moveBody gives the arm there. The face layer leaves it out: a hand twirling a moustache, and its sleeve,
+     * were cut into the face layer and drawn torn across the cheek when the arm and the head moved apart.
+     */
+    float raisedArm(float u, float v) {
+        float w = 0;
+        for (int side = 0; side < 2; side++) {
+            if (!armUp[side]) continue;
+            float out = side == 0 ? cx - u : u - cx;
+            float wr = smooth(headHalf * 1.0f, headHalf * 1.3f, out) * smooth(eyeV - 0.05f, eyeV - 0.01f, v) * (1 - smooth(shoulderY, shoulderY + 0.03f, v));
+            w = Math.max(w, wr);
+        }
+        return w;
+    }
+
     /** Crops the face with soft edges so it can be drawn over the body with its own fine mesh. */
     void makeFace(Cutout.Result r, Art.Loader L) {
         float d = Math.abs(eRX - eLX);
@@ -384,6 +400,8 @@ public final class Rig {
                 int c = r.px[(y + y0) * r.w + x + x0];
                 float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
                 float k = Math.min(1, e / feather);
+                // v38: a hand raised beside the face (and its sleeve) moves with the arm, never with the face layer
+                k *= 1 - raisedArm((x + x0 + 0.5f) / r.w, (y + y0 + 0.5f) / r.h);
                 int a = (int) ((c >>> 24) * k * k * (3 - 2 * k));
                 px[y * cw + x] = (a << 24) | (c & 0xFFFFFF);
             }
@@ -419,7 +437,7 @@ public final class Rig {
             float a = ((r.px[iy * r.w + ix] >>> 24) * (1 - fx) + (r.px[iy * r.w + ix + 1] >>> 24) * fx) * (1 - fy)
                     + ((r.px[(iy + 1) * r.w + ix] >>> 24) * (1 - fx) + (r.px[(iy + 1) * r.w + ix + 1] >>> 24) * fx) * fy;
             float e = Math.min(Math.min(x, cw - 1 - x), Math.min(y, ch - 1 - y));
-            float f = Math.min(1, e / feather);
+            float f = Math.min(1, e / feather) * (1 - raisedArm((x + x0 + 0.5f) / hw, (y + y0 + 0.5f) / hh));     // v38
             int al = (int) (a * f * f * (3 - 2 * f));
             px[y * cw + x] = (Math.max(0, Math.min(255, al)) << 24) | (hi[(y + y0) * hw + x + x0] & 0xFFFFFF);
         }
@@ -478,16 +496,19 @@ public final class Rig {
         f.L0 = left; f.T0 = top; f.W0 = w; f.H0 = h;
         f.nX = left + cx * w; f.nY = top + neckY * h;
         f.hipCX = left + cx * w; f.hipCY = top + hipY * h;
-        double hr = Math.toRadians(s.headRot), lr = Math.toRadians(s.lean);
+        // v38: a hand held up at the face holds the head with it — the head neither turns nor nods against the hand
+        // (the side of the head beside the hand moves with the arm, the face layer with the head: apart, they tore)
+        boolean handAtFace = !animal && (armUp[0] || armUp[1]);
+        double hr = Math.toRadians(handAtFace ? 0 : s.headRot), lr = Math.toRadians(s.lean);
         f.hCos = (float) Math.cos(hr); f.hSin = (float) Math.sin(hr);
         f.lCos = (float) Math.cos(lr); f.lSin = (float) Math.sin(lr);
         for (int side = 0; side < 2; side++) {
             float ang = side == 0 ? s.armL : -s.armR;
             if (armsFixed) ang = 0;
             else if (armUp[side]) {
-                // a hand held at the face does not swing out; it fidgets (twirls the moustache), more when acting
-                float fid = (float) (Math.sin(s.time * 2.2 + side) * 2.5 + (s.twirl ? Math.sin(s.time * 7) * 5 : 0));
-                ang = (side == 0 ? 1 : -1) * fid;
+                // a hand held at the face stays where the picture has it (v38: its fidget about the shoulder swung the
+                // side of the head with it, away from the face layer)
+                ang = 0;
             }
             double a = Math.toRadians(ang);   // outward: the left arm turns clockwise
             f.armC[side] = (float) Math.cos(a); f.armS[side] = (float) Math.sin(a);
@@ -495,8 +516,8 @@ public final class Rig {
         float[] la = {s.legLAng, s.legRAng, (s.legLAng - s.legRAng) * 0.15f};
         for (int i = 0; i < 3; i++) { double a = Math.toRadians(la[i]); f.legC[i] = (float) Math.cos(a); f.legS[i] = (float) Math.sin(a); }
         float headH = (neckY - this.top) * h;
-        f.nodS = 1 - 0.035f * Math.abs(s.nod);
-        f.nodDy = s.nod * headH * 0.04f;
+        f.nodS = handAtFace ? 1 : 1 - 0.035f * Math.abs(s.nod);
+        f.nodDy = handAtFace ? 0 : s.nod * headH * 0.04f;
         if (animal) {
             // the eyes and mouth drawn on an animal follow its head about the neck
             f.nX = left + neckX * w; f.nY = top + neckY2 * h;

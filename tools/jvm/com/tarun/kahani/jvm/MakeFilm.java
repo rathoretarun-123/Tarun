@@ -84,9 +84,8 @@ public class MakeFilm {
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
         if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));
-        // DELIVERY=prefix: the subtitle file and the edit list with scene markers (v38, as the app saves them)
+        // DELIVERY=prefix: the edit list with scene markers (v38, as the app saves it)
         if (System.getenv("DELIVERY") != null) {
-            Files.write(Paths.get(System.getenv("DELIVERY") + ".srt"), com.tarun.kahani.core.FilmCraft.srt(film).getBytes("UTF-8"));
             Files.write(Paths.get(System.getenv("DELIVERY") + "_edit_list.txt"), com.tarun.kahani.core.FilmCraft.editList(film, fps, film.story != null ? film.story.title : "").getBytes("UTF-8"));
         }
         // KEYS=1: every character's keys (time, body, seat, eyes shut, visible) — to check staging against the frames

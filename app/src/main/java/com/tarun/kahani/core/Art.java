@@ -33,6 +33,8 @@ public final class Art {
         public float turbanY;       // bottom of turban (0 = none / unknown)
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E, lid = 0xFFC88A66;
         public boolean faceKnown;
+        /** v38: the picture's own mouth is open (teeth or the dark inside show between the lips): it is never painted open further. */
+        public boolean mouthOpen;
         public transient Cutout.Result pixelsForSampling;
         /** Bones and face for moving the picture (null = moved as one piece). */
         public Rig rig;
@@ -90,6 +92,7 @@ public final class Art {
             if (main != null) { v.skin = main.skin; v.lip = main.lip; v.lid = main.lid; }
             // the rig only where the face must speak (a front or three-quarter with a face); a picture of a pose is drawn as it is
             boolean frontish = Math.abs(angle) < 46;
+            mouthFromPicture(v.pixelsForSampling, v);
             if (frontish && v.faceKnown && pose == PoseSense.STAND) {
                 try { v.rig = Rig.build(v.pixelsForSampling, v, main == null ? new Look() : mainLook, loader); } catch (RuntimeException e) { v.rig = null; }
             }
@@ -147,6 +150,63 @@ public final class Art {
         if (b == null && part == 0) b = scenes.get(String.valueOf(number));
         if (b == null && part > 0 && !scenes.containsKey(number + "a")) b = null;
         return b;
+    }
+
+    /**
+     * v38: the picture's own mouth, read from its pixels before the face mesh is built. Teeth (light, and much less
+     * coloured than the skin around them) found just below or around the mouth point move the point onto the real
+     * opening (a point left on the skin under the nose made the mesh open a second mouth there: the "new lips"), and
+     * a mouth showing teeth or its dark inside is marked open — it is never painted open further.
+     */
+    public static void mouthFromPicture(Cutout.Result r, Sprite s) {
+        s.mouthOpen = false;
+        if (r == null || r.px == null || s == null || !s.faceKnown || s.mouthHW <= 0) return;
+        int cx = Math.round(s.mouthX * r.w), cy = Math.round(s.mouthY * r.h), hw = Math.max(2, Math.round(s.mouthHW * r.w));
+        // the skin's colourfulness around the mouth (the cheeks either side)
+        int skinSat = 0, skinN = 0;
+        for (int y = cy - hw / 2; y <= cy + hw / 2; y += 2) for (int x : new int[]{cx - hw * 3 / 2, cx + hw * 3 / 2}) {
+            if (x < 0 || x >= r.w || y < 0 || y >= r.h) continue;
+            int c = r.px[y * r.w + x];
+            if ((c >>> 24) < 128) continue;
+            int R = (c >> 16) & 255, G = (c >> 8) & 255, B = c & 255;
+            skinSat += Math.max(R, Math.max(G, B)) - Math.min(R, Math.min(G, B)); skinN++;
+        }
+        int satMax = skinN > 0 ? Math.min(80, Math.max(30, skinSat / skinN - 25)) : 60;
+        int teeth = 0, n = 0;
+        long ty = 0;
+        for (int y = cy - Math.round(hw * 0.6f); y <= cy + Math.round(hw * 1.2f); y++) {
+            if (y < 0 || y >= r.h) continue;
+            for (int x = cx - Math.round(hw * 0.6f); x <= cx + Math.round(hw * 0.6f); x++) {
+                if (x < 0 || x >= r.w) continue;
+                int c = r.px[y * r.w + x];
+                if ((c >>> 24) < 128) continue;
+                int R = (c >> 16) & 255, G = (c >> 8) & 255, B = c & 255;
+                int lum = (R * 77 + G * 150 + B * 29) >> 8, sat = Math.max(R, Math.max(G, B)) - Math.min(R, Math.min(G, B));
+                n++;
+                if (lum > 140 && sat < satMax) { teeth++; ty += y; }
+            }
+        }
+        if (n > 20 && teeth > n * 0.03f) {
+            // the opening is just below the teeth's middle (the upper teeth show first)
+            float my = ty / (float) teeth + 0.05f * hw;
+            s.mouthY = Math.max(0, Math.min(1, my / r.h));
+            s.mouthOpen = true;
+            cy = Math.round(my);
+        }
+        // the dark inside of an open mouth, just at and below the (refined) point — a moustache above it never counts
+        int dark = 0, m = 0;
+        for (int y = cy - Math.round(hw * 0.1f); y <= cy + Math.round(hw * 0.5f); y++) {
+            if (y < 0 || y >= r.h) continue;
+            for (int x = cx - Math.round(hw * 0.5f); x <= cx + Math.round(hw * 0.5f); x++) {
+                if (x < 0 || x >= r.w) continue;
+                int c = r.px[y * r.w + x];
+                if ((c >>> 24) < 128) continue;
+                int lum = (((c >> 16) & 255) * 77 + ((c >> 8) & 255) * 150 + (c & 255) * 29) >> 8;
+                m++;
+                if (lum < 55) dark++;
+            }
+        }
+        if (m > 20 && dark > m * 0.2f) s.mouthOpen = true;
     }
 
     /** The user's reverse angle of a scene's place (manifest line scene|<number>r|file), or null. */
@@ -217,6 +277,7 @@ public final class Art {
         int[] keep = cr.px;
         cr.px = px;
         try { v.rig = Rig.build(cr, v, look, L); } catch (RuntimeException e) { v.rig = null; } finally { cr.px = keep; }
+        v.mouthOpen = base.mouthOpen;
         v.rimL = base.rimL; v.rimR = base.rimR; v.shadowImg = base.shadowImg;
         return v;
     }
@@ -302,10 +363,10 @@ public final class Art {
         try {
             Headwear hw = Headwear.strip(r.px, r.w, r.h, s.eyeLX * r.w, s.eyeLY * r.h, s.eyeRX * r.w, s.eyeRY * r.h, s.skin);
             int[] bare;
-            int hatColor;
+            int[] hatColors;
             if (hw != null) {
                 bare = hw.bare;
-                hatColor = averageOpaque(hw.hat, 0);
+                hatColors = palette(hw.hat, hw.hat.length);
                 s.hatImg = L.create(hw.hat, hw.hx1 - hw.hx0 + 1, hw.hy1 - hw.hy0 + 1);
                 s.hatW = hw.hx1 - hw.hx0 + 1; s.hatH = hw.hy1 - hw.hy0 + 1;
                 s.hatX0 = hw.relX0; s.hatY0 = hw.relY0; s.hatX1 = hw.relX1; s.hatY1 = hw.relY1;
@@ -313,11 +374,11 @@ public final class Art {
                 // the headwear could not be cut out as a piece: the picture's top is taken off along the cut line and a
                 // bald head painted, so the bare head is drawn through the mesh like everyone else (v22)
                 bare = simpleBare(r, s);
-                hatColor = averageNonSkin(r.px, r.w, 0, Math.round(s.turbanY * r.h), r.w);
+                hatColors = palette(r.px, Math.min(r.px.length, Math.round(s.turbanY * r.h) * r.w));
             } else return;
             // what the headwear leaves beside the bare head (a turban's tail, a feather, a band's end): pixels of the
             // headwear's own colour above the shoulders and outside the face go too (v22)
-            clearHeadwearLeftovers(bare, r, s, hatColor);
+            clearHeadwearLeftovers(bare, r, s, hatColors);
             s.bareImg = L.create(bare, r.w, r.h);
             if (s.rig != null) s.rig.faceBareImg = s.rig.faceFrom(bare, r.w, r.h, L);
         } catch (RuntimeException e) {
@@ -361,20 +422,92 @@ public final class Art {
         return out;
     }
 
-    static void clearHeadwearLeftovers(int[] bare, Cutout.Result r, Sprite s, int hatColor) {
+    /**
+     * v38: the main colours of a piece of headwear (up to eight, each at least 3% of its pixels): a turban is blue
+     * and red, not their purple average.
+     */
+    static int[] palette(int[] px, int n) {
+        int[] count = new int[512];
+        long[] sr = new long[512], sg = new long[512], sb = new long[512];
+        int total = 0;
+        for (int i = 0; i < n && i < px.length; i++) {
+            int c = px[i];
+            if ((c >>> 24) < 128 || Cutout.isSkin(c)) continue;
+            int R = (c >> 16) & 255, G = (c >> 8) & 255, B = c & 255;
+            int b = (R >> 5) << 6 | (G >> 5) << 3 | (B >> 5);
+            count[b]++; sr[b] += R; sg[b] += G; sb[b] += B; total++;
+        }
+        java.util.List<Integer> out = new java.util.ArrayList<Integer>();
+        for (int k = 0; k < 8 && total > 0; k++) {
+            int best = -1;
+            for (int b = 0; b < 512; b++) if (count[b] > 0 && (best < 0 || count[b] > count[best])) best = b;
+            if (best < 0 || count[best] < total * 0.03f) break;
+            out.add(0xFF000000 | (int) (sr[best] / count[best]) << 16 | (int) (sg[best] / count[best]) << 8 | (int) (sb[best] / count[best]));
+            count[best] = 0;
+        }
+        int[] a = new int[out.size()];
+        for (int i = 0; i < a.length; i++) a[i] = out.get(i);
+        return a;
+    }
+
+    /**
+     * What the headwear leaves beside the bare head (a turban's tail, a feather, a band's end): pixels of the
+     * headwear's own colours, beside the face and above the eyes, go. v38: only those — the eyebrows, a
+     * moustache's curl, the cheek and a hand raised to the face beside it stay (clearing everything that was not skin
+     * there cut holes through the guard's face, the wall showing through them).
+     */
+    static void clearHeadwearLeftovers(int[] bare, Cutout.Result r, Sprite s, int[] hatColors) {
+        if (hatColors == null || hatColors.length == 0) return;
         int faceCx = Math.round((s.eyeLX + s.eyeRX) / 2f * r.w), faceHalf = Math.round(Math.max(0.1f, s.eyeRX - s.eyeLX) * r.w * 0.8f);
         float eyeY = (s.eyeLY + s.eyeRY) / 2f;
+        // (only above the eyes: below them, beside the face, are the ears, the cheeks, a moustache's curl and a raised
+        // hand — an ear's shaded skin came close enough to a red band to be cut away)
+        // Below the eyes (down to the neck) only the headwear's cool colours (blue, green, purple — never a skin's) or its
+        // vivid dyed ones go:
+        // a turban's flap hanging beside the ear, but not the ear
+        int eyes = Math.round(Math.max(0, eyeY - Math.max(0.1f, s.eyeRX - s.eyeLX) * 0.15f) * r.h);
         int neck = Math.round(Math.min(r.h - 1, (s.mouthY + Math.max(0.02f, s.mouthY - eyeY) * 1.0f) * r.h));
         for (int y = 0; y < neck; y++) {
             for (int x = 0; x < r.w; x++) {
                 int c = bare[y * r.w + x];
                 if ((c >>> 24) < 20 || Cutout.isSkin(c)) continue;
-                boolean beside = Math.abs(x - faceCx) > faceHalf;
-                if (!beside) continue;
-                // beside the bare head and above the shoulders only the headwear's leftovers remain (its tail, its band,
-                // its highlights): everything that is not skin goes
-                bare[y * r.w + x] = 0;
+                if (Math.abs(x - faceCx) <= faceHalf) continue;
+                boolean hat = false;
+                int cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
+                boolean vivid = Math.max(cr, Math.max(cg, cb)) - Math.min(cr, Math.min(cg, cb)) >= 130;     // a dyed band, not shaded skin
+                for (int h : hatColors) {
+                    boolean cool = (h & 255) > ((h >> 16) & 255) + 20;
+                    if (y < eyes ? Cutout.dist(c, h) < 75 : (cool || vivid) && Cutout.dist(c, h) < 60) { hat = true; break; }
+                }
+                if (hat) bare[y * r.w + x] = 0;
             }
+        }
+        // what is left floating beside the head (a band's end the colours missed) is joined to nothing: everything
+        // above the neck that cannot be reached from the face or from the body below the neck goes
+        boolean[] seen = new boolean[r.w * (neck + 1)];
+        int[] stack = new int[r.w * (neck + 1)];
+        int sp = 0;
+        for (int y = 0; y <= neck && y < r.h; y++) for (int x = Math.max(0, faceCx - faceHalf); x <= Math.min(r.w - 1, faceCx + faceHalf); x++) {
+            int i = y * r.w + x;
+            if ((bare[i] >>> 24) >= 20 && !seen[i]) { seen[i] = true; stack[sp++] = i; }
+        }
+        for (int x = 0; x < r.w && neck < r.h; x++) {
+            int i = neck * r.w + x;
+            if ((bare[i] >>> 24) >= 20 && !seen[i]) { seen[i] = true; stack[sp++] = i; }
+        }
+        while (sp > 0) {
+            int i = stack[--sp], x = i % r.w, y = i / r.w;
+            for (int k = 0; k < 4; k++) {
+                int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                if (nx < 0 || nx >= r.w || ny < 0 || ny > neck) continue;
+                int j = ny * r.w + nx;
+                if (seen[j] || (bare[j] >>> 24) < 20) continue;
+                seen[j] = true; stack[sp++] = j;
+            }
+        }
+        for (int y = 0; y < neck; y++) for (int x = 0; x < r.w; x++) {
+            int i = y * r.w + x;
+            if (!seen[i] && (bare[i] >>> 24) >= 20) bare[i] = 0;
         }
     }
 
@@ -573,6 +706,7 @@ public final class Art {
                         resample(s);
                     }
                     // head, arms, legs and face for animating the picture (needs the final face points)
+                    mouthFromPicture(s.pixelsForSampling, s);
                     try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
                     if (c.look != null && c.look.headwear == Look.HW_TURBAN && !beast) takeOffHeadwear(s, L);
                     if (s.rig != null && s.rig.face && !beast) {
@@ -679,6 +813,7 @@ public final class Art {
                     if (f.length >= 12) v.turbanY = Float.parseFloat(f[11].trim());
                     resample(v);
                 }
+                mouthFromPicture(v.pixelsForSampling, v);
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.costumes.get(n - 1).look, L); } catch (RuntimeException e) { v.rig = null; }
                 v.shadowImg = castShadow(v.pixelsForSampling, L);
                 v.pixelsForSampling = null;
@@ -705,6 +840,7 @@ public final class Art {
                     }
                 }
                 v.skin = main.skin; v.lip = main.lip; v.lid = main.lid;
+                mouthFromPicture(v.pixelsForSampling, v);
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L); } catch (RuntimeException e) { v.rig = null; }
                 if (v.rig != null && v.pixelsForSampling != null) {
                     try {

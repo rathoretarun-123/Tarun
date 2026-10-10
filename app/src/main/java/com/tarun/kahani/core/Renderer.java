@@ -1118,6 +1118,10 @@ public final class Renderer {
     private void drawActor(Gfx g, Film.Seg s, Film.Actor a, float t) {
         Film.Key k = a.stateAt(t);
         if (!k.visible) return;
+        // v38: in an over-the-shoulder shot the speaker is the shoulder in the foreground — never also on the stage
+        // beside the listener (the same person twice, the face half hidden behind the own shoulder)
+        Film.Shot osh = shotAt(t);
+        if (osh != null && osh.ots.length() > 0 && osh.ots.equals(a.c.shown()) && otsBack(a, osh) != null) return;
         // Spider-Verse: a character animated on twos or threes holds each pose for 2-3 frames (the walk, the
         // gestures, the breathing); the place, the camera and the lip-sync stay on ones
         // (Spider-Verse: a scared run steps on twos even for an expert — the fear shows in the choppiness)
@@ -2643,7 +2647,7 @@ public final class Renderer {
     }
 
     /** Bones and face of a picture character for this frame, from the same pose the cartoon puppets use. */
-    private Rig.State rigState(Pose p, Film.Actor a) {
+    private Rig.State rigState(Pose p, Film.Actor a, Art.Sprite sp) {
         Rig.State st = rs;
         st.reset();
         float t = p.time;
@@ -2673,9 +2677,11 @@ public final class Renderer {
         st.lean -= 1.2f * poise;
         st.walkAmt = p.walkAmt;
         // the lips: the jaw opens with the voice, the corners follow the sound (wide "ee", round "oo")
+        // v38: a picture's lips move only with its voice — a laugh or a surprise without words keeps the picture's
+        // own mouth (opening it painted a second mouth under a picture that already laughs); a picture whose mouth
+        // is already open (teeth showing) opens only half as far
         float open = p.mouth;
-        if (open < 0.06f && p.emotion == Pose.SURPRISED) open = 0.3f;
-        if (open < 0.06f && p.emotion == Pose.LAUGH) open = 0.32f + 0.12f * (float) Math.sin(t * 9);
+        if (sp != null && sp.mouthOpen) open *= 0.5f;
         st.jaw = open > 0.04f ? open : 0;
         st.mountJaw = Math.min(1, p.mountMouth * 1.3f);          // v34: the rider's animal speaks with its own jaw
         st.lipWide = Math.max(0, Math.min(1, (p.mouthWide - 0.5f) * 2.2f));
@@ -2848,12 +2854,8 @@ public final class Renderer {
      * edge of the frame, on the side the listener faces, large and soft (out of the depth of field), so the
      * reaction is seen from the speaker's place in the conversation (the scene maker guide, ch. 7).
      */
-    private void overShoulder(Gfx g, Film.Seg s, float t) {
-        Film.Shot sh = shotAt(t);
-        if (sh == null || sh.ots.length() == 0) return;
-        Film.Actor fg = null, to = null;
-        for (Film.Actor a : s.actors) { if (a.c.shown().equals(sh.ots)) fg = a; if (a.c.shown().equals(sh.subject)) to = a; }
-        if (fg == null) return;
+    /** The back of the shoulder character of an over-the-shoulder shot: the user's own back picture, else the view made from the front; null when there is none. */
+    private Art.Sprite otsBack(Film.Actor fg, Film.Shot sh) {
         Art.Sprite sp = art.sprites.get(fg.c.id);
         Art.Sprite back = sp == null ? null : sp.view(2);
         if (sp != null && sp.poses != null) {
@@ -2863,12 +2865,25 @@ public final class Renderer {
             if (ps == null || Math.abs(Math.abs(ps.angle) - 180) > 1) for (Art.PoseSprite q : sp.poses) if (Math.abs(Math.abs(q.angle) - 180) < 1 && q.pose == PoseSense.STAND) { ps = q; break; }
             if (ps != null && Math.abs(Math.abs(ps.angle) - 180) < 1 && ps.sprite() != null) back = ps.sprite();
         }
+        return back;
+    }
+
+    private void overShoulder(Gfx g, Film.Seg s, float t) {
+        Film.Shot sh = shotAt(t);
+        if (sh == null || sh.ots.length() == 0) return;
+        Film.Actor fg = null, to = null;
+        for (Film.Actor a : s.actors) { if (a.c.shown().equals(sh.ots)) fg = a; if (a.c.shown().equals(sh.subject)) to = a; }
+        if (fg == null) return;
+        Art.Sprite back = otsBack(fg, sh);
         if (back == null) return;
         float side = to != null ? to.stateAt(t).facing : -fg.stateAt(t).facing;
-        final float h = vh * 1.45f, w = h * back.w / Math.max(1, back.h);
-        // the shoulder takes at most 28% of the frame's width (a narrow frame too): the listener's face stays whole (v23)
-        final float inside = Math.min(w * 0.34f, vw * 0.28f);
-        final float cx = side > 0 ? vw - inside : inside, bottom = vh * 1.12f;
+        // v38: the back of the head and the shoulder, not the waist — the figure large enough that its head top sits
+        // just inside the top of the frame and its shoulders fill the edge down to the bottom
+        final float h = vh * 2.15f, w = h * back.w / Math.max(1, back.h);
+        // the shoulder takes at most 28% of the frame's width (a narrow frame too): the listener's face stays whole (v23;
+        // v38: and the picture's whole width at most 40% — a wide figure, a witch's hat, never reaches the middle)
+        final float inside = Math.min(w * 0.34f, vw * 0.28f), edge = vw * 0.4f;
+        final float cx = side > 0 ? Math.max(vw - inside, vw - edge + w / 2) : Math.min(inside, edge - w / 2), bottom = vh * 0.1f + h;
         final Object img = back.img;
         final float fw = w;
         g.layerLow("ots:" + fg.c.id + ":" + (side > 0 ? "R" : "L"), vw, vh, 0.35f, new Gfx.Painter() {
@@ -2887,7 +2902,7 @@ public final class Renderer {
         // every picture moves through its mesh, also lying down or hanging upside down (the whole picture is
         // turned; the body still breathes, the face still speaks and changes expression)
         boolean rigged = rig != null && (!beast || p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
-        Rig.State st = rigged ? rigState(p, actor) : null;
+        Rig.State st = rigged ? rigState(p, actor, sp) : null;
         if (rigged && beast) animalState(st, p);
         g.save();
         if (p.body == Pose.LIE && !beast) {
@@ -3040,13 +3055,23 @@ public final class Renderer {
             if ((p.blink > 0.5f || p.eyesClosed) && !covered) {
                 for (int i = 0; i < 2; i++) {
                     float ex = i == 0 ? ex1 : ex2, ey = i == 0 ? ey1 : ey2;
-                    g.color(sp.lid);
-                    g.oval(ex, ey, er * 1.45f, er * 1.25f);
-                    g.color(0xFF2A1A12);
+                    // v38: an eyelid the shape of the eye (an almond), its edge soft into the skin around it, the lashes
+                    // along its lower edge — not a flat disc over the eye
+                    int lid = sp.lid | 0xFF000000;
+                    g.radial(ex, ey - er * 0.1f, er * 1.75f, lid, lid & 0x00FFFFFF);
+                    g.oval(ex, ey - er * 0.1f, er * 1.75f, er * 1.45f);
+                    g.color(lid);
                     g.begin();
-                    g.moveTo(ex - er * 1.3f, ey + er * 0.1f);
-                    g.quadTo(ex, ey + er * 0.75f, ex + er * 1.3f, ey + er * 0.1f);
-                    g.strokePath(Math.max(1.5f, er * 0.18f));
+                    g.moveTo(ex - er * 1.3f, ey);
+                    g.quadTo(ex, ey - er * 2.1f, ex + er * 1.3f, ey);
+                    g.quadTo(ex, ey + er * 1.6f, ex - er * 1.3f, ey);
+                    g.close();
+                    g.fillPath();
+                    g.color(0xE02A1A12);
+                    g.begin();
+                    g.moveTo(ex - er * 1.25f, ey + er * 0.1f);
+                    g.quadTo(ex, ey + er * 0.85f, ex + er * 1.25f, ey + er * 0.1f);
+                    g.strokePath(Math.max(1.5f, er * 0.14f));
                 }
             }
             if (p.flush > 0.03f && !p.redFace && (look == null || look.isHumanoid())) {
@@ -3079,10 +3104,10 @@ public final class Renderer {
                 g.oval(dx - dr * 0.35f, dy + dr * 0.1f, dr * 0.22f, dr * 0.3f);
             }
             // lip-sync mouth (open in surprise or laughter even when not speaking)
+            // (v38: only with the voice, and never inside a mouth the picture already shows open — that was a second
+            // mouth under the real one: the "new lips")
             float m = p.mouth;
-            if (rigged && m < 0.06f && p.emotion == Pose.SURPRISED) m = 0.28f;
-            if (rigged && m < 0.06f && p.emotion == Pose.LAUGH) m = 0.32f + 0.12f * (float) Math.sin(p.time * 9);
-            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown) {
+            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown && !sp.mouthOpen) {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
                 float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
                 float gap = Rig.jawDrop(hw) * st.jaw;

@@ -4512,30 +4512,17 @@ public class AppTest {
         for (String w : wants) assertTrue(w, w.contains("a picture"));
     }
 
-    /** v38: the film comes with a subtitle file and an edit list with scene markers. */
+    /**
+     * v38: the film comes with an edit list with scene markers; subtitles are not burnt in unless asked for after the
+     * film ("add subtitles").
+     */
     @Test
-    public void v38SubtitlesAndEditList() {
+    public void v38EditListAndSubtitlesByInstruction() {
         Film film = directed(ScriptParser.parse(CRAFT));
-        String srt = com.tarun.kahani.core.FilmCraft.srt(film);
-        String[] blocks = srt.trim().split("\n\n");
-        assertTrue("subtitles: " + blocks.length, blocks.length >= 4);
-        float last = -1;
-        for (int i = 0; i < blocks.length; i++) {
-            String[] l = blocks[i].split("\n");
-            assertEquals(String.valueOf(i + 1), l[0]);
-            assertTrue(l[1], l[1].matches("\\d\\d:\\d\\d:\\d\\d,\\d\\d\\d --> \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d"));
-            float t0 = secs(l[1].substring(0, 12)), t1 = secs(l[1].substring(17));
-            assertTrue("in time order", t0 >= last - 0.001f && t1 > t0);
-            last = t0;
-        }
-        assertTrue(srt.contains("अनु: "));
-        // a long line is split at its sentence ends, the last part ending with the line
-        Film f = new Film();
-        Film.Seg sg = new Film.Seg(); sg.type = Film.S_SCENE; sg.t0 = 0; sg.t1 = 20; f.segs.add(sg);
-        Film.Sub sb = new Film.Sub(); sb.t0 = 1; sb.t1 = 10; sb.who = "माँ"; sb.text = "पहला वाक्य यहाँ पर है। दूसरा वाक्य भी यहाँ पर है। तीसरा वाक्य सबसे अंत में।"; sg.subs.add(sb);
-        String split = com.tarun.kahani.core.FilmCraft.srt(f);
-        assertEquals(split, 3, split.trim().split("\n\n").length);
-        assertTrue(split, split.contains("--> 00:00:10,000"));
+        assertTrue("no subtitles unless asked", !film.subtitles && !new Director.Options().subtitles && !new com.tarun.kahani.core.Edits().subtitles);
+        com.tarun.kahani.core.Edits ed = new com.tarun.kahani.core.Edits();
+        for (java.util.Map<String, Object> c : com.tarun.kahani.core.CommandParser.parse("add subtitles", java.util.Arrays.asList("अनु", "माँ")).commands) ed.apply(c);
+        assertTrue("\"add subtitles\" switches them on", ed.subtitles);
         String edl = com.tarun.kahani.core.FilmCraft.editList(film, 30, "Test");
         int markers = 0, shots = 0;
         for (String l : edl.split("\n")) { if (l.startsWith("* MARKER")) markers++; if (l.matches("^\\d\\d\\d  .*")) shots++; }
@@ -4546,8 +4533,47 @@ public class AppTest {
         assertTrue(edl, edl.contains("SCENE 1 — ") && edl.contains("* LINE: "));
     }
 
-    private static float secs(String t) {
-        return Integer.parseInt(t.substring(0, 2)) * 3600 + Integer.parseInt(t.substring(3, 5)) * 60 + Integer.parseInt(t.substring(6, 8)) + Integer.parseInt(t.substring(9, 12)) / 1000f;
+    /**
+     * v38 (the user: "new lips are seen when Vanusha is laughing; the picture of the guard is not ok"): वानुषा's
+     * picture already laughs with her teeth showing — the mouth point moves onto her real mouth and nothing is painted
+     * open under it; when the monkey takes रतनलाल's turban, his eyebrow, moustache and cheek beside the face are not
+     * cut away with it.
+     */
+    @Test
+    public void v38PicturesKeepTheirOwnMouthAndFace() throws Exception {
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Art.Sprite vanusha = null, guard = null;
+        int closed = 0;
+        for (Story.CharacterDef c : story.characters) {
+            Art.Sprite sp = art.sprites.get(c.id);
+            if (sp == null) continue;
+            if (c.displayName.equals("वानुषा")) vanusha = sp;
+            if (c.displayName.equals("रतनलाल")) guard = sp;
+            if (sp.faceKnown && !sp.mouthOpen) closed++;
+        }
+        assertNotNull(vanusha);
+        assertTrue("वानुषा's own mouth is open (teeth): never painted open again", vanusha.mouthOpen);
+        assertTrue("a closed mouth is still a closed mouth", closed >= 3);
+        // the guard without his turban: nothing between his eyes and his mouth beside the face is cut away (the turban above goes)
+        assertNotNull(guard);
+        assertNotNull("the turban comes off", guard.bareImg);
+        Bitmap img = (Bitmap) guard.img, bare = (Bitmap) guard.bareImg;
+        assertEquals(img.getWidth(), bare.getWidth());
+        int w = img.getWidth(), h = img.getHeight();
+        float d = Math.abs(guard.eyeRX - guard.eyeLX) * w, fcx = (guard.eyeLX + guard.eyeRX) / 2 * w;
+        int y0 = Math.round((guard.eyeLY + guard.eyeRY) / 2 * h + d * 0.25f), y1 = Math.round(guard.mouthY * h);       // below the turban: the cheeks, the moustache, the hand
+        int opaque = 0, cut = 0;
+        for (int y = Math.max(0, y0); y < Math.min(h, y1); y++) for (int x = 0; x < w; x++) {
+            float off = Math.abs(x - fcx);
+            if (off < d * 0.8f || off > d * 2.2f) continue;
+            if ((img.getPixel(x, y) >>> 24) < 200) continue;
+            opaque++;
+            if ((bare.getPixel(x, y) >>> 24) < 60) cut++;
+        }
+        System.out.println("GUARD v38: beside the face " + opaque + " px, cut away with the turban " + cut);
+        assertTrue("the guard's face beside the eyes is kept: " + cut + " of " + opaque, opaque > 100 && cut < opaque * 0.02f);
     }
 
     /** v38: the colour follows the beat (richer at the peak, warmer when tender) and the cheeks flush with the feeling. */

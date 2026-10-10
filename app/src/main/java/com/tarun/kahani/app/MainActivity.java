@@ -4188,10 +4188,10 @@ public class MainActivity extends Activity {
             public void onClick(View v) { saveToGallery(true); }
         }));
         panel.addView(r);
-        // v38: the subtitle file and the edit list with scene markers (the animated director's craft: delivery)
-        final File srt = project.file("subtitles.srt"), edl = project.file("edit_list.txt");
-        if (srt.exists() || edl.exists()) panel.addView(Ui.button(this, "💬  Subtitles (.srt) and edit list with scene markers", Ui.BLUE, new View.OnClickListener() {
-            public void onClick(View v) { deliveryFiles(srt, edl); }
+        // v38: the edit list with scene markers (the animated director's craft: delivery)
+        final File edl = project.file("edit_list.txt");
+        if (edl.exists()) panel.addView(Ui.button(this, "🎞  Edit list with scene markers", Ui.BLUE, new View.OnClickListener() {
+            public void onClick(View v) { editList(edl); }
         }));
         final File thumb = project.file("thumbnail.jpg"), poster = project.file("poster.jpg");
         final File shotsDir = project.file("shots");
@@ -4315,20 +4315,17 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** v38: download or read the film's subtitle file and its edit list (scene markers, every shot's timecode). */
-    private void deliveryFiles(final File srt, final File edl) {
+    /** v38: download or read the film's edit list (scene markers, every shot's timecode). */
+    private void editList(final File edl) {
         final String base = safeName(project.name());
-        final String srtText = srt.exists() ? project.read("subtitles.srt") : "", edlText = edl.exists() ? project.read("edit_list.txt") : "";
-        new AlertDialog.Builder(this).setTitle("💬 Subtitles and edit list")
-                .setMessage("subtitles.srt — every line with its speaker and timing, for YouTube or any player.\nedit_list.txt — every scene marker and every shot with its timecode, size, camera move and line: ask for a change by shot number.")
-                .setPositiveButton("💾 Subtitles", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { if (srtText.length() > 0) saveTextFile(base + ".srt", srtText); else toast("No subtitles in this film"); }
+        final String text = project.read("edit_list.txt");
+        new AlertDialog.Builder(this).setTitle("🎞 Edit list")
+                .setMessage("Every scene marker and every shot with its timecode, size, camera move and line — ask for a change by shot number. (Subtitles: type \"add subtitles\" in the box above.)")
+                .setPositiveButton("💾 Download", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { saveTextFile(base + "_edit_list.txt", text); }
                 })
-                .setNeutralButton("💾 Edit list", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { if (edlText.length() > 0) saveTextFile(base + "_edit_list.txt", edlText); }
-                })
-                .setNegativeButton("👁 Read the edit list", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { showText("Edit list", edlText); }
+                .setNegativeButton("👁 Read", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { showText("Edit list", text); }
                 }).show();
     }
 

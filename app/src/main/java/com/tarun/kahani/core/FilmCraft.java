@@ -11,8 +11,7 @@ import java.util.Map;
  * gave as an additional guide, trained into the director for its family films. Only the film craft of that guide
  * is here: appealing, readable performances, cinematic light that follows the beat, a storytelling camera, the
  * best of the user's own pictures for every beat (and a request for the ones that are missing instead of inventing
- * them), continuity, pacing with breathing room, and a delivery with a subtitle file and an edit list with scene
- * markers. The guide's sexual and nude content is not trained, not recognised and never drawn (LEFT_OUT). Each
+ * them), continuity, pacing with breathing room, and a delivery with an edit list with scene markers. The guide's sexual and nude content is not trained, not recognised and never drawn (LEFT_OUT). Each
  * rule names the code that applies it; the film's shot list reports what was done for its own story.
  */
 public final class FilmCraft {
@@ -35,7 +34,7 @@ public final class FilmCraft {
             {"Touch only as the script writes it", "Director.activityFrom, actionFrom: a hug, a held hand or a peck on the cheek only where the script says so, between the characters it names; the director never adds one of its own (FilmCraft.check counts them)"},
             {"Pacing: build, sustain, then breathe", "ShotPlanner.breathe, PixarLead ma: after the peak of a scene a pause before the next line and a reaction shot; tension builds over the escalating lines, calm talk is cut gently; FilmCraft.check measures the breathing room after every peak line"},
             {"Sound in sync", "Director, Mixer: footsteps on the frames the feet land, effects at the moment of the action, the voice on the lips (Mixer.envelope); natural, high-fidelity sound — never comic sound effects on a serious moment"},
-            {"Deliver with markers", "FilmCraft.srt, FilmCraft.editList, FilmJob: the film comes with a subtitle file (subtitles.srt, every line with its speaker) and an edit list with scene markers (edit_list.txt: every scene and shot with its timecode, size, camera move, beat and line) so a precise change can be asked for by shot; both can be downloaded beside the film"},
+            {"Deliver with markers", "FilmCraft.editList, FilmJob: the film comes with an edit list with scene markers (edit_list.txt: every scene and shot with its timecode, size, camera move, beat and line) so a precise change can be asked for by shot; it can be downloaded beside the film. Subtitles are added after the film by an instruction (\"add subtitles\"), burnt into the picture"},
             {"Polish", "FilmLook: a filmic tone curve, a soft bloom, split toning and output sharpening; Renderer: clean edges, depth (Set3D depth of field outdoors), soft shadows from the sun, the moon and the flames"},
     };
 
@@ -124,55 +123,6 @@ public final class FilmCraft {
     static String tc(float t, int fps) {
         int f = Math.max(0, Math.round(t * fps));
         return String.format(Locale.US, "%02d:%02d:%02d:%02d", f / (3600 * fps), f / (60 * fps) % 60, f / fps % 60, f % fps);
-    }
-
-    /** The subtitle file (SubRip): every subtitle of the film in time order, with its speaker. */
-    public static String srt(Film film) {
-        List<Film.Sub> all = new ArrayList<Film.Sub>();
-        for (Film.Seg s : film.segs) all.addAll(s.subs);
-        java.util.Collections.sort(all, new java.util.Comparator<Film.Sub>() {
-            public int compare(Film.Sub a, Film.Sub b) { return Float.compare(a.t0, b.t0); }
-        });
-        StringBuilder b = new StringBuilder();
-        int n = 0;
-        for (Film.Sub sb : all) {
-            String text = Txt.withoutParens(sb.text == null ? "" : sb.text).trim();
-            if (text.length() == 0 || sb.t1 <= sb.t0) continue;
-            // a long line is split at its sentence ends, each part timed by its length (as the film shows it in parts)
-            List<String> parts = sb.t1 - sb.t0 > 6f ? sentences(text) : java.util.Collections.singletonList(text);
-            int total = 0;
-            for (String pt : parts) total += pt.length();
-            float t = sb.t0;
-            for (int i = 0; i < parts.size(); i++) {
-                float t1 = i == parts.size() - 1 ? sb.t1 : t + (sb.t1 - sb.t0) * parts.get(i).length() / (float) Math.max(1, total);
-                n++;
-                b.append(n).append('\n').append(srtTime(t)).append(" --> ").append(srtTime(t1)).append('\n');
-                if (sb.who != null && sb.who.length() > 0) b.append(sb.who).append(": ");
-                b.append(parts.get(i)).append("\n\n");
-                t = t1;
-            }
-        }
-        return b.toString();
-    }
-
-    /** The sentences of a line (kept with their marks: । ? ! .), or the line itself. */
-    static List<String> sentences(String text) {
-        List<String> out = new ArrayList<String>();
-        int from = 0;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if ((c == '\u0964' || c == '?' || c == '!' || c == '.') && (i + 1 == text.length() || text.charAt(i + 1) == ' ')) {
-                String sn = text.substring(from, i + 1).trim();
-                if (sn.length() > 0) out.add(sn);
-                from = i + 1;
-            }
-        }
-        String rest = text.substring(from).trim();
-        if (rest.length() > 0) out.add(rest);
-        // never a part of a word or two: short pieces join the one before
-        for (int i = out.size() - 1; i > 0; i--) if (out.get(i).length() < 12) { out.set(i - 1, out.get(i - 1) + " " + out.get(i)); out.remove(i); }
-        if (out.isEmpty()) out.add(text);
-        return out;
     }
 
     /** The edit list with scene markers: every scene, then each of its shots with timecodes, size, move, beat and line. */
@@ -340,7 +290,7 @@ public final class FilmCraft {
             b.append("PICTURES THAT WOULD HELP (upload them and make the film again; until then the studio uses what it has):\n");
             for (String w : wants) b.append("  • ").append(w).append('\n');
         }
-        b.append("Delivery: subtitles.srt and edit_list.txt (scene markers and every shot's timecode) are saved with the film\n");
+        b.append("Delivery: edit_list.txt (scene markers and every shot's timecode) is saved with the film; subtitles: type \"add subtitles\" after the film\n");
         b.append("Not trained from the guide: its sexual and nude content (the studio makes family films)\n");
         return b.toString();
     }

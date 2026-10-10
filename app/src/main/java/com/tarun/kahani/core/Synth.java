@@ -107,6 +107,36 @@ public final class Synth {
             case Film.SFX_CUP: { knock(o, 0.01f, 2300, 0.2f); knock(o, 0.012f, 3100, 0.08f); break; }
             // v35: a sleeper's slow breathing — a soft breath in, a longer breath out
             case Film.SFX_SLEEP: { for (float t = 0.1f; t < dur - 1f; t += 4f) { noiseBedRange(o, t, Math.min(dur, t + 1.5f), 0.3f, 0.022f); noiseBedRange(o, t + 1.7f, Math.min(dur, t + 3.7f), 0.18f, 0.028f); } break; }
+            // v36: cooking — a steady sizzle of oil (bright crackling noise) with the ladle scraping and tapping the pan
+            case Film.SFX_SIZZLE: {
+                noiseBedRange(o, 0.02f, dur, 0.85f, 0.05f);
+                for (float t = 0.05f; t < dur - 0.05f; t += 0.05f + Math.abs(rnd()) * 0.08f) burst(o, t, 0.012f, 0.9f, 0.035f);
+                for (float t = 0.6f; t < dur - 0.2f; t += 1.1f) { sweepNoise(o, t, 0.25f, 0.5f, 0.3f, 0.05f); knock(o, t + 0.3f, 1700, 0.06f); }
+                fadeEnds(o, 0.15f);
+                break;
+            }
+            // v36: a broom (a jhadu) — soft swishes, one each way
+            case Film.SFX_SWEEP: { for (float t = 0.05f; t < dur - 0.2f; t += 0.55f) sweepNoise(o, t, 0.32f, 0.35f, 0.65f, 0.09f); fadeEnds(o, 0.05f); break; }
+            // v36: washing — water sloshing in a bucket, a scrub, now and then a wring and drips
+            case Film.SFX_SCRUB: {
+                for (float t = 0.05f; t < dur - 0.3f; t += 0.7f) { sweepNoise(o, t, 0.4f, 0.15f, 0.35f, 0.07f); burst(o, t + 0.42f, 0.18f, 0.6f, 0.05f); }
+                for (float t = 0.3f; t < dur - 0.1f; t += 0.23f + Math.abs(rnd()) * 0.2f) knock(o, t, 900 + rnd() * 300, 0.025f);
+                fadeEnds(o, 0.1f);
+                break;
+            }
+            // v36: a page turned — a quick papery whisper
+            case Film.SFX_PAGE: { sweepNoise(o, 0.02f, Math.min(dur - 0.03f, 0.33f), 0.55f, 0.85f, 0.08f); break; }
+            // v36: a pen or pencil on paper — short scratchy strokes
+            case Film.SFX_SCRIBBLE: { for (float t = 0.05f; t < dur - 0.1f; t += 0.16f + Math.abs(rnd()) * 0.12f) burst(o, t, 0.06f + Math.abs(rnd()) * 0.05f, 0.95f, 0.03f); fadeEnds(o, 0.05f); break; }
+            // v36: brushing teeth — quick back-and-forth bristle strokes
+            case Film.SFX_BRUSH: { for (float t = 0.05f; t < dur - 0.1f; t += 0.13f) burst(o, t, 0.09f, 0.8f, 0.04f); fadeEnds(o, 0.08f); break; }
+            // v36: water poured from a watering can — a steady trickle with splashes below
+            case Film.SFX_POUR: {
+                noiseBedRange(o, 0.05f, dur - 0.1f, 0.55f, 0.06f);
+                for (float t = 0.1f; t < dur - 0.1f; t += 0.09f + Math.abs(rnd()) * 0.08f) knock(o, t, 700 + rnd() * 400, 0.02f);
+                fadeEnds(o, 0.2f);
+                break;
+            }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

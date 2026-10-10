@@ -1,4 +1,4 @@
-# Kahani Film — v35
+# Kahani Film — v36
 
 An Android app that turns your story into a cartoon film for children (6–15 years).
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,16 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v36
+
+* **Wind on clothes, hair and fur** — outdoors in the wind, a saree's pallu and a dupatta stream out from the shoulder and flutter at the tip (the tip lags the root), hair and cloaks follow the same travelling gusts as the grass and trees, and an animal's fur ripples along its back, its mane blows and its tail sways downwind; each character feels the gust where they stand. Indoors nothing blows. Test `v36WindBlowsClothes`.
+* **Flames that look like flames** — a campfire, a diya, a candle and a torch are drawn as layered tongues (dark red outside, orange, a pale yellow-white core) that rise, narrow, flicker and lean with the wind; sparks and smoke drift the same way. Test `v36FlamesLookLikeFlames`.
+* **Fire lights things and makes shadows; so do the sun and the moon** — at night the dark gathers away from a fire and stops at the edge of its light; the fire, diyas, candles and torches throw a warm glow on everything near them, a warm rim on each character's side towards the flames, and a soft shadow on the ground away from them. The flames themselves stay the brightest thing in the frame (they give light; the night's grade no longer dims them). The sun's shadow is long in the morning and evening and short at noon; at night under the moon a faint, cool shadow. A fire belongs to its own scene (it no longer burns on into the next place while it fades). Test `v36FireLightsTheNight`.
+* **The time of day from the place line** — "(स्थान: गाँव का मैदान। रात का समय।)" now makes the scene night (it was read only from the place name); "सब अलाव के पास बैठ जाते हैं" seats everyone in the scene; "माँ दीये जलाती है" gets a shot low and wide enough to see the flames catch.
+* **Other everyday tasks** — cooking at a stove (a ladle stirring a kadhai over a blue-orange gas flame, steam, sizzling), sweeping with a jhadu (the swish), washing dishes at a bucket of suds (scrubbing), reading a book or a newspaper (pages turning), writing in a notebook (the pen scratching), a phone call (the phone stays at the ear through the lines said into it), brushing teeth, combing hair and watering plants (a stream from the can onto a potted plant, pouring heard). With your photos, the phone goes to the ear and the toothbrush to the mouth in a hand of the photo's own skin. "नहीं" keeps a task from happening. The shot list reports the tasks and the lighting shots. Test `v36EverydayTasks`.
+* **The director trained for all of it** — `SituationsGuide` has six new rules and two new honest limits; `DirectorTraining`'s twelve-principles map names where the cloth and the lighting shots apply them.
+* **What these cannot do, said plainly:** a photo's arm does not bend, so a ladle, a broom or a newspaper is drawn at the photo's hand, which does not stir or sweep; firelight is a warm pool, a rim and a soft shadow, not light bouncing off every surface — a photo is tinted, not relit.
 
 ## New in v35
 

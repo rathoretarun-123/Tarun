@@ -386,6 +386,9 @@ public final class DirectorsManual {
             case Film.SFX_STEPS_LIMP: return "uneven steps (a limp)"; case Film.SFX_CHAIR: return "a chair"; case Film.SFX_SOFA: return "a sofa";
             case Film.SFX_BED: return "a bed"; case Film.SFX_EAT: return "eating"; case Film.SFX_SIP: return "a sip"; case Film.SFX_GULP: return "gulps";
             case Film.SFX_CUP: return "a cup set down"; case Film.SFX_SLEEP: return "a sleeper's breathing";
+            case Film.SFX_SIZZLE: return "cooking (a sizzle)"; case Film.SFX_SWEEP: return "a broom"; case Film.SFX_SCRUB: return "washing";
+            case Film.SFX_PAGE: return "a page turned"; case Film.SFX_SCRIBBLE: return "writing"; case Film.SFX_BRUSH: return "brushing teeth";
+            case Film.SFX_POUR: return "water poured";
             default: return "effect " + type;
         }
     }

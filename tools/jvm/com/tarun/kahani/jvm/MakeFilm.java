@@ -88,6 +88,7 @@ public class MakeFilm {
         if (System.getenv("KEYS") != null) for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) {
             StringBuilder kb = new StringBuilder();
             for (Film.Key k : ac.keys) kb.append(String.format(java.util.Locale.US, " [%.2f b%d s%d%s%s]", k.t, k.body, k.seat, k.eyesShut ? " shut" : "", k.visible ? "" : " hidden"));
+            for (Film.Act at : ac.acts) kb.append(String.format(java.util.Locale.US, " {act g%d %.2f-%.2f i%d}", at.type, at.t0, at.t1, at.item));
             System.out.printf("  keys seg %.1f-%.1f %s:%s%n", sg.t0, sg.t1, ac.c.displayName, kb);
         }
         if (System.getenv("LINES") != null) {

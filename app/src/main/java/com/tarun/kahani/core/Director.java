@@ -670,6 +670,9 @@ public final class Director {
                         + "%d woke (sat up, stretched and yawned), %d ate (hand to mouth, chewing, heard), %d drank (raised to the lips, a sip or gulps, the cup set down); "
                         + "%d shots of a seated speaker from a standing photo kept from the waist up, %d close-ups of a photo eating or drinking (the cup or morsel comes up to the lips)%n",
                         sittings, risings, sleepers, wakings, meals, drinks, waistUp, mealCloseUps));
+            if (tasks + lightingShots > 0)
+                b.append(String.format(java.util.Locale.US, "• Everyday tasks (v36): %d tasks shown with their tool and sound (cooking at the stove, sweeping, washing, reading, writing, "
+                        + "a phone call, brushing teeth, combing hair, watering plants); %d shots framed on a lamp, candle, torch or fire being lit%n", tasks, lightingShots));
             b.append(String.format(java.util.Locale.US, "• Cuts made so no character moves 15%% of the frame in one shot: %d; shots still over the limit (very fast moves the story's timing leaves no room to slow): %d%n", motionCuts, overMotion));
             b.append(String.format(java.util.Locale.US, "• Cuts made so each shot holds one action: %d; shots with more than one: %d%n", actionCuts, multi));
             b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
@@ -882,7 +885,15 @@ public final class Director {
         String firstDir = "";
         for (int bi = b0; bi < b1; bi++) if (sc.beats.get(bi).type == Story.Beat.DIRECTION) { firstDir = firstSentence(sc.beats.get(bi).text); break; }
         int fallback = pi == 0 && si == 0 ? Sets.MORNING : prevTod == Sets.NIGHT && seg.set != Sets.CAVE_IN ? Sets.NIGHT : Sets.DAY;
-        seg.tod = Sets.detectTime((pi == 0 ? sc.title + " । " : "") + firstDir, Sets.detectTime(firstSentence(where), fallback));
+        // v36: a setting that states its hour in a sentence of its own ("गाँव का मैदान। रात का समय।") is that hour —
+        // only a short sentence or one about the time (not a description of the place that mentions the night)
+        int fromSetting = Sets.detectTime(firstSentence(where), -1);
+        if (fromSetting < 0) for (String sen : sentences(where)) {
+            if (!Txt.has(sen, "समय", "बेला", "वक़्त", "वक्त", "time") && sen.trim().split("\\s+").length > 4) continue;
+            int tt = Sets.detectTime(sen, -1);
+            if (tt >= 0) { fromSetting = tt; break; }
+        }
+        seg.tod = Sets.detectTime((pi == 0 ? sc.title + " । " : "") + firstDir, fromSetting >= 0 ? fromSetting : fallback);
         if (seg.set == Sets.CAVE_IN) seg.tod = Sets.NIGHT;
         if (seg.set == Sets.BASEMENT) seg.tod = Sets.NIGHT;      // a closed basement knows no daylight
         seg.festive = Txt.has(where, "सजा", "रोशनियों", "ढोल", "उत्सव", "जश्न", "celebrat", "festiv");
@@ -1352,6 +1363,9 @@ public final class Director {
         Film.Speak s = new Film.Speak();
         s.t0 = start; s.t1 = end; s.line = line.index; s.emotion = line.emotion; s.mount = mountLine;
         sp.speaks.add(s);
+        // v36: a phone call goes on while its caller speaks (the phone stays at the ear through the line)
+        Film.Act call = null;
+        for (Film.Act ac : sp.acts) if (ac.type == Film.G_TASK && ac.item == Film.T_PHONE && ac.t1 > start - 2f && ac.t0 < start) call = ac;
         // v35: a character who cannot speak (or signs) says the line in sign language: the hands sign, the lips stay still
         boolean signs = !mountLine && sp.look != null && sp.look.signs();
         line.signed = signs;
@@ -1361,6 +1375,7 @@ public final class Director {
             // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
             mannerActions(sp, to, b.manner, start, end, line.emotion);
         }
+        if (call != null) { call.t1 = Math.max(call.t1, end + 0.4f); sp.acts.remove(call); sp.acts.add(call); }
         cuesFrom(b.manner, start, sp, to, null);
         if (!mountLine) headwearFromWords(sp, to, b.text, start);
         if (line.emotion == Pose.SAD && !mountLine) { Film.Key k = sp.at(start); k.tears = true; }
@@ -2847,6 +2862,12 @@ public final class Director {
             group.clear();
             for (Story.CharacterDef c : lastGroup) { Film.Actor a = actor(c); if (a != null) group.add(a); }
         }
+        // v36: "सब / सभी / everyone" with no one named is everyone on the stage ("सब अलाव के पास बैठ जाते हैं")
+        if (ms.isEmpty() && Txt.has(" " + s + " ", " सब ", " सभी ", "everyone", "everybody", " all of them", " they all ") && seg != null) {
+            group.clear();
+            if (subj != null && subj.stateAt(t).visible) group.add(subj);
+            for (Film.Actor a : seg.actors) if (a != subj && a.stateAt(t).visible && a.look != null) group.add(a);
+        }
         float d = 1.4f;
         boolean focusSet = false;
         // thought before action (handbook ch. 6): a sound or a sudden sight is perceived first — a pause, the head
@@ -2961,6 +2982,13 @@ public final class Director {
         }
         d = Math.max(d, postureFrom(s, t, subj, group));
         if (mealCU != null) { camOn(mealCU, mealCUt, 2.4f); focusSet = true; mealCU = null; mealCloseUps++; }
+        // v36: lighting diyas, candles or a fire is shown — a frame low and wide enough to see the flames catch
+        if (!focusSet && Txt.has(s, "जला", "जलाती", "जलाता", "जलाते", "light", "lit ", "kindle") && (Txt.has(s, DIYA) || Txt.has(s, CANDLE) || Txt.has(s, TORCH) || Txt.has(s, FIRE))) {
+            boolean high = Txt.has(s, TORCH);
+            cam(t + 0.1f, 640, ground - (high ? 300 : 170), 1.0f, 0.5f);
+            focusSet = true;
+            lightingShots++;
+        }
         if (Txt.has(s, "मसल") && subj != null) { Film.Key k = subj.at(t); k.holdR = Pose.I_FLOWER; subj.acts.add(new Film.Act(t + 0.5f, t + 2f, Film.G_CRUSH)); Film.Key k2 = subj.at(t + 2f); k2.holdR = Pose.I_NONE; d = Math.max(d, 2.2f); }
         if (Txt.has(s, "आँखें") && Txt.has(s, "धधक", "दहक", "चमक") && subj != null && !subj.look.hero) {
             camOn(subj, t, 1.9f); focusSet = true; film.sfx.add(new Film.Sfx(Film.SFX_ROAR, t, 1.2f, 0.25f));
@@ -4069,6 +4097,7 @@ public final class Director {
             d = Math.max(d, 1.2f);
         }
         d = Math.max(d, mealFrom(s, t, who));
+        d = Math.max(d, taskFrom(s, t, who));
         if (Txt.has(s, BOW)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
         if (Txt.has(s, WAVE)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.8f, Film.G_WAVE)); d = Math.max(d, 1.6f); }
         if (Txt.has(s, NOD)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.2f, Film.G_NOD)); d = Math.max(d, 1.2f); }
@@ -4084,7 +4113,7 @@ public final class Director {
     }
 
     /** v35: what the everyday-action passes did (the shot list's line). */
-    private int sittings, risings, sleepers, wakings, meals, drinks, waistUp, mealCloseUps;
+    private int sittings, risings, sleepers, wakings, meals, drinks, waistUp, mealCloseUps, lightingShots;
     /**
      * v35: one drawn from the user's photo who eats or drinks: its arm cannot bend to the mouth, so the action is shown
      * in a close-up, the cup or the morsel coming up into the frame to the lips (Renderer.drawToLips).
@@ -4165,6 +4194,65 @@ public final class Director {
             d = Math.max(d, 4.7f);
         }
         return d;
+    }
+
+    // v36: everyday tasks, as the story names them
+    static final String[] COOK = {"खाना बना", "खाना पका", "पकाती", "पकाता", "पकाते", "रोटी बना", "रोटियाँ बना", "सब्ज़ी बना", "सब्जी बना", "दाल बना", "चाय बना", "हलवा बना",
+            "कड़ाही में", "चूल्हे पर", "cooks", "cooking", "is making tea", "makes tea", "stirs the", "stirring the"};
+    static final String[] SWEEP = {"झाड़ू लगा", "झाड़ू दे", "झाड़ू से", "झाड़ू मार", "sweeps", "sweeping"};
+    static final String[] WASH = {"कपड़े धो", "बर्तन धो", "बर्तन माँज", "बर्तन मांज", "washes clothes", "washing clothes", "washes the clothes", "washes the dishes",
+            "washing the dishes", "washes dishes", "does the dishes", "does the laundry"};
+    static final String[] READ = {"किताब पढ़", "पुस्तक पढ़", "अख़बार पढ़", "अखबार पढ़", "पढ़ाई कर", "पढ़ रहा", "पढ़ रही", "पढ़ रहे", "reads a", "reads the", "reading a",
+            "reading the", "reads his", "reads her", "reads the newspaper", "is reading", "studies", "studying"};
+    static final String[] WRITE = {"लिख रहा", "लिख रही", "लिख रहे", "लिखता है", "लिखती है", "लिखने लग", "होमवर्क कर", "चिट्ठी लिख", "पत्र लिख", "writes a", "writes in", "writing a",
+            "is writing", "does her homework", "does his homework", "doing homework"};
+    static final String[] PHONE = {"फ़ोन पर बात", "फोन पर बात", "फ़ोन उठा", "फोन उठा", "फ़ोन करता", "फ़ोन करती", "फोन करता", "फोन करती", "मोबाइल पर बात", "on the phone",
+            "answers the phone", "picks up the phone", "makes a call", "phone call", "calls on the phone"};
+    static final String[] BRUSH = {"ब्रश कर", "दाँत साफ", "दांत साफ", "दाँत माँज", "brushes his teeth", "brushes her teeth", "brushes their teeth", "brushing teeth",
+            "brushing his teeth", "brushing her teeth", "brushes teeth"};
+    static final String[] COMB = {"कंघी कर", "कंघा कर", "बाल बना", "बाल सँवार", "बाल संवार", "combs", "combing"};
+    static final String[] WATER_PLANTS = {"पौधों को पानी", "पौधे को पानी", "पौधों में पानी", "पेड़ों को पानी", "waters the plants", "waters the plant", "watering the plants",
+            "waters the garden", "waters the flowers"};
+
+    /** v36: what the everyday-task pass did. */
+    private int tasks;
+
+    /**
+     * v36: an everyday task, as the story tells it: cooking (a ladle stirring a pot on a stove, oil sizzling, steam),
+     * sweeping (bent over a broom, swishes, a little dust), washing clothes or dishes (bent over a bucket, water
+     * sloshing), reading (a book held up, the head down, a page turned now and then), writing (a notebook and a pen,
+     * pen on paper heard), a phone call (the phone at the ear), brushing teeth, combing hair, watering plants (a
+     * watering can, water falling on a potted plant). Each takes about four seconds of the story; a photo character
+     * holds the tool at its hand (its arm cannot bend), and a phone or a toothbrush is shown at the face in a close-up.
+     */
+    private float taskFrom(String s, float t, List<Film.Actor> who) {
+        String sp = " " + s + " ";
+        int kind = Txt.has(sp, COOK) ? Film.T_COOK : Txt.has(sp, SWEEP) ? Film.T_SWEEP : Txt.has(sp, WASH) ? Film.T_WASH : Txt.has(sp, WRITE) ? Film.T_WRITE
+                : Txt.has(sp, READ) ? Film.T_READ : Txt.has(sp, PHONE) ? Film.T_PHONE : Txt.has(sp, BRUSH) ? Film.T_BRUSH : Txt.has(sp, COMB) ? Film.T_COMB
+                : Txt.has(sp, WATER_PLANTS) ? Film.T_WATER : 0;
+        if (kind == 0 || negated(s)) return 0;
+        if (kind == Film.T_READ && Txt.has(sp, "अख़बार", "अखबार", "newspaper")) kind = Film.T_PAPER;
+        float dur = kind == Film.T_PHONE ? 3.2f : kind == Film.T_COMB ? 3f : 4.2f;
+        for (Film.Actor a : who) {
+            if (a.look == null || !a.look.isHumanoid()) continue;
+            Film.Act act = new Film.Act(t + 0.2f, t + 0.2f + dur, Film.G_TASK);
+            act.item = kind;
+            a.acts.add(act);
+            float st = t + 0.35f, len = dur - 0.3f;
+            switch (kind) {
+                case Film.T_COOK: film.sfx.add(sfxAt(Film.SFX_SIZZLE, st, len, 0.3f, a)); break;
+                case Film.T_SWEEP: film.sfx.add(sfxAt(Film.SFX_SWEEP, st, len, 0.35f, a)); break;
+                case Film.T_WASH: film.sfx.add(sfxAt(Film.SFX_SCRUB, st, len, 0.35f, a)); break;
+                case Film.T_READ: case Film.T_PAPER: for (float pt = 1.4f; pt < dur; pt += 2.6f) film.sfx.add(sfxAt(Film.SFX_PAGE, t + 0.2f + pt, 0.4f, 0.3f, a)); break;
+                case Film.T_WRITE: film.sfx.add(sfxAt(Film.SFX_SCRIBBLE, st, len, 0.3f, a)); break;
+                case Film.T_BRUSH: film.sfx.add(sfxAt(Film.SFX_BRUSH, st, len, 0.3f, a)); break;
+                case Film.T_WATER: film.sfx.add(sfxAt(Film.SFX_POUR, st + 0.3f, len - 0.3f, 0.3f, a)); break;
+                default:
+            }
+            tasks++;
+            if (who.size() == 1 && photo(a) && (kind == Film.T_PHONE || kind == Film.T_BRUSH)) { mealCU = a; mealCUt = t + 0.1f; }
+        }
+        return dur + 0.3f;
     }
 
     /** The AI's cues for a line, without the events the text itself already sets off (no double lightning or stones). */

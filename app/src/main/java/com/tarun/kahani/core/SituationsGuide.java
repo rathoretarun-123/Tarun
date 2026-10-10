@@ -12,7 +12,7 @@ import java.util.Locale;
 public final class SituationsGuide {
     private SituationsGuide() {}
 
-    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34–v35)";
+    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34–v36)";
 
     /** {the rule, where the studio applies it}. */
     public static final String[][] RULES = {
@@ -24,7 +24,7 @@ public final class SituationsGuide {
             {"Frame a seated character at their own eye level", "Director.camOn: a character in a wheelchair or on a chair is framed at their eye height, the camera never looking down on them; close-ups by the face (faceCam) as for everyone"},
             {"A blindfolded character does not look", "Director.pointOfView: no point-of-view shot for a blindfold; she turns toward the sound and listens; no blinks painted over a blindfold, dark glasses or an eye patch (Renderer)"},
             {"Weather touches the characters", "Renderer: an umbrella opens over the head of whoever carries one while it rains outdoors, and keeps them dry; rain drums on it (Director.umbrellaRain); wet ground shows a faint reflection under the feet"},
-            {"Light grounds the characters", "Renderer.sunShadow: under the open sky the sun casts each character's soft shadow across the ground — long in the morning and evening, short at noon, away from the sun (the rim light's side), none at night, indoors, or under rain, cloud, fog or snow; the park, the street, the rooftop and the festival ground count as under the sky (Renderer.sunlit)"},
+            {"Light grounds the characters", "Renderer.sunShadow: under the open sky the sun casts each character's soft shadow across the ground — long in the morning and evening, short at noon, away from the sun (the rim light's side), at night only a faint one from the moon (v36), none indoors or under rain, cloud, fog or snow; the park, the street, the rooftop and the festival ground count as under the sky (Renderer.sunlit)"},
             {"Eyes on whoever speaks", "Renderer.gaze: a listener's eyes go to the one speaking, a speaker's to the one nearest; between, a small quick shift of the eyes every one and a half to two and a half seconds (fewer and smaller while they rest on someone); in a photograph the iris moves inside the face mesh while the corners of the eyes stay (Rig.faceMesh), in a drawn character the pupils move — so the shot list's GAZE line is what the frames do"},
             {"Stage directions move people", "Director.travelFrom: \"runs across the grass\" runs to the other side, \"walks slowly home\", \"runs out of the room\" or \"घर चला जाता है\" walks off the stage and is gone (only to the edge when they speak again in the scene), \"comes back\" or \"वापस आती है\" walks back in after a moment off the stage (in the new clothes when they changed), \"runs to Maya\" ends beside her; running only when the words say so and never faster than the body allows; the sample story's own staging is never doubled"},
             {"Everyone looks at what matters", "Director.watch, Renderer.gaze: someone walking in, walking off, coming back, revealed in new clothes, hurt or healed is watched by everyone on the stage; one standing with their back to it who is free turns round, a quick turn; after an exit they look after them a moment; a blindfolded character listens toward it instead"},
@@ -44,6 +44,13 @@ public final class SituationsGuide {
             {"Seated means on the seat", "Puppet.seatHeight: a drawn character's hips rest on the seat's top (a chair 0.30 of their height, a sofa 0.27, a bed 0.28, a throne 0.335), the knees forward and the shins down to the floor; on the floor cross-legged, on a mat indoors; a child's furniture is a child's size; the seat is under the sitter, only armrests come in front; Rig: a photo's thighs (or a saree's lap) fold towards the camera, on the floor the shins fold under too"},
             {"Eating and drinking", "Director.mealFrom: a plate in one hand, the other to the mouth and back with chewing; a cup, a glass or a bottle raised to the lips (tea steams; a bottle tips back further), a sip or gulps heard, the cup set down with a clink; a photo cannot bend its arm, so the director shows it in a close-up where the cup or a morsel comes up into the frame to the lips in a hand of the character's own skin (Renderer.drawToLips)"},
             {"Ask for the picture that shows it", "Director.poseNeeds, AutoLibrary: one who sits or lies down in the story and has only a standing photo is asked (optionally — the film never waits for it) for a picture of them sitting or lying; the user's own pictures are always used first (Casting); meanwhile a seated speaker from a standing photo is framed from the waist up"},
+            // v36
+            {"Wind moves what hangs and grows", "Renderer: outdoors a gust field (Nature.gustField) moves each character's hair, a saree's pallu, a dupatta and a cloak (Puppet.clothTail: the tip lags the root and flutters), an animal's fur, mane and tail (Rig, Puppet.drawAnimal); indoors nothing blows"},
+            {"Flames look like flames", "Nature.fire, Nature.tongue: layered tongues (a dark red outside, orange, a yellow-white core) that rise, narrow, flicker and lean with the wind; sparks and smoke drift the same way; a diya's and a torch's flame the same"},
+            {"Fire lights and casts shadows", "Renderer.gatherLights: a fire, diyas, candles and torches light the scene in a warm pool that is strongest near them (at night the dark gathers away from them), each character gets a warm rim on the side of the fire and a shadow on the ground away from it (Renderer.fireShadow); a fire belongs to its own part and does not leak into the next"},
+            {"Sun and moon cast shadows", "Renderer.sunShadow: the sun's shadow long in the morning and evening and short at noon; at night under the moon a faint cool shadow; the time of day is read from the place line (\"रात का समय\", \"सुबह\", \"evening\")"},
+            {"Lighting a lamp is shown", "Director: \"दीया जलाती है\", lighting candles, a torch or a fire gets a frame low and wide enough to see the flames catch"},
+            {"Everyday tasks with their tools and sounds", "Director.taskFrom: cooking at a stove (a ladle stirring a kadhai, the gas flame, steam, sizzling), sweeping with a jhadu (the swish), washing dishes at a bucket (scrubbing), reading a book or a newspaper (pages turning), writing in a notebook (the pen scratching), a phone call (the phone stays at the ear through the call's lines), brushing teeth, combing hair, watering plants (the stream from the can, pouring)"},
     };
 
     /** What these rules cannot do on a phone, said plainly. */
@@ -56,6 +63,9 @@ public final class SituationsGuide {
             {"A photo's arm to the mouth", "a photo's arm does not bend: the cup or the morsel reaches the lips only in a close-up, where the hand at the hip is out of the frame; when the picture is too small for a close-up, the cup stays in the hand"},
             {"Wind in a photo of a place", "the plants are found by their colour and texture, so a green wall or a painted tree may sway a little and a dry brown bush may not"},
             {"Fingers and missing limbs on a photo", "fewer fingers are drawn only on drawn characters (and asked of an AI picture maker in words); a photo is never cut — a missing arm or leg on a photo shows as the photo shows it"},
+            // v36
+            {"A photo's tools", "a photo's arm does not bend: a phone goes to the ear and a toothbrush to the mouth in a hand of the photo's own skin; a ladle, a broom or a newspaper is drawn at the photo's hand, which does not stir or sweep"},
+            {"Light from a fire", "a warm pool, a rim and a soft shadow on the ground — not light bouncing off every surface; a photo is tinted, not relit"},
     };
 
     public static final String SUMMARY;

@@ -3954,4 +3954,229 @@ public class AppTest {
         // the film never waits for these (the make-film check lists characters and places only)
         for (String[] t : (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingTargets", p, st)) assertTrue(!t[0].startsWith("pose:"));
     }
+
+    // ================================================================== v36
+
+    /** v36 (the user: "other everyday tasks"): a story of household tasks. */
+    static final String TASKS = "पात्र और रूप-रंग (Characters):\n"
+            + "1. माँ (35 वर्ष):\n"
+            + " * चेहरा: लंबे बाल, जूड़ा।\n"
+            + " * पहनावा: लाल साड़ी।\n"
+            + "2. दादी (65 वर्ष):\n"
+            + " * चेहरा: सफ़ेद बाल, जूड़ा।\n"
+            + " * पहनावा: हरी साड़ी।\n"
+            + "3. पापा (40 वर्ष):\n"
+            + " * चेहरा: छोटी मूँछें।\n"
+            + " * पहनावा: नीली कमीज़ और पतलून।\n"
+            + "4. गुड़िया (9 वर्ष):\n"
+            + " * चेहरा: दो चोटियाँ।\n"
+            + " * पहनावा: पीली फ्रॉक।\n"
+            + "5. भैया (15 वर्ष):\n"
+            + " * चेहरा: छोटे बाल।\n"
+            + " * पहनावा: हरी टी-शर्ट।\n"
+            + "6. दादाजी (70 वर्ष):\n"
+            + " * चेहरा: सफ़ेद मूँछें, चश्मा।\n"
+            + " * पहनावा: सफ़ेद कुर्ता।\n"
+            + "\n"
+            + "दृश्य 1: घर की रसोई\n"
+            + "(स्थान: घर की रसोई। सुबह का समय।)\n"
+            + "(माँ रसोई में खाना बनाती है।)\n"
+            + "माँ: \"आज आलू के पराठे बन रहे हैं।\"\n"
+            + "(दादी झाड़ू लगाती है।)\n"
+            + "दादी: \"घर साफ़ तो मन साफ़।\"\n"
+            + "(गुड़िया बर्तन धोती है।)\n"
+            + "\n"
+            + "दृश्य 2: घर का कमरा\n"
+            + "(स्थान: घर का कमरा। सुबह का समय।)\n"
+            + "(पापा कुर्सी पर बैठकर अख़बार पढ़ते हैं।)\n"
+            + "पापा: \"आज बारिश होगी।\"\n"
+            + "(गुड़िया ज़मीन पर बैठकर होमवर्क लिखती है।)\n"
+            + "(भैया फ़ोन पर बात करता है।)\n"
+            + "भैया: \"हाँ दोस्त, मैं शाम को आऊँगा।\"\n"
+            + "(गुड़िया दाँत ब्रश करती है।)\n"
+            + "(माँ कंघी से बाल संवारती है।)\n"
+            + "\n"
+            + "दृश्य 3: घर का आँगन\n"
+            + "(स्थान: घर का आँगन। शाम का समय।)\n"
+            + "(दादाजी पौधों को पानी देते हैं।)\n"
+            + "दादाजी: \"पौधे भी प्यासे होते हैं।\"\n"
+            + "(माँ दीया जलाती है।)\n"
+            + "\n"
+            + "समाप्त\n"
+            + "\n";
+
+    /** v36 (the user: "wind effect on dresses and hair, fur of animal; fire should light things and make shadows"). */
+    static final String FIREWIND = "पात्र और रूप-रंग (Characters):\n"
+            + "1. माँ (35 वर्ष):\n"
+            + " * चेहरा: लंबे बाल, जूड़ा।\n"
+            + " * पहनावा: लाल साड़ी।\n"
+            + "2. गुड़िया (9 वर्ष):\n"
+            + " * चेहरा: खुले लंबे बाल।\n"
+            + " * पहनावा: पीला लहंगा और हरा दुपट्टा।\n"
+            + "3. पापा (40 वर्ष):\n"
+            + " * चेहरा: छोटी मूँछें।\n"
+            + " * पहनावा: सफ़ेद कुर्ता।\n"
+            + "4. शेरू (शेर):\n"
+            + " * शरीर: सुनहरा शेर, घने बाल वाला अयाल।\n"
+            + "\n"
+            + "दृश्य 1: गाँव का मैदान\n"
+            + "(स्थान: गाँव का खुला मैदान। दोपहर का समय। तेज़ हवा चल रही है।)\n"
+            + "(माँ और गुड़िया मैदान में खड़ी हैं। हवा में उनके बाल और दुपट्टा उड़ रहे हैं।)\n"
+            + "गुड़िया (खुशी से): \"माँ, देखो कितनी तेज़ हवा है!\"\n"
+            + "माँ (मुस्कुराकर): \"दुपट्टा संभालो बेटा।\"\n"
+            + "(शेरू पास में बैठा है। उसका अयाल हवा में लहरा रहा है।)\n"
+            + "शेरू: \"आज हवा बहुत अच्छी है।\"\n"
+            + "\n"
+            + "दृश्य 2: गाँव का मैदान\n"
+            + "(स्थान: गाँव का खुला मैदान। रात का समय।)\n"
+            + "(पापा आग जलाते हैं। सब अलाव के पास बैठ जाते हैं।)\n"
+            + "पापा: \"आओ, आग के पास बैठो, ठंड है।\"\n"
+            + "गुड़िया (धीरे से): \"आग की लपटें कितनी सुंदर हैं।\"\n"
+            + "\n"
+            + "दृश्य 3: घर का कमरा\n"
+            + "(स्थान: घर का कमरा। रात का समय।)\n"
+            + "(माँ दीये जलाती है।)\n"
+            + "माँ: \"दिवाली मुबारक हो!\"\n"
+            + "गुड़िया (खुशी से): \"दिवाली मुबारक!\"\n"
+            + "\n"
+            + "समाप्त\n"
+            + "\n";
+
+    /**
+     * v36: everyday tasks — cooking, sweeping, washing, reading (a newspaper), writing, a phone call, brushing teeth,
+     * combing hair, watering plants — each an act with its tool and its sound; the call lasts through the caller's line.
+     */
+    @Test
+    public void v36EverydayTasks() {
+        Film film = directed(ScriptParser.parse(TASKS));
+        keysInOrder(film);
+        java.util.Set<Integer> kinds = new java.util.HashSet<Integer>();
+        Film.Act call = null; Film.Actor caller = null;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) if (act.type == Film.G_TASK) {
+            kinds.add(act.item);
+            if (act.item == Film.T_PHONE) { call = act; caller = a; }
+        }
+        int[] want = {Film.T_COOK, Film.T_SWEEP, Film.T_WASH, Film.T_PAPER, Film.T_WRITE, Film.T_PHONE, Film.T_BRUSH, Film.T_COMB, Film.T_WATER};
+        for (int k : want) assertTrue("task " + k + " is acted: " + kinds, kinds.contains(k));
+        assertNotNull(call);
+        boolean through = false;
+        for (Film.Speak sp : caller.speaks) if (sp.t0 >= call.t0 && sp.t1 <= call.t1) through = true;
+        assertTrue("the phone stays at the ear through the line said into it (" + call.t0 + "-" + call.t1 + ")", through);
+        java.util.Set<Integer> heard = new java.util.HashSet<Integer>();
+        for (Film.Sfx x : film.sfx) heard.add(x.type);
+        int[] sounds = {Film.SFX_SIZZLE, Film.SFX_SWEEP, Film.SFX_SCRUB, Film.SFX_PAGE, Film.SFX_SCRIBBLE, Film.SFX_BRUSH, Film.SFX_POUR};
+        for (int s : sounds) assertTrue("sound " + s + " is heard", heard.contains(s));
+        assertTrue("the shot list reports it", film.shotList.contains("Everyday tasks (v36)"));
+        // every task frame draws (the tools, the stove, the bucket, the plant) without failing, and is not blank
+        Renderer r = new Renderer(film, new Art());
+        Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) if (act.type == Film.G_TASK) {
+            r.render(g, (act.t0 + act.t1) / 2);
+            int distinct = 0, last = 0;
+            for (int y = 0; y < 720; y += 13) for (int x = 0; x < 1280; x += 13) { int c = bmp.getPixel(x, y); if (c != last) { distinct++; last = c; } }
+            assertTrue("task " + act.item + " frame not blank", distinct > 50);
+        }
+        g.release();
+        // "not" keeps it from happening
+        Film none = directed(ScriptParser.parse("पात्र:\n1. माँ (35 वर्ष):\n * पहनावा: लाल साड़ी।\n\nदृश्य 1: रसोई\n(स्थान: घर की रसोई। सुबह।)\n(माँ आज खाना नहीं बनाती है।)\nमाँ: \"आज छुट्टी है।\"\n\nसमाप्त\n"));
+        for (Film.Seg sg : none.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) assertTrue("a negated task is not acted", act.type != Film.G_TASK);
+    }
+
+    /** v36: a flame is layered (a hot pale core inside orange and red), rises above its base and leans with the wind. */
+    @Test
+    public void v36FlamesLookLikeFlames() {
+        float[] lean = new float[2];
+        for (int w = 0; w < 2; w++) {
+            Bitmap bmp = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 2);
+            g.color(0xFF000000); g.rect(0, 0, 240, 240);
+            Nature.fire(g, 120, 220, 3.3f, 1f, w == 0 ? 0f : 1f);
+            int core = 0, outer = 0, top = 240; float sx = 0, n = 0;
+            for (int y = 0; y < 240; y++) for (int x = 0; x < 240; x++) {
+                int c = bmp.getPixel(x, y), rr = c >> 16 & 255, gg = c >> 8 & 255, bb = c & 255;
+                if (rr > 230 && gg > 190) core++;
+                else if (rr > 150 && gg < 150 && bb < 90) outer++;
+                if (rr > 140 && rr > bb + 60) { top = Math.min(top, y); if (y < 200) { sx += x; n++; } }
+            }
+            assertTrue("a pale hot core (" + core + ") and a red-orange outside (" + outer + ")", core > 20 && outer > 20);
+            assertTrue("the flame rises well above its base (top " + top + ")", top < 175);
+            lean[w] = n > 0 ? sx / n : 120;
+            g.release();
+        }
+        System.out.println("FLAME v36: centre of the flame above the base, still " + lean[0] + ", in wind " + lean[1]);
+        assertTrue("the wind leans the flame (" + lean[0] + " -> " + lean[1] + ")", lean[1] > lean[0] + 2);
+    }
+
+    /** v36: the wind blows a saree's pallu, a dupatta and hair outdoors; the cloth flutters from frame to frame. */
+    @Test
+    public void v36WindBlowsClothes() {
+        Story st = ScriptParser.parse(FIREWIND);
+        Look maa = null, girl = null;
+        for (Story.CharacterDef c : st.characters) { if (c.displayName.equals("माँ")) maa = c.look; if (c.displayName.equals("गुड़िया")) girl = c.look; }
+        assertNotNull(maa); assertNotNull(girl);
+        for (Look look : new Look[]{maa, girl}) {
+            int[][] px = new int[3][];
+            float[] winds = {0f, 1.2f, 1.2f}, times = {1f, 1f, 1.4f};
+            for (int i = 0; i < 3; i++) {
+                Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
+                AndroidGfx g = new AndroidGfx(bmp, 2);
+                g.color(0xFFFFFFFF); g.rect(0, 0, 300, 300);
+                g.save(); g.translate(150, 280);
+                Pose p = new Pose(); p.reset(); p.facing = 1; p.wind = winds[i]; p.time = times[i];
+                Puppet.draw(g, look, p, 240);
+                g.restore();
+                px[i] = new int[300 * 300]; bmp.getPixels(px[i], 0, 300, 0, 0, 300, 300);
+                g.release();
+            }
+            int blown = 0, flutter = 0;
+            for (int i = 0; i < px[0].length; i++) { if (px[0][i] != px[1][i]) blown++; if (px[1][i] != px[2][i]) flutter++; }
+            System.out.println("WIND v36: " + look + " pixels moved by the wind " + blown + ", from frame to frame " + flutter);
+            assertTrue("the wind moves the clothes and hair (" + blown + ")", blown > 400);
+            assertTrue("the cloth flutters (" + flutter + ")", flutter > 60);
+        }
+    }
+
+    /**
+     * v36: "रात का समय" in the place line makes the part night; "सब बैठ जाते हैं" seats everyone; the fire lights the
+     * night (warm light near it, darker far from it) and belongs to its own part; diyas being lit get their shot.
+     */
+    @Test
+    public void v36FireLightsTheNight() {
+        Film film = directed(ScriptParser.parse(FIREWIND));
+        keysInOrder(film);
+        assertTrue("three parts", film.segs.size() >= 3);
+        Film.Seg day = null, fire = null, room = null;
+        for (Film.Seg sg : film.segs) {
+            if (sg.actors.isEmpty()) continue;
+            if (day == null) day = sg; else if (fire == null) fire = sg; else if (room == null) room = sg;
+        }
+        assertNotNull(room);
+        assertTrue("the windy afternoon is day", day.tod != Sets.NIGHT);
+        assertTrue("\"रात का समय\" makes the campfire part night", fire.tod == Sets.NIGHT);
+        assertTrue("and the room part", room.tod == Sets.NIGHT);
+        int seated = 0;
+        for (Film.Actor a : fire.actors) for (Film.Key k : a.keys) if (k.body == Pose.SIT) { seated++; break; }
+        assertTrue("everyone sits by the fire (" + seated + " of " + fire.actors.size() + ")", seated >= 2 && seated == fire.actors.size());
+        assertTrue("the diyas being lit get their shot", film.shotList.contains("Everyday tasks (v36)") && !film.shotList.contains("; 0 shots framed on a lamp"));
+        Renderer r = new Renderer(film, new Art());
+        Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        float[] warm = new float[3];
+        Film.Seg[] parts = {day, fire, room};
+        for (int i = 0; i < 3; i++) {
+            r.render(g, (parts[i].t0 + parts[i].t1) / 2);
+            int n = 0;
+            for (int y = 0; y < 720; y += 6) for (int x = 0; x < 1280; x += 6) {
+                int c = bmp.getPixel(x, y), rr = c >> 16 & 255, gg = c >> 8 & 255, bb = c & 255;
+                if (rr > 170 && rr > bb + 70 && gg > 80) n++;
+            }
+            warm[i] = n;
+        }
+        // the end of the campfire part fades into the room: the fire is not drawn there
+        g.release();
+        System.out.println("FIRE v36: warm firelit samples — day " + warm[0] + ", campfire " + warm[1] + ", diyas " + warm[2]);
+        assertTrue("the night by the fire has warm, lit places (" + warm[1] + ")", warm[1] > 60);
+        assertTrue("the diyas light the room (" + warm[2] + ")", warm[2] > 20);
+    }
 }

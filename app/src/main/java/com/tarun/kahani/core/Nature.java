@@ -568,36 +568,31 @@ public final class Nature {
     }
 
     /** A campfire: logs, flickering flames, sparks rising and smoke. */
-    public static void fire(Gfx g, float x, float ground, float t, float size) {
-        float s = size;
+    public static void fire(Gfx g, float x, float ground, float t, float size) { fire(g, x, ground, t, size, 0); }
+
+    /** v36: wind bends the flames, the sparks and the smoke away from where it blows from. */
+    public static void fire(Gfx g, float x, float ground, float t, float size, float wind) {
+        float s = size, lean = Math.max(-0.7f, Math.min(0.7f, wind * 0.6f));
         g.color(0xFF4E342E);
         g.save(); g.translate(x, ground - 6 * s); g.rotate(14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
         g.save(); g.translate(x, ground - 6 * s); g.rotate(-14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
         // glow on the ground
         g.radial(x, ground - 20 * s, 160 * s, 0x60FF9A30, 0x00FF9A30);
         g.rect(x - 160 * s, ground - 180 * s, 320 * s, 340 * s);
-        // flames: tongues that flicker
-        int[] cols = {0xFFFF5722, 0xFFFF9800, 0xFFFFC107, 0xFFFFF59D};
-        for (int layer = 0; layer < 4; layer++) {
-            float sc = 1 - layer * 0.22f;
-            for (int k = -2; k <= 2; k++) {
-                float fl = (float) (Math.sin(t * (9 + k) + k * 1.7 + layer) * 0.18 + Math.sin(t * 17 + k) * 0.08);
-                float hgt = (70 + 20 * (2 - Math.abs(k))) * s * sc * (1 + fl);
-                float bx = x + k * 13 * s * sc;
-                g.begin();
-                g.moveTo(bx - 14 * s * sc, ground - 8 * s);
-                g.quadTo(bx - 16 * s * sc, ground - hgt * 0.5f, bx + fl * 20 * s, ground - hgt);
-                g.quadTo(bx + 16 * s * sc, ground - hgt * 0.5f, bx + 14 * s * sc, ground - 8 * s);
-                g.close();
-                g.color(alpha(cols[layer], 0.85f));
-                g.fillPath();
-            }
+        // v36: flames that look like flames — tongues that rise along a travelling wave, narrow to a tip, lick off
+        // the top and fade; deep red at the edge, orange, yellow, a white-hot core at the base
+        for (int k = -3; k <= 3; k++) {
+            float side = Math.abs(k) / 3f;
+            float hgt = (95 - 38 * side) * s * (0.85f + 0.3f * rnd(k + 9, 5));
+            tongue(g, x + k * 11 * s, ground - 6 * s, (15 - 4 * side) * s, hgt, t, k * 7 + 3, lean, 1f);
         }
+        // the hot core low in the middle
+        tongue(g, x, ground - 6 * s, 20 * s, 55 * s, t * 1.1f, 101, lean, 0.6f);
         // sparks: thrown up, slowed by the air, fading
         for (int i = 0; i < 14; i++) {
             float life = 1.2f + rnd(i, 1);
             float age = (t + rnd(i, 2) * life) % life;
-            float sx = x + (rnd(i, 3) - 0.5f) * 40 * s + (float) Math.sin(age * 4 + i) * 10 * s;
+            float sx = x + (rnd(i, 3) - 0.5f) * 40 * s + (float) Math.sin(age * 4 + i) * 10 * s + lean * age * age * 60 * s;
             float sy = ground - 40 * s - age * (90 + rnd(i, 4) * 60) * s;
             g.color(alpha(0xFFFFD54F, 1 - age / life));
             g.oval(sx, sy, 2.2f * s, 2.2f * s);
@@ -606,7 +601,7 @@ public final class Nature {
         for (int i = 0; i < 6; i++) {
             float life = 4f;
             float age = (t + i * life / 6) % life;
-            float sy = ground - 110 * s - age * 45 * s, sx = x + (float) Math.sin(age + i) * 20 * s + age * 12 * s;
+            float sy = ground - 110 * s - age * 45 * s, sx = x + (float) Math.sin(age + i) * 20 * s + age * (12 + 50 * lean) * s;
             g.color(alpha(0xFF707070, 0.18f * (1 - age / life)));
             g.oval(sx, sy, (18 + age * 16) * s, (14 + age * 12) * s);
         }
@@ -798,18 +793,64 @@ public final class Nature {
         if (kind == 0) { g.color(0xFFF5EEDC); g.roundRect(x - 5 * size, y, 10 * size, 34 * size, 2 * size); }
         else if (kind == 1) { g.color(0xFFB5652B); g.oval(x, y + 5 * size, 13 * size, 5 * size); g.color(0xFF8C4A1E); g.oval(x, y + 7 * size, 11 * size, 3 * size); }
         else { g.color(0xFF5D3A1F); g.line(x, y, x - lean * 4, y + 70 * size, 6 * size); }
-        for (int layer = 0; layer < 3; layer++) {
-            float k = 1 - layer * 0.3f;
-            g.begin();
-            g.moveTo(x - w * k, y);
-            g.quadTo(x - w * 1.1f * k, y - h * 0.45f * k, x + lean * h * k, y - h * k);
-            g.quadTo(x + w * 1.1f * k, y - h * 0.45f * k, x + w * k, y);
-            g.close();
-            g.color(layer == 0 ? 0xE6FF7A1A : layer == 1 ? 0xF0FFC93C : 0xFFFFF7D0);
-            g.fillPath();
-        }
+        // v36: the flame itself, as a real one (a candle's is one calm tongue, a torch's three restless ones)
+        if (kind == 2) {
+            for (int k = -1; k <= 1; k++) tongue(g, x + k * w * 0.6f, y, w * (k == 0 ? 0.9f : 0.65f), h * (k == 0 ? 1f : 0.75f), t, seed * 5 + k + 1, lean, 1f);
+        } else tongue(g, x, y, w, h, t * (kind == 0 ? 0.7f : 0.85f), seed * 5, lean, 1f);
+        // the blue at the root of a flame
         g.color(0x993070FF);
         g.oval(x, y - 1, w * 0.4f, w * 0.35f);
+    }
+
+    /**
+     * v36: one tongue of flame. Its centre line rises along a travelling wave (the turbulence of hot air), so the
+     * sway grows with height and runs upwards; it is widest a fifth of the way up and narrows to a tip that flickers
+     * in height; now and then a small lick breaks off the top and rises, shrinking and fading; four colour layers
+     * from the deep red edge through orange and yellow to the white-hot core. lean: the wind's bend (+ to the right);
+     * core below 1 draws only the inner layers (a hot centre).
+     */
+    static void tongue(Gfx g, float bx, float base, float w, float h, float t, int seed, float lean, float core) {
+        float ph = rnd(seed, 1) * 6.283f, sp = 2.2f + rnd(seed, 2) * 1.2f;
+        float flick = 1 + 0.16f * (float) Math.sin(t * (10 + rnd(seed, 3) * 6) + ph) + 0.08f * (float) Math.sin(t * 23 + ph * 2);
+        float H = h * flick;
+        final int N = 10;
+        int[] cols = {0xD9C62A0A, 0xE6FF6A13, 0xF0FFB02E, 0xFFFFF1B8};
+        float[] widths = {1f, 0.78f, 0.55f, 0.3f}, heights = {1f, 0.86f, 0.66f, 0.42f};
+        for (int layer = core < 1 ? 1 : 0; layer < 4; layer++) {
+            float lw = w * widths[layer] * core, lh = H * heights[layer];
+            g.begin();
+            for (int pass = 0; pass < 2; pass++) {
+                for (int ii = 0; ii <= N; ii++) {
+                    int i = pass == 0 ? ii : N - ii;
+                    float f = i / (float) N;
+                    float cx = bx + flameWave(f, t, sp, ph) * w * 0.9f + lean * lh * f * f;
+                    float half = lw * flameProfile(f);
+                    float px = cx + (pass == 0 ? -half : half), py = base - lh * f;
+                    if (pass == 0 && ii == 0) g.moveTo(px, py); else g.lineTo(px, py);
+                }
+            }
+            g.close();
+            g.color(cols[layer]);
+            g.fillPath();
+        }
+        // a lick breaking off the top and rising
+        float life = 0.45f + rnd(seed, 4) * 0.3f, age = (t + rnd(seed, 5) * life) % life, u = age / life;
+        float ly = base - H * (0.95f + 0.6f * u), lx = bx + flameWave(1, t, sp, ph) * w * 0.9f + lean * H * (1 + u * 0.5f);
+        float lr = w * 0.35f * (1 - u);
+        if (lr > 0.5f) {
+            g.begin(); g.moveTo(lx, ly - lr * 2.2f); g.quadTo(lx + lr, ly - lr * 0.2f, lx, ly + lr * 0.6f); g.quadTo(lx - lr, ly - lr * 0.2f, lx, ly - lr * 2.2f); g.close();
+            g.color(alpha(0xFFFF9A2E, 0.85f * (1 - u))); g.fillPath();
+        }
+    }
+
+    /** v36: the sideways sway of a flame at height f (0 base .. 1 tip): it grows with height and travels upwards. */
+    static float flameWave(float f, float t, float sp, float ph) {
+        return f * f * (0.55f * (float) Math.sin(6.283f * (f * 1.3f - t * sp * 0.5f) + ph) + 0.25f * (float) Math.sin(6.283f * (f * 2.7f - t * sp) + ph * 1.7f));
+    }
+
+    /** v36: a flame's half-width at height f: round at the base, widest a fifth of the way up, a sharp tip. */
+    static float flameProfile(float f) {
+        return (float) (Math.sqrt(Math.min(1, f * 5)) * Math.pow(1 - f, 0.9));
     }
 
     /** Soft clouds drifting across the sky (dark and low in a storm). */

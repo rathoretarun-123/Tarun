@@ -11,7 +11,9 @@ public final class Pose {
     // held items
     public static final int I_NONE = 0, I_RIBBON = 1, I_BANANA = 2, I_MIRROR = 3, I_WOOD_SWORD = 4, I_BASKET = 5,
             I_FLOWER = 6, I_SWORD = 7, I_BOTTLE = 8, I_TURBAN = 9,
-            I_CUP = 10, I_GLASS = 11, I_PLATE = 12, I_TEA = 13;     // v35: a cup, a glass of water, a plate of food, a cup of hot tea (it steams)
+            I_CUP = 10, I_GLASS = 11, I_PLATE = 12, I_TEA = 13,     // v35: a cup, a glass of water, a plate of food, a cup of hot tea (it steams)
+            // v36: the tools of everyday tasks
+            I_LADLE = 14, I_BROOM = 15, I_BOOK = 16, I_PEN = 17, I_PHONE = 18, I_BRUSH = 19, I_COMB = 20, I_CAN = 21, I_NOTEBOOK = 22, I_PAPER = 23;
 
     public int body = STAND;
     public int emotion = NEUTRAL;

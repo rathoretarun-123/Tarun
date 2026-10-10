@@ -650,6 +650,8 @@ public final class Puppet {
                 g.color(lighten(l.primary, 0.08f)); g.fillPath();
                 g.color(l.secondary);
                 g.line(-hw * 0.3f, waistY + b.T * 0.42f, sw * 0.95f, shY + b.T * 0.05f, 5);
+                // v36: the pallu's free end streams from the shoulder in the wind
+                clothTail(g, sw * 0.9f, shY + b.T * 0.05f, b.T * 1.3f, b.T * 0.16f, p.wind, p.time, p.seed + 3, lighten(l.primary, 0.08f), l.secondary);
                 break;
             }
             case Look.O_SALWAR: {
@@ -1025,7 +1027,58 @@ public final class Puppet {
             g.color(alpha(dupattaColor, 0.92f)); g.fillPath();
             g.color(0xFFE8C04A);
             g.line(sw * 0.95f, shY + b.T * 0.02f, -b.hw * 0.75f, bottomY + b.T * 0.12f, 2.5f);
+            // v36: its free end over the shoulder streams in the wind
+            clothTail(g, sw * 0.92f, shY + b.T * 0.04f, b.T * 1.15f, b.T * 0.13f, p.wind, p.time, p.seed, alpha(dupattaColor, 0.92f), 0xFFE8C04A);
         }
+    }
+
+    /**
+     * v36: the loose end of a saree's pallu or a dupatta streaming in the wind. From the shoulder (x0, y0) it lifts
+     * towards where the wind blows, higher the stronger it is, and ripples along its length in waves that run out to
+     * the free end, its edge trembling; in still air it is not drawn (it hangs behind the back).
+     */
+    static void clothTail(Gfx g, float x0, float y0, float len, float wd, float wind, float t, long seedL, int color, int edge) {
+        int seed = (int) (seedL % 1000);
+        float w = Math.abs(wind);
+        if (w < 0.08f) return;
+        float a = Math.min(1, (w - 0.08f) / 0.25f), dir = wind >= 0 ? 1 : -1;
+        float lift = Math.min(1.25f, 0.35f + w * 0.9f);          // radians from hanging straight down
+        final int N = 8;
+        float[] xs = new float[N + 1], ys = new float[N + 1];
+        float x = x0, y = y0, step = len / N;
+        for (int i = 0; i <= N; i++) {
+            float f = i / (float) N;
+            float ang = lift * (0.6f + 0.4f * f) + 0.35f * f * (float) Math.sin(6.283f * (f * 1.4f - t * (1.6f + w)) + seed);
+            xs[i] = x; ys[i] = y;
+            x += dir * (float) Math.sin(ang) * step;
+            y += (float) Math.cos(ang) * step;
+        }
+        float[] nx = new float[N + 1], ny = new float[N + 1];
+        for (int i = 0; i <= N; i++) {
+            int i0 = Math.max(0, i - 1), i1 = Math.min(N, i + 1);
+            float dx = xs[i1] - xs[i0], dy = ys[i1] - ys[i0], d = (float) Math.max(1e-3, Math.hypot(dx, dy));
+            nx[i] = -dy / d; ny[i] = dx / d;
+        }
+        g.save();
+        g.setAlpha(a);
+        g.begin();
+        for (int i = 0; i <= N; i++) {
+            float hw = wd * (1 - 0.35f * i / (float) N) * (1 + 0.18f * (float) Math.sin(t * 9 + i + seed));
+            if (i == 0) g.moveTo(xs[i] + nx[i] * hw, ys[i] + ny[i] * hw); else g.lineTo(xs[i] + nx[i] * hw, ys[i] + ny[i] * hw);
+        }
+        for (int i = N; i >= 0; i--) {
+            float hw = wd * (1 - 0.35f * i / (float) N);
+            g.lineTo(xs[i] - nx[i] * hw, ys[i] - ny[i] * hw);
+        }
+        g.close();
+        g.color(color);
+        g.fillPath();
+        g.color(edge);
+        for (int i = 1; i <= N; i++) {
+            float h0 = wd * (1 - 0.35f * (i - 1) / (float) N), h1 = wd * (1 - 0.35f * i / (float) N);
+            g.line(xs[i - 1] - nx[i - 1] * h0, ys[i - 1] - ny[i - 1] * h0, xs[i] - nx[i] * h1, ys[i] - ny[i] * h1, 2.5f);
+        }
+        g.restore();
     }
 
     static void furStrokes(Gfx g, int fur, float x, float y, float w, float h, long seed) {
@@ -1275,6 +1328,142 @@ public final class Puppet {
             case Pose.I_TURBAN:
                 drawTurbanShape(g, hx, hy - 6, b.headR * 1.0f, p.turbanColor, p.turbanBand, false);
                 break;
+            default:
+                if (hold >= Pose.I_LADLE && hold <= Pose.I_PAPER) drawTool(g, hold, hx, hy, b.headR / 34f, p.facing, p.time, b.floorY);
+        }
+    }
+
+    /**
+     * v36: the tool of an everyday task held at the hand (x, y), k = scale (1 ≈ a child's head of 34 px), facing the
+     * way the character looks, floorY = where the floor is (a broom's bristles and a watering can's water reach it).
+     */
+    public static void drawTool(Gfx g, int item, float x, float y, float k, float facing, float t, float floorY) {
+        float f = facing < 0 ? -1 : 1;
+        switch (item) {
+            case Pose.I_LADLE: {
+                // a long-handled ladle: the handle up behind the hand, the bowl down in the pot
+                g.color(0xFF8D6E63); g.line(x - f * 10 * k, y - 16 * k, x + f * 10 * k, y + 20 * k, 3.2f * k);
+                g.color(0xFFB0BEC5); g.oval(x + f * 12 * k, y + 23 * k, 6 * k, 3.5f * k);
+                break;
+            }
+            case Pose.I_BROOM: {
+                // a jhadu: a bundle of grass from the hand down to the floor ahead, its bristles fanning on the floor
+                float bx = x + f * 26 * k, by = Math.max(y + 20 * k, floorY - 2);
+                g.color(0xFF8D6E63); g.line(x, y - 6 * k, x + f * 9 * k, y + 14 * k, 4.5f * k);
+                g.color(0xFFC8A464);
+                for (int i = -3; i <= 3; i++) g.line(x + f * 8 * k, y + 12 * k, bx + i * 4 * k + f * (float) Math.sin(t * 9) * 3 * k, by, 1.6f * k);
+                g.color(0xFF6D4C41); g.line(x + f * 6 * k, y + 10 * k, x + f * 11 * k, y + 16 * k, 3 * k);
+                break;
+            }
+            case Pose.I_BOOK: case Pose.I_NOTEBOOK: {
+                // an open book (or a notebook) held up, its two pages; a page lifts now and then
+                int cover = item == Pose.I_BOOK ? 0xFF8E2D2D : 0xFF2E5C8A;
+                g.color(cover); g.roundRect(x - 15 * k, y - 11 * k, 30 * k, 21 * k, 2 * k);
+                g.color(0xFFF7F3E8); g.rect(x - 13.5f * k, y - 10 * k, 13 * k, 18 * k); g.rect(x + 0.5f * k, y - 10 * k, 13 * k, 18 * k);
+                g.color(0x55000000); for (int i = 0; i < 5; i++) { g.line(x - 12 * k, y - 7 * k + i * 3 * k, x - 2 * k, y - 7 * k + i * 3 * k, 0.6f * k); g.line(x + 2 * k, y - 7 * k + i * 3 * k, x + 12 * k, y - 7 * k + i * 3 * k, 0.6f * k); }
+                float flip = (t % 2.6f) / 2.6f;
+                if (item == Pose.I_BOOK && flip < 0.18f) {
+                    float u = flip / 0.18f;
+                    g.color(0xFFFFFDF6); g.rect(x + 0.5f * k - 13 * k * u, y - 10 * k, 13 * k * (1 - 2 * Math.abs(u - 0.5f)) + 1, 18 * k);
+                }
+                break;
+            }
+            case Pose.I_PAPER: {
+                // a newspaper opened wide in both hands: grey columns, a headline, a photo block; it sways a little
+                k *= 1.35f;
+                float sw = (float) Math.sin(t * 1.3f) * 1.2f * k;
+                g.color(0xFFE9E6DC); g.rect(x - 30 * k, y - 22 * k + sw, 60 * k, 36 * k);
+                g.color(0x22000000); g.line(x, y - 22 * k + sw, x, y + 14 * k + sw, 1 * k);
+                g.color(0xFF3A3A3A); g.rect(x - 27 * k, y - 19 * k + sw, 24 * k, 3.2f * k); g.rect(x + 3 * k, y - 19 * k + sw, 22 * k, 3.2f * k);
+                g.color(0xFF9E9E9E); g.rect(x + 3 * k, y - 13 * k + sw, 11 * k, 9 * k);
+                g.color(0x66000000);
+                for (int i = 0; i < 7; i++) {
+                    float ly = y - 12 * k + i * 3.4f * k + sw;
+                    g.line(x - 27 * k, ly, x - 15 * k, ly, 0.7f * k); g.line(x - 14 * k, ly, x - 3 * k, ly, 0.7f * k);
+                    if (ly > y - 2 * k + sw) g.line(x + 3 * k, ly, x + 25 * k, ly, 0.7f * k);
+                }
+                break;
+            }
+            case Pose.I_PEN: { g.color(0xFF1565C0); g.line(x, y, x + f * 4 * k, y - 11 * k, 2 * k); g.color(0xFF212121); g.line(x, y, x - f * 0.6f * k, y + 2 * k, 1.2f * k); break; }
+            case Pose.I_PHONE: {
+                g.color(0xFF1E1E22); g.roundRect(x - 3.5f * k, y - 7 * k, 7 * k, 13 * k, 1.5f * k);
+                g.color(0xFF80D8FF); g.roundRect(x - 2.6f * k, y - 6 * k, 5.2f * k, 10.5f * k, 1 * k);
+                break;
+            }
+            case Pose.I_BRUSH: {
+                // a toothbrush: the handle and the bristles, a little foam
+                g.color(0xFF26A69A); g.line(x - f * 8 * k, y + 2 * k, x + f * 8 * k, y - 1 * k, 2.2f * k);
+                g.color(0xFFFFFFFF); g.rect(x + f * 6 * k - 2 * k, y - 4 * k, 4 * k, 3 * k);
+                g.color(0xCCFFFFFF); g.oval(x + f * 9 * k, y - 1 * k, 2.2f * k, 1.8f * k);
+                break;
+            }
+            case Pose.I_COMB: {
+                g.color(0xFF6D4C41); g.rect(x - 2 * k, y - 9 * k, 3 * k, 18 * k);
+                g.color(0xFF8D6E63); for (int i = 0; i < 8; i++) g.line(x + 1 * k, y - 8 * k + i * 2.2f * k, x + 5 * k, y - 8 * k + i * 2.2f * k, 0.9f * k);
+                break;
+            }
+            case Pose.I_CAN: {
+                // a watering can, tipped: the body, the handle, the spout and a fan of water falling to the floor ahead
+                g.color(0xFF43A047); g.roundRect(x + (f > 0 ? -4 : -14) * k, y - 4 * k, 18 * k, 12 * k, 3 * k);
+                g.color(0xFF2E7D32); g.line(x + f * 12 * k, y, x + f * 24 * k, y - 6 * k, 2.4f * k);
+                float sx = x + f * 25 * k, sy = y - 6 * k;
+                g.color(0x8890CAF9);
+                for (int i = 0; i < 6; i++) {
+                    float ph = (t * 3 + i * 0.17f) % 1f;
+                    float ex = sx + f * (8 + i * 2) * k, ey = Math.max(sy + 4 * k, floorY - 2);
+                    g.line(sx + f * i * 0.6f * k, sy, sx + f * (3 + i) * k + (ex - sx) * 0.3f, sy + (ey - sy) * 0.55f, 0.9f * k);
+                    g.line(sx + f * (3 + i) * k + (ex - sx) * 0.3f, sy + (ey - sy) * 0.55f, ex, ey, 0.9f * k);
+                    g.color(alpha(0xFFBBDEFB, 0.7f * (1 - ph))); g.oval(ex + (ph - 0.5f) * 6 * k, ey - ph * 4 * k, 1.4f * k, 1.4f * k);
+                    g.color(0x8890CAF9);
+                }
+                break;
+            }
+            default:
+        }
+    }
+
+    /**
+     * v36: what an everyday task needs on the floor or a counter in front of the character (feet at 0,0, h = their
+     * height): a counter with a gas stove, its blue-orange flame and a pot that steams (cooking); a bucket of water
+     * with suds (washing); a potted plant, wet and shining where the water falls (watering).
+     */
+    public static void drawTaskProp(Gfx g, int task, float h, float facing, float t) {
+        float f = facing < 0 ? -1 : 1;
+        switch (task) {
+            case Film.T_COOK: {
+                float cx = f * h * 0.36f, top = -h * 0.44f, w = h * 0.34f;
+                g.color(0xFF8D6E63); g.rect(cx - w / 2, top, w, -top);                         // the counter
+                g.color(0xFFA1887F); g.rect(cx - w / 2 - h * 0.01f, top - h * 0.015f, w + h * 0.02f, h * 0.03f);
+                g.color(0xFF37474F); g.roundRect(cx - w * 0.36f, top - h * 0.035f, w * 0.72f, h * 0.025f, h * 0.008f);    // the stove
+                Nature.flame(g, cx, top - h * 0.035f, t, h / 900f, 0, 0, 7);
+                g.color(0xFF455A64);                                                              // the pot (a kadhai)
+                g.begin(); g.moveTo(cx - w * 0.3f, top - h * 0.075f); g.quadTo(cx, top - h * 0.01f, cx + w * 0.3f, top - h * 0.075f); g.close(); g.fillPath();
+                g.color(0xFF263238); g.line(cx - w * 0.3f, top - h * 0.075f, cx + w * 0.3f, top - h * 0.075f, h * 0.008f);
+                for (int i = 0; i < 3; i++) {                                                     // steam
+                    float ph = (t * 0.5f + i / 3f) % 1f;
+                    g.color(Puppet.alpha(0xFFFFFFFF, 0.3f * (1 - ph)));
+                    g.oval(cx + (i - 1) * w * 0.12f + (float) Math.sin(t * 2 + i) * w * 0.05f, top - h * 0.09f - ph * h * 0.14f, w * (0.06f + ph * 0.06f), w * (0.05f + ph * 0.05f));
+                }
+                break;
+            }
+            case Film.T_WASH: {
+                float cx = f * h * 0.3f, r = h * 0.11f;
+                g.color(0xFF1E88E5); g.begin(); g.moveTo(cx - r, -h * 0.17f); g.lineTo(cx + r, -h * 0.17f); g.lineTo(cx + r * 0.8f, 0); g.lineTo(cx - r * 0.8f, 0); g.close(); g.fillPath();
+                g.color(0xFF90CAF9); g.oval(cx, -h * 0.17f, r, h * 0.022f);
+                for (int i = 0; i < 5; i++) { g.color(0xDDFFFFFF); g.oval(cx + (i - 2) * r * 0.35f, -h * 0.175f - (float) Math.abs(Math.sin(t * 3 + i)) * h * 0.012f, r * 0.13f, r * 0.11f); }
+                break;
+            }
+            case Film.T_WATER: {
+                float cx = f * h * 0.62f;
+                g.color(0xFFB5652B); g.begin(); g.moveTo(cx - h * 0.07f, -h * 0.13f); g.lineTo(cx + h * 0.07f, -h * 0.13f); g.lineTo(cx + h * 0.05f, 0); g.lineTo(cx - h * 0.05f, 0); g.close(); g.fillPath();
+                g.color(0xFF2E7D32);
+                for (int i = -3; i <= 3; i++) {
+                    float sway = (float) Math.sin(t * 1.7 + i) * h * 0.01f;
+                    g.oval(cx + i * h * 0.025f + sway, -h * 0.2f - Math.abs(i) * -h * 0.012f - h * 0.03f * (3 - Math.abs(i)) / 3f, h * 0.03f, h * 0.05f);
+                }
+                g.color(0x66BBDEFB); g.oval(cx, -h * 0.14f, h * 0.05f, h * 0.012f);
+                break;
+            }
             default:
         }
     }
@@ -2189,7 +2378,9 @@ public final class Puppet {
         g.line(bodyRx * 0.55f, legTop, bodyRx * 0.55f + stride * H * 0.12f, -legW * 0.5f, legW);
         // tail
         g.color(fur);
-        float tw = (float) Math.sin(p.time * 4) * H * 0.04f;
+        // v36: the wind in this mirrored frame (+ = towards the head); it swings the tail, ruffles the fur and the mane
+        float lw = p.wind * (p.facing < 0 ? -1 : 1);
+        float tw = (float) Math.sin(p.time * 4) * H * 0.04f + lw * H * 0.06f * (0.8f + 0.4f * (float) Math.sin(p.time * 6.5f));
         switch (sp) {
             case Look.SP_FOX: case Look.SP_WOLF:
                 g.begin(); g.moveTo(-bodyRx * 0.9f, bodyY - bodyRy * 0.1f);
@@ -2211,6 +2402,18 @@ public final class Puppet {
         g.oval(0, bodyY, bodyRx, bodyRy);
         g.color(belly);
         g.oval(H * 0.05f, bodyY + bodyRy * 0.45f, bodyRx * 0.7f, bodyRy * 0.42f);
+        if (!l.robot && sp != Look.SP_ELEPHANT && Math.abs(lw) > 0.04f) {
+            // v36: fur along the back lifts and ripples in the wind, a wave running along it
+            float fa = Math.min(1, (Math.abs(lw) - 0.04f) / 0.3f);
+            g.color(alpha(shade(fur, 0.82f), 0.85f * fa));
+            for (int i = 0; i < 18; i++) {
+                double an = Math.PI * (1.1 + 0.8 * i / 17.0);
+                float bx0 = (float) Math.cos(an) * bodyRx * 0.97f, by0 = bodyY + (float) Math.sin(an) * bodyRy * 0.97f;
+                float rip = 0.6f + 0.4f * (float) Math.sin(p.time * 8.5f - i * 0.7f);
+                float len = H * 0.035f * (0.6f + Math.abs(lw)) * rip;
+                g.line(bx0, by0, bx0 + lw * len * 1.4f, by0 - len * 0.7f, H * 0.012f);
+            }
+        }
         if (l.robot) {
             // a robot: panel seams, rivets and a small light on the back
             g.color(alpha(0xFF000000, 0.35f));
@@ -2264,7 +2467,9 @@ public final class Puppet {
             g.color(0xFF8D5524);
             for (int i = 0; i < 12; i++) {
                 double a = i * Math.PI / 6;
-                g.oval((float) Math.cos(a) * hr * 1.05f, (float) Math.sin(a) * hr * 1.05f, hr * 0.5f, hr * 0.5f);
+                // v36: the mane blows back from the wind, the tufts at the back most, each at its own beat
+                float blow = lw * hr * 0.16f * (1 - 0.6f * (float) Math.cos(a)) * (0.7f + 0.3f * (float) Math.sin(p.time * 7 + i * 1.3f));
+                g.oval((float) Math.cos(a) * hr * 1.05f + blow, (float) Math.sin(a) * hr * 1.05f - Math.abs(blow) * 0.3f, hr * 0.5f, hr * 0.5f);
             }
             g.oval(0, 0, hr * 1.35f, hr * 1.35f);
         }

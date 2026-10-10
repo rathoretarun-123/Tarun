@@ -1095,6 +1095,14 @@ public final class Rig {
             float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = qx - lx, dy = qy - ly;
             qx += lg * (lx + c * dx - sn * dy - qx); qy += lg * (ly + sn * dx + c * dy - qy);
         }
+        if (s.wind != 0) {
+            // v36: the wind ruffles the fur of the back, the mane and the tail: small ripples that run along the coat
+            // (most along the top of the animal, none on the legs and hooves), the tail blown with the wind
+            float coat = (1 - smooth(legTop - 0.05f, legTop + 0.02f, v)) * (0.4f + 0.6f * (1 - smooth(headTop, legTop, v)));
+            float rip = (float) Math.sin(s.time * 8.3f - u * 38 - v * 21) * 0.6f + (float) Math.sin(s.time * 13.1f - u * 71) * 0.4f;
+            qx += s.wind * f.W0 * (0.006f * coat * rip + 0.03f * (hasTail ? tl : 0));
+            qy -= Math.abs(s.wind) * f.H0 * 0.003f * coat * (0.5f + 0.5f * rip);
+        }
         o[0] = qx;
         o[1] = qy;
     }

@@ -150,12 +150,16 @@ public final class Film {
             G_EAT = 55,           // v35: eating — the hand goes from the plate to the mouth, then chewing
             G_DRINK = 56,         // v35: drinking from a cup, a glass or a bottle (Act.item) — raised to the lips, a sip or gulps, lowered
             G_STRETCH = 57,       // v35: waking — the arms stretch up, a yawn
+            G_TASK = 58,          // v36: an everyday task (Act.item = Film.T_*): cooking, sweeping, washing, reading, writing…
             G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3, SEAT_WHEELCHAIR = 4,   // v34: a wheelchair goes where its sitter goes
             SEAT_CHAIR = 5, SEAT_SOFA = 6, SEAT_BED = 7;     // v35: a chair with a back, a cushioned sofa, a bed (sat on, lain and slept in)
+
+    /** v36: the everyday tasks a G_TASK act shows. */
+    public static final int T_COOK = 1, T_SWEEP = 2, T_WASH = 3, T_READ = 4, T_WRITE = 5, T_PHONE = 6, T_BRUSH = 7, T_COMB = 8, T_WATER = 9, T_PAPER = 10;
 
     public static final class Act {
         public float t0, t1;
@@ -316,7 +320,14 @@ public final class Film {
             SFX_SIP = 60,           // a sip from a cup or a glass, a swallow, the cup set down
             SFX_GULP = 61,          // drinking from a bottle: gulps
             SFX_CUP = 62,           // a cup or a glass set down on the table
-            SFX_SLEEP = 63;         // a sleeper's slow, soft breathing
+            SFX_SLEEP = 63,         // a sleeper's slow, soft breathing
+            SFX_SIZZLE = 64,        // v36: cooking — oil sizzling in the pan, the ladle scraping and tapping
+            SFX_SWEEP = 65,         // v36: a broom's swishes on the floor
+            SFX_SCRUB = 66,         // v36: washing — water sloshing, scrubbing, a wring
+            SFX_PAGE = 67,          // v36: a page turned
+            SFX_SCRIBBLE = 68,      // v36: a pen or pencil on paper
+            SFX_BRUSH = 69,         // v36: brushing teeth — the brush's quick strokes
+            SFX_POUR = 70;          // v36: water poured (a watering can over the plants)
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

@@ -594,8 +594,72 @@ public final class Renderer {
         if (fog > 0) Nature.fog(g, vw, vh, t, fog);
         float quake = film.weather(Film.W_QUAKE, t);
         if (quake > 0) Nature.quakeDust(g, vw, vh, t, quake);
-        float fire = film.weather(Film.W_FIRE, t);
-        if (fire > 0) Nature.fireLight(g, vw, vh, t, fire);
+        // v36: a fire's light is a pool round it on the stage (drawn with the stage), no longer a tint over the frame
+    }
+
+    /** v36: the flames burning in this frame: {x, height above the ground, strength × flicker, flicker} for each. */
+    private final float[] lights = new float[4 * 12];
+    private int lightCount;
+
+    /** v36: gathers the fires, torches, candles and diyas burning at t (where Renderer.candles draws them). */
+    private void gatherLights(float t) {
+        lightCount = 0;
+        if (film == null) return;
+        float fire = film.weather(Film.W_FIRE, t), cand = film.weather(Film.W_CANDLES, t);
+        Film.Seg s = curSeg;
+        if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) addLight(w.x, 45, fire, t, 0);
+        if (cand > 0) for (Film.Weather w : film.weather) {
+            if (w.type != Film.W_CANDLES || t < w.t0 || t > w.t1 + 1.5f || !inPart(w, s)) continue;
+            if (w.kind == 1) for (int i = 0; i < 7; i++) addLight(140 + i * 166, 8, 0.3f * cand, t, i + 1);
+            else if (w.kind == 2) { addLight(90, 290, 0.7f * cand, t, 11); addLight(1190, 290, 0.7f * cand, t, 12); }
+            else { addLight(150, 70, 0.45f * cand, t, 13); addLight(1130, 70, 0.45f * cand, t, 14); }
+        }
+    }
+
+    /** v36: the weather was opened in this part (a fire lit here, not the last place's fading out). */
+    private static boolean inPart(Film.Weather w, Film.Seg s) { return s == null || (w.t0 >= s.t0 - 0.05f && w.t0 < s.t1); }
+
+    private void addLight(float x, float ht, float strength, float t, int seed) {
+        if (lightCount >= 12) return;
+        float fl = 0.85f + 0.15f * (float) (Math.sin(t * 13 + seed) * 0.5 + Math.sin(t * 7.3 + seed * 2) * 0.5);
+        int k = lightCount++ * 4;
+        lights[k] = x; lights[k + 1] = ht; lights[k + 2] = strength * fl; lights[k + 3] = fl;
+    }
+
+    private final float[] fireNow = new float[4];
+
+    /**
+     * v36: the shadow the nearest strong flame throws from a character at stage x, h tall: {direction (+1 to the
+     * right), length, squash (× h), strength}, or null. Away from the flame; a low flame (a campfire, a diya on the
+     * floor) throws a long shadow, longer the further away; a high torch a short one; its length breathes with the
+     * flicker.
+     */
+    private float[] fireShadow(float x, float h) {
+        int best = -1;
+        float bc = 0.07f;
+        for (int i = 0; i < lightCount; i++) {
+            float d = Math.abs(x - lights[i * 4]) / 380f;
+            float c = lights[i * 4 + 2] / (1 + d * d);
+            if (c > bc) { bc = c; best = i; }
+        }
+        if (best < 0) return null;
+        float lx = lights[best * 4], lh = lights[best * 4 + 1], d = Math.abs(x - lx);
+        fireNow[0] = x >= lx ? 1 : -1;
+        float len = lh < h * 0.5f ? Math.min(2.2f, 0.7f + d / 420f) : Math.max(0.15f, Math.min(1.4f, d / Math.max(60, lh) * 0.7f));
+        fireNow[1] = len * (0.95f + 0.05f * lights[best * 4 + 3]);
+        fireNow[2] = 0.09f;
+        fireNow[3] = Math.min(0.4f, 0.5f * bc);
+        return fireNow;
+    }
+
+    /** v36: a drawn character's soft shadow on the ground (a few flattened ovals thrown to one side). */
+    private static void ovalShadow(Gfx g, float h, float[] sh) {
+        float len = sh[1] * h, sq = sh[2] * h;
+        for (int i = 0; i < 3; i++) {
+            float kk = 1 - i * 0.22f;
+            g.color(Puppet.alpha(0xFF000000, sh[3] * 0.45f));
+            g.oval(sh[0] * len * 0.48f, -sq * 0.45f, (len * 0.5f + h * 0.09f) * kk, (sq * 0.5f + h * 0.012f) * kk);
+        }
     }
 
     /** Out-of-focus leaves and flowers right in front of the lens: they slide faster than the scene (depth). */
@@ -715,11 +779,12 @@ public final class Renderer {
     /** The part being drawn (for its light). */
     private Film.Seg curSeg;
     /** v35: the feet line and scale of the character being drawn. */
-    private float actorY, actorScale = 1;
+    private float actorY, actorScale = 1, actorX;
 
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         curSeg = s;
         camera(s, t);
+        gatherLights(t);                 // v36: the flames that light this frame and throw its shadows
         pixelStep = curGw > 0 ? vw / curGw / Math.max(0.1f, camZ) : 0;
         // a narrow frame follows the speaker only when the camera is free; a locked shot (Technical Director)
         // was framed for this shape by the director and never moves
@@ -807,16 +872,35 @@ public final class Renderer {
             float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t));
             if (rain > 0 && Sets.outdoorSet(s.set)) Nature.rainSplashes(g, s.ground, t, rain);
             // night: the whole stage darkens; flames, fire and fireflies then shine on top of it
+            int strongest = -1;
+            for (int i = 0; i < lightCount; i++) if (strongest < 0 || lights[i * 4 + 2] > lights[strongest * 4 + 2]) strongest = i;
             if (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) {
                 boolean photo = bd(s) != null;
                 int dark = s.set == Sets.BASEMENT ? (photo ? 0x80061410 : 0x40061410) : s.tod == Sets.NIGHT ? (photo ? 0x8C081026 : 0x46081026) : (photo ? 0x30301030 : 0x18301030);
-                g.color(dark);
+                if (strongest >= 0) {
+                    // v36: the dark stops at the edge of the firelight: a pool of light round the strongest flame
+                    // that breathes with its flicker (other flames lift the dark a little everywhere)
+                    float lx = lights[strongest * 4], lh = lights[strongest * 4 + 1], str = Math.min(1, lights[strongest * 4 + 2]);
+                    float a0 = (dark >>> 24) / 255f * (lightCount > 1 ? 0.85f : 1f);
+                    float r = (300 + 260 * str) * (0.94f + 0.06f * lights[strongest * 4 + 3]);
+                    g.radial(lx, s.ground - Math.min(lh, 120) - 40, r, Puppet.alpha(dark, a0 * 0.15f), Puppet.alpha(dark, a0));
+                } else g.color(dark);
                 g.rect(-W, -H, W * 3, H * 3);
             }
+            // v36: the flames' warm light on everything near them, falling off with distance (stronger at night)
+            boolean dim = s.tod == Sets.NIGHT || s.tod == Sets.EVENING || !Sets.outdoorSet(s.set);
+            for (int i = 0; i < lightCount; i++) {
+                float lx = lights[i * 4], lh = lights[i * 4 + 1], str = Math.min(1, lights[i * 4 + 2]);
+                float r = 160 + 300 * str, cy = s.ground - Math.min(lh, 160) - 30;
+                g.radial(lx, cy, r, Puppet.alpha(0xFFFFA040, (dim ? 0.24f : 0.1f) * str), 0x00FFA040);
+                g.rect(lx - r, cy - r, r * 2, r * 2);
+            }
             float fire = film.weather(Film.W_FIRE, t);
-            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire);
+            float fwind = Sets.outdoorSet(s.set) ? film.wind(t) : 0;
+            // v36: a fire or a lamp belongs to the part it was lit in (its fade-out never burns on into the next place)
+            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
             float cand = film.weather(Film.W_CANDLES, t);
-            if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f) candles(g, s, t, w.kind, cand);
+            if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) candles(g, s, t, w.kind, cand);
             float ff = film.weather(Film.W_FIREFLIES, t);
             if (ff > 0) Nature.fireflies(g, s.ground, t, ff);
             float wet = film.wetness(t);
@@ -838,12 +922,32 @@ public final class Renderer {
         light(g, s, t);
         foreground(g, s, t);
         grade(g, s);
+        glowPass(g, s, t);
         drawScreenFx(g, s, t);
         grain(g, t);
         letterbox(g);
         if (film.subtitles) drawSubs(g, s, t);
         else drawSubs(g, s, t, true);        // v35: a line in sign language is always subtitled
         if (safeZoneOverlay) safeZone(g);
+    }
+
+    /**
+     * v36: a flame gives light, it is not lit: the night's dark, the tints and the grade fall over the flames too, so
+     * they are drawn once more over the graded frame (mostly opaque at night, lighter by day) and stay the brightest
+     * thing in the frame, as real fire does.
+     */
+    private void glowPass(Gfx g, Film.Seg s, float t) {
+        if (film == null || lightCount == 0) return;
+        float fire = film.weather(Film.W_FIRE, t), cand = film.weather(Film.W_CANDLES, t);
+        if (fire <= 0 && cand <= 0) return;
+        boolean dark = s.tod == Sets.NIGHT || s.tod == Sets.EVENING || !Sets.outdoorSet(s.set);
+        float fwind = Sets.outdoorSet(s.set) ? film.wind(t) : 0;
+        g.save();
+        applyCam(g, 1f, s.ground);
+        g.setAlpha(dark ? 0.72f : 0.4f);
+        if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
+        if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) candles(g, s, t, w.kind, cand);
+        g.restore();
     }
 
     /** Draws the format's safe zones over the frame (Human QC stills): the side margins, the headroom, the caption zone, the eye line. */
@@ -1061,7 +1165,12 @@ public final class Renderer {
         // (v35: a blind character's eyes do not follow anyone: the head turns to a sound, the eyes stay where they are)
         if (look.glasses != 2 && look.glasses != 4 && look.glasses != 5 && !look.cannotSee()) gaze(p, s, a, t);
         if (film != null && Sets.outdoorSet(s.set)) {
-            p.wind = film.wind(t); p.wet = film.wetness(t);
+            // v36: the wind on clothes, hair and fur comes in the same travelling gusts as on the grass behind them,
+            // and outdoors a light breeze always stirs them a little
+            float wnd = film.wind(t), dir = wnd >= 0 ? 1 : -1, gx = Director.xAt(a, t) / 1280f;
+            float gust = Nature.gustField(gx, t, dir);
+            p.wind = wnd * (0.75f + 0.45f * gust) + 0.12f * (0.6f + 0.4f * gust) * (float) Math.sin(t * 0.9f + a.order * 1.3f);
+            p.wet = film.wetness(t);
             // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)
             if (look.umbrella && look.isHumanoid() && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && k.body != Pose.LIE && k.body != Pose.HANG && a.look.mount < 0) {
                 p.umbrellaOpen = true;
@@ -1266,7 +1375,7 @@ public final class Renderer {
         if (camStill && pixelStep > 0) { px = Math.round(px / pixelStep) * pixelStep; py = Math.round(py / pixelStep) * pixelStep; }
         g.translate(px, py);
         if (scale != 1f) g.scale(scale, scale);
-        actorY = py; actorScale = scale;                       // v35: where this character stands (is its hand in the frame?)
+        actorY = py; actorScale = scale; actorX = px;          // v35: where this character stands (is its hand in the frame?)
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) {
             // v35: sitting on the floor — indoors on a woven mat (a durrie), outdoors on the ground; the lap is in
@@ -1349,15 +1458,12 @@ public final class Renderer {
         }
         else {
             // v34 (realism): a drawn character's shadow from the sun, a soft flattened oval thrown away from it
-            float[] sun = p.body != Pose.LIE && p.body != Pose.HANG && a.look.mount < 0 ? sunShadow() : null;
-            if (sun != null) {
-                float len = sun[1] * h, sq = sun[2] * h;
-                for (int i = 0; i < 3; i++) {
-                    float kk = 1 - i * 0.22f;
-                    g.color(Puppet.alpha(0xFF000000, sun[3] * 0.45f));
-                    g.oval(sun[0] * len * 0.48f, -sq * 0.45f, (len * 0.5f + h * 0.09f) * kk, (sq * 0.5f + h * 0.012f) * kk);
-                }
-            }
+            boolean upright = p.body != Pose.LIE && p.body != Pose.HANG && a.look.mount < 0;
+            float[] sun = upright ? sunShadow() : null;
+            if (sun != null) ovalShadow(g, h, sun);
+            // v36: a fire, a torch or a lamp nearby throws its own flickering shadow away from it
+            float[] fsh = upright ? fireShadow(actorX, h) : null;
+            if (fsh != null) ovalShadow(g, h, fsh);
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
             int boil = (int) (t * 12) * 31 + a.order * 17;
@@ -1374,6 +1480,15 @@ public final class Renderer {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
             drawSeat(g, seat, h * seatScale(a), true, p.facing);
+            g.restore();
+        }
+        // v36: what an everyday task needs in front of the character — the stove and its pot, the bucket, the plant
+        for (Film.Act act : a.acts) {
+            if (act.type != Film.G_TASK || t < act.t0 - 0.3f || t > act.t1 + 0.3f) continue;
+            if (act.item != Film.T_COOK && act.item != Film.T_WASH && act.item != Film.T_WATER) continue;
+            float fade = Math.min(1, Math.min(t - act.t0 + 0.3f, act.t1 + 0.3f - t) / 0.3f);
+            g.save(); g.setAlpha(fade);
+            Puppet.drawTaskProp(g, act.item, h, p.facing, t);
             g.restore();
         }
         g.restore();
@@ -1463,6 +1578,56 @@ public final class Renderer {
                     p.mouth = Math.max(p.mouth, 0.55f * Rig.smooth(0.2f, 0.6f, u) * (1 - Rig.smooth(dur - 0.6f, dur - 0.15f, u)));
                     if (k2 > 0.6f) p.eyesClosed = true;
                     mo.sy *= 1 + 0.02f * k2;
+                    break;
+                }
+                case Film.G_TASK: {
+                    // v36: an everyday task — the hands do the work with the task's tool, the head follows the work
+                    // (a picture keeps its arms nearly still: the tool is at its hand, the task's things in front of it)
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float dur = act.t1 - act.t0, in = Rig.smooth(0, 0.35f, u) * (1 - Rig.smooth(dur - 0.35f, dur, u));
+                    float cyc = (float) Math.sin(u * 2 * Math.PI / 1.1f);
+                    switch (act.item) {
+                        case Film.T_COOK:
+                            p.holdR = Pose.I_LADLE; p.nod += 0.16f * in;
+                            if (!picture) { p.armR = 34 + 9 * cyc * in; p.elbowR = 72 + 22 * (float) Math.cos(u * 2 * Math.PI / 1.1f) * in; }
+                            break;
+                        case Film.T_SWEEP:
+                            p.holdR = Pose.I_BROOM; p.tilt += 16 * in; p.nod += 0.12f * in;
+                            if (!picture) { p.armR = 26 + 18 * cyc * in; p.elbowR = 30; p.armL = 20 + 10 * cyc * in; p.elbowL = 40; }
+                            else mo.rot += 1.5f * cyc * in;
+                            break;
+                        case Film.T_WASH:
+                            p.tilt += 20 * in; p.nod += 0.2f * in;
+                            if (!picture) { p.armR = 32 + 10 * cyc * in; p.armL = 32 - 10 * cyc * in; p.elbowR = p.elbowL = 45; }
+                            break;
+                        case Film.T_READ: case Film.T_PAPER:
+                            p.holdR = act.item == Film.T_PAPER ? Pose.I_PAPER : Pose.I_BOOK; p.nod += 0.22f * in;
+                            if (!picture) { p.armR = p.armL = 24; p.elbowR = p.elbowL = 100; }
+                            break;
+                        case Film.T_WRITE:
+                            p.holdL = Pose.I_NOTEBOOK; p.holdR = Pose.I_PEN; p.nod += 0.28f * in;
+                            if (!picture) { p.armL = 22; p.elbowL = 95; p.armR = 26 + 3 * (float) Math.sin(u * 19) * in; p.elbowR = 92 + 4 * (float) Math.sin(u * 13) * in; }
+                            break;
+                        case Film.T_PHONE:
+                            p.holdR = Pose.I_PHONE;
+                            if (!picture) { p.armR = 84 * in + 8 * (1 - in); p.elbowR = 156 * in + 10 * (1 - in); p.headTilt += 4 * in; }
+                            else { p.toMouth = in; p.toMouthItem = Pose.I_PHONE; }
+                            break;
+                        case Film.T_BRUSH:
+                            p.holdR = Pose.I_BRUSH;
+                            if (!picture) { p.armR = (72 + 3 * (float) Math.sin(u * 28)) * in + 8 * (1 - in); p.elbowR = 142 * in + 10 * (1 - in); }
+                            else { p.toMouth = in; p.toMouthItem = Pose.I_BRUSH; }
+                            break;
+                        case Film.T_COMB:
+                            p.holdR = Pose.I_COMB; p.headTilt += 5 * in;
+                            if (!picture) { p.armR = (150 - 18 * (float) Math.abs(Math.sin(u * 2.4f))) * in + 8 * (1 - in); p.elbowR = 60 * in + 10 * (1 - in); }
+                            break;
+                        case Film.T_WATER:
+                            p.holdR = Pose.I_CAN; p.nod += 0.12f * in;
+                            if (!picture) { p.armR = 50 * in + 8 * (1 - in); p.elbowR = 25; }
+                            break;
+                        default:
+                    }
                     break;
                 }
                 case Film.G_SIGN: {
@@ -2008,9 +2173,16 @@ public final class Renderer {
      */
     private float[] sunShadow() {
         Film.Seg ls = curSeg;
-        if (ls == null || film == null || !sunlit(ls.set) || ls.set == Sets.CAVE_MOUTH || ls.tod == Sets.NIGHT) return null;
+        if (ls == null || film == null || !sunlit(ls.set) || ls.set == Sets.CAVE_MOUTH) return null;
         float over = Math.min(1f, 1.3f * film.weather(Film.W_RAIN, curT) + film.weather(Film.W_STORM, curT) + 0.7f * film.weather(Film.W_CLOUDS, curT)
                 + 0.8f * film.weather(Film.W_FOG, curT) + 0.6f * film.weather(Film.W_SNOW, curT));
+        if (ls.tod == Sets.NIGHT) {
+            // v36: the moon's shadow — faint, soft and long-ish, under a clear night sky only
+            float a = 0.13f * (1 - over);
+            if (a < 0.03f) return null;
+            sunNow[0] = 1; sunNow[1] = 0.65f; sunNow[2] = 0.11f; sunNow[3] = a;
+            return sunNow;
+        }
         float a = (ls.tod == Sets.DAY ? 0.34f : 0.27f) * (1 - over);
         if (a < 0.03f) return null;
         sunNow[0] = ls.tod == Sets.EVENING ? -1 : 1;
@@ -2442,6 +2614,9 @@ public final class Renderer {
             Object bodyImg = bare ? sp.bareImg : Art.mip(sp.img, sp.imgHalf, sp.imgQuarter, shrink);
             if (wetA > 0.01f) onGround(g, bodyImg, rf.body, rf.cols, rf.rows, left, top, w, h, true, 0, 0, wetA);
             if (sunA > 0) onGround(g, sp.shadowImg, rf.body, rf.cols, rf.rows, left, top, w, h, false, sunDx, sunSq, sunA);
+            // v36: the shadow of a nearby flame, from the picture's own outline, flickering with it
+            float[] fsh = upright ? fireShadow(actorX, h) : null;
+            if (fsh != null) onGround(g, sp.shadowImg, rf.body, rf.cols, rf.rows, left, top, w, h, false, fsh[0] * fsh[1] * h * mirror, fsh[2] * h, fsh[3]);
             g.imageMesh(bodyImg, rf.cols, rf.rows, rf.body);
             if (p.wet > 0.02f && sp.wetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
             if (st.sit > 0.3f && !beast && p.body != Pose.LIE && p.seat >= 0 && p.seat != Film.SEAT_FLOOR) {
@@ -2472,6 +2647,14 @@ public final class Renderer {
                 g.save();
                 g.setAlpha(k);
                 g.imageMesh(rim, rf.cols, rf.rows, rf.body);
+                g.restore();
+            }
+            if (sp.rimL != null && sp.rimR != null && !bare && fsh != null) {
+                // v36: the edge facing a nearby flame catches its light, flickering with it
+                boolean fireLeft = fsh[0] > 0;
+                g.save();
+                g.setAlpha(Math.min(0.75f, fsh[3] * 1.8f));
+                g.imageMesh(fireLeft == (p.facing >= 0) ? sp.rimL : sp.rimR, rf.cols, rf.rows, rf.body);
                 g.restore();
             }
             // v34: the rider's animal speaks: a dark mouth between its snout and its lowered jaw, a tongue inside
@@ -2582,12 +2765,18 @@ public final class Renderer {
             }
             // v35: eating or drinking in a close-up — the picture's hand is below the frame, so the cup, the glass,
             // the bottle or a morsel comes up into the frame to the lips in a hand of the character's own skin
-            if (p.toMouth > 0.01f && sp.faceKnown && actorY + hy * actorScale > camY + vh / 2f / camZ - 2) {
+            if (p.toMouth > 0.01f && sp.faceKnown && (p.toMouthItem == Pose.I_PHONE || p.toMouthItem == Pose.I_BRUSH || actorY + hy * actorScale > camY + vh / 2f / camZ - 2)) {
                 float rise = rigged ? rig.feetRise(st, h) : 0;
                 float mx = (-w / 2 + sp.mouthX * w) * (p.facing < 0 ? -1 : 1) * mo.sx, my = (-h + sp.mouthY * h) * mo.sy + rise;
                 float mw = Math.max(sp.mouthHW * w, w * 0.02f);
                 float u = ease01(p.toMouth);
                 float tx = mx + p.facing * mw * 0.6f, ty = my + mw * (p.toMouthItem == -1 ? 0.5f : 2.6f);
+                if (p.toMouthItem == Pose.I_PHONE) {
+                    // v36: a phone goes to the ear on the side the character faces
+                    float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * w, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy + rise;
+                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * (p.facing < 0 ? -1 : 1) * mo.sx;
+                    tx = ecx + p.facing * ed * 1.4f; ty = ey + ed * 0.35f;
+                } else if (p.toMouthItem == Pose.I_BRUSH) { tx = mx + p.facing * mw * 0.2f + (float) Math.sin(p.time * 28) * mw * 0.35f; ty = my + mw * 0.2f; }
                 float ix = hx + (tx - hx) * u, iy = hy + (ty - hy) * u;
                 drawToLips(g, p.toMouthItem, ix, iy, mw, p.facing, u, sp.skin, p.time);
                 if (p.toMouthItem == -1) { if (p.holdR == Pose.I_PLATE) drawItem(g, p.holdR, hx, hy, h, p); return; }
@@ -2648,6 +2837,15 @@ public final class Renderer {
             g.restore();
             return;
         }
+        if (item == Pose.I_PHONE || item == Pose.I_BRUSH) {
+            // v36: a phone at the ear, a toothbrush at the mouth, in a hand of the character's own skin
+            float k = mw / (item == Pose.I_PHONE ? 2.6f : 4.2f);
+            Puppet.drawTool(g, item, 0, 0, k, facing, time, 1e6f);
+            g.color(skin); g.roundRect(-5 * k, (item == Pose.I_PHONE ? 2 : 1) * k, 10 * k, 7 * k, 3 * k);
+            g.color(Puppet.shade(skin, 0.86f)); g.line(-3 * k, 3 * k, -3 * k, 7 * k, 0.7f * k); g.line(0, 3 * k, 0, 7 * k, 0.7f * k);
+            g.restore();
+            return;
+        }
         float k = mw / 4.8f;
         g.rotate(-facing * 32 * u * (item == Pose.I_BOTTLE ? 1.5f : 1f));       // tipped towards the lips
         if (item == Pose.I_BOTTLE) {
@@ -2702,6 +2900,8 @@ public final class Renderer {
                 Puppet.drawVessel(g, item, 0, 0, 1f, p.time);
                 break;
             default:
+                // v36: the tools of everyday tasks (the floor is at the feet: y = 0 before this item's own scale)
+                if (item >= Pose.I_LADLE && item <= Pose.I_PAPER) Puppet.drawTool(g, item, 0, 0, 1f, p.facing, p.time, -y / (s * 1.6f));
         }
         g.restore();
     }

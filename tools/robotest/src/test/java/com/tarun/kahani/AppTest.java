@@ -26,6 +26,7 @@ import com.tarun.kahani.core.Handbook;
 import com.tarun.kahani.core.Look;
 import com.tarun.kahani.core.Nature;
 import com.tarun.kahani.core.Pose;
+import com.tarun.kahani.core.Props;
 import com.tarun.kahani.core.Puppet;
 import com.tarun.kahani.core.Rig;
 import com.tarun.kahani.core.Set3D;
@@ -4178,5 +4179,219 @@ public class AppTest {
         System.out.println("FIRE v36: warm firelit samples — day " + warm[0] + ", campfire " + warm[1] + ", diyas " + warm[2]);
         assertTrue("the night by the fire has warm, lit places (" + warm[1] + ")", warm[1] > 60);
         assertTrue("the diyas light the room (" + warm[2] + ")", warm[2] > 20);
+    }
+
+    // ================================================================== v37
+
+    /** v37 (the user: playgrounds, exercise, driving and cycling, make-up, and other activities — hardcoded, family-level). */
+    static final String ACTIVITIES = "पात्र और रूप-रंग (Characters):\n"
+            + "1. राजू (10 वर्ष):\n"
+            + " * चेहरा: छोटे बाल।\n"
+            + " * पहनावा: लाल टी-शर्ट और नीली निक्कर।\n"
+            + "2. पिंकी (8 वर्ष):\n"
+            + " * चेहरा: दो चोटियाँ।\n"
+            + " * पहनावा: गुलाबी फ्रॉक।\n"
+            + "3. पापा (40 वर्ष):\n"
+            + " * चेहरा: छोटी मूँछें।\n"
+            + " * पहनावा: सफ़ेद कमीज़ और काली पतलून।\n"
+            + "4. मम्मी (36 वर्ष):\n"
+            + " * चेहरा: लंबे बाल, जूड़ा।\n"
+            + " * पहनावा: हरी साड़ी।\n"
+            + "5. दीदी (19 वर्ष):\n"
+            + " * चेहरा: लंबे खुले बाल।\n"
+            + " * पहनावा: पीला सलवार कुर्ता।\n"
+            + "\n"
+            + "दृश्य 1: पार्क\n"
+            + "(स्थान: बच्चों का पार्क। सुबह का समय।)\n"
+            + "(राजू झूला झूलता है।)\n"
+            + "राजू: \"वाह, कितना ऊँचा!\"\n"
+            + "(पिंकी फिसलपट्टी पर फिसलती है।)\n"
+            + "पिंकी: \"मज़ा आ गया!\"\n"
+            + "(राजू और पिंकी सी-सॉ खेलते हैं।)\n"
+            + "(पिंकी गोल झूले पर घूमती है।)\n"
+            + "\n"
+            + "दृश्य 2: सड़क\n"
+            + "(स्थान: शहर की सड़क। दोपहर का समय।)\n"
+            + "(पापा कार चलाते हैं।)\n"
+            + "(राजू साइकिल चलाता है।)\n"
+            + "(मम्मी स्कूटर चलाती है।)\n"
+            + "(दीदी बस में बैठकर कॉलेज जाती है।)\n"
+            + "(पापा ऑटो में बैठकर बाज़ार जाते हैं।)\n"
+            + "(मम्मी बाइक चलाकर घर चली जाती है।)\n"
+            + "\n"
+            + "दृश्य 3: घर का आँगन\n"
+            + "(स्थान: घर का आँगन। सुबह का समय।)\n"
+            + "(पापा डंबल से कसरत करते हैं।)\n"
+            + "(पिंकी रस्सी कूदती है।)\n"
+            + "(मम्मी योगासन करती है।)\n"
+            + "(राजू उठक-बैठक करता है।)\n"
+            + "(पापा पुश-अप करते हैं।)\n"
+            + "\n"
+            + "दृश्य 4: घर का कमरा\n"
+            + "(स्थान: घर का कमरा। शाम का समय।)\n"
+            + "(दीदी शीशे में देखकर काजल लगाती है।)\n"
+            + "(दीदी लिपस्टिक लगाती है।)\n"
+            + "(दीदी बिंदी लगाती है।)\n"
+            + "(मम्मी हाथों पर मेहंदी लगाती है।)\n"
+            + "(पिंकी अपने चेहरे पर फेस पेंट करती है।)\n"
+            + "(दीदी कपड़े बदलकर लाल साड़ी पहनती है।)\n"
+            + "दीदी: \"मैं कैसी लग रही हूँ?\"\n"
+            + "(मम्मी रंगोली बनाती है।)\n"
+            + "(राजू चित्र बनाता है।)\n"
+            + "\n"
+            + "दृश्य 5: घर का बाथरूम\n"
+            + "(स्थान: घर का बाथरूम। सुबह का समय।)\n"
+            + "(राजू नहाता है।)\n"
+            + "राजू: \"पानी ठंडा है!\"\n"
+            + "\n"
+            + "दृश्य 6: घर का कमरा\n"
+            + "(स्थान: घर का कमरा। रात का समय।)\n"
+            + "(मम्मी पिंकी को गले लगाती है।)\n"
+            + "(मम्मी पिंकी के माथे को चूमती है।)\n"
+            + "पिंकी: \"शुभ रात्रि मम्मी।\"\n"
+            + "(पापा मम्मी के गाल पर पप्पी देते हैं।)\n"
+            + "\n"
+            + "समाप्त\n"
+            + "\n";
+
+    /**
+     * v37: every activity of the story is staged — rides (a car, a bicycle, a scooter, a bus and an auto as a
+     * passenger, a motorbike riding off), the playground (a swing, a slide, a see-saw for two, a merry-go-round),
+     * exercise, make-up, a bath, a change of clothes behind a screen, a hug and pecks, a rangoli and a painting —
+     * with their sounds, and the rides move their riders across the stage.
+     */
+    @Test
+    public void v37ActivitiesFromTheWords() {
+        Film film = directed(ScriptParser.parse(ACTIVITIES));
+        keysInOrder(film);
+        java.util.Map<Integer, java.util.Set<Integer>> got = new java.util.HashMap<Integer, java.util.Set<Integer>>();
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) {
+            if (!got.containsKey(act.type)) got.put(act.type, new java.util.HashSet<Integer>());
+            got.get(act.type).add(act.item);
+        }
+        int[][] want = {
+                {Film.G_RIDE, Film.V_CAR}, {Film.G_RIDE, Film.V_BICYCLE}, {Film.G_RIDE, Film.V_SCOOTER}, {Film.G_RIDE, Film.V_MOTORBIKE},
+                {Film.G_RIDE, Film.V_BUS + Film.V_PASSENGER}, {Film.G_RIDE, Film.V_AUTO + Film.V_PASSENGER},
+                {Film.G_PLAYGROUND, Film.PG_SWING}, {Film.G_PLAYGROUND, Film.PG_SLIDE}, {Film.G_PLAYGROUND, Film.PG_SEESAW}, {Film.G_PLAYGROUND, -Film.PG_SEESAW}, {Film.G_PLAYGROUND, Film.PG_ROUND},
+                {Film.G_EXERCISE, Film.EX_DUMBBELL}, {Film.G_EXERCISE, Film.EX_SKIP}, {Film.G_EXERCISE, Film.EX_YOGA}, {Film.G_EXERCISE, Film.EX_SQUAT}, {Film.G_EXERCISE, Film.EX_PUSHUP},
+                {Film.G_MAKEUP, Film.MK_KAJAL}, {Film.G_MAKEUP, Film.MK_LIPSTICK}, {Film.G_MAKEUP, Film.MK_BINDI}, {Film.G_MAKEUP, Film.MK_MEHNDI}, {Film.G_MAKEUP, Film.MK_FACEPAINT},
+                {Film.G_BATHE, 0}, {Film.G_KISS, 1}, {Film.G_KISS, 0}, {Film.G_TASK, Film.T_RANGOLI}, {Film.G_TASK, Film.T_PAINT}};
+        for (int[] w : want) assertTrue("act " + w[0] + " item " + w[1] + " staged: " + got.get(w[0]), got.containsKey(w[0]) && got.get(w[0]).contains(w[1]));
+        assertTrue("a change of clothes behind a screen", got.containsKey(Film.G_SCREEN));
+        assertTrue("a hug", got.containsKey(Film.G_HUG));
+        // the riders move across the stage on their vehicles (the motorbike rides off it)
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) if (act.type == Film.G_RIDE && act.item > 0) {
+            float x0 = Director.xAt(a, act.t0), x1 = Director.xAt(a, act.t1 - 0.05f);
+            assertTrue(a.c.displayName + " rides " + act.item + ": " + x0 + " -> " + x1, Math.abs(x1 - x0) > 250);
+        }
+        java.util.Set<Integer> heard = new java.util.HashSet<Integer>();
+        for (Film.Sfx x : film.sfx) heard.add(x.type);
+        int[] sounds = {Film.SFX_ENGINE, Film.SFX_MOTOR, Film.SFX_HORN, Film.SFX_CYCLE_BELL, Film.SFX_CHAIN, Film.SFX_CREAK, Film.SFX_ROPE, Film.SFX_KISS, Film.SFX_POUR};
+        for (int s : sounds) assertTrue("sound " + s + " heard", heard.contains(s));
+        assertTrue("the shot list reports it", film.shotList.contains("Activities (v37)"));
+        // the words: whole words in Hindi too, and "बस" (enough) is not a bus
+        assertTrue(!Director.term("उसने शिकार किया", "कार"));
+        assertTrue(Director.vehicleIn("पापा कार चलाते हैं", false) == Film.V_CAR);
+        assertTrue(Director.vehicleIn("बस करो, चलो घर", false) == 0);
+        assertTrue(Director.vehicleIn("दीदी बस में बैठकर कॉलेज जाती है", false) == Film.V_BUS);
+        assertTrue("a child's bike is a bicycle", Director.vehicleIn("राजू बाइक चलाता है", true) == Film.V_BICYCLE);
+        // every frame of every activity draws, and is not blank
+        Renderer r = new Renderer(film, new Art());
+        Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        int frames = 0;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) for (Film.Act act : a.acts) {
+            if (act.type < Film.G_RIDE || act.type > Film.G_KISS) continue;
+            r.render(g, (act.t0 + act.t1) / 2);
+            int distinct = 0, last = 0;
+            for (int y = 0; y < 720; y += 13) for (int x = 0; x < 1280; x += 13) { int c = bmp.getPixel(x, y); if (c != last) { distinct++; last = c; } }
+            assertTrue("activity " + act.type + "/" + act.item + " frame not blank", distinct > 50);
+            frames++;
+        }
+        g.release();
+        System.out.println("ACTIVITIES v37: " + frames + " activity frames drawn");
+    }
+
+    /** v37: make-up put on stays on (drawn on the face and the hands); a bath curtain and a dressing screen hide everything below the shoulders. */
+    @Test
+    public void v37MakeupAndTheFamilyWay() {
+        Story st = ScriptParser.parse(ACTIVITIES);
+        Look didi = null, raju = null;
+        for (Story.CharacterDef c : st.characters) { if (c.displayName.equals("दीदी")) didi = c.look; if (c.displayName.equals("राजू")) raju = c.look; }
+        assertNotNull(didi); assertNotNull(raju);
+        int[][] px = new int[2][];
+        for (int i = 0; i < 2; i++) {
+            Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 2);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 300, 300);
+            g.save(); g.translate(150, 290);
+            Pose p = new Pose(); p.reset(); p.facing = 1;
+            if (i == 1) { p.kajal = 1; p.lipstick = 1; p.bindi = 1; p.mehndi = 1; p.facePaint = 1; }
+            Puppet.draw(g, didi, p, 270);
+            g.restore();
+            px[i] = new int[300 * 300]; bmp.getPixels(px[i], 0, 300, 0, 0, 300, 300);
+            g.release();
+        }
+        int diff = 0;
+        for (int i = 0; i < px[0].length; i++) if (px[0][i] != px[1][i]) diff++;
+        System.out.println("MAKEUP v37: pixels the make-up changes " + diff);
+        assertTrue("kajal, lipstick, a bindi, mehndi and face paint are drawn (" + diff + ")", diff > 200);
+        for (int kind = 0; kind < 2; kind++) {
+            Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 2);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 300, 300);
+            g.save(); g.translate(150, 290);
+            Pose p = new Pose(); p.reset(); p.facing = 1;
+            float h = 260;
+            Puppet.draw(g, raju, p, h);
+            float top = kind == 0 ? Puppet.shoulderY(raju, h) + 0.04f * h : Puppet.shoulderY(raju, h) - 0.03f * h;
+            if (kind == 0) Props.curtain(g, h, top, 1.3f); else Props.screen(g, h, top, 0xFFFDD835, 1.3f);
+            g.restore();
+            int shown = 0, total = 0;
+            for (int y = (int) (290 + top) + 4; y < 288; y++) for (int x = (int) (150 - 0.38f * h); x < 150 + 0.38f * h; x++) {
+                int c = bmp.getPixel(x, y);
+                total++;
+                // the puppet's own colours (skin, the red shirt, the blue shorts) must not show below the top
+                int r = c >> 16 & 255, gg = c >> 8 & 255, b = c & 255;
+                boolean skin = r > 170 && gg > 110 && gg < 190 && b < 140 && r - b > 60;
+                boolean shirt = r > 150 && gg < 80 && b < 80, shorts = b > 120 && r < 90;
+                if (skin || shirt || shorts) shown++;
+            }
+            System.out.println("FAMILY v37: " + (kind == 0 ? "bath curtain" : "dressing screen") + " — body pixels below its top " + shown + " of " + total);
+            assertTrue((kind == 0 ? "the curtain" : "the screen") + " hides the body below the shoulders (" + shown + ")", shown < total / 200);
+            g.release();
+        }
+    }
+
+    /** v37: the vehicles draw, and their wheels turn with the distance gone. */
+    @Test
+    public void v37VehiclesDrawAndTheirWheelsTurn() {
+        for (int v = Film.V_BICYCLE; v <= Film.V_AUTO; v++) {
+            int[][] q = new int[2][];
+            for (int i = 0; i < 2; i++) {
+                Bitmap bmp = Bitmap.createBitmap(700, 400, Bitmap.Config.ARGB_8888);
+                AndroidGfx g = new AndroidGfx(bmp, 2);
+                g.color(0xFFFFFFFF); g.rect(0, 0, 700, 400);
+                g.save(); g.translate(350, 380);
+                Props.vehicle(g, v, 200, 1, i * 40, 1, 0xFFC62828, false);
+                Props.vehicle(g, v, 200, 1, i * 40, 1, 0xFFC62828, true);
+                g.restore();
+                q[i] = new int[700 * 400]; bmp.getPixels(q[i], 0, 700, 0, 0, 700, 400);
+                g.release();
+            }
+            int ink = 0, turned = 0;
+            for (int i = 0; i < q[0].length; i++) { if (q[0][i] != 0xFFFFFFFF) ink++; if (q[0][i] != q[1][i]) turned++; }
+            System.out.println("VEHICLE v37 " + v + ": drawn " + ink + " px, wheels turned " + turned + " px");
+            assertTrue("vehicle " + v + " drawn (" + ink + ")", ink > 5000);
+            assertTrue("vehicle " + v + " wheels turn (" + turned + ")", turned > 40);
+        }
+    }
+
+    /** v37 (the user: "remove the age range of viewer written in code"): no viewer age range in what the studio writes or asks. */
+    @Test
+    public void v37NoViewerAgeRange() {
+        Story st = ScriptParser.parse(ACTIVITIES);
+        String all = com.tarun.kahani.core.Bible.characterPrompt(st.characters.get(0)) + "\n" + com.tarun.kahani.core.ScriptAI.system(true) + "\n" + com.tarun.kahani.core.ScriptAI.system(false);
+        for (String bad : new String[]{"6-15", "6–15", "(ages ", "years)."}) assertTrue("no age range: " + bad, !all.contains(bad));
     }
 }

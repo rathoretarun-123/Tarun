@@ -49,7 +49,7 @@ public final class ScriptAI {
             + "Scene 2: ...\n";
 
     public static String system(boolean hindi) {
-        return "You are an expert screenwriter and film director for children's animated films (ages 6-15), "
+        return "You are an expert screenwriter and film director for family animated films, "
                 + "working like a careful script supervisor. You read a story written in natural language and rewrite it "
                 + "as a screenplay WITHOUT losing any detail: every character (with age, face, hair, dress colours, "
                 + "jewellery, items they carry), every place (with time of day, weather, light and natural sounds), every "

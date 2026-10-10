@@ -137,6 +137,37 @@ public final class Synth {
                 fadeEnds(o, 0.2f);
                 break;
             }
+            // v37: a car's or a bus's engine — a low, rough hum with its harmonics, a little uneven
+            case Film.SFX_ENGINE: {
+                for (int i = 0; i < n; i++) {
+                    float t = i / (float) SR, f = 46 + 6 * (float) Math.sin(t * 0.8f) + 3 * (float) Math.sin(t * 5.3f);
+                    float ph = t * f;
+                    float v = (float) (Math.sin(ph * 6.283) * 0.5 + Math.sin(ph * 2 * 6.283) * 0.3 + Math.sin(ph * 3 * 6.283) * 0.15) + rnd() * 0.12f;
+                    o[i] += v * 0.32f;
+                }
+                lowpass(o, 0.12f);
+                fadeEnds(o, 0.4f);
+                break;
+            }
+            // v37: a motorbike, a scooter or an auto — the two-stroke putter, quick pops on a hum
+            case Film.SFX_MOTOR: {
+                for (float t = 0.02f; t < dur - 0.05f; t += 0.045f + 0.008f * (float) Math.sin(t * 3)) knock(o, t, 140 + rnd() * 30, 0.16f);
+                for (int i = 0; i < n; i++) { float t = i / (float) SR; o[i] += (float) Math.sin(t * 92 * 6.283) * 0.05f; }
+                fadeEnds(o, 0.3f);
+                break;
+            }
+            // v37: a horn, twice ("पॉं-पॉं")
+            case Film.SFX_HORN: { tone(o, 0, 0.28f, 420, 420, 0.35f, 1); tone(o, 0, 0.28f, 530, 530, 0.25f, 1); tone(o, 0.38f, 0.32f, 420, 420, 0.35f, 1); tone(o, 0.38f, 0.32f, 530, 530, 0.25f, 1); break; }
+            // v37: a bicycle bell — two quick rings
+            case Film.SFX_CYCLE_BELL: { for (int r = 0; r < 2; r++) for (int k = 0; k < 6; k++) bellTone(o, r * 0.32f + k * 0.035f, 2900 + (k % 2) * 260, 0.35f, 0.09f); break; }
+            // v37: a bicycle's chain and freewheel — a soft fast ticking
+            case Film.SFX_CHAIN: { for (float t = 0.03f; t < dur - 0.05f; t += 0.07f) knock(o, t, 3800 + rnd() * 400, 0.018f); fadeEnds(o, 0.2f); break; }
+            // v37: a swing's chains — a creak at each end of the swing (every 1.3 s)
+            case Film.SFX_CREAK: { for (float t = 0.1f; t < dur - 0.4f; t += 1.3f) { tone(o, t, 0.32f, 520, 610, 0.05f, 1); tone(o, t + 0.04f, 0.25f, 760, 700, 0.03f, 1); } break; }
+            // v37: a skipping rope — the whirr past the ear, the tap on the ground
+            case Film.SFX_ROPE: { for (float t = 0.05f; t < dur - 0.1f; t += 0.55f) { sweepNoise(o, t, 0.18f, 0.4f, 0.7f, 0.05f); burst(o, t + 0.22f, 0.025f, 0.5f, 0.12f); } fadeEnds(o, 0.05f); break; }
+            // v37: a soft peck
+            case Film.SFX_KISS: { burst(o, 0.02f, 0.035f, 0.85f, 0.12f); tone(o, 0.03f, 0.06f, 900, 1300, 0.04f, 0); break; }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

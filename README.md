@@ -1,11 +1,24 @@
-# Kahani Film — v36
+# Kahani Film — v37
 
-An Android app that turns your story into a cartoon film for children (6–15 years).
+An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
 The studio prepares the voices, music, natural sounds, scenes, camera and lip movement itself.
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v37
+
+* **No viewer age range in the code** — the studio no longer writes an audience age anywhere (the README, the home screen, the picture-maker and script prompts said "children (6–15 years)"); it makes family films. Test `v37NoViewerAgeRange`.
+* **Riding and driving** — "पापा कार चलाते हैं", "राजू साइकिल चलाता है", "मम्मी स्कूटर चलाती है", a motorbike ("बाइक"; a child's bike is a bicycle), "दीदी बस में बैठकर कॉलेज जाती है", "ऑटो में बैठकर बाज़ार जाते हैं": the rider sits on the vehicle with the hands on the handlebar or the wheel and crosses the stage on it (or rides off), the wheels turning with the distance, the bell and the chain, the engine, the putter or the horn heard. A passenger in a bus, a car or an auto sits inside while a driver is at the wheel; two named cyclists ride side by side; the paint stands out from the rider's clothes; with your photos the person sits on the seat or in the window. Tests `v37ActivitiesFromTheWords`, `v37VehiclesDrawAndTheirWheelsTurn`.
+* **The playground** — a swing (the child, the seat and the chains swing together about the A-frame's top bar, higher then lower, the chains creaking), a slide (up the ladder, sit at the top, down the chute with the arms up and a laugh), a see-saw for two (one end up as the other goes down), a merry-go-round.
+* **Exercise** — dumbbell curls, a skipping rope (it passes over the head and under the feet as they hop, its tap heard), squats and yoga on a mat (arms up, a bend to each side, namaste, eyes closed), a kneeling push-up.
+* **Make-up that stays on** — with a mirror in one hand: kajal to the eye, lipstick to the lips, a bindi between the brows, powder or face paint on the cheek (the hand reaches the spot on the face), mehndi drawn on the palm with a cone; it stays on in every later scene. With your photos the tool comes to the face, and a bindi stays on the forehead.
+* **The family way** — a bath is always behind a curtain from just below the shoulders (a tiled corner and a bucket indoors, the water up to the shoulders outdoors), water poured over the head from a mug, then a towel round the shoulders; clothes are changed behind a folding screen (only the head above it, the old clothes over its top) and the new clothes are revealed as they step out; affection is a hug, or a peck on the cheek — on the forehead for a child — with a small rising heart. Nothing more is ever shown. Test `v37MakeupAndTheFamilyWay` (nothing of the body shows below the curtain or the screen).
+* **More everyday tasks** — drawing a rangoli on the floor (it grows ring by ring and stays) and painting at an easel (the picture appears stroke by stroke).
+* **Also fixed:** "बाथरूम" was read as an open place and a park as open land (a bathroom is now indoors, a park a garden); "बैठकर" in "बस में बैठकर जाती है" made her sit on the road.
+* **The director trained for all of it** — `SituationsGuide` has nine new rules and three new limits; the shot list reports the rides, the playground, exercise, make-up, baths, screens, pecks and hugs.
+* **What these cannot do, said plainly:** a drawn character faces the camera, so its legs do not pedal and a push-up is a kneeling push-up seen from the front; a photo on a bicycle or a swing is lowered and folded at the knees and reads less clearly than a drawn character or your own picture of it.
 
 ## New in v36
 

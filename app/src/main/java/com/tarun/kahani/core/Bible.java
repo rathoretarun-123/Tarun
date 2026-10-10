@@ -72,7 +72,7 @@ public final class Bible {
         // v34: the still-picture manual's six blocks (subject, action / emotion, locked style, lighting, quality,
         // camera) and its negative list, around the studio's own subject and pose rules
         StringBuilder b = new StringBuilder();
-        b.append("Create ONE character for a premium 3D animated Indian film for children (6-15 years). ");
+        b.append("Create ONE character for a premium 3D animated Indian family film. ");
         b.append("Name: ").append(c.displayName);
         if (c.age > 0) b.append(", age ").append(c.age);
         if (c.look != null) b.append(", ").append(kindWord(c.look, false));

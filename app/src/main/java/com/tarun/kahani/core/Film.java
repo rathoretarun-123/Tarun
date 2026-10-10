@@ -151,6 +151,13 @@ public final class Film {
             G_DRINK = 56,         // v35: drinking from a cup, a glass or a bottle (Act.item) — raised to the lips, a sip or gulps, lowered
             G_STRETCH = 57,       // v35: waking — the arms stretch up, a yawn
             G_TASK = 58,          // v36: an everyday task (Act.item = Film.T_*): cooking, sweeping, washing, reading, writing…
+            G_RIDE = 59,          // v37: riding or driving (Act.item = Film.V_*): a bicycle, a motorbike, a scooter, a car, a bus, an auto
+            G_PLAYGROUND = 60,    // v37: on the playground (Act.item = Film.PG_*): a swing, a slide, a see-saw, a merry-go-round
+            G_EXERCISE = 61,      // v37: exercise (Act.item = Film.EX_*): dumbbells, a skipping rope, squats, yoga, push-ups
+            G_MAKEUP = 62,        // v37: make-up with a mirror (Act.item = Film.MK_*): kajal, lipstick, a bindi, mehndi, powder, face paint
+            G_BATHE = 63,         // v37: a bath behind a curtain (shoulders up), water poured from a mug, then a towel
+            G_SCREEN = 64,        // v37: changing clothes behind a folding screen (the new clothes on as they step out)
+            G_KISS = 65,          // v37: a peck on the cheek or the forehead (affection in a family film)
             G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
@@ -159,7 +166,15 @@ public final class Film {
             SEAT_CHAIR = 5, SEAT_SOFA = 6, SEAT_BED = 7;     // v35: a chair with a back, a cushioned sofa, a bed (sat on, lain and slept in)
 
     /** v36: the everyday tasks a G_TASK act shows. */
-    public static final int T_COOK = 1, T_SWEEP = 2, T_WASH = 3, T_READ = 4, T_WRITE = 5, T_PHONE = 6, T_BRUSH = 7, T_COMB = 8, T_WATER = 9, T_PAPER = 10;
+    public static final int T_COOK = 1, T_SWEEP = 2, T_WASH = 3, T_READ = 4, T_WRITE = 5, T_PHONE = 6, T_BRUSH = 7, T_COMB = 8, T_WATER = 9, T_PAPER = 10,
+            T_RANGOLI = 11, T_PAINT = 12;     // v37: drawing a rangoli on the floor, painting at an easel
+    /** v37: what a G_RIDE act rides, a G_PLAYGROUND act plays on, a G_EXERCISE act does, a G_MAKEUP act puts on. */
+    public static final int V_BICYCLE = 1, V_MOTORBIKE = 2, V_SCOOTER = 3, V_CAR = 4, V_BUS = 5, V_AUTO = 6;
+    /** v37: added to a G_RIDE act's vehicle when its rider is a passenger (a driver is drawn at the wheel). */
+    public static final int V_PASSENGER = 100;
+    public static final int PG_SWING = 1, PG_SLIDE = 2, PG_SEESAW = 3, PG_ROUND = 4;
+    public static final int EX_DUMBBELL = 1, EX_SKIP = 2, EX_SQUAT = 3, EX_YOGA = 4, EX_PUSHUP = 5;
+    public static final int MK_KAJAL = 1, MK_LIPSTICK = 2, MK_BINDI = 3, MK_MEHNDI = 4, MK_POWDER = 5, MK_FACEPAINT = 6, MK_NAILS = 7;
 
     public static final class Act {
         public float t0, t1;
@@ -327,7 +342,15 @@ public final class Film {
             SFX_PAGE = 67,          // v36: a page turned
             SFX_SCRIBBLE = 68,      // v36: a pen or pencil on paper
             SFX_BRUSH = 69,         // v36: brushing teeth — the brush's quick strokes
-            SFX_POUR = 70;          // v36: water poured (a watering can over the plants)
+            SFX_POUR = 70,          // v36: water poured (a watering can over the plants)
+            SFX_ENGINE = 71,        // v37: a car's or a bus's engine running (the pitch with the speed)
+            SFX_MOTOR = 72,         // v37: a motorbike's, a scooter's or an auto's two-stroke putter
+            SFX_HORN = 73,          // v37: a horn, twice
+            SFX_CYCLE_BELL = 74,    // v37: a bicycle bell, ring-ring
+            SFX_CHAIN = 75,         // v37: a bicycle's chain and freewheel ticking
+            SFX_CREAK = 76,         // v37: a swing's chains creaking at each end of the swing
+            SFX_ROPE = 77,          // v37: a skipping rope: its whirr and the tap on the ground
+            SFX_KISS = 78;          // v37: a soft peck
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

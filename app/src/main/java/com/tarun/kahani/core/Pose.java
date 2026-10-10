@@ -13,7 +13,9 @@ public final class Pose {
             I_FLOWER = 6, I_SWORD = 7, I_BOTTLE = 8, I_TURBAN = 9,
             I_CUP = 10, I_GLASS = 11, I_PLATE = 12, I_TEA = 13,     // v35: a cup, a glass of water, a plate of food, a cup of hot tea (it steams)
             // v36: the tools of everyday tasks
-            I_LADLE = 14, I_BROOM = 15, I_BOOK = 16, I_PEN = 17, I_PHONE = 18, I_BRUSH = 19, I_COMB = 20, I_CAN = 21, I_NOTEBOOK = 22, I_PAPER = 23;
+            I_LADLE = 14, I_BROOM = 15, I_BOOK = 16, I_PEN = 17, I_PHONE = 18, I_BRUSH = 19, I_COMB = 20, I_CAN = 21, I_NOTEBOOK = 22, I_PAPER = 23,
+            // v37: exercise and make-up, the bath's mug, painting
+            I_DUMBBELL = 24, I_KAJAL = 25, I_LIPSTICK = 26, I_BINDI = 27, I_CONE = 28, I_PUFF = 29, I_MUG = 30, I_PAINTBRUSH = 31, I_ROPE = 32;
 
     public int body = STAND;
     public int emotion = NEUTRAL;
@@ -56,6 +58,10 @@ public final class Pose {
     public boolean umbrellaOpen;       // v34: an umbrella held open over the head (rain outdoors)
     /** v34: where the eyes look, on screen (-1 left .. +1 right, -1 up .. +1 down), and how much they rest on someone (0..1). */
     public float gazeX, gazeY, gazeHeld;
+    /** v37: make-up put on in the story so far (0..1 as it goes on): kajal, lipstick, a bindi, mehndi on the hands, powder, face paint. */
+    public float kajal, lipstick, bindi, mehndi, powder, facePaint;
+    /** v37: a towel round the shoulders after a bath (0..1). */
+    public float towel;
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
 
@@ -70,6 +76,7 @@ public final class Pose {
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld;
+        q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel;
         return q;
     }
 
@@ -80,5 +87,6 @@ public final class Pose {
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
         sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; toMouth = 0; toMouthItem = 0;
         gazeX = 0; gazeY = 0; gazeHeld = 0;
+        kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0;
     }
 }

@@ -12,7 +12,7 @@ import java.util.Locale;
 public final class SituationsGuide {
     private SituationsGuide() {}
 
-    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34–v36)";
+    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34–v37)";
 
     /** {the rule, where the studio applies it}. */
     public static final String[][] RULES = {
@@ -51,6 +51,16 @@ public final class SituationsGuide {
             {"Sun and moon cast shadows", "Renderer.sunShadow: the sun's shadow long in the morning and evening and short at noon; at night under the moon a faint cool shadow; the time of day is read from the place line (\"रात का समय\", \"सुबह\", \"evening\")"},
             {"Lighting a lamp is shown", "Director: \"दीया जलाती है\", lighting candles, a torch or a fire gets a frame low and wide enough to see the flames catch"},
             {"Everyday tasks with their tools and sounds", "Director.taskFrom: cooking at a stove (a ladle stirring a kadhai, the gas flame, steam, sizzling), sweeping with a jhadu (the swish), washing dishes at a bucket (scrubbing), reading a book or a newspaper (pages turning), writing in a notebook (the pen scratching), a phone call (the phone stays at the ear through the call's lines), brushing teeth, combing hair, watering plants (the stream from the can, pouring)"},
+            // v37
+            {"Riding and driving", "Director.activityFrom, Props.vehicle: a bicycle (a child's is a child's size; the bell, the chain), a motorbike, a scooter (its apron over the shins), a car (the driver seen through the glass), a bus and an auto-rickshaw (the engine or the putter, a horn); the wheels turn with the distance gone; the rider sits on the seat with the hands on the handlebar or the wheel; one who rides in a bus, a car or an auto without driving sits inside as a passenger and a driver is at the wheel; two named cyclists ride side by side; riding off leaves the stage; the paint stands out from the rider's clothes"},
+            {"The playground", "Director.activityFrom, Props: a swing (an A-frame; the child, the seat and the chains swing together about the top bar, higher then lower, the chains creak), a slide (up the ladder, sit at the top, down the chute with the arms up and a laugh, stand up at its foot), a see-saw (two children face each other, one end up as the other goes down), a merry-go-round (round and round, holding the ring)"},
+            {"Exercise", "Director.activityFrom, Renderer: dumbbell curls, a skipping rope (the rope passes over the head and under the feet as they hop, its tap heard), squats, yoga (arms up, a bend to each side, namaste; eyes closed; on a mat), a kneeling push-up"},
+            {"Make-up stays on", "Director.activityFrom, Renderer.madeUp, Puppet: a mirror in one hand; kajal to the eye, lipstick to the lips, a bindi between the brows, powder or face paint on the cheek (the hand reaches the place on the face), mehndi drawn on the palm with a cone — and it stays on in every later scene of the film; \"मेकअप करती है\" is powder, kajal and lipstick in turn"},
+            {"A bath is shown the family way", "Director.activityFrom, Props.curtain, Props.bathWater: always behind a curtain from just below the shoulders (indoors a tiled corner and a bucket; outdoors the water up to the shoulders), water poured over the head from a mug, eyes shut against it; afterwards a towel round the shoulders and wet hair for a while"},
+            {"Clothes are changed behind a screen", "Director (a change of clothes on the stage): a folding screen in front, only the head above it, the old clothes thrown over its top; the new clothes are on as they step out, then the reveal"},
+            {"Affection the family way", "Director.activityFrom: a hug (they come together, both arms round), a peck on the cheek, or on the forehead for a child — the eyes close a moment, a small heart rises, a soft sound; the user's own words decide who; nothing more is shown"},
+            {"No age is written into the studio", "the studio makes family films: no age range is set for the audience anywhere in the code or in what it asks of picture makers"},
+            {"More everyday tasks", "Director.taskFrom: drawing a rangoli on the floor (it grows ring by ring and stays), painting at an easel (the picture appears stroke by stroke)"},
     };
 
     /** What these rules cannot do on a phone, said plainly. */
@@ -66,6 +76,10 @@ public final class SituationsGuide {
             // v36
             {"A photo's tools", "a photo's arm does not bend: a phone goes to the ear and a toothbrush to the mouth in a hand of the photo's own skin; a ladle, a broom or a newspaper is drawn at the photo's hand, which does not stir or sweep"},
             {"Light from a fire", "a warm pool, a rim and a soft shadow on the ground — not light bouncing off every surface; a photo is tinted, not relit"},
+            // v37
+            {"A front-facing drawn character", "pedalling legs, a full push-up seen from the side and a slide's ladder climbed rung by rung are drawn simply (the seated legs do not pedal; a push-up is a kneeling push-up seen from the front)"},
+            {"Photos on vehicles and playthings", "a photo is lowered onto the seat and folded at the knees; on a bicycle or a swing it reads less clearly than a drawn character or the user's own picture of it"},
+            {"What is never shown", "nudity, a bath or a change of clothes in view, and anything more than a hug or a peck on the cheek or the forehead: the studio makes family films from people's own photographs"},
     };
 
     public static final String SUMMARY;

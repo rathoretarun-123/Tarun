@@ -389,6 +389,14 @@ public final class DirectorsManual {
             case Film.SFX_SIZZLE: return "cooking (a sizzle)"; case Film.SFX_SWEEP: return "a broom"; case Film.SFX_SCRUB: return "washing";
             case Film.SFX_PAGE: return "a page turned"; case Film.SFX_SCRIBBLE: return "writing"; case Film.SFX_BRUSH: return "brushing teeth";
             case Film.SFX_POUR: return "water poured";
+            case Film.SFX_ENGINE: return "an engine";
+            case Film.SFX_MOTOR: return "a motorbike's putter";
+            case Film.SFX_HORN: return "a horn";
+            case Film.SFX_CYCLE_BELL: return "a bicycle bell";
+            case Film.SFX_CHAIN: return "a bicycle chain";
+            case Film.SFX_CREAK: return "a swing creaking";
+            case Film.SFX_ROPE: return "a skipping rope";
+            case Film.SFX_KISS: return "a soft peck";
             default: return "effect " + type;
         }
     }

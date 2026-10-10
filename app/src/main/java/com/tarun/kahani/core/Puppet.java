@@ -133,6 +133,15 @@ public final class Puppet {
         return b;
     }
 
+    /** v37: where a drawn character's shoulders are (y, negative up from the feet) — a bath curtain stops below them. */
+    public static float shoulderY(Look l, float H) { return body(l, H).shY; }
+
+    /** v37: where a drawn character's hand is for these arm angles ({x, y} from the feet; side -1 left, 1 right). */
+    public static float[] handAt(Look l, float H, float side, float armDeg, float elbowDeg) {
+        float[] h = hand(body(l, H), side, armDeg, elbowDeg);
+        return new float[]{h[4], h[5]};
+    }
+
     static float[] hand(Body b, float side, float armDeg, float elbowDeg) {
         float sx = side * b.sw * 0.92f, sy = b.shY + b.armW * 0.6f;
         double a = Math.toRadians(armDeg);
@@ -1191,6 +1200,13 @@ public final class Puppet {
         boolean fewer = side == -1 && (l.condition & Look.C_FINGERS) != 0;
         g.oval(h[4], h[5], fewer ? hr * 0.72f : hr, hr);
         if (fewer) { g.color(shade(skin, 0.8f)); g.line(h[4] - hr * 0.5f, h[5] + hr * 0.45f, h[4] + hr * 0.5f, h[5] + hr * 0.45f, Math.max(1.2f, hr * 0.12f)); }
+        if (p.mehndi > 0.01f && l.isHumanoid()) {
+            // v37: mehndi — a henna pattern on the hand: a round flower on the palm and dots round it
+            g.color(alpha(0xFF8D3B12, 0.8f * Math.min(1, p.mehndi)));
+            g.strokeOval(h[4], h[5], hr * 0.42f, hr * 0.42f, Math.max(0.8f, hr * 0.1f));
+            g.oval(h[4], h[5], hr * 0.14f, hr * 0.14f);
+            for (int i = 0; i < 6; i++) { double an = i * Math.PI / 3; g.oval(h[4] + (float) Math.cos(an) * hr * 0.68f, h[5] + (float) Math.sin(an) * hr * 0.68f, hr * 0.07f, hr * 0.07f); }
+        }
         if (l.longNails) {
             g.color(0xFF3B3B2E);
             for (int i = -1; i <= 1; i++) g.line(h[4] + i * 3, h[5] + hr * 0.6f, h[4] + i * 4, h[5] + hr * 1.5f, 2);
@@ -1329,7 +1345,7 @@ public final class Puppet {
                 drawTurbanShape(g, hx, hy - 6, b.headR * 1.0f, p.turbanColor, p.turbanBand, false);
                 break;
             default:
-                if (hold >= Pose.I_LADLE && hold <= Pose.I_PAPER) drawTool(g, hold, hx, hy, b.headR / 34f, p.facing, p.time, b.floorY);
+                if (hold >= Pose.I_LADLE && hold <= Pose.I_ROPE) drawTool(g, hold, hx, hy, b.headR / 34f, p.facing, p.time, b.floorY);
         }
     }
 
@@ -1384,6 +1400,41 @@ public final class Puppet {
                 }
                 break;
             }
+            case Pose.I_DUMBBELL: {
+                // a dumbbell: the grip in the fist, a weight disc each side
+                g.color(0xFF616161); g.line(x - 9 * k, y, x + 9 * k, y, 2.6f * k);
+                g.color(0xFF263238); g.roundRect(x - 13 * k, y - 5.5f * k, 5 * k, 11 * k, 1.5f * k); g.roundRect(x + 8 * k, y - 5.5f * k, 5 * k, 11 * k, 1.5f * k);
+                g.color(0x55FFFFFF); g.rect(x - 12 * k, y - 4.5f * k, 1.4f * k, 9 * k); g.rect(x + 9 * k, y - 4.5f * k, 1.4f * k, 9 * k);
+                break;
+            }
+            case Pose.I_KAJAL: { g.color(0xFF212121); g.line(x, y, x + f * 3 * k, y - 10 * k, 2.2f * k); g.color(0xFFB0BEC5); g.line(x - f * 0.5f * k, y + 1.5f * k, x, y, 2.4f * k); break; }
+            case Pose.I_LIPSTICK: {
+                g.color(0xFFD4AF37); g.roundRect(x - 2.2f * k, y - 4 * k, 4.4f * k, 9 * k, 1 * k);
+                g.color(0xFFC2185B); g.roundRect(x - 1.6f * k, y - 8 * k, 3.2f * k, 4.5f * k, 1.2f * k);
+                break;
+            }
+            case Pose.I_BINDI: { g.color(0xFFD32F2F); g.oval(x + f * 1.5f * k, y - 3 * k, 1.6f * k, 1.6f * k); break; }
+            case Pose.I_CONE: {
+                // a mehndi cone: a paper cone, its tip down to the other hand
+                g.color(0xFF8D6E63); g.begin(); g.moveTo(x - 3.5f * k, y - 6 * k); g.lineTo(x + 3.5f * k, y - 6 * k); g.lineTo(x + f * 1 * k, y + 9 * k); g.close(); g.fillPath();
+                g.color(0xFF5D4037); g.oval(x + f * 1 * k, y + 9.5f * k, 0.9f * k, 0.9f * k);
+                break;
+            }
+            case Pose.I_PUFF: { g.color(0xFFF8BBD0); g.oval(x, y - 2 * k, 5 * k, 3.6f * k); g.color(0x88FFFFFF); g.oval(x - 1.2f * k, y - 3 * k, 2.2f * k, 1.4f * k); break; }
+            case Pose.I_MUG: {
+                // a bathing mug (a lota-like plastic mug), tipped: water falls from its lip
+                g.color(0xFF1E88E5); g.roundRect(x - 5 * k, y - 6 * k, 10 * k, 10 * k, 2 * k);
+                g.color(0xFF1565C0); g.strokeOval(x - f * 6.5f * k, y - 1 * k, 2.6f * k, 3 * k, 1.4f * k);
+                g.color(0xAA90CAF9);
+                for (int i = 0; i < 5; i++) {
+                    float ph = (t * 4 + i * 0.21f) % 1f;
+                    g.line(x + f * (5 + i * 0.7f) * k, y - 5 * k, x + f * (7 + i) * k, y + 20 * k, 0.9f * k);
+                    g.color(alpha(0xFFBBDEFB, 0.8f * (1 - ph))); g.oval(x + f * (8 + i) * k, y + (4 + ph * 18) * k, 1.1f * k, 1.4f * k);
+                    g.color(0xAA90CAF9);
+                }
+                break;
+            }
+            case Pose.I_PAINTBRUSH: { g.color(0xFF8D6E63); g.line(x, y, x + f * 4 * k, y - 12 * k, 1.8f * k); g.color(0xFF1E88E5); g.oval(x + f * 4.4f * k, y - 13 * k, 1.4f * k, 2 * k); break; }
             case Pose.I_PEN: { g.color(0xFF1565C0); g.line(x, y, x + f * 4 * k, y - 11 * k, 2 * k); g.color(0xFF212121); g.line(x, y, x - f * 0.6f * k, y + 2 * k, 1.2f * k); break; }
             case Pose.I_PHONE: {
                 g.color(0xFF1E1E22); g.roundRect(x - 3.5f * k, y - 7 * k, 7 * k, 13 * k, 1.5f * k);
@@ -1427,9 +1478,50 @@ public final class Puppet {
      * height): a counter with a gas stove, its blue-orange flame and a pot that steams (cooking); a bucket of water
      * with suds (washing); a potted plant, wet and shining where the water falls (watering).
      */
-    public static void drawTaskProp(Gfx g, int task, float h, float facing, float t) {
+    public static void drawTaskProp(Gfx g, int task, float h, float facing, float t) { drawTaskProp(g, task, h, facing, t, 1); }
+
+    /** v37: the same, with how far the task has gone (a rangoli and a painting grow as they are made). */
+    public static void drawTaskProp(Gfx g, int task, float h, float facing, float t, float done) {
         float f = facing < 0 ? -1 : 1;
         switch (task) {
+            case Film.T_RANGOLI: {
+                // a rangoli on the floor in front: rings of coloured petals drawn outwards, ring by ring
+                float cx = f * h * 0.42f, cy = h * 0.02f, R = h * 0.26f;
+                int[] cols = {0xFFE53935, 0xFFFDD835, 0xFF43A047, 0xFF1E88E5, 0xFFFB8C00, 0xFF8E24AA};
+                g.color(alpha(0xFFFFFFFF, 0.9f)); g.strokeOval(cx, cy, R * Math.min(1, done * 1.2f), R * 0.3f * Math.min(1, done * 1.2f), h * 0.006f);
+                int rings = 4;
+                for (int r = 0; r < rings; r++) {
+                    float rf = (r + 1f) / rings;
+                    if (done < r / (float) rings) break;
+                    float part = Math.min(1, (done - r / (float) rings) * rings);
+                    int n = 6 + r * 4;
+                    for (int i = 0; i < n * part; i++) {
+                        double an = i * Math.PI * 2 / n;
+                        g.color(cols[(i + r) % cols.length]);
+                        g.oval(cx + (float) Math.cos(an) * R * rf * 0.9f, cy + (float) Math.sin(an) * R * rf * 0.27f, h * 0.022f, h * 0.008f);
+                    }
+                }
+                g.color(0xFFFFEB3B); g.oval(cx, cy, h * 0.025f * Math.min(1, done * 4), h * 0.009f * Math.min(1, done * 4));
+                break;
+            }
+            case Film.T_PAINT: {
+                // an easel beside them with a canvas: a sky, a hill, a sun and a tree appear stroke by stroke
+                float cx = f * h * 0.4f, top = -h * 0.82f, cw = h * 0.3f, ch = h * 0.24f;
+                g.color(0xFF8D6E63);
+                g.line(cx - cw * 0.45f, 0, cx - cw * 0.2f, top - h * 0.04f, h * 0.012f); g.line(cx + cw * 0.45f, 0, cx + cw * 0.2f, top - h * 0.04f, h * 0.012f);
+                g.line(cx, -h * 0.4f, cx + f * cw * 0.25f, 0, h * 0.01f);
+                g.color(0xFFFAFAFA); g.rect(cx - cw / 2, top, cw, ch);
+                g.color(0xFF6D4C41); g.rect(cx - cw / 2 - h * 0.01f, top + ch, cw + h * 0.02f, h * 0.012f);
+                if (done > 0.1f) { g.color(alpha(0xFF81D4FA, Math.min(1, (done - 0.1f) * 4))); g.rect(cx - cw / 2 + 2, top + 2, cw - 4, ch * 0.6f); }
+                if (done > 0.35f) { g.color(alpha(0xFF66BB6A, Math.min(1, (done - 0.35f) * 4))); g.oval(cx, top + ch * 0.85f, cw * 0.5f, ch * 0.3f); }
+                if (done > 0.55f) { g.color(alpha(0xFFFFCA28, Math.min(1, (done - 0.55f) * 4))); g.oval(cx + cw * 0.28f, top + ch * 0.22f, ch * 0.09f, ch * 0.09f); }
+                if (done > 0.75f) {
+                    float a = Math.min(1, (done - 0.75f) * 4);
+                    g.color(alpha(0xFF6D4C41, a)); g.line(cx - cw * 0.2f, top + ch * 0.75f, cx - cw * 0.2f, top + ch * 0.5f, h * 0.008f);
+                    g.color(alpha(0xFF2E7D32, a)); g.oval(cx - cw * 0.2f, top + ch * 0.42f, ch * 0.13f, ch * 0.12f);
+                }
+                break;
+            }
             case Film.T_COOK: {
                 float cx = f * h * 0.36f, top = -h * 0.44f, w = h * 0.34f;
                 g.color(0xFF8D6E63); g.rect(cx - w / 2, top, w, -top);                         // the counter
@@ -1729,6 +1821,36 @@ public final class Puppet {
             g.color(l.bindi);
             g.oval(ex * 0.6f, -r * 0.32f, r * (l.kind == Look.WOMAN ? 0.075f : 0.06f), r * (l.kind == Look.WOMAN ? 0.075f : 0.06f));
         }
+        // v37: make-up put on in the story — a bindi, kajal round the eyes, lipstick, powder, face paint
+        if (p.bindi > 0.01f && l.bindi == 0 && !p.disguised) {
+            g.color(alpha(0xFFD32F2F, Math.min(1, p.bindi)));
+            g.oval(ex * 0.6f, -r * 0.32f, r * 0.07f, r * 0.07f);
+        }
+        if (p.kajal > 0.01f && !p.eyesClosed) {
+            g.color(alpha(0xFF151515, 0.85f * Math.min(1, p.kajal)));
+            for (int sd = -1; sd <= 1; sd += 2) {
+                float cx = ex + sd * r * 0.36f, cy = -r * 0.08f;
+                g.line(cx - r * 0.15f, cy + r * 0.085f, cx + r * 0.15f, cy + r * 0.085f, Math.max(1.2f, r * 0.035f));
+                g.line(cx + sd * r * 0.15f, cy + r * 0.07f, cx + sd * r * 0.23f, cy + r * 0.02f, Math.max(1.0f, r * 0.03f));
+            }
+        }
+        if (p.powder > 0.01f) {
+            g.color(alpha(0xFFFFF3E0, 0.22f * Math.min(1, p.powder)));
+            g.oval(ex - r * 0.48f, r * 0.28f, r * 0.2f, r * 0.13f); g.oval(ex + r * 0.48f, r * 0.28f, r * 0.2f, r * 0.13f);
+        }
+        if (p.facePaint > 0.01f) {
+            // a little painted flower on one cheek and a star on the other (a fair, a festival)
+            float a = Math.min(1, p.facePaint);
+            float cx = ex + r * 0.5f, cy = r * 0.3f;
+            g.color(alpha(0xFFE91E63, a));
+            for (int i = 0; i < 5; i++) { double an = i * Math.PI * 2 / 5; g.oval(cx + (float) Math.cos(an) * r * 0.07f, cy + (float) Math.sin(an) * r * 0.07f, r * 0.05f, r * 0.05f); }
+            g.color(alpha(0xFFFFEB3B, a)); g.oval(cx, cy, r * 0.04f, r * 0.04f);
+            g.color(alpha(0xFF1E88E5, a));
+            float sx = ex - r * 0.5f;
+            g.begin();
+            for (int i = 0; i < 10; i++) { double an = -Math.PI / 2 + i * Math.PI / 5; float rr = r * (i % 2 == 0 ? 0.1f : 0.045f); if (i == 0) g.moveTo(sx + (float) Math.cos(an) * rr, cy + (float) Math.sin(an) * rr); else g.lineTo(sx + (float) Math.cos(an) * rr, cy + (float) Math.sin(an) * rr); }
+            g.close(); g.fillPath();
+        }
         if (l.tilak != 0) {
             g.color(l.tilak);
             g.line(ex * 0.6f, -r * 0.55f, ex * 0.6f, -r * 0.28f, r * 0.07f);
@@ -1965,6 +2087,17 @@ public final class Puppet {
     }
 
     static void drawMouth(Gfx g, Look l, Pose p, float r, float ex) {
+        drawMouth0(g, l, p, r, ex);
+        if (p.lipstick > 0.01f && p.mouth < 0.25f) {
+            // v37: lipstick — the closed lips coloured (an open mouth keeps its own drawing)
+            float my = r * 0.6f, mw = r * (l.isChild() ? 0.2f : 0.22f);
+            g.color(alpha(0xFFC2185B, 0.75f * Math.min(1, p.lipstick)));
+            g.oval(ex, my - r * 0.015f, mw * 0.85f, r * 0.045f);
+            g.oval(ex, my + r * 0.04f, mw * 0.7f, r * 0.04f);
+        }
+    }
+
+    static void drawMouth0(Gfx g, Look l, Pose p, float r, float ex) {
         float my = r * 0.6f;
         float mw = r * (l.isChild() ? 0.2f : 0.22f);
         float open = Math.max(0, Math.min(1, p.mouth));

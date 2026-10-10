@@ -288,7 +288,7 @@ public class MainActivity extends Activity {
         LinearLayout body = page(S_LOGIN, "🎬 Kahani Film", false);
         LinearLayout c = Ui.card(this);
         c.addView(Ui.text(this, "Welcome!", 22, Ui.TEXT, true));
-        c.addView(Ui.text(this, "Turn your story into a cartoon film for children — the studio prepares voices, music, camera and scenes for you.\n\nSign in with your Gmail (Google account) to start.", 16, Ui.SUB, false));
+        c.addView(Ui.text(this, "Turn your story into an animated family film — the studio prepares voices, music, camera and scenes for you.\n\nSign in with your Gmail (Google account) to start.", 16, Ui.SUB, false));
         c.addView(Ui.button(this, "G   Sign in with Gmail", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { login(); }
         }));

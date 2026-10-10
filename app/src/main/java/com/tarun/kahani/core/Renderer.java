@@ -1268,6 +1268,7 @@ public final class Renderer {
                 if (gl > 0.93f && camZ < 1.6f) p.headTilt += (gl - 0.93f) / 0.07f * 2f * close * (p.facing < 0 ? -1 : 1);
             }
         }
+        madeUp(a, p, t);
         applyActs(a, p, tp);
         // lip-sync protocol: a speaker seen close keeps the head still — a gesture may still move the arms, but
         // never bob or rock the whole body (on a narrow screen the face is the whole frame, and a bob reads as
@@ -1371,6 +1372,71 @@ public final class Renderer {
             feetLog.add(new float[]{y + mo.dy, y, h, mv != null || acting(a, t) || (p.sit > 0 && p.sit < 1) ? 1 : 0});
         // a locked shot never shimmers: the picture lands on whole screen pixels (sub-pixel drift re-samples the
         // mesh differently every frame and reads as a shake)
+        // v37: activities that carry the body on their own path — a vehicle's seat, a swing, a slide, a see-saw,
+        // a merry-go-round — and the playground things that stay where they stand
+        Film.Act ride = null, play = null, exer = null, bath = null, scr = null, kiss = null;
+        for (Film.Act ac : a.acts) {
+            if (t < ac.t0 || t >= ac.t1) continue;
+            switch (ac.type) {
+                case Film.G_RIDE: ride = ac; break;
+                case Film.G_PLAYGROUND: play = ac; break;
+                case Film.G_EXERCISE: exer = ac; break;
+                case Film.G_BATHE: bath = ac; break;
+                case Film.G_SCREEN: scr = ac; break;
+                case Film.G_KISS: kiss = ac; break;
+                default:
+            }
+        }
+        // a passenger inside a car, a bus or an auto is inside it (not drawn over its side)
+        if (ride != null && ride.item < 0 && (-ride.item) % Film.V_PASSENGER >= Film.V_CAR) { g.restore(); return; }
+        float hip = Puppet.seatHeight(p.seat) * h * seatScale(a);
+        float swingDeg = 0, vS = h;
+        if (ride != null) {
+            int v = Math.abs(ride.item) % Film.V_PASSENGER;
+            vS = v == Film.V_BICYCLE ? h : (a.look.isChild() ? h / 0.78f : h);
+            float lift = Props.seatOf(Math.abs(ride.item))[1] * vS - Math.max(0, hip);
+            mo.dy = -lift * p.sit + (v == Film.V_BICYCLE ? 0 : (float) Math.sin(t * 40) * 0.6f);
+            mo.dx = ride.item < 0 ? -0.24f * vS * p.facing : 0;
+            mo.rot = 0;
+        }
+        if (play != null) {
+            int kind = Math.abs(play.item);
+            float uu = t - play.t0, dur = play.t1 - play.t0, ph = uu / dur;
+            float base = Director.xAt(a, play.t0), f = a.stateAt(play.t0 + 0.05f).facing >= 0 ? 1 : -1;
+            mo.rot = 0;
+            if (kind == Film.PG_SWING) {
+                float amp = 26 * Rig.smooth(0, 1.6f, uu) * Rig.smooth(dur, dur - 1.3f, uu);
+                swingDeg = amp * (float) Math.sin(uu * 2 * Math.PI / 1.9f);
+                mo.dx = 0; mo.dy = -(Props.SWING_SEAT * h - hip);
+                g.save(); g.translate(x, y); if (scale != 1f) g.scale(scale, scale); Props.swingFrame(g, h); g.restore();
+            } else if (kind == Film.PG_SLIDE) {
+                float top = Props.SLIDE_TOP * h;
+                if (ph < 0.35f) { mo.dx = -0.14f * h * f; mo.dy = -top * Rig.smooth(0.02f, 0.33f, ph); }
+                else if (ph < 0.5f) { float w = (ph - 0.35f) / 0.15f; mo.dx = (-0.14f + 0.2f * w) * h * f; mo.dy = -(top - hip * p.sit); }
+                else {
+                    float q = Math.max(0, Math.min(1, (x - base) * f / (Props.SLIDE_LEN * h)));
+                    float surf = Props.slideHeight(q) * h;
+                    mo.dx = 0.06f * h * f * (1 - q);
+                    mo.dy = -(surf - hip * Math.max(p.sit, 0.001f)) * (ph < 0.85f ? 1 : p.sit);
+                    if (ph >= 0.85f) mo.dy = -(Props.SLIDE_END * h - hip) * p.sit;
+                }
+                g.save(); g.translate(base, y); if (scale != 1f) g.scale(scale, scale); Props.slide(g, h, f); g.restore();
+            } else if (kind == Film.PG_SEESAW && play.target != null) {
+                float ox = Director.xAt(play.target, t);
+                float left = Math.min(x, ox), right = Math.max(x, ox), half = (right - left) / 2;
+                float deg = 13 * Rig.smooth(0, 1.0f, uu) * Rig.smooth(dur, dur - 1.0f, uu) * (float) Math.sin(uu * 2 * Math.PI / 2.4f);
+                float rise = half * (float) Math.sin(Math.toRadians(deg));
+                float seatY = 0.33f * h + (x <= ox ? rise : -rise);
+                mo.dx = 0; mo.dy = -(seatY - hip);
+                if (x <= ox) { g.save(); g.translate(0, y); Props.seesaw(g, left, right, h, deg); g.restore(); }
+            } else if (kind == Film.PG_ROUND) {
+                float th = uu * 2 * (float) Math.PI / 3.4f;
+                mo.dx = 0.55f * h * (float) Math.sin(th); mo.dy = -0.12f * h;
+                p.facing = Math.cos(th) >= 0 ? 1 : -1;
+                g.save(); g.translate(x, y); if (scale != 1f) g.scale(scale, scale); Props.roundabout(g, h, th, false); g.restore();
+            }
+        }
+        if (bath != null || scr != null) { mo.dx = 0; mo.dy = 0; mo.rot = 0; }
         float px = x + mo.dx, py = y + mo.dy;
         if (camStill && pixelStep > 0) { px = Math.round(px / pixelStep) * pixelStep; py = Math.round(py / pixelStep) * pixelStep; }
         g.translate(px, py);
@@ -1399,6 +1465,27 @@ public final class Renderer {
         boolean chair = a.look.aid == Look.AID_WHEELCHAIR && sp == null && k.body != Pose.LIE;
         if (a.look.aid == Look.AID_WHEELCHAIR) { p.walkAmt = 0; mo.dy = 0; mo.rot *= 0.3f; }
         if (chair) { p.body = Pose.SIT; p.sit = 1; drawWheelchair(g, h, false, p.facing, Director.xAt(a, t) / (0.22f * h)); }
+        // v37: what is behind the body — a vehicle's frame or dark inside, a bath's tiled corner, a mat, the rope behind
+        float rideFade = ride == null ? 0 : Math.min(1, Math.min(t - ride.t0 + 0.35f, ride.t1 - t) / 0.35f);
+        int vColor = vehicleColor(look, a.order);
+        if (ride != null && ride.item > 0) {
+            g.save(); g.setAlpha(Math.max(0, rideFade)); g.translate(0, -mo.dy);
+            Props.vehicle(g, ride.item, vS, p.facing, Director.xAt(a, t) * p.facing, t, vColor, false);
+            g.restore();
+        }
+        if (bath != null && bath.item == 0) { g.save(); g.setAlpha(fadeIn(bath, t)); Props.bathCorner(g, h, p.facing); g.restore(); }
+        if (exer != null && (exer.item == Film.EX_YOGA || exer.item == Film.EX_SQUAT || exer.item == Film.EX_PUSHUP)) { g.save(); g.setAlpha(fadeIn(exer, t)); g.translate(0, -mo.dy); Props.mat(g, h, exer.item == Film.EX_YOGA ? 0xFF7E57C2 : 0xFF26A69A); g.restore(); }
+        float[] ropeL = null, ropeR = null;
+        if (exer != null && exer.item == Film.EX_SKIP) {
+            if (sp == null) { ropeL = Puppet.handAt(look, h, -1, p.armL, p.elbowL); ropeR = Puppet.handAt(look, h, 1, p.armR, p.elbowR); }
+            else { ropeL = new float[]{-0.24f * h, -0.4f * h}; ropeR = new float[]{0.24f * h, -0.4f * h}; }
+            Props.rope(g, ropeL[0], ropeL[1], ropeR[0], ropeR[1], h, (t - exer.t0) * 2 * Math.PI / 0.55f + Math.PI, false);
+        }
+        if (swingDeg != 0 || (play != null && Math.abs(play.item) == Film.PG_SWING)) {
+            // the swinging frame: the rider, the seat and the chains turn together about the top bar
+            float top = Props.SWING_TOP * h + mo.dy;
+            g.translate(0, -top); g.rotate(swingDeg); g.translate(0, top);
+        }
         g.save();
         // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
         // it is for the whole shot (nothing bent, nothing swaying, no step cycle): the pose is in the picture
@@ -1482,17 +1569,107 @@ public final class Renderer {
             drawSeat(g, seat, h * seatScale(a), true, p.facing);
             g.restore();
         }
+        // v37: what is in front of the body — a vehicle's side, door and glass; a bath curtain (or the water) from just
+        // below the shoulders; the folding screen; a towel after the bath; the rope in front; a little heart
+        if (ride != null && ride.item > 0) {
+            g.save(); g.setAlpha(Math.max(0, rideFade)); g.translate(0, -mo.dy);
+            Props.vehicle(g, ride.item, vS, p.facing, Director.xAt(a, t) * p.facing, t, vColor, true);
+            g.restore();
+        }
+        float chin = sp != null ? -h + (sp.faceKnown ? sp.mouthY : 0.13f) * h + 0.07f * h : Puppet.shoulderY(look, h);
+        if (bath != null) {
+            float fa = fadeIn(bath, t);
+            if (sp != null && bath.t1 - t > 0.4f) {
+                float headTop = -h * 0.98f;
+                g.save(); g.setAlpha(fa);
+                Props.mugPour(g, 0.1f * h * p.facing, headTop - 0.07f * h, h, p.facing, t, sp.skin, headTop + 0.03f * h);
+                g.restore();
+            }
+            g.save(); g.setAlpha(fa);
+            if (bath.item == 0) Props.curtain(g, h, chin + 0.04f * h, t);
+            else Props.bathWater(g, h, chin + 0.05f * h, t);
+            g.restore();
+        }
+        if (scr != null) { g.save(); g.setAlpha(fadeIn(scr, t)); Props.screen(g, h, chin - 0.03f * h, scr.item, t); g.restore(); }
+        if (p.towel > 0.01f && bath == null) Props.towel(g, chin + (sp != null ? 0.04f * h : 0.01f * h), (sp != null ? 0.15f : 0.13f) * h, h, p.towel);
+        if (ropeL != null) Props.rope(g, ropeL[0], ropeL[1], ropeR[0], ropeR[1], h, (t - exer.t0) * 2 * Math.PI / 0.55f + Math.PI, true);
+        if (play != null && Math.abs(play.item) == Film.PG_SWING) { g.save(); g.translate(0, -mo.dy); Props.swingSeat(g, h); g.restore(); }
+        if (sp != null && sp.faceKnown && p.bindi > 0.01f && p.sit < 0.05f && p.body == Pose.STAND && ride == null && play == null) {
+            // v37: a bindi put on stays on a picture's forehead, between the brows
+            float sw = sp.w * (h / sp.h), fl = p.facing < 0 ? -1 : 1;
+            float ecx = (-sw / 2 + (sp.eyeLX + sp.eyeRX) / 2 * sw) * fl * mo.sx, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy;
+            float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * sw;
+            g.color(Puppet.alpha(0xFFD32F2F, Math.min(1, p.bindi))); g.oval(ecx, ey - ed * 0.5f, ed * 0.085f, ed * 0.085f);
+        }
+        if (kiss != null && t > kiss.t0 + 0.6f) {
+            float w = (t - kiss.t0 - 0.6f) / Math.max(0.1f, kiss.t1 - kiss.t0 - 0.6f);
+            Props.heart(g, p.facing * 0.16f * h, -0.95f * h - w * 0.25f * h, 0.035f * h, Math.max(0, 1 - w));
+        }
         // v36: what an everyday task needs in front of the character — the stove and its pot, the bucket, the plant
         for (Film.Act act : a.acts) {
-            if (act.type != Film.G_TASK || t < act.t0 - 0.3f || t > act.t1 + 0.3f) continue;
-            if (act.item != Film.T_COOK && act.item != Film.T_WASH && act.item != Film.T_WATER) continue;
+            if (act.type != Film.G_TASK || t < act.t0 - 0.3f || (t > act.t1 + 0.3f && act.item != Film.T_RANGOLI)) continue;
+            if (act.item != Film.T_COOK && act.item != Film.T_WASH && act.item != Film.T_WATER && act.item != Film.T_RANGOLI && act.item != Film.T_PAINT) continue;
             float fade = Math.min(1, Math.min(t - act.t0 + 0.3f, act.t1 + 0.3f - t) / 0.3f);
+            // (a rangoli, once drawn, stays on the floor for the rest of the part)
+            if (act.item == Film.T_RANGOLI) fade = t < act.t0 ? fade : 1;
             g.save(); g.setAlpha(fade);
-            Puppet.drawTaskProp(g, act.item, h, p.facing, t);
+            Puppet.drawTaskProp(g, act.item, h, p.facing, t, Math.max(0, Math.min(1, (t - act.t0) / (act.t1 - act.t0))));
             g.restore();
         }
         g.restore();
     }
+
+    /**
+     * v37: make-up put on earlier in the film stays on (in every later scene): kajal, lipstick, a bindi, mehndi,
+     * powder, face paint, each growing in while it is put on; after a bath a towel round the shoulders for a while.
+     */
+    private void madeUp(Film.Actor a, Pose p, float t) {
+        if (film == null) return;
+        for (Film.Seg sg : film.segs) {
+            if (sg.t0 > t) break;
+            for (Film.Actor o : sg.actors) {
+                if (o.c != a.c) continue;
+                for (Film.Act act : o.acts) {
+                    if (act.t0 > t) continue;
+                    if (act.type == Film.G_MAKEUP) {
+                        float v = Math.min(1, (t - act.t0) / Math.max(0.1f, act.t1 - act.t0));
+                        v = v * v * (3 - 2 * v);
+                        switch (act.item) {
+                            case Film.MK_KAJAL: p.kajal = Math.max(p.kajal, v); break;
+                            case Film.MK_LIPSTICK: p.lipstick = Math.max(p.lipstick, v); break;
+                            case Film.MK_BINDI: p.bindi = Math.max(p.bindi, v > 0.6f ? 1 : 0); break;
+                            case Film.MK_MEHNDI: p.mehndi = Math.max(p.mehndi, v); break;
+                            case Film.MK_POWDER: p.powder = Math.max(p.powder, v); break;
+                            case Film.MK_FACEPAINT: p.facePaint = Math.max(p.facePaint, v); break;
+                            default:
+                        }
+                    } else if (act.type == Film.G_BATHE && o == a && t >= act.t1 && t < act.t1 + 7) {
+                        p.towel = 1 - Rig.smooth(act.t1 + 6, act.t1 + 7, t);
+                        p.wet = Math.max(p.wet, 0.5f * (1 - (t - act.t1) / 7));
+                    }
+                }
+            }
+        }
+    }
+
+    /** v37: the colours a vehicle is painted (one per character). */
+    static final int[] VEHICLE_COLORS = {0xFFC62828, 0xFF1565C0, 0xFF2E7D32, 0xFFEF6C00, 0xFF6A1B9A, 0xFF00838F};
+
+    /** v37: a vehicle's paint — of the palette, the one furthest from the rider's clothes (a green saree, a red scooter). */
+    static int vehicleColor(Look look, int order) {
+        int best = VEHICLE_COLORS[(order & 0x7fffffff) % VEHICLE_COLORS.length], c = look == null ? 0 : look.primary;
+        if (c == 0) return best;
+        double bd = -1;
+        for (int i = 0; i < VEHICLE_COLORS.length; i++) {
+            int v = VEHICLE_COLORS[(i + order) % VEHICLE_COLORS.length];
+            double d = Math.pow((v >> 16 & 255) - (c >> 16 & 255), 2) + Math.pow((v >> 8 & 255) - (c >> 8 & 255), 2) + Math.pow((v & 255) - (c & 255), 2);
+            if (d > bd + 4000) { bd = d; best = v; }
+        }
+        return best;
+    }
+
+    /** v37: an act's things fade in over its first third of a second and out over its last. */
+    static float fadeIn(Film.Act act, float t) { return Math.max(0, Math.min(1, Math.min(t - act.t0, act.t1 - t) / 0.3f)); }
 
     /** 0..1..0 with the rhythm of |sin x| but rounded at the bottom: a bounce that never jerks. */
     static float bump(double x) { return (float) (0.5 - 0.5 * Math.cos(2 * x)); }
@@ -1580,6 +1757,154 @@ public final class Renderer {
                     mo.sy *= 1 + 0.02f * k2;
                     break;
                 }
+                case Film.G_RIDE: {
+                    // v37: riding or driving — seated on the vehicle (lifted onto its seat in drawActor), no steps,
+                    // the hands on the handlebar or the steering wheel; getting off in the last half second
+                    p.walkAmt = 0; p.walk = 0; mo.rot = 0; mo.dy = 0;
+                    int v = Math.abs(act.item) % Film.V_PASSENGER;
+                    float off = act.item > 0 ? Rig.smooth(act.t1 - act.t0 - 0.6f, act.t1 - act.t0, u) : 0;
+                    p.body = off > 0.5f ? Pose.STAND : Pose.SIT; p.sit = 1 - off;
+                    p.seat = v == Film.V_CAR || v == Film.V_BUS ? Film.SEAT_CHAIR : Film.SEAT_THRONE;
+                    boolean bars = v == Film.V_BICYCLE || v == Film.V_MOTORBIKE || v == Film.V_SCOOTER || v == Film.V_AUTO;
+                    if (act.item > Film.V_PASSENGER) { p.armL = p.armR = 14; p.elbowL = p.elbowR = 50; }     // a passenger's hands in the lap
+                    else if (act.item > 0) {
+                        p.armL = bars ? 64 : 52; p.armR = bars ? 64 : 56; p.elbowL = bars ? 24 : 42; p.elbowR = bars ? 24 : 38;
+                        if (v == Film.V_BICYCLE) p.tilt += 5;
+                    } else { p.armL = 20; p.armR = 20; p.elbowL = 40; p.elbowR = 40; }     // a pillion rider holds on
+                    p.emotion = p.emotion == Pose.NEUTRAL ? Pose.HAPPY : p.emotion;
+                    break;
+                }
+                case Film.G_PLAYGROUND: {
+                    float dur = act.t1 - act.t0, ph = u / dur;
+                    int kind = Math.abs(act.item);
+                    if (kind == Film.PG_SWING) {
+                        p.body = Pose.SIT; p.sit = 1; p.seat = Film.SEAT_STOOL; p.walkAmt = 0;
+                        p.armL = p.armR = 168; p.elbowL = p.elbowR = 6;         // holding the chains
+                        p.emotion = Pose.HAPPY;
+                    } else if (kind == Film.PG_SEESAW) {
+                        p.body = Pose.SIT; p.sit = 1; p.seat = Film.SEAT_STOOL; p.walkAmt = 0;
+                        p.armL = p.armR = 70; p.elbowL = p.elbowR = 30;          // the handle in front
+                        p.emotion = Pose.HAPPY;
+                    } else if (kind == Film.PG_ROUND) {
+                        p.walkAmt = 0; p.armR = 150; p.elbowR = 20; p.emotion = Pose.HAPPY;
+                    } else if (kind == Film.PG_SLIDE) {
+                        // climb the ladder (steps, hands on the rails), sit at the top, slide down with the arms up, stand up
+                        if (ph < 0.35f) { p.walk = u * 7; p.walkAmt = 0.7f; p.armL = 150 + 15 * (float) Math.sin(u * 7); p.armR = 150 - 15 * (float) Math.sin(u * 7); p.elbowL = p.elbowR = 30; }
+                        else if (ph < 0.85f) {
+                            p.walkAmt = 0; p.body = Pose.SIT; p.seat = Film.SEAT_STOOL;
+                            p.sit = Rig.smooth(0.35f, 0.47f, ph);
+                            if (ph > 0.5f) { p.armL = p.armR = 150; p.elbowL = p.elbowR = 15; p.mouth = Math.max(p.mouth, 0.45f); }
+                        } else { p.walkAmt = 0; p.body = Pose.STAND; p.sit = 1 - Rig.smooth(0.85f, 0.97f, ph); p.seat = Film.SEAT_STOOL; }
+                    }
+                    break;
+                }
+                case Film.G_EXERCISE: {
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float dur = act.t1 - act.t0;
+                    switch (act.item) {
+                        case Film.EX_DUMBBELL: {
+                            // biceps curls: both forearms come up together, slowly, and go down slower
+                            float c = 0.5f - 0.5f * (float) Math.cos(u * 2 * Math.PI / 1.7f);
+                            p.holdR = Pose.I_DUMBBELL; p.holdL = Pose.I_DUMBBELL;
+                            p.armL = p.armR = 10; p.elbowL = p.elbowR = 12 + 140 * c;
+                            if (picture) mo.dy -= 1.5f * c;
+                            p.emotion = Pose.DETERMINED;
+                            break;
+                        }
+                        case Film.EX_SKIP: {
+                            double ang = u * 2 * Math.PI / 0.55f;
+                            float jump = (float) Math.max(0, -Math.cos(ang));
+                            mo.dy -= jump * jump * 16;
+                            p.armL = p.armR = 26 + 6 * (float) Math.sin(ang); p.elbowL = p.elbowR = 48;
+                            p.holdL = p.holdR = Pose.I_NONE;
+                            p.emotion = Pose.HAPPY;
+                            break;
+                        }
+                        case Film.EX_SQUAT: {
+                            float c = 0.5f - 0.5f * (float) Math.cos(u * 2 * Math.PI / 1.9f);
+                            p.sit = 0.62f * c; p.seat = Film.SEAT_CHAIR; p.body = Pose.STAND;
+                            p.armL = p.armR = 8 + 80 * c; p.elbowL = p.elbowR = 8;
+                            p.emotion = Pose.DETERMINED;
+                            break;
+                        }
+                        case Film.EX_YOGA: {
+                            // a slow sequence: arms up (palms together), a bend to each side, namaste at the chest; eyes closed, calm
+                            float seg3 = dur / 3, w = u % seg3 / seg3;
+                            int step = Math.min(2, (int) (u / seg3));
+                            float in = Rig.smooth(0, 0.25f, w) * Rig.smooth(1, 0.8f, w);
+                            if (step == 0) { p.armL = p.armR = 8 + 165 * in; p.elbowL = p.elbowR = 10; }
+                            else if (step == 1) { p.armL = p.armR = 172; p.elbowL = p.elbowR = 8; p.tilt += 14 * (float) Math.sin(w * 2 * Math.PI) * in; mo.rot += 6 * (float) Math.sin(w * 2 * Math.PI) * in; }
+                            else { p.armL = p.armR = 8 + 34 * in; p.elbowL = p.elbowR = 10 + 140 * in; }
+                            p.eyesClosed = true; p.emotion = Pose.RELIEVED;
+                            break;
+                        }
+                        case Film.EX_PUSHUP: {
+                            // a kneeling push-up seen from the front: on the knees, leaning forward onto the hands, the
+                            // elbows bending and straightening (a drawn character faces the camera: no side view of a full push-up)
+                            float down = Rig.smooth(0, 0.6f, u) * Rig.smooth(dur, dur - 0.6f, u);
+                            float c = 0.5f - 0.5f * (float) Math.cos(Math.max(0, u - 0.6f) * 2 * Math.PI / 1.4f);
+                            if (!picture) { if (down > 0.3f) p.body = Pose.KNEEL; p.tilt += 40 * down; p.armL = p.armR = 20; p.elbowL = p.elbowR = 10 + 45 * c * down; mo.dy += 9 * c * down; }
+                            else mo.dy += 4 * c;
+                            p.emotion = Pose.DETERMINED;
+                            break;
+                        }
+                        default:
+                    }
+                    break;
+                }
+                case Film.G_MAKEUP: {
+                    // a mirror in the left hand, the right hand putting it on (the face turned a little to the mirror)
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float dur = act.t1 - act.t0, in = Rig.smooth(0, 0.4f, u) * (1 - Rig.smooth(dur - 0.4f, dur, u));
+                    float dab = (float) Math.sin(u * 9);
+                    int tool;
+                    float arm, elbow;
+                    // the arm angles that bring the hand to the eye, the lips, the forehead and the cheek (solved
+                    // for the drawn body's proportions: a child's head is bigger for its height)
+                    boolean kid = a.look.isChild();
+                    switch (act.item) {
+                        case Film.MK_KAJAL: tool = Pose.I_KAJAL; arm = kid ? 154 : 152; elbow = kid ? 79 : 104; break;
+                        case Film.MK_LIPSTICK: tool = Pose.I_LIPSTICK; arm = kid ? 164 : 167; elbow = kid ? 119 : 123; break;
+                        case Film.MK_BINDI: tool = Pose.I_BINDI; arm = kid ? 178 : 168; elbow = kid ? 45 : 80; break;
+                        case Film.MK_POWDER: tool = Pose.I_PUFF; arm = (kid ? 137 : 145) + 4 * dab; elbow = kid ? 113 : 122; break;
+                        case Film.MK_FACEPAINT: tool = Pose.I_PAINTBRUSH; arm = (kid ? 137 : 145) + 3 * dab; elbow = kid ? 113 : 122; break;
+                        default: tool = Pose.I_CONE; arm = 36; elbow = 112;
+                    }
+                    p.holdR = tool;
+                    if (act.item == Film.MK_MEHNDI) { p.holdL = Pose.I_NONE; p.armL = 30 * in + 8 * (1 - in); p.elbowL = 96 * in + 10 * (1 - in); p.nod += 0.2f * in; }
+                    else { p.holdL = Pose.I_MIRROR; p.armL = 92 * in + 8 * (1 - in); p.elbowL = 70 * in + 10 * (1 - in); p.headTilt += 4 * in * (p.facing < 0 ? 1 : -1); }
+                    if (!picture) { p.armR = arm * in + 8 * (1 - in); p.elbowR = elbow * in + 10 * (1 - in); }
+                    else if (act.item != Film.MK_MEHNDI) { p.toMouth = in; p.toMouthItem = tool; }
+                    p.emotion = Pose.HAPPY;
+                    break;
+                }
+                case Film.G_BATHE: {
+                    // water poured over the head from a mug (the arm up), the eyes shut against it, a shake of the head
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float dur = act.t1 - act.t0, in = Rig.smooth(0, 0.5f, u) * (1 - Rig.smooth(dur - 0.5f, dur, u));
+                    p.walkAmt = 0; mo.dx = 0;
+                    if (!picture) { p.holdR = Pose.I_MUG; p.armR = 165 * in + 8 * (1 - in); p.elbowR = 22; }
+                    p.eyesClosed = in > 0.5f && (u % 2.2f) < 1.4f;
+                    p.headTilt += 4 * (float) Math.sin(u * 5) * in;
+                    p.wet = Math.max(p.wet, 0.8f * in);
+                    p.emotion = Pose.HAPPY;
+                    break;
+                }
+                case Film.G_SCREEN:
+                    p.walkAmt = 0;
+                    break;
+                case Film.G_KISS: {
+                    // a peck: lean in towards the other's cheek (or bend to a child's forehead), the eyes close a moment
+                    float dur = act.t1 - act.t0, in = Rig.smooth(0, 0.5f, u) * (1 - Rig.smooth(dur - 0.5f, dur, u));
+                    if (act.target != null) p.facing = Director.xAt(act.target, t) >= Director.xAt(a, t) ? 1 : -1;
+                    p.tilt += (act.item == 1 ? 16 : 9) * in;
+                    p.nod += (act.item == 1 ? 0.25f : 0.08f) * in;
+                    mo.dx += p.facing * 14 * in;
+                    p.armL = p.armR = 8 + 30 * in; p.elbowL = p.elbowR = 10 + 40 * in;
+                    if (in > 0.8f) p.eyesClosed = true;
+                    p.emotion = Pose.HAPPY;
+                    break;
+                }
                 case Film.G_TASK: {
                     // v36: an everyday task — the hands do the work with the task's tool, the head follows the work
                     // (a picture keeps its arms nearly still: the tool is at its hand, the task's things in front of it)
@@ -1615,12 +1940,23 @@ public final class Renderer {
                             break;
                         case Film.T_BRUSH:
                             p.holdR = Pose.I_BRUSH;
-                            if (!picture) { p.armR = (72 + 3 * (float) Math.sin(u * 28)) * in + 8 * (1 - in); p.elbowR = 142 * in + 10 * (1 - in); }
+                            if (!picture) { p.armR = ((a.look.isChild() ? 164 : 167) + 3 * (float) Math.sin(u * 28)) * in + 8 * (1 - in); p.elbowR = (a.look.isChild() ? 119 : 123) * in + 10 * (1 - in); }
                             else { p.toMouth = in; p.toMouthItem = Pose.I_BRUSH; }
                             break;
                         case Film.T_COMB:
                             p.holdR = Pose.I_COMB; p.headTilt += 5 * in;
                             if (!picture) { p.armR = (150 - 18 * (float) Math.abs(Math.sin(u * 2.4f))) * in + 8 * (1 - in); p.elbowR = 60 * in + 10 * (1 - in); }
+                            break;
+                        case Film.T_RANGOLI:
+                            // v37: kneeling on the floor, the hand trickling coloured powder into the pattern
+                            p.body = Pose.SIT; p.sit = Math.max(p.sit, in); p.seat = Film.SEAT_FLOOR; p.walkAmt = 0;
+                            p.nod += 0.25f * in;
+                            if (!picture) { p.armR = 44 + 10 * cyc * in; p.elbowR = 40; }
+                            break;
+                        case Film.T_PAINT:
+                            // v37: at an easel, the brush dabbing at the canvas
+                            p.holdR = Pose.I_PAINTBRUSH; p.nod += 0.05f * in;
+                            if (!picture) { p.armR = (70 + 8 * cyc) * in + 8 * (1 - in); p.elbowR = 50 + 12 * (float) Math.cos(u * 5) * in; }
                             break;
                         case Film.T_WATER:
                             p.holdR = Pose.I_CAN; p.nod += 0.12f * in;
@@ -2765,7 +3101,7 @@ public final class Renderer {
             }
             // v35: eating or drinking in a close-up — the picture's hand is below the frame, so the cup, the glass,
             // the bottle or a morsel comes up into the frame to the lips in a hand of the character's own skin
-            if (p.toMouth > 0.01f && sp.faceKnown && (p.toMouthItem == Pose.I_PHONE || p.toMouthItem == Pose.I_BRUSH || actorY + hy * actorScale > camY + vh / 2f / camZ - 2)) {
+            if (p.toMouth > 0.01f && sp.faceKnown && (p.toMouthItem == Pose.I_PHONE || p.toMouthItem == Pose.I_BRUSH || p.toMouthItem >= Pose.I_KAJAL || actorY + hy * actorScale > camY + vh / 2f / camZ - 2)) {
                 float rise = rigged ? rig.feetRise(st, h) : 0;
                 float mx = (-w / 2 + sp.mouthX * w) * (p.facing < 0 ? -1 : 1) * mo.sx, my = (-h + sp.mouthY * h) * mo.sy + rise;
                 float mw = Math.max(sp.mouthHW * w, w * 0.02f);
@@ -2777,6 +3113,18 @@ public final class Renderer {
                     float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * (p.facing < 0 ? -1 : 1) * mo.sx;
                     tx = ecx + p.facing * ed * 1.4f; ty = ey + ed * 0.35f;
                 } else if (p.toMouthItem == Pose.I_BRUSH) { tx = mx + p.facing * mw * 0.2f + (float) Math.sin(p.time * 28) * mw * 0.35f; ty = my + mw * 0.2f; }
+                else if (p.toMouthItem >= Pose.I_KAJAL) {
+                    // v37: make-up to its place on the face — the lips, the lower lid, between the brows, a cheek
+                    float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * w, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy + rise;
+                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * (p.facing < 0 ? -1 : 1) * mo.sx;
+                    float jig = (float) Math.sin(p.time * 9) * mw * 0.15f;
+                    switch (p.toMouthItem) {
+                        case Pose.I_LIPSTICK: tx = mx + jig; ty = my + mw * 0.15f; break;
+                        case Pose.I_KAJAL: tx = ecx + p.facing * ed * 0.5f + jig; ty = ey + ed * 0.12f; break;
+                        case Pose.I_BINDI: tx = ecx; ty = ey - ed * 0.55f; break;
+                        default: tx = ecx + p.facing * ed * 0.75f + jig; ty = ey + ed * 0.55f;
+                    }
+                }
                 float ix = hx + (tx - hx) * u, iy = hy + (ty - hy) * u;
                 drawToLips(g, p.toMouthItem, ix, iy, mw, p.facing, u, sp.skin, p.time);
                 if (p.toMouthItem == -1) { if (p.holdR == Pose.I_PLATE) drawItem(g, p.holdR, hx, hy, h, p); return; }
@@ -2837,9 +3185,9 @@ public final class Renderer {
             g.restore();
             return;
         }
-        if (item == Pose.I_PHONE || item == Pose.I_BRUSH) {
+        if (item == Pose.I_PHONE || item == Pose.I_BRUSH || item >= Pose.I_KAJAL) {
             // v36: a phone at the ear, a toothbrush at the mouth, in a hand of the character's own skin
-            float k = mw / (item == Pose.I_PHONE ? 2.6f : 4.2f);
+            float k = mw / (item == Pose.I_PHONE ? 2.6f : item >= Pose.I_KAJAL ? 3.2f : 4.2f);
             Puppet.drawTool(g, item, 0, 0, k, facing, time, 1e6f);
             g.color(skin); g.roundRect(-5 * k, (item == Pose.I_PHONE ? 2 : 1) * k, 10 * k, 7 * k, 3 * k);
             g.color(Puppet.shade(skin, 0.86f)); g.line(-3 * k, 3 * k, -3 * k, 7 * k, 0.7f * k); g.line(0, 3 * k, 0, 7 * k, 0.7f * k);
@@ -2901,7 +3249,7 @@ public final class Renderer {
                 break;
             default:
                 // v36: the tools of everyday tasks (the floor is at the feet: y = 0 before this item's own scale)
-                if (item >= Pose.I_LADLE && item <= Pose.I_PAPER) Puppet.drawTool(g, item, 0, 0, 1f, p.facing, p.time, -y / (s * 1.6f));
+                if (item >= Pose.I_LADLE && item <= Pose.I_ROPE) Puppet.drawTool(g, item, 0, 0, 1f, p.facing, p.time, -y / (s * 1.6f));
         }
         g.restore();
     }

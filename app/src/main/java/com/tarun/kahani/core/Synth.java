@@ -127,7 +127,7 @@ public final class Synth {
             // v36: a page turned — a quick papery whisper
             case Film.SFX_PAGE: { sweepNoise(o, 0.02f, Math.min(dur - 0.03f, 0.33f), 0.55f, 0.85f, 0.08f); break; }
             // v36: a pen or pencil on paper — short scratchy strokes
-            case Film.SFX_SCRIBBLE: { for (float t = 0.05f; t < dur - 0.1f; t += 0.16f + Math.abs(rnd()) * 0.12f) burst(o, t, 0.06f + Math.abs(rnd()) * 0.05f, 0.95f, 0.03f); fadeEnds(o, 0.05f); break; }
+            case Film.SFX_SCRIBBLE: { for (float t = 0.05f; t < dur - 0.1f; t += 0.16f + Math.abs(rnd()) * 0.12f) burst(o, t, 0.06f + Math.abs(rnd()) * 0.05f, 0.95f, 0.05f); fadeEnds(o, 0.05f); break; }
             // v36: brushing teeth — quick back-and-forth bristle strokes
             case Film.SFX_BRUSH: { for (float t = 0.05f; t < dur - 0.1f; t += 0.13f) burst(o, t, 0.09f, 0.8f, 0.04f); fadeEnds(o, 0.08f); break; }
             // v36: water poured from a watering can — a steady trickle with splashes below
@@ -143,7 +143,7 @@ public final class Synth {
                     float t = i / (float) SR, f = 46 + 6 * (float) Math.sin(t * 0.8f) + 3 * (float) Math.sin(t * 5.3f);
                     float ph = t * f;
                     float v = (float) (Math.sin(ph * 6.283) * 0.5 + Math.sin(ph * 2 * 6.283) * 0.3 + Math.sin(ph * 3 * 6.283) * 0.15) + rnd() * 0.12f;
-                    o[i] += v * 0.32f;
+                    o[i] += v * 0.1f;
                 }
                 lowpass(o, 0.12f);
                 fadeEnds(o, 0.4f);
@@ -161,7 +161,7 @@ public final class Synth {
             // v37: a bicycle bell — two quick rings
             case Film.SFX_CYCLE_BELL: { for (int r = 0; r < 2; r++) for (int k = 0; k < 6; k++) bellTone(o, r * 0.32f + k * 0.035f, 2900 + (k % 2) * 260, 0.35f, 0.09f); break; }
             // v37: a bicycle's chain and freewheel — a soft fast ticking
-            case Film.SFX_CHAIN: { for (float t = 0.03f; t < dur - 0.05f; t += 0.07f) knock(o, t, 3800 + rnd() * 400, 0.018f); fadeEnds(o, 0.2f); break; }
+            case Film.SFX_CHAIN: { for (float t = 0.03f; t < dur - 0.05f; t += 0.07f) knock(o, t, 3800 + rnd() * 400, 0.035f); fadeEnds(o, 0.2f); break; }
             // v37: a swing's chains — a creak at each end of the swing (every 1.3 s)
             case Film.SFX_CREAK: { for (float t = 0.1f; t < dur - 0.4f; t += 1.3f) { tone(o, t, 0.32f, 520, 610, 0.05f, 1); tone(o, t + 0.04f, 0.25f, 760, 700, 0.03f, 1); } break; }
             // v37: a skipping rope — the whirr past the ear, the tap on the ground

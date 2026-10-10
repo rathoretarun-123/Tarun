@@ -1580,7 +1580,7 @@ public final class Renderer {
         if (seat >= Film.SEAT_STOOL && seat != Film.SEAT_WHEELCHAIR && p.sit > 0.35f && p.body != Pose.LIE) {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
-            drawSeat(g, seat, h * seatScale(a), true, p.facing);
+            drawSeat(g, seat, h * seatScale(a), true, p.facing, sp != null);
             g.restore();
         }
         // v37: what is in front of the body — a vehicle's side, door and glass; a bath curtain (or the water) from just
@@ -2381,7 +2381,10 @@ public final class Renderer {
     private float seatScale(Film.Actor a) { return art.sprites.containsKey(a.c.id) ? 1f : Puppet.seatScale(a.look); }
 
     /** facing (v35): the way the sitter faces — a bed's head end (its headboard and pillow) is behind them. */
-    private void drawSeat(Gfx g, int seat, float h, boolean front, float facing) {
+    private void drawSeat(Gfx g, int seat, float h, boolean front, float facing) { drawSeat(g, seat, h, front, facing, false); }
+
+    /** legsIn (v39): a picture's legs, folded by its rig, go into the sofa (its front is drawn over them). */
+    private void drawSeat(Gfx g, int seat, float h, boolean front, float facing, boolean legsIn) {
         float top = -h * 0.3f, w = h * 0.62f;
         switch (seat) {
             case Film.SEAT_CHAIR: {
@@ -2412,6 +2415,15 @@ public final class Renderer {
                     g.roundRect(-sw / 2, st, sw, h * 0.2f, h * 0.04f);
                     g.linear(0, st - h * 0.03f, 0, st + h * 0.05f, 0xFFA572B2, 0xFF7A4A86);
                     g.roundRect(-sw * 0.45f, st - h * 0.03f, sw * 0.9f, h * 0.08f, h * 0.035f);
+                }
+                if (front && legsIn) {
+                    // v39: the seat's front in front of the sitter's legs — a front picture folded onto the seat cannot
+                    // show its knees coming forward, so the legs go into the sofa and the body sits in its cushion
+                    // (with the legs standing in front of the seat it read as one standing before the sofa)
+                    g.linear(0, st + h * 0.015f, 0, -h * 0.05f, 0xFF7A4A86, 0xFF4E2E5A);
+                    g.roundRect(-sw * 0.47f, st + h * 0.015f, sw * 0.94f, -st - h * 0.065f, h * 0.035f);
+                    g.color(0x33FFFFFF); g.line(-sw * 0.44f, st + h * 0.03f, sw * 0.44f, st + h * 0.03f, h * 0.006f);
+                    g.color(0xFF3E2723); g.rect(-sw * 0.46f, -h * 0.05f, h * 0.035f, h * 0.05f); g.rect(sw * 0.46f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
                 }
                 g.linear(0, -h * 0.42f, 0, -h * 0.05f, 0xFF9A64A8, 0xFF5E3A6A);
                 g.roundRect(-sw / 2 - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);

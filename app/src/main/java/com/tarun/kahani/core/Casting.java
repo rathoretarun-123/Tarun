@@ -31,11 +31,16 @@ public final class Casting {
     /** Decides the pictures of every shot of the film. */
     public static void cast(Art art, Film film, Story story) {
         if (art == null || film == null) return;
+        // v39: one who stays seated stays on the same seat: the seated picture of the last shot is kept while it fits
+        // (a mother on a chair in one shot and cross-legged on the floor in the next is a continuity error)
+        java.util.Map<String, Integer> seated = new java.util.HashMap<String, Integer>();
+        Film.Seg lastSeg = null;
         for (Film.Shot sh : film.shots) {
             sh.pictures.clear();
             sh.cycles.clear();
             Film.Seg s = film.segAt(sh.t + 0.01f);
             if (s == null) continue;
+            if (s != lastSeg) { seated.clear(); lastSeg = s; }
             float mid = sh.t + Math.max(0.05f, Math.min(sh.dur * 0.5f, 1.2f));
             for (Film.Actor a : s.actors) {
                 Film.Key k = a.stateAt(mid);
@@ -43,7 +48,11 @@ public final class Casting {
                 Art.Sprite sp = art.sprites.get(a.c.id);
                 if (sp == null || sp.poses == null || sp.poses.isEmpty()) continue;
                 Want w = want(film, s, sh, a, mid);
-                int best = choose(sp, w);
+                Integer keep = w.pose == PoseSense.SIT ? seated.get(a.c.id) : null;
+                int best = choose(sp, w, keep == null ? MAIN - 10 : keep);
+                if (w.pose != PoseSense.SIT) seated.remove(a.c.id);
+                else if (best >= 0 && !sp.poses.get(best).closeUp && sp.poses.get(best).pose == PoseSense.SIT) seated.put(a.c.id, best);
+                else if (best == MAIN) seated.put(a.c.id, MAIN);
                 // v33: a beast (fur, four legs, a monster) is never bent through the rig: its front picture is drawn as it is
                 boolean beast = a.c.look != null && (a.c.look.kind == Look.ANIMAL || a.c.look.kind == Look.BIRD || a.c.look.kind == Look.MONSTER || a.c.look.kind == Look.MONKEY
                         || a.c.look.arms > 2 || a.c.look.mount >= 0 || a.c.look.aid == Look.AID_WHEELCHAIR);      // v34: a many-armed goddess, a rider or a wheelchair is never bent either
@@ -139,7 +148,10 @@ public final class Casting {
     }
 
     /** The best of the character's pictures for the want, or MAIN. */
-    public static int choose(Art.Sprite sp, Want w) {
+    public static int choose(Art.Sprite sp, Want w) { return choose(sp, w, MAIN - 10); }
+
+    /** v39: the same, keeping the seated picture (or MAIN) of the shot before when it still fits (keep; MAIN - 10 = none). */
+    public static int choose(Art.Sprite sp, Want w, int keep) {
         List<Art.PoseSprite> ps = sp.poses;
         if (ps == null || ps.isEmpty()) return MAIN;
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
@@ -153,6 +165,7 @@ public final class Casting {
         // v39: but a standing front picture folded onto a seat reads as standing in front of it: the user's own
         // seated picture of a fitting feeling plays the sitting (cross-legged, in a chair: the body is right)
         if (mainPose != PoseSense.STAND && lowPose(w.pose)) mainScore -= 3;
+        if (keep == MAIN && !w.closeOk) mainScore += 4;                     // seated through the rig before: still so (a face shot shows no seat)
         int best = MAIN; float bestScore = mainScore;
         for (int i = 0; i < ps.size(); i++) {
             Art.PoseSprite p = ps.get(i);
@@ -168,6 +181,7 @@ public final class Casting {
             // v39: a seated picture as wide as it is tall has its own armchair in it: on the story's sofa it would be a
             // chair on a sofa — a cross-legged or perched one fits better
             if (p.pose == PoseSense.SIT && !p.closeUp && p.aspect > 0 && p.aspect < 1.02f) sc -= 2.5f;
+            if (i == keep && !w.closeOk) sc += 4;                             // v39: the same seat as the shot before
             if (sc > bestScore) { bestScore = sc; best = i; }
         }
         return best;

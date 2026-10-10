@@ -973,7 +973,7 @@ public final class Director {
                     ck.costume = ci + 1;
                     film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, tc, 0.5f, 0.3f));
                 }
-                film.notes.add("    ↳ " + c.shown() + " changes clothes: " + co.text);
+                film.notes.add("    ↳ " + c.shown() + " — a new look: " + co.text);
             }
             // entrances that happen at this beat
             for (Film.Actor a : seg.actors) {
@@ -2193,17 +2193,23 @@ public final class Director {
      * "डरो मत, मैं आ गई हूँ" hears his fear with resolve, not fear (her next line within the next four).
      */
     /**
-     * v34: what helps a character walk decides how they move — a wheelchair rolls (never stands, kneels, runs or
+     * v34: what helps a character walk (or a leg in plaster) decides how they move — a wheelchair rolls (never stands, kneels, runs or
      * jumps; a drawn character sits in it, a picture is drawn as it is, since it shows the chair); a walking stick
      * or crutches walk a third slower and never run or jump.
      */
     private void mobility() {
         for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
-            int aid = a.look == null ? Look.AID_NONE : a.look.aid;
-            if (aid == Look.AID_NONE) continue;
+            if (a.look == null) continue;
+            boolean any = a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0;
+            for (Story.Costume co : a.c.costumes) any |= co.look.aid != Look.AID_NONE || (co.look.injury & Look.INJ_LEG) != 0;
+            if (!any) continue;
             boolean picture = art != null && art.sprites.containsKey(a.c.id);
             for (int i = 0; i < a.keys.size(); i++) {
                 Film.Key k = a.keys.get(i);
+                // v34: the look at this moment (a plaster cut off mid-story lets the character run again)
+                Look lk = k.costume > 0 && k.costume <= a.c.costumes.size() ? a.c.costumes.get(k.costume - 1).look : a.look;
+                int aid = lk.aid;
+                if (aid == Look.AID_NONE && (lk.injury & Look.INJ_LEG) == 0) continue;
                 k.run = false;
                 if (aid == Look.AID_WHEELCHAIR) {
                     if (k.body != Pose.LIE) { k.body = picture ? Pose.STAND : Pose.SIT; k.seat = picture ? -1 : Film.SEAT_WHEELCHAIR; }
@@ -2213,8 +2219,13 @@ public final class Director {
                 }
             }
             for (java.util.Iterator<Film.Act> it = a.acts.iterator(); it.hasNext(); ) {
-                int ty = it.next().type;
-                if (ty == Film.G_JUMP || ty == Film.G_BOUNCE || (aid == Look.AID_WHEELCHAIR && (ty == Film.G_DANCE || ty == Film.G_WALK_PLACE))) it.remove();
+                Film.Act act = it.next();
+                int ty = act.type;
+                Film.Key at = a.keys.isEmpty() ? null : a.at(act.t0);
+                Look lk = at != null && at.costume > 0 && at.costume <= a.c.costumes.size() ? a.c.costumes.get(at.costume - 1).look : a.look;
+                boolean hurt = lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0;
+                if (!hurt) continue;
+                if (ty == Film.G_JUMP || ty == Film.G_BOUNCE || (lk.aid == Look.AID_WHEELCHAIR && (ty == Film.G_DANCE || ty == Film.G_WALK_PLACE))) it.remove();
             }
         }
     }

@@ -26,6 +26,7 @@ import com.tarun.kahani.core.Handbook;
 import com.tarun.kahani.core.Look;
 import com.tarun.kahani.core.Nature;
 import com.tarun.kahani.core.Pose;
+import com.tarun.kahani.core.Puppet;
 import com.tarun.kahani.core.Rig;
 import com.tarun.kahani.core.Set3D;
 import com.tarun.kahani.core.Sets;
@@ -3279,6 +3280,97 @@ public class AppTest {
         job.choosePictures(2);
         job.cancel();
         th.join(60000);
+    }
+
+    /**
+     * v34 (the user's final instructions: "think more about situations"): a leg in plaster on crutches (a limp, never a
+     * run), an arm in a sling, a walking frame, a blindfold, an eye patch, a bandaged head, an umbrella that opens in the
+     * rain; a bandage taken off and a plaster cut in the middle of the story (the crutches go with the plaster), and the
+     * 3D maker's doll of each new look, accepted with the character's own doll and used by the film.
+     */
+    @Test
+    public void injuriesUmbrellaWalkerAndHealing() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        String script = "पात्र और रूप-रंग (Characters):\n1. रोहन (10 वर्ष):\n * चेहरा: छोटे काले बाल।\n * पहनावा: नीली टी-शर्ट। उसका पैर टूटा है, पैर में प्लास्टर।\n"
+                + "2. आशा (11 वर्ष):\n * चेहरा: दो चोटियाँ।\n * पहनावा: पीला फ्रॉक। उसका हाथ गले में लटका है, हाथ पर प्लास्टर। हाथ में लाल छाता।\n"
+                + "3. दादी (75 वर्ष):\n * चेहरा: सफ़ेद बाल।\n * पहनावा: हरी साड़ी। वह वॉकर के सहारे चलती हैं।\n4. गांधारी:\n * चेहरा: आँखों पर पट्टी बँधी है।\n * पहनावा: बैंगनी साड़ी।\n"
+                + "5. काला दाँत (समुद्री डाकू):\n * चेहरा: काली दाढ़ी, एक आँख पर काली पट्टी (eye patch)।\n * पहनावा: लाल कोट।\n6. मोनू (9 वर्ष):\n * चेहरा: घुंघराले बाल, सिर पर पट्टी।\n * पहनावा: हरी टी-शर्ट।\n"
+                + "\nदृश्य 1: बगीचा\n(स्थान: घर के पास का बगीचा। शाम। बारिश हो रही है।)\n(आशा छाता लेकर आती है।)\nआशा: \"बारिश में भीग जाओगे!\"\n(रोहन बैसाखी के सहारे धीरे-धीरे चलकर आता है।)\n"
+                + "रोहन: \"मेरा पैर अब ठीक है।\"\n(दादी वॉकर के सहारे आती हैं।)\nदादी: \"बच्चों, अंदर चलो।\"\nमोनू: \"मुझे भी ले चलो!\"\nगांधारी: \"धैर्य रखो।\"\nकाला दाँत: \"हा हा हा!\"\n"
+                + "\nदृश्य 2: अस्पताल\n(स्थान: अस्पताल का कमरा। दिन।)\n(डॉक्टर मोनू के सिर की पट्टी खोलते हैं।)\nमोनू: \"अब दर्द नहीं है!\"\n(रोहन का प्लास्टर कट जाता है।)\nरोहन: \"हुर्रे!\"\n\nसमाप्त\n";
+        Story st = ScriptParser.parse(script);
+        Story.CharacterDef rohan = null, asha = null, dadi = null, gandhari = null, pirate = null, monu = null;
+        for (Story.CharacterDef c : st.characters) {
+            if (c.displayName.contains("रोहन")) rohan = c; else if (c.displayName.contains("आशा")) asha = c; else if (c.displayName.contains("दादी")) dadi = c;
+            else if (c.displayName.contains("गांधारी")) gandhari = c; else if (c.displayName.contains("काला")) pirate = c; else if (c.displayName.contains("मोनू")) monu = c;
+        }
+        assertNotNull(rohan); assertNotNull(asha); assertNotNull(dadi); assertNotNull(gandhari); assertNotNull(pirate); assertNotNull(monu);
+        // 1. who has what
+        assertTrue("Rohan: a leg in plaster, on crutches: " + rohan.look.injury + "/" + rohan.look.aid, (rohan.look.injury & Look.INJ_LEG) != 0 && rohan.look.aid == Look.AID_CRUTCHES);
+        assertTrue("Asha: an arm in a sling and an umbrella", (asha.look.injury & Look.INJ_ARM) != 0 && asha.look.umbrella);
+        assertTrue("Dadi: a walking frame", dadi.look.aid == Look.AID_WALKER);
+        assertTrue("Gandhari: a blindfold", gandhari.look.glasses == 4);
+        assertTrue("the pirate: an eye patch", pirate.look.glasses == 5);
+        assertTrue("Monu: a bandaged head", (monu.look.injury & Look.INJ_HEAD) != 0);
+        // 2. healing in the middle of the story: the bandage comes off, the plaster is cut and the crutches go with it
+        assertTrue("Monu's bandage comes off: " + monu.costumes.size(), monu.costumes.size() == 1 && monu.costumes.get(0).look.injury == 0 && monu.costumes.get(0).look.primary == monu.look.primary);
+        assertTrue("Rohan's plaster is cut and his crutches go", rohan.costumes.size() == 1 && rohan.costumes.get(0).look.injury == 0 && rohan.costumes.get(0).look.aid == Look.AID_NONE);
+        // 3. no running while the leg is in plaster
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(new Art());
+        int plastered = 0;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c == rohan) for (Film.Key k : a.keys) {
+            Look lk = k.costume > 0 ? rohan.costumes.get(k.costume - 1).look : rohan.look;
+            if ((lk.injury & Look.INJ_LEG) != 0) { plastered++; assertTrue("no running in plaster", !k.run); }
+        }
+        assertTrue("Rohan is on stage in plaster: " + plastered, plastered > 0);
+        // 4. the drawn character: an open umbrella covers the space over the head; every frame of the film draws
+        Bitmap one = Bitmap.createBitmap(400, 500, Bitmap.Config.ARGB_8888);
+        int[] over = new int[2];
+        for (int u = 0; u < 2; u++) {
+            one.eraseColor(0);
+            AndroidGfx pg = new AndroidGfx(one, 2);
+            pg.translate(200, 480);
+            Pose pose = new Pose();
+            pose.umbrellaOpen = u == 1;
+            Puppet.draw(pg, asha.look, pose, 330);
+            int[] px = new int[400 * 500];
+            one.getPixels(px, 0, 400, 0, 0, 400, 500);
+            for (int y = 0; y < 170; y++) for (int x = 0; x < 400; x++) if ((px[y * 400 + x] >>> 24) > 128) over[u]++;      // above the head top (480 - 0.93 × 330)
+        }
+        System.out.println("UMBRELLA: pixels over the head without " + over[0] + ", with " + over[1]);
+        assertTrue("the open umbrella is over the head: " + over[0] + " -> " + over[1], over[1] > over[0] + 2000);
+        Bitmap bmp = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        Renderer rd = new Renderer(film, new Art());
+        for (Film.Shot sh : film.shots) rd.render(g, sh.t + Math.min(0.4f, sh.dur * 0.5f));
+        // 5. the dolls: the plaster and the sling are white and pale blue at the waist; the doll of Monu's new look
+        //    (no bandage) is proposed with his doll and accepted with it; the film then uses it from the change
+        Doll3D.Result sling = Doll3D.make(asha.look, 600, 7, 0, Pose.NEUTRAL, null);
+        int white = 0;
+        for (int y = sling.h * 40 / 100; y < sling.h * 62 / 100; y++) for (int x = 0; x < sling.w; x++) {
+            int c = sling.px[y * sling.w + x];
+            if ((c >>> 24) > 200 && ((c >> 16) & 255) > 200 && ((c >> 8) & 255) > 200 && (c & 255) > 190) white++;
+        }
+        System.out.println("SLING: white plaster pixels at the waist " + white);
+        assertTrue("the arm in plaster across the waist: " + white, white > 150);
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        String key = (String) s3d("keyFor", p, st, monu);
+        p.setSetting("rejected3d.ref." + key, "1");
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        s3d("makeCharacter", p, st, monu, lib, ctx, null, true, null, false);
+        List<String[]> props = (List<String[]>) s3d("costumeProposals", p, key);
+        assertTrue("a doll of Monu's new look is proposed: " + p.read("cast.txt"), props.size() == 1 && props.get(0)[2].equals(key + "#1"));
+        s3d("accept", p, lib, ctx, (String[]) s3d("proposalFor", p, "char", key));
+        assertTrue("accepted with his doll, with its face points: " + p.read("cast.txt"), p.read("cast.txt").contains("costume|" + key + "#1|") && ((List<?>) s3d("costumeProposals", p, key)).isEmpty());
+        for (String l : p.read("cast.txt").split("\n")) if (l.startsWith("costume|")) assertTrue("face points with the costume line: " + l, l.split("\\|").length >= 11);
+        List<String[]> asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingForUser", p, st);
+        for (String[] t : asked) assertTrue("no longer asked for Monu's new look: " + t[0], !t[0].equals("costume:" + key + "#1"));
+        Art art = Art.fromManifest(p.read("cast.txt"), st, p.loader());
+        assertNotNull("Monu's new-look doll is loaded", art.costumeSprite(monu.id, 1));
     }
 
     /** Every visible view with a click action, in screen order. */

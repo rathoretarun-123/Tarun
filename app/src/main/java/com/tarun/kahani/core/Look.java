@@ -57,7 +57,7 @@ public final class Look {
     /** 1 = upright and proud (chin up, chest out), 0 normal, -1 = closed and shy (shoulders in, head down). */
     public float poise = 0f;
     public boolean hero = true;      // villains placed right side
-    /** 0 none, 1 round spectacles, 2 dark / AR glasses (glowing red when glowGlasses). */
+    /** 0 none, 1 round spectacles, 2 dark / AR glasses (glowing red when glowGlasses), 3 goggles, 4 a cloth blindfold, 5 an eye patch. */
     public int glasses;
     public boolean glowGlasses;
     /** A gadget in the hand when idle (GD_*); a selfie stick is a wand with techWand. */
@@ -75,7 +75,12 @@ public final class Look {
     public int mount = -1;
     /** v34: what helps the character walk — a walking stick, crutches or a wheelchair (AID_*). */
     public int aid = AID_NONE;
-    public static final int AID_NONE = 0, AID_STICK = 1, AID_CRUTCHES = 2, AID_WHEELCHAIR = 3;
+    public static final int AID_NONE = 0, AID_STICK = 1, AID_CRUTCHES = 2, AID_WHEELCHAIR = 3, AID_WALKER = 4;
+    /** v34: what is hurt and bandaged (INJ_* bits): an arm in a sling, a leg in plaster, a bandage round the head. */
+    public int injury;
+    public static final int INJ_ARM = 1, INJ_LEG = 2, INJ_HEAD = 4;
+    /** v34: carries an umbrella — opened over the head when it rains outdoors. */
+    public boolean umbrella;
     /** v34: the skin was read from the user's own reference picture: the style cue never replaces it. */
     public boolean skinFixed;
 
@@ -120,7 +125,7 @@ public final class Look {
         l.energy = energy; l.poise = poise; l.heads = heads; l.arms = arms; l.mount = mount;
         l.glasses = glasses; l.glowGlasses = glowGlasses; l.gadget = gadget; l.techWand = techWand; l.robot = robot;
         l.ledClip = ledClip; l.earphones = earphones; l.lightShoes = lightShoes;
-        l.aid = aid; l.skinFixed = skinFixed;
+        l.aid = aid; l.skinFixed = skinFixed; l.injury = injury; l.umbrella = umbrella;
         return l;
     }
 

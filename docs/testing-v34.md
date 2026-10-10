@@ -1,4 +1,4 @@
-# Testing v34 — pictures for everything, many-headed characters, the emotion / activity / angle guide
+# Testing v34 — pictures for everything, many-headed characters, the emotion / activity / angle guide, aids, costumes and situations
 
 ## 1. Uploads rechecked for every character, place and thing
 
@@ -131,3 +131,51 @@ What was looked at and found right after the fixes: the battlefield at dusk with
 The Durga story was also made with drawn puppets (no pictures at all): Durga side-saddle on her lion, the giant's head inside every wide shot, the court and the battlefield as their own places.
 
 Test `godsDemonsAndVanarasAreStagedWell` checks each fix in the app's own code paths.
+
+
+## 8. Glasses, walking aids and a change of clothes
+
+Test `aidsCostumesAndPicturesFirst` reads a Hindi story with six characters and an English one with a change of clothes.
+
+| Checked | Result |
+|---|---|
+| दादाजी "गोल चश्मा", "लाठी" | spectacles and a walking stick (not a wand) |
+| दादी "व्हीलचेयर पर रहती हैं" | a wheelchair; every key seated in it, never running |
+| रोहन "तैराकी के गॉगल्स" | goggles |
+| मीरा "बैसाखी के सहारे" | crutches; never running |
+| जादूगर "जादुई छड़ी" | a wand, no walking stick |
+| सूरदास "एक अंधा बूढ़ा गायक" | dark glasses and a cane |
+| The wheelchair doll | dark tyres at the bottom (4 618 pixels); the face lower than standing |
+| "Maya comes back wearing a red frock with golden stars" | a costume: a frock in a new colour, worn from that line on |
+| "Grandpa takes off his glasses" | a costume with no glasses |
+| Maya's picture recoloured for the frock | made; asked for as "costume:Maya#1"; once uploaded, saved and no longer asked |
+
+## 9. More situations
+
+Test `injuriesUmbrellaWalkerAndHealing`, and the same story made as a film twice on the desktop (drawn characters, then 3D dolls) and looked at every second.
+
+| Situation | How it is read | How it is drawn and moved |
+|---|---|---|
+| A leg in plaster ("पैर में प्लास्टर", "broken leg") | `Look.INJ_LEG` | White plaster from below the knee; the step onto it is shorter; a limp (the step onto the hurt leg sinks deeper and leans); never runs or jumps |
+| An arm in a sling ("हाथ गले में लटका", "arm in a sling") | `Look.INJ_ARM` | The forearm in plaster across the waist in a pale blue sling; that arm never gestures |
+| A bandaged head ("सिर पर पट्टी") | `Look.INJ_HEAD` | A white bandage round the forehead with a pad |
+| A blindfold ("आँखों पर पट्टी", Gandhari) | glasses 4 | A dark cloth over both eyes, knotted behind; no blinks painted over it |
+| An eye patch ("एक आँख पर काली पट्टी", "eye patch") | glasses 5 | A black patch on a strap |
+| A walking frame ("वॉकर के सहारे") | `Look.AID_WALKER` | A frame in front with both hands on its grips; slow steps |
+| An umbrella ("हाथ में लाल छाता", "छाता लेकर आती है") | `Look.umbrella` | Opens over the head while it rains outdoors (and keeps its carrier dry); drawn over pictures too |
+| "डॉक्टर मोनू के सिर की पट्टी खोलते हैं" | a costume: the head bandage off | The bandage is gone from that moment |
+| "रोहन का प्लास्टर कट जाता है" | a costume: the leg healed, the crutches gone | He walks freely again |
+
+**Found and fixed while making the films:**
+
+* The bandage taken off ("पट्टी खोलते हैं") was read only as a blindfold coming off — it now heals the part named (the head), or every bandage when no part is named.
+* Rohan kept his crutches after his plaster was cut — crutches go with the plaster (an old person's stick stays).
+* The sling read as a bowl held at the waist — it is now a narrow triangle under a clearly white forearm.
+* A doll's change of look was only its picture recoloured, so Monu kept his bandage on his doll — the 3D maker now proposes a doll in each new look with the character's own doll (accepted or rejected together), with its own face points; a picture the user gives always wins.
+* "The doctor bandages Rohan's leg" names two people — the hurt one is the owner of the leg ("रोहन के", "Rohan's").
+
+## 10. Pictures first, and cues from the pictures already uploaded
+
+* Started from the app, a film now waits before the 3D maker: "Waiting for you: please add pictures of Zara, the surface of the moon", with two buttons on the progress screen (add pictures, or let the 3D maker make only these). Nothing is built in 3D while it waits. A switch in Settings ("Ask me for my pictures first") turns this off.
+* The 3D maker's style cue comes from the library's pictures when the story has fewer than four of its own: "Style cue from 2 reference picture(s): key light from the right, warmth +0.12, saturation 0.37, contrast 0.26, 2 skin tone(s)".
+* A doll made with a reference picture takes that picture's skin and hair colour, and the style cue never overrides that skin.

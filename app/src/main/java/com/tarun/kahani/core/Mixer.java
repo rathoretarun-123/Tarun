@@ -25,16 +25,28 @@ public final class Mixer {
         for (int i = 0; i < n; i++) {
             float v = (e[i] / ref - 0.14f) / 0.8f;
             v = v < 0 ? 0 : v > 1 ? 1 : v;
-            y += (v > y ? 0.5f : 0.25f) * (v - y);   // quick to open, slower to close
+            y += (v > y ? 0.35f : 0.22f) * (v - y);   // quick to open, slower to close
             e[i] = y;
         }
         // smoothed backwards too (no flicker between frames: real lips glide from syllable to syllable) ...
         y = 0;
         for (int i = n - 1; i >= 0; i--) { y += 0.4f * (e[i] - y); e[i] = 0.5f * (e[i] + y); }
+        // v34 (the animators' rule: the mouth does not flap shut on every syllable): a dip shorter than about 90 ms
+        // between two openings keeps half of them; a real pause (longer) still closes the mouth
+        float[] dil = new float[n], clo = new float[n];
+        for (int i = 0; i < n; i++) { float m = 0; for (int k = Math.max(0, i - 4); k <= Math.min(n - 1, i + 4); k++) m = Math.max(m, e[k]); dil[i] = m; }
+        for (int i = 0; i < n; i++) { float m = 1; for (int k = Math.max(0, i - 4); k <= Math.min(n - 1, i + 4); k++) m = Math.min(m, dil[k]); clo[i] = m; }
+        for (int i = 0; i < n; i++) e[i] = Math.max(e[i], 0.5f * clo[i]);
         // ... and the lips move a moment before the sound is heard (about 40 ms), as real speakers' do
         int lead = 4;
         float[] o = new float[n];
         for (int i = 0; i < n; i++) o[i] = e[Math.min(n - 1, i + lead)];
+        // v34: and they glide — never more than 0.08 of a full opening in 10 ms (about a quarter in one frame), up or
+        // down, from a closed mouth at the start of the line and back to closed at its end
+        float slew = 0.08f, prev = 0;
+        for (int i = 0; i < n; i++) { o[i] = Math.min(o[i], prev + slew); prev = o[i]; }
+        prev = 0;
+        for (int i = n - 1; i >= 0; i--) { o[i] = Math.min(o[i], prev + slew); prev = o[i]; }
         return o;
     }
 

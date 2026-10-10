@@ -3738,7 +3738,8 @@ public class MainActivity extends Activity {
                     String id = f[1] + ":" + f[2];
                     if (f[1].equals(Studio3DArt.P_VIEW) && !seen.add(id)) continue;
                     LinearLayout card = Ui.card(MainActivity.this);
-                    String title = f[1].equals(Studio3DArt.P_CHAR) ? "🧊 3D doll: " + f[2] : f[1].equals(Studio3DArt.P_SCENE) ? "🧊 3D place: part " + f[2] : "📐 Views of " + f[2] + " (three-quarter, side, back)";
+                    String title = f[1].equals(Studio3DArt.P_CHAR) ? "🧊 3D doll: " + f[2] : f[1].equals(Studio3DArt.P_SCENE) ? "🧊 3D place: part " + f[2]
+                            : f[1].equals(Studio3DArt.P_COSTUME) ? "👗 3D doll in the new look: " + f[2].replace("#", " — change ") : "📐 Views of " + f[2] + " (three-quarter, side, back)";
                     final String[] ff = f;
                     LinearLayout box = Ui.column(MainActivity.this);
                     box.addView(Ui.text(MainActivity.this, title, 15, Ui.TEXT, true));
@@ -4501,6 +4502,7 @@ public class MainActivity extends Activity {
         dir.addView(Ui.title(this, "🎬 The director"));
         dir.addView(toggle("Online features (AI, free pictures and sounds)", "online", true));
         dir.addView(toggle("Make missing pictures with free AI (3D animated style, needs internet)", "autoArt", true));
+        dir.addView(toggle("Ask me for my pictures first: the film waits for them before the 3D maker makes any (the 3D maker only for what I do not give)", "askUploads", true));
         dir.addView(toggle("Studio 3D: build whatever is still missing in 3D on the phone, and the views of every character from its picture (no internet)", "studio3d", true));
         dir.addView(toggle("Ask me before a picture made in 3D is used (✔ Use / ✖ Reject where pictures are chosen)", "ask3d", true));
         dir.addView(toggle("Free pictures of the story's objects for inserts (Fluent Emoji 3D on GitHub, MIT)", "freeObjects", true));

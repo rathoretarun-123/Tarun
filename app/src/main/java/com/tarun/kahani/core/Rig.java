@@ -246,7 +246,7 @@ public final class Rig {
         }
         // v34: a picture with a wheelchair (the chair is in the picture) never walks; one with a walking stick or
         // crutches keeps its arms on them (no swing that would leave the stick behind)
-        if (look != null && look.aid != Look.AID_NONE) {
+        if (look != null && (look.aid != Look.AID_NONE || (look.injury & Look.INJ_ARM) != 0)) {
             g.armsFixed = true;
             g.armUp[0] = g.armUp[1] = false;
             if (look.aid == Look.AID_WHEELCHAIR) g.legs = false;

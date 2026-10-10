@@ -278,6 +278,7 @@ final class SheetSaver {
                 if (!image && MainActivity.decodeBytes(d, 512) == null) continue;
                 String f = project.savePicture(d, "costume");
                 project.setManifest("costume", keyGiven, "costume|" + keyGiven + "|" + f);
+                Studio3DArt.dropProposals(project, Studio3DArt.P_COSTUME, keyGiven, null, true);     // the user's picture beats a made doll
                 try {
                     Library.Item it = library.addBytes(Library.PIC, "person", (p.length > 3 ? p[3] : keyGiven), "front", d, d.length > 8 && (d[1] & 255) == 'P' ? ".png" : ".jpg", "costume");
                     it.setMeta("costume", keyGiven);

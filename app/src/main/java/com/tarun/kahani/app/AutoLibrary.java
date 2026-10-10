@@ -81,11 +81,24 @@ final class AutoLibrary {
         String cast = project.read("cast.txt");
         for (Story.CharacterDef c : st.cast()) for (int i = 0; i < c.costumes.size(); i++) {
             String key = SheetSaver.charKey(project, st, c, c.displayName) + "#" + (i + 1);
-            if (cast.contains("costume|" + key + "|")) continue;
+            if (cast.contains("costume|" + key + "|") || hasCostume(cast, st, c, i + 1)) continue;
             Story.Costume co = c.costumes.get(i);
-            t.add(new String[]{"costume:" + key, c.shown() + " — changes clothes (scene " + co.scene + "): " + co.label(), co.text});
+            t.add(new String[]{"costume:" + key, c.shown() + " — a new look (scene " + co.scene + "): " + co.label(), co.text});
         }
         return t;
+    }
+
+    /** v34: whether the manifest has a picture of this change of look, under whichever of the character's names. */
+    static boolean hasCostume(String cast, Story st, Story.CharacterDef c, int n) {
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length < 3 || !f[0].equals("costume")) continue;
+            int hash = f[1].lastIndexOf('#');
+            if (hash <= 0) continue;
+            try { if (Integer.parseInt(f[1].substring(hash + 1).trim()) == n && ScriptParser.resolve(st, f[1].substring(0, hash)) == c) return true; }
+            catch (NumberFormatException ignored) { }
+        }
+        return false;
     }
 
     /** Every picture this story still needs: {target, label, description}. */

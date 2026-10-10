@@ -229,12 +229,20 @@ public final class Doll3D {
             if (seated) {
                 m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.05f, kneeY, kneeZ, legW * 0.56f, legW * 0.5f, seg, legMat);
                 m.capsule(lx * 1.05f, kneeY, kneeZ, lx * 1.05f, footY + 0.05f * H, kneeZ + 0.01f * H, legW * 0.5f, legW * 0.42f, seg, legMat);
+                if (side > 0 && (l.injury & Look.INJ_LEG) != 0 && !skirt)       // v34: a leg in plaster
+                    m.capsule(lx * 1.05f, kneeY - 0.01f * H, kneeZ, lx * 1.05f, footY + 0.06f * H, kneeZ + 0.012f * H, legW * 0.66f, legW * 0.6f, seg, m.mat(Studio3D.cloth(0xFFF4F3EE)));
                 int shoeMat = l.lightShoes ? m.mat(Studio3D.glowing(l.shoeColor, 0x8040C8FF)) : shoe;
                 m.sphere(lx * 1.05f, footY + 0.035f * H, kneeZ + 0.035f * H, legW * 0.62f, 0.035f * H, legW * 1.05f, seg, shoeMat);
                 if (l.anklets) m.torus(lx * 1.05f, footY + 0.075f * H, kneeZ + 0.01f * H, legW * 0.5f, legW * 0.06f, 1, 8, gold);
                 continue;
             }
             m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.05f, 0.06f * H, 0.01f * H, legW * 0.52f, legW * 0.42f, seg, legMat);
+            if (side > 0 && (l.injury & Look.INJ_LEG) != 0) {
+                // v34: a leg in plaster from below the knee to the toes, with a band of crepe at its top
+                float wide = skirt && (l.outfit == Look.O_LEHENGA || l.outfit == Look.O_FROCK) ? 1.15f : 1f;
+                m.capsule(lx * 1.03f, hipY - 0.5f * L, 0.004f * H, lx * 1.05f, 0.07f * H, 0.012f * H, legW * 0.68f * wide, legW * 0.62f * wide, seg, m.mat(Studio3D.cloth(0xFFF4F3EE)));
+                m.torus(lx * 1.03f, hipY - 0.5f * L, 0.004f * H, legW * 0.66f * wide, legW * 0.1f, 1, 12, m.mat(Studio3D.cloth(0xFFE0D2B4)));
+            }
             if (shorts) m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.03f, hipY - 0.45f * L, 0, legW * 0.6f, legW * 0.56f, seg, bottom);
             // the shoe
             int shoeMat = l.lightShoes ? m.mat(Studio3D.glowing(l.shoeColor, 0x8040C8FF)) : shoe;
@@ -296,8 +304,24 @@ public final class Doll3D {
             m.capsule(ex, ey, z, hx, hy, z, armW * 0.44f, armW * 0.36f, seg, shortSleeves ? skin : top);
             m.sphere(hx, hy + armW * 0.1f, z, armW * 0.56f, armW * 0.64f, armW * 0.4f, seg, skin);
         }
+        int plaster = m.mat(Studio3D.cloth(0xFFF4F3EE));
         for (int side = -1; side <= 1; side += 2) {
             float sx = side * sw * 0.95f, sy = shY - armW * 0.3f;
+            if (side < 0 && (l.injury & Look.INJ_ARM) != 0) {
+                // v34: the arm in a sling — the upper arm hangs, the forearm in white plaster lies across the waist in a
+                // pale blue sling whose strap goes round the neck
+                float ex = sx - 0.004f * H, ey = sy - armLen * 0.47f, ez = 0.045f * H;
+                float hx = sw * 0.3f, hy = ey + 0.035f * H, hz = sw * 1.02f + armW * 0.75f;
+                m.capsule(sx, sy, 0, ex, ey, ez, armW * 0.55f, armW * 0.5f, seg, top);
+                m.capsule(ex, ey, ez, hx, hy, hz, armW * 0.62f, armW * 0.56f, seg, plaster);
+                m.sphere(hx + armW * 0.45f, hy, hz, armW * 0.5f, armW * 0.55f, armW * 0.42f, seg, skin);
+                int sling = m.mat(Studio3D.cloth(0xFF90B8E0));
+                float mx = (ex + hx) / 2, my = (ey + hy) / 2 - armW * 0.35f, mz = (ez + hz) / 2 + armW * 0.1f;
+                m.sphere(mx, my, mz, Math.abs(hx - ex) * 0.56f, armW * 0.95f, armW * 0.62f, seg, sling);
+                m.capsule(hx, hy + armW * 0.3f, hz, headR * 0.35f, shY + 0.012f * H, sw * 0.62f, 0.011f * H, 0.011f * H, 8, sling);
+                m.capsule(ex, ey + armW * 0.3f, ez + armW * 0.3f, -headR * 0.35f, shY + 0.012f * H, sw * 0.5f, 0.011f * H, 0.011f * H, 8, sling);
+                continue;
+            }
             float ex = side * (sw + armLen * 0.22f), ey = sy - armLen * 0.45f;
             float hx = side * (sw + armLen * 0.34f), hy = ey - armLen * 0.46f;
             m.capsule(sx, sy, 0, ex, ey, 0.01f * H, armW * 0.55f, armW * 0.48f, seg, top);
@@ -328,6 +352,22 @@ public final class Doll3D {
                     m.capsule(hx - 0.025f * H, hy, 0.04f * H, hx + 0.025f * H, hy, 0.04f * H, 0.012f * H, 0.012f * H, 8, m.mat(Studio3D.plastic(0xFF455A64)));
                 }
             }
+        }
+        if (!seated && l.aid == Look.AID_WALKER) {
+            // v34: a walking frame in front — two side frames with grey rubber feet, a front bar, the hands on its grips
+            int alu = m.mat(Studio3D.metal(0xFFB0BEC5)), grip = m.mat(Studio3D.plastic(0xFF37474F));
+            float sy = shY - armW * 0.3f, gy = sy - armLen * 0.91f, gx = sw + armLen * 0.34f, z0 = 0.05f * H, z1 = 0.24f * H;
+            for (int side = -1; side <= 1; side += 2) {
+                float x = side * gx;
+                m.capsule(x, gy, z0, x, gy, z1, 0.009f * H, 0.009f * H, 8, alu);
+                m.capsule(x, gy, z0, x * 1.06f, 0.02f * H, z0 - 0.02f * H, 0.008f * H, 0.008f * H, 8, alu);
+                m.capsule(x, gy, z1, x * 1.06f, 0.02f * H, z1 + 0.02f * H, 0.008f * H, 0.008f * H, 8, alu);
+                m.sphere(x * 1.06f, 0.016f * H, z0 - 0.02f * H, 0.014f * H, 0.016f * H, 0.014f * H, 6, grip);
+                m.sphere(x * 1.06f, 0.016f * H, z1 + 0.02f * H, 0.014f * H, 0.016f * H, 0.014f * H, 6, grip);
+                m.capsule(x, gy + 0.004f * H, z0 + 0.01f * H, x, gy + 0.004f * H, z0 + 0.07f * H, 0.014f * H, 0.014f * H, 8, grip);
+            }
+            m.capsule(-gx, gy - 0.12f * H, z1 + 0.012f * H, gx, gy - 0.12f * H, z1 + 0.012f * H, 0.008f * H, 0.008f * H, 8, alu);
+            m.capsule(-gx, gy, z1, gx, gy, z1, 0.008f * H, 0.008f * H, 8, alu);
         }
         // ---- neck and head
         m.capsule(0, shY - 0.01f * H, 0, 0, headY - headR * 0.6f, 0, headR * 0.34f, headR * 0.36f, seg, skin);
@@ -384,7 +424,28 @@ public final class Doll3D {
         if (l.tilak > 0) m.capsule(0, headY + headR * 0.3f, headR * 0.95f, 0, headY + headR * 0.55f, headR * 0.9f, headR * 0.035f, headR * 0.035f, 6, m.mat(Studio3D.plastic(0xFFE65100)));
         if (l.wrinkles || old) { for (int i = 0; i < 2; i++) m.capsule(-headR * 0.2f, headY + headR * (0.5f + 0.1f * i), headR * 0.86f, headR * 0.2f, headY + headR * (0.5f + 0.1f * i), headR * 0.86f, headR * 0.015f, headR * 0.015f, 4, m.mat(Studio3D.skin(Studio3D.shade(l.skin, 0.8f)))); }
         if (l.scar) m.capsule(headR * 0.3f, headY + headR * 0.3f, headR * 0.92f, headR * 0.5f, headY - headR * 0.05f, headR * 0.85f, headR * 0.02f, headR * 0.02f, 4, m.mat(Studio3D.skin(Studio3D.shade(l.skin, 0.75f))));
-        if (l.glasses > 0) {
+        if (l.glasses == 4) {
+            // v34: a cloth blindfold over both eyes, knotted at the back with its two ends hanging
+            int cloth = m.mat(Studio3D.cloth(l.glowGlasses ? 0xFF1A237E : 0xFF2B2B33));
+            float r0 = headR * 1.04f;
+            for (int i = -1; i <= 1; i++) m.torus(0, eyeY + i * eyeRad * 0.62f, 0, r0, eyeRad * 0.5f, 1, 28, cloth);
+            m.sphere(0, eyeY, -r0 - eyeRad * 0.2f, eyeRad * 0.6f, eyeRad * 0.55f, eyeRad * 0.45f, 8, cloth);
+            for (int side = -1; side <= 1; side += 2) m.capsule(0, eyeY, -r0 - eyeRad * 0.3f, side * headR * 0.22f, eyeY - headR * 0.7f, -r0 - eyeRad * 0.1f, eyeRad * 0.3f, eyeRad * 0.22f, 6, cloth);
+        } else if (l.glasses == 5) {
+            // v34: a black patch over the left eye on a thin strap round the head
+            int black = m.mat(Studio3D.cloth(0xFF15161A));
+            m.disc(-eyeX, eyeY, eyeZ + eyeRad * 0.92f, eyeRad * 1.35f, 2, 16, black);
+            m.sphere(-eyeX, eyeY, eyeZ + eyeRad * 0.55f, eyeRad * 1.32f, eyeRad * 1.25f, eyeRad * 0.5f, 10, black);
+            float[] a = {-eyeX - eyeRad * 0.9f, eyeY + eyeRad * 0.9f - headY, eyeZ}, b = {headR * 0.95f, headR * 0.55f, -headR * 0.2f};
+            float px = 0, py = 0, pz = 0;
+            for (int i = 0; i <= 8; i++) {
+                float u = i / 8f, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u, z = a[2] + (b[2] - a[2]) * u;
+                float n = (float) Math.sqrt(x * x + y * y + z * z), k = headR * 1.03f / Math.max(1e-4f, n);
+                x *= k; y *= k; z *= k;
+                if (i > 0) m.capsule(px, headY + py, pz, x, headY + y, z, headR * 0.022f, headR * 0.022f, 4, black);
+                px = x; py = y; pz = z;
+            }
+        } else if (l.glasses > 0) {
             int frame = m.mat(l.glasses == 2 ? (l.glowGlasses ? Studio3D.glowing(0xFF202428, 0x90FF3020) : Studio3D.plastic(0xFF202428)) : Studio3D.metal(0xFF8A7A3A));
             for (int side = -1; side <= 1; side += 2) m.torus(side * eyeX, eyeY, eyeZ + eyeRad * 0.95f, eyeRad * 1.25f, eyeRad * 0.09f, 2, 10, frame);
             m.capsule(-eyeX + eyeRad * 1.25f, eyeY, eyeZ + eyeRad * 0.95f, eyeX - eyeRad * 1.25f, eyeY, eyeZ + eyeRad * 0.95f, eyeRad * 0.07f, eyeRad * 0.07f, 4, frame);
@@ -395,6 +456,12 @@ public final class Doll3D {
                 for (int side = -1; side <= 1; side += 2) m.torus(side * eyeX, eyeY, eyeZ + eyeRad * 1.05f, eyeRad * 1.55f, eyeRad * 0.26f, 2, 12, rim);
                 m.torus(0, eyeY, 0, headR * 1.03f, headR * 0.06f, 1, 20, m.mat(Studio3D.cloth(0xFF3E2723)));
             }
+        }
+        if ((l.injury & Look.INJ_HEAD) != 0) {
+            // v34: a white bandage wound round the forehead, a pad over one temple
+            int band = m.mat(Studio3D.cloth(0xFFF6F5F0));
+            for (int i = 0; i < 2; i++) m.torus(0, headY + headR * (0.36f + 0.13f * i), headR * 0.02f, headR * (0.99f - 0.05f * i), headR * 0.075f, 1, 26, band);
+            m.sphere(headR * 0.55f, headY + headR * 0.42f, headR * 0.78f, headR * 0.17f, headR * 0.14f, headR * 0.08f, 8, band);
         }
         if (l.earrings) for (int side = -1; side <= 1; side += 2) m.sphere(side * headR * 1.0f, headY - headR * 0.36f, 0, headR * 0.05f, headR * 0.08f, headR * 0.05f, 6, gold);
         if (l.necklace > 0) m.torus(0, shY + 0.005f * H, 0.02f * H, headR * 0.55f, headR * (l.necklace == 2 ? 0.05f : 0.035f), 1, 12,

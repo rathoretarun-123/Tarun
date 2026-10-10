@@ -207,12 +207,118 @@ public final class Puppet {
         drawHead(g, l, p, b);
         g.restore();
 
-        // Arms in front
-        drawArm(g, l, p, b, -1, p.armL, p.elbowL, p.holdL);
-        drawArm(g, l, p, b, 1, p.armR, p.elbowR, p.holdR);
+        // Arms in front (v34: an arm in a sling stays across the waist; an open umbrella is held up over the head)
+        if ((l.injury & Look.INJ_ARM) != 0 && p.body != Pose.LIE && p.body != Pose.HANG) drawSlingArm(g, l, p, b);
+        else drawArm(g, l, p, b, -1, p.armL, p.elbowL, p.holdL);
+        if (p.umbrellaOpen) drawUmbrellaArm(g, l, p, b);
+        else drawArm(g, l, p, b, 1, p.armR, p.elbowR, p.holdR);
+        if (l.aid == Look.AID_WALKER && (p.body == Pose.STAND || p.body == Pose.CROUCH)) drawWalker(g, l, p, b);
 
         // Spear or wand held at the side when not gesturing
         g.restore();
+    }
+
+    /** v34: the left arm in a sling — the upper arm hangs, the forearm in white plaster lies across the waist in a pale blue sling tied round the neck. */
+    static void drawSlingArm(Gfx g, Look l, Pose p, Body b) {
+        float sx = -b.sw * 0.92f, sy = b.shY + b.armW * 0.6f;
+        float ex = sx - b.armW * 0.15f, ey = sy + b.armLen * 0.47f;
+        float hx = b.sw * 0.38f, hy = ey - b.armLen * 0.07f;
+        int sleeve = l.outfit == Look.O_ARMOR ? l.furColor : l.primary;
+        g.color(shade(sleeve, 0.7f));
+        g.line(sx, sy, ex, ey, b.armW * 2.15f);
+        g.color(sleeve);
+        g.line(sx, sy, ex, ey, b.armW * 1.85f);
+        // the strap round the neck
+        g.color(0xFF6F98C4);
+        g.line(hx - b.armW * 0.3f, hy - b.armW * 0.5f, b.headR * 0.32f, b.shY + b.armW * 0.2f, Math.max(2, b.armW * 0.42f));
+        g.line(ex + b.armW * 0.4f, ey - b.armW * 0.4f, -b.headR * 0.32f, b.shY + b.armW * 0.2f, Math.max(2, b.armW * 0.42f));
+        // the sling: a narrow cloth triangle, its point at the elbow, just under the forearm
+        g.color(0xFF90B8E0);
+        g.begin();
+        g.moveTo(ex - b.armW * 0.9f, ey + b.armW * 0.15f);
+        g.lineTo(hx + b.armW * 0.35f, hy - b.armW * 0.55f);
+        g.lineTo(hx + b.armW * 0.35f, hy + b.armW * 1.05f);
+        g.close(); g.fillPath();
+        g.color(0xFF6F98C4);
+        g.begin();
+        g.moveTo(ex - b.armW * 0.9f, ey + b.armW * 0.15f);
+        g.lineTo(hx + b.armW * 0.35f, hy + b.armW * 1.05f);
+        g.strokePath(Math.max(1.5f, b.armW * 0.16f));
+        // the forearm in white plaster over it, the hand coming out of the plaster
+        g.color(0xFFB8B6AE);
+        g.line(ex, ey - b.armW * 0.1f, hx, hy - b.armW * 0.1f, b.armW * 1.75f);
+        g.color(0xFFF7F6F2);
+        g.line(ex, ey - b.armW * 0.1f, hx, hy - b.armW * 0.1f, b.armW * 1.5f);
+        g.color(0xFFE0D2B4);
+        g.line(hx - b.armW * 0.1f, hy - b.armW * 0.85f, hx - b.armW * 0.1f, hy + b.armW * 0.65f, b.armW * 0.3f);
+        g.color(faceSkin(l, p));
+        g.oval(hx + b.armW * 0.6f, hy - b.armW * 0.1f, b.armW * 0.75f, b.armW * 0.68f);
+    }
+
+    /** v34: the right arm raised, holding an open umbrella over the head (its colour against the clothes). */
+    static void drawUmbrellaArm(Gfx g, Look l, Pose p, Body b) {
+        drawArm(g, l, p, b, 1, 152, 14, Pose.I_NONE);
+        float[] h = hand(b, 1, 152, 14);
+        float top = b.headY - b.headR - b.H * 0.12f, cx = h[4] * 0.45f, R = b.H * 0.3f;
+        drawUmbrella(g, cx, top, R, h[4], h[5] + b.H * 0.07f, umbrellaColor(l), p.facing, p.time, p.wind);
+    }
+
+    static int umbrellaColor(Look l) {
+        int c = l.primary;
+        int r = (c >> 16) & 255, gg = (c >> 8) & 255, bl = c & 255;
+        boolean reddish = r > gg + 40 && r > bl + 40;
+        return reddish ? 0xFF1E6FD0 : 0xFFD8322F;
+    }
+
+    /** An open umbrella: a scalloped dome (apex at cx, top) of radius R, its shaft down to (hx, hy) with a crook. */
+    static void drawUmbrella(Gfx g, float cx, float top, float R, float hx, float hy, int color, float facing, float time, float wind) {
+        float sway = (float) Math.sin(time * 1.7f) * 0.025f + wind * 0.04f;
+        float ax = cx + sway * R, base = top + R * 0.42f;
+        g.color(0xFF4E342E);
+        g.line(ax, top, hx, hy, Math.max(2, R * 0.03f));
+        g.begin(); g.moveTo(hx, hy); g.quadTo(hx, hy + R * 0.14f, hx - facing * R * 0.1f, hy + R * 0.1f); g.strokePath(Math.max(2, R * 0.035f));
+        g.begin();
+        g.moveTo(ax - R, base);
+        g.cubicTo(ax - R * 0.95f, top - R * 0.05f, ax + R * 0.95f, top - R * 0.05f, ax + R, base);
+        for (int i = 4; i >= 1; i--) {
+            float x0 = ax - R + R * 0.5f * i, x1 = ax - R + R * 0.5f * (i - 1);
+            g.quadTo((x0 + x1) / 2, base - R * 0.14f, x1, base);
+        }
+        g.close();
+        g.color(color); g.fillPath();
+        g.color(shade(color, 0.72f)); g.strokePath(Math.max(1.5f, R * 0.02f));
+        // the ribs and a light sheen
+        g.color(shade(color, 0.8f));
+        for (int i = 1; i <= 3; i++) {
+            float x = ax - R + R * 0.5f * i;
+            g.begin(); g.moveTo(ax, top + R * 0.02f); g.quadTo((ax + x) / 2 + (x - ax) * 0.2f, top + R * 0.12f, x, base); g.strokePath(Math.max(1, R * 0.015f));
+        }
+        g.color(alpha(0xFFFFFFFF, 0.22f));
+        g.oval(ax - R * 0.35f, top + R * 0.15f, R * 0.22f, R * 0.08f);
+        g.color(0xFF4E342E);
+        g.oval(ax, top - R * 0.03f, R * 0.035f, R * 0.05f);
+    }
+
+    /** v34: a walking frame in front: two side frames from the hands down to rubber feet, joined at the front. */
+    static void drawWalker(Gfx g, Look l, Pose p, Body b) {
+        float[] hl = hand(b, -1, p.armL, p.elbowL), hr = hand(b, 1, p.armR, p.elbowR);
+        float fwd = p.facing * b.H * 0.1f, w = Math.max(2.5f, b.armW * 0.42f);
+        float gy = Math.min(hl[5], hr[5]);
+        for (int s2 = 0; s2 < 2; s2++) {
+            float x = s2 == 0 ? hl[4] : hr[4];
+            g.color(0xFF78909C);
+            g.line(x, gy, x - p.facing * b.armW * 0.2f, -b.legW * 0.3f, w);                // the back leg
+            g.line(x + fwd, gy + b.armW * 0.15f, x + fwd * 1.15f, -b.legW * 0.3f, w);         // the front leg
+            g.color(0xFFB0BEC5);
+            g.line(x - p.facing * b.armW * 0.3f, gy, x + fwd, gy + b.armW * 0.15f, w * 1.1f); // the side rail
+            g.color(0xFF37474F);
+            g.line(x - p.facing * b.armW * 0.35f, gy - w * 0.2f, x + p.facing * b.armW * 0.5f, gy - w * 0.2f, w * 1.6f);   // the grip
+            g.oval(x - p.facing * b.armW * 0.2f, -b.legW * 0.2f, w * 1.1f, w * 0.7f);
+            g.oval(x + fwd * 1.15f, -b.legW * 0.2f, w * 1.1f, w * 0.7f);
+        }
+        g.color(0xFF90A4AE);
+        g.line(hl[4] + fwd, gy + b.armW * 0.2f, hr[4] + fwd, gy + b.armW * 0.2f, w);
+        g.line(hl[4] + fwd * 1.08f, gy * 0.45f, hr[4] + fwd * 1.08f, gy * 0.45f, w);
     }
 
     static void drawLegs(Gfx g, Look l, Pose p, Body b) {
@@ -247,12 +353,25 @@ public final class Puppet {
                 g.line(hx, b.hipY, hx + p.facing * b.L * 0.1f, b.hipY + b.L * 0.5f, b.legW * 2f);
                 g.line(hx + p.facing * b.L * 0.1f, b.hipY + b.L * 0.5f, fx, fy, b.legW * 1.8f);
             } else {
-                float sw = side * stride * b.L * 0.38f;
+                // v34: a leg in plaster swings less (a stiff, short step)
+                float sw = side * stride * b.L * 0.38f * (side > 0 && (l.injury & Look.INJ_LEG) != 0 ? 0.55f : 1f);
                 fx = hx + sw; fy = 0;
                 if (!longSkirt || p.walkAmt > 0.01f || p.body == Pose.LIE) {
                     g.color(legColor);
                     g.line(hx, b.hipY, fx, fy - b.legW * 0.6f, b.legW * 2f);
                 }
+            }
+            if (side > 0 && (l.injury & Look.INJ_LEG) != 0 && p.body != Pose.KNEEL && (!longSkirt || p.walkAmt > 0.01f)) {
+                // v34: the plaster from below the knee to the toes
+                float kx, ky;
+                if (p.body == Pose.SIT) { kx = fx - p.facing * b.L * 0.15f; ky = b.hipY + b.legW * 0.2f; }
+                else { kx = hx + (fx - hx) * 0.5f; ky = b.hipY * 0.5f; }
+                g.color(0xFFC9C7C0);
+                g.line(kx, ky, fx, fy - b.legW * 0.5f, b.legW * 2.55f);
+                g.color(0xFFF4F3EE);
+                g.line(kx, ky, fx, fy - b.legW * 0.5f, b.legW * 2.3f);
+                g.color(0xFFE0D2B4);
+                g.line(kx - b.legW * 1.1f, ky, kx + b.legW * 1.1f, ky, b.legW * 0.35f);
             }
             if (l.outfit == Look.O_TSHIRT && p.body != Pose.SIT && p.body != Pose.KNEEL) {
                 // shorts: the upper half of the leg in the shorts' colour
@@ -1287,6 +1406,32 @@ public final class Puppet {
                 g.color(alpha(0xFFFFFFFF, 0.45f));
                 g.oval(gx - r * 0.08f, -r * 0.15f, r * 0.06f, r * 0.04f);
             }
+        } else if (l.glasses == 4) {
+            // v34: a cloth blindfold over both eyes, knotted behind with two ends hanging
+            g.color(0xFF2B2B33);
+            g.begin(); g.moveTo(-r * 0.99f, -r * 0.24f); g.quadTo(0, -r * 0.3f, r * 0.99f, -r * 0.24f); g.lineTo(r * 0.97f, r * 0.06f); g.quadTo(0, r * 0.02f, -r * 0.97f, r * 0.06f); g.close(); g.fillPath();
+            g.color(0xFF3C3C46);
+            g.line(-r * 0.9f, -r * 0.16f, r * 0.9f, -r * 0.16f, Math.max(1, r * 0.03f));
+            float kx = -f * r * 0.98f;
+            g.color(0xFF2B2B33);
+            g.oval(kx, -r * 0.09f, r * 0.12f, r * 0.11f);
+            g.line(kx, -r * 0.05f, kx - f * r * 0.15f, r * 0.45f, r * 0.09f);
+            g.line(kx, -r * 0.05f, kx - f * r * 0.02f, r * 0.5f, r * 0.08f);
+        } else if (l.glasses == 5) {
+            // v34: a black patch over the left eye on a thin strap
+            g.color(0xFF15161A);
+            g.line(ex - r * 0.6f, -r * 0.3f, ex + r * 0.85f, -r * 0.62f, Math.max(1.5f, r * 0.05f));
+            g.oval(ex - r * 0.36f, -r * 0.08f, r * 0.21f, r * 0.19f);
+        }
+        if ((l.injury & Look.INJ_HEAD) != 0) {
+            // v34: a white bandage round the forehead with a pad over the temple
+            g.color(0xFFC9C7C0);
+            g.begin(); g.moveTo(-r * 0.9f, -r * 0.47f); g.quadTo(0, -r * 0.4f, r * 0.9f, -r * 0.47f); g.strokePath(r * 0.22f);
+            g.color(0xFFF6F5F0);
+            g.begin(); g.moveTo(-r * 0.9f, -r * 0.47f); g.quadTo(0, -r * 0.4f, r * 0.9f, -r * 0.47f); g.strokePath(r * 0.19f);
+            g.oval(ex + f * r * 0.45f, -r * 0.47f, r * 0.15f, r * 0.13f);
+            g.color(0xFFE0D8C8);
+            g.line(ex + f * r * 0.36f, -r * 0.47f, ex + f * r * 0.54f, -r * 0.47f, Math.max(1, r * 0.025f));
         }
         // headwear on top
         drawHeadwear(g, l, p, r);

@@ -47,7 +47,7 @@ final class Studio3DArt {
 
     interface Progress { void at(String what); }
 
-    static final String P_CHAR = "char", P_SCENE = "scene", P_VIEW = "view";
+    static final String P_CHAR = "char", P_SCENE = "scene", P_VIEW = "view", P_COSTUME = "costume";
 
     // ------------------------------------------------------------------ the style of the user's pictures
 
@@ -120,7 +120,7 @@ final class Studio3DArt {
             String[] f = l.split("\\|");
             if (f.length >= 3 && (f[0].equals("char") || f[0].equals("view") || f[0].equals("propose")) ) {
                 String k = f[0].equals("propose") ? (f.length >= 4 ? f[2] : "") : f[1];
-                if (k.length() > 0 && ScriptParser.resolve(story, k) == c) return k;
+                if (k.length() > 0 && k.indexOf('#') < 0 && ScriptParser.resolve(story, k) == c) return k;     // "Maya#1" is a change of look, not a key
             }
         }
         return c.displayName;
@@ -329,6 +329,12 @@ final class Studio3DArt {
             dropProposals(project, P_CHAR, key, null, false);
             library(lib, ctx, project, f[3], "person", key, "3D doll (studio)");
             for (String[] v : viewProposals(project, key)) accept(project, lib, ctx, v);
+            for (String[] v : costumeProposals(project, key)) accept(project, lib, ctx, v);
+        } else if (kind.equals(P_COSTUME)) {
+            StringBuilder line = new StringBuilder("costume|" + key + "|" + f[3]);
+            for (int i = 4; i < 13 && i < f.length; i++) line.append('|').append(f[i]);
+            project.setManifest("costume", key, line.toString());
+            dropProposals(project, P_COSTUME, key, null, false);
         } else if (kind.equals(P_SCENE)) {
             project.setManifest("scene", key + "a", null);
             project.setManifest("scene", key + "b", null);
@@ -351,7 +357,7 @@ final class Studio3DArt {
     static void reject(Project project, String[] f) {
         String kind = f[1], key = f[2];
         dropProposals(project, kind, key, kind.equals(P_VIEW) ? f[3] : null, true);
-        if (kind.equals(P_CHAR)) dropProposals(project, P_VIEW, key, null, true);
+        if (kind.equals(P_CHAR)) { dropProposals(project, P_VIEW, key, null, true); for (String[] v : costumeProposals(project, key)) dropProposals(project, P_COSTUME, v[2], null, true); }
         if (kind.equals(P_SCENE) && f[f.length - 1].contains("from your picture")) {
             // the place made from the user's own picture is turned down: the painted set is proposed next time
             project.setSetting("rejected3d.refplace." + key, "1");
@@ -444,8 +450,30 @@ final class Studio3DArt {
             String vf = project.savePicture(encode(v.px, v.w, v.h, true), "view");
             addProposal(project, "propose|view|" + key + "|" + (int) Figure3D.VIEW_ANGLES[i] + "|" + vf + "|" + viewPoints(v) + "|" + SceneMaker.score(ratings) + "|" + verdict);
         }
+        // v34: a change of look in the story (new clothes, a bandage, a plaster, glasses off) gets a doll of its own in
+        // that look — the same face, skin and hair; a picture of it the user gives always wins (never replaced here)
+        for (int ci = 0; ci < c.costumes.size(); ci++) {
+            String ck = key + "#" + (ci + 1);
+            if (AutoLibrary.hasCostume(project.read("cast.txt"), story, c, ci + 1) || rejected(project, P_COSTUME, ck)) continue;
+            Look cl = c.costumes.get(ci).look.copy();
+            cl.skin = look.skin; cl.hairColor = look.hairColor; cl.skinFixed = look.skinFixed;
+            Doll3D.Result cr;
+            try { cr = Doll3D.make(cl, size, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue); }
+            catch (OutOfMemoryError oom) { cr = Doll3D.make(cl, 1100, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue); }
+            String cf = project.savePicture(encode(cr.px, cr.w, cr.h, true), "3d_costume");
+            String cp = String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", cr.mouthX, cr.mouthY, cr.mouthHW, cr.eyeLX, cr.eyeLY, cr.eyeRX, cr.eyeRY, cr.eyeR, cr.turbanY);
+            dropProposals(project, P_COSTUME, ck, null, true);
+            addProposal(project, "propose|costume|" + ck + "|" + cf + "|" + cp + "|" + SceneMaker.score(ratings) + "|" + verdict + " — " + c.costumes.get(ci).label());
+        }
         if (!ask) accept(project, lib, ctx, proposalFor(project, P_CHAR, key));
         return file;
+    }
+
+    /** v34: the proposed dolls of a character's changes of look (accepted and rejected with the character's doll). */
+    static List<String[]> costumeProposals(Project project, String key) {
+        List<String[]> out = new ArrayList<String[]>();
+        for (String[] f : proposals(project)) if (f[1].equals(P_COSTUME) && f[2].startsWith(key + "#")) out.add(f);
+        return out;
     }
 
     /**

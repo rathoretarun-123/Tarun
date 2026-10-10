@@ -542,6 +542,18 @@ public final class Art {
                 if (c == null || n < 1 || n > c.costumes.size()) continue;
                 Sprite v = makeSprite(L, f[2], spriteSide, false);
                 if (v == null) continue;
+                if (f.length >= 11) {
+                    // v34: a doll of the new look made by the 3D maker carries its own face points (like a char line)
+                    float[] fp = new float[8];
+                    for (int i = 0; i < 8; i++) fp[i] = Float.parseFloat(f[3 + i].trim());
+                    if (fp[0] > 0) {
+                        v.mouthX = fp[0]; v.mouthY = fp[1]; v.mouthHW = fp[2];
+                        v.eyeLX = fp[3]; v.eyeLY = fp[4]; v.eyeRX = fp[5]; v.eyeRY = fp[6]; v.eyeR = fp[7];
+                        v.faceKnown = true;
+                    }
+                    if (f.length >= 12) v.turbanY = Float.parseFloat(f[11].trim());
+                    resample(v);
+                }
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.costumes.get(n - 1).look, L); } catch (RuntimeException e) { v.rig = null; }
                 v.pixelsForSampling = null;
                 art.costumes.put(c.id + "#" + n, v);

@@ -124,6 +124,8 @@ public final class ScriptParser {
             if (b.type != Story.Beat.DIRECTION) continue;
             for (String sent : b.text.split("[।.!?]")) {
                 List<Story.CharacterDef> who = mentions(story, sent);
+                // v34: an umbrella carried in the action ("मीरा छाता लेकर निकलती है") opens over her head in the rain
+                if (who.size() == 1 && who.get(0).look != null && who.get(0).look.isHumanoid() && Txt.has(sent, "छाता", "छतरी", "umbrella")) who.get(0).look.umbrella = true;
                 if (who.size() != 1 || who.get(0).look == null || who.get(0).look.aid != Look.AID_NONE) continue;
                 Look l = who.get(0).look;
                 if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) continue;
@@ -145,17 +147,32 @@ public final class ScriptParser {
             for (String sent : b.text.split("[।.!?]")) {
                 if (!LookDesigner.changesClothes(sent) || Txt.has(sent, "पगड़ी", "टोपी", "turban", " cap", "मुकुट", "crown")) continue;
                 List<Story.CharacterDef> who = mentions(story, sent);
+                // v34: "डॉक्टर रोहन के पैर पर पट्टी बाँधते हैं", "the nurse puts Asha's arm in a sling": the hurt one is the
+                // one whose arm, leg or head it is
+                if (who.size() > 1) who = owners(sent, who);
                 if (who.size() != 1) continue;
                 Story.CharacterDef c = who.get(0);
                 if (c.look == null || !c.look.isHumanoid()) continue;
                 Look cur = c.costumes.isEmpty() ? c.look : c.costumes.get(c.costumes.size() - 1).look;
                 Look nl = LookDesigner.restyle(cur, sent);
-                if (nl.outfit == cur.outfit && nl.primary == cur.primary && nl.secondary == cur.secondary && nl.glasses == cur.glasses) continue;
+                if (nl.outfit == cur.outfit && nl.primary == cur.primary && nl.secondary == cur.secondary && nl.glasses == cur.glasses && nl.injury == cur.injury) continue;
                 Story.Costume k = new Story.Costume();
                 k.scene = sc.number; k.beat = bi; k.text = sent.trim(); k.look = nl;
                 c.costumes.add(k);
             }
         }
+    }
+
+    /** v34: of the characters a sentence names, the ones named as owners ("रोहन के", "आशा की", "Asha's"). */
+    static List<Story.CharacterDef> owners(String sent, List<Story.CharacterDef> who) {
+        List<Story.CharacterDef> out = new ArrayList<Story.CharacterDef>();
+        String t = Txt.norm(sent);
+        for (Story.CharacterDef c : who) for (String a : c.aliases) {
+            String na = Txt.norm(a);
+            if (na.length() < 2) continue;
+            if (t.contains(na + " के ") || t.contains(na + " की ") || t.contains(na + "'s ") || t.contains(na + "’s ")) { out.add(c); break; }
+        }
+        return out;
     }
 
     static void linkMounts(Story story) {

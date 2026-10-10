@@ -40,6 +40,7 @@ public final class Pose {
     public float wave;                 // > 0 while waving: the arm swings out and back
     public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
     public boolean swing;
+    public boolean umbrellaOpen;       // v34: an umbrella held open over the head (rain outdoors)
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
 
@@ -52,7 +53,7 @@ public final class Pose {
         q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
         q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
-        q.turbanOwner = turbanOwner; q.seed = seed;
+        q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen;
         return q;
     }
 
@@ -61,6 +62,6 @@ public final class Pose {
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
-        sit = 0; nod = 0; wave = 0; twirl = false;
+        sit = 0; nod = 0; wave = 0; twirl = false; umbrellaOpen = false;
     }
 }

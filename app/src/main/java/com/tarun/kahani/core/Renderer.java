@@ -910,7 +910,7 @@ public final class Renderer {
                 if (i < 0 || i >= l.env.length) return 0;
                 float v = l.env[i] + (l.env[Math.min(l.env.length - 1, i + 1)] - l.env[i]) * (fi - i);
                 float edge = Math.min(t - sp.t0, sp.t1 - t);
-                return edge < 0.05f ? v * Math.max(0, edge) / 0.05f : v;
+                return edge < 0.06f ? v * Rig.smooth(0, 0.06f, Math.max(0, edge)) : v;     // v34: eased (the envelope itself opens from closed)
             }
         }
         return 0;
@@ -986,7 +986,14 @@ public final class Renderer {
         p.holdL = k.holdL;
         p.eyesClosed = k.eyesShut;
         p.blink = blink(tp, a.order);
-        if (film != null && Sets.outdoorSet(s.set)) { p.wind = film.wind(t); p.wet = film.wetness(t); }
+        if (film != null && Sets.outdoorSet(s.set)) {
+            p.wind = film.wind(t); p.wet = film.wetness(t);
+            // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)
+            if (look.umbrella && look.isHumanoid() && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && k.body != Pose.LIE && k.body != Pose.HANG && a.look.mount < 0) {
+                p.umbrellaOpen = true;
+                p.wet *= 0.25f;
+            }
+        }
         float quakeNow = film == null ? 0 : film.weather(Film.W_QUAKE, t);
         p.sit = sitAmount(a, t);
         if (p.sit > 0 && p.sit < 1 && k.body != Pose.SIT) p.body = Pose.STAND;        // getting up: still rising
@@ -1018,10 +1025,19 @@ public final class Renderer {
             mo.rot = (float) Math.sin(p.walk) * (mv.run ? 1.8f : 1.1f) * amt;
             p.armL = 8 + (17 + (float) Math.sin(p.walk) * 25) * amt;
             p.armR = 8 + (17 - (float) Math.sin(p.walk) * 25) * amt;
-            if (a.look.aid == Look.AID_STICK || a.look.aid == Look.AID_CRUTCHES) {
-                // v34: a slow step on a stick: the stick hand stays on the stick, the body dips a little with each step
-                p.armR = 8; if (a.look.aid == Look.AID_CRUTCHES) p.armL = 8; else p.armL = 8 + (p.armL - 8) * 0.4f;
+            if (look.aid == Look.AID_STICK || look.aid == Look.AID_CRUTCHES || look.aid == Look.AID_WALKER) {
+                // v34: a slow step on a stick: the stick hand stays on the stick, the body dips a little with each step;
+                // both hands stay on crutches or a walking frame
+                p.armR = 8; if (look.aid == Look.AID_CRUTCHES) p.armL = 8; else p.armL = 8 + (p.armL - 8) * 0.4f;
+                if (look.aid == Look.AID_WALKER) { p.armL = p.armR = 16; p.elbowL = p.elbowR = 20; }
                 mo.dy *= 1.2f;
+            }
+            if ((look.injury & Look.INJ_LEG) != 0 || look.aid == Look.AID_STICK || look.aid == Look.AID_CRUTCHES || look.aid == Look.AID_WALKER) {
+                // v34: a limp — the step onto the weaker leg sinks deeper and leans toward it; the other step is short
+                // and level (smooth: both pieces meet at the foot-fall, where the rise and fall is zero)
+                float half = (float) Math.sin(p.walk);
+                mo.dy *= half > 0 ? 1f + 0.9f * half : 1f + 0.25f * half;
+                mo.rot += Math.max(0, half) * 1.6f * amt * p.facing;
             }
         } else {
             // anticipation: just before setting off the body dips and leans back a little; after arriving it
@@ -1165,6 +1181,10 @@ public final class Renderer {
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
+        // v34: both hands stay on the walking frame (no gesture takes them off it)
+        if (look.aid == Look.AID_WALKER && p.body != Pose.SIT && p.body != Pose.LIE && p.body != Pose.KNEEL) {
+            p.armL = p.armR = 16; p.elbowL = p.elbowR = 20; p.holdL = p.holdR = Pose.I_NONE; p.wave = 0; p.twirl = false; p.carrying = false;
+        }
         // v34: a wheelchair rolls with its sitter: no steps, its wheels turn with the distance covered
         boolean chair = a.look.aid == Look.AID_WHEELCHAIR && sp == null && k.body != Pose.LIE;
         if (a.look.aid == Look.AID_WHEELCHAIR) { p.walkAmt = 0; mo.dy = 0; mo.rot *= 0.3f; }
@@ -1217,11 +1237,15 @@ public final class Renderer {
                 drawSprite(g, real, look, p, hReal, 0, a);
                 g.setAlpha(1);
             } else drawSprite(g, real, look, p, hReal, 0, a);
+            if (p.umbrellaOpen) spriteUmbrella(g, look, p, hReal);
             g.restore();
             g.restore();
             return;
         }
-        if (sp != null) drawSprite(g, k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t), look, p, h, mo.rot, a);
+        if (sp != null) {
+            drawSprite(g, k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t), look, p, h, mo.rot, a);
+            if (p.umbrellaOpen) spriteUmbrella(g, look, p, h);
+        }
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
@@ -1648,6 +1672,15 @@ public final class Renderer {
             g.color(0xFF9E9E9E);
             g.oval(facing * 0.31f * h, -0.042f * h, 0.012f * h, 0.012f * h);
         }
+    }
+
+    /**
+     * v34: an open umbrella over a picture character in the rain — its dome above the head, the shaft down in front of
+     * the shoulder (the hand that holds it is behind the picture's own arm); seated, it comes down with the head.
+     */
+    private static void spriteUmbrella(Gfx g, Look look, Pose p, float h) {
+        float top = p.sit > 0.5f || p.body == Pose.SIT ? -h * 0.86f : -h * 1.1f;
+        Puppet.drawUmbrella(g, p.facing * h * 0.03f, top, h * 0.3f, p.facing * h * 0.15f, top + h * 0.5f, Puppet.umbrellaColor(look), p.facing, p.time, p.wind);
     }
 
     private static void wheel(Gfx g, float cx, float cy, float R, float spin, int tyre, int metal) {
@@ -2085,8 +2118,9 @@ public final class Renderer {
             float ex1 = left + sp.eyeLX * w, ey1 = top + sp.eyeLY * h;
             float ex2 = left + sp.eyeRX * w, ey2 = top + sp.eyeRY * h;
             float er = sp.eyeR * w;
-            // blinking / closed eyes
-            if (p.blink > 0.5f || p.eyesClosed) {
+            // blinking / closed eyes (v34: never painted over dark glasses, a blindfold or an eye patch)
+            boolean covered = look != null && (look.glasses == 2 || look.glasses == 4 || look.glasses == 5);
+            if ((p.blink > 0.5f || p.eyesClosed) && !covered) {
                 for (int i = 0; i < 2; i++) {
                     float ex = i == 0 ? ex1 : ex2, ey = i == 0 ? ey1 : ey2;
                     g.color(sp.lid);

@@ -91,8 +91,29 @@ public final class LookDesigner {
         Look l = base.copy();
         int o = outfitIn(text, base.female);
         if (o >= 0) l.outfit = o;
-        List<Integer> cc = colorsIn(text);
+        // v34: a bandage, a plaster cast, a sling, a blindfold or an eye patch put on (or taken off): the clothes stay
+        // as they are unless the sentence names new ones ("सफ़ेद पट्टी" is the bandage's colour, not the shirt's)
+        int inj = injuryIn(text), cover = coverIn(text);
+        boolean healed = Txt.has(text, "प्लास्टर कट", "प्लास्टर उतर", "प्लास्टर खुल", "पट्टी खुल", "plaster comes off", "cast comes off", "cast is removed", "plaster is removed", "cast is cut",
+                "bandage comes off", "bandage is removed", "removes the bandage", "takes off the bandage", "out of the sling", "sling comes off");
+        boolean unblind = Txt.has(text, "पट्टी खोल", "पट्टी हटा", "पट्टी उतार", "removes the blindfold", "takes off the blindfold", "took off the blindfold", "blindfold off", "unties the blindfold",
+                "removes the eye patch", "takes off the eye patch", "removes his eye patch", "removes her eye patch");
+        boolean body = inj != 0 || cover > 0 || healed || unblind;
+        if (inj != 0) l.injury |= inj;
+        if (cover > 0) l.glasses = cover;
+        if (unblind && (base.glasses == 4 || base.glasses == 5)) l.glasses = 0;
+        else if (unblind && base.injury != 0) healed = true;           // "मोनू के सिर की पट्टी खोलते हैं": the bandage comes off
+        if (healed) {
+            // only the part named heals ("सिर की पट्टी" — the head); with no part named, every bandage comes off
+            int part = (Txt.has(text, "सिर", "माथ", "head", "forehead") ? Look.INJ_HEAD : 0) | (Txt.has(text, "पैर", "टांग", "टाँग", "पाँव", "पांव", "टखन", "leg", "foot", "ankle") ? Look.INJ_LEG : 0)
+                    | (Txt.has(text, "हाथ", "बाँह", "बांह", "arm", "sling") ? Look.INJ_ARM : 0);
+            l.injury = part == 0 ? 0 : l.injury & ~part;
+            // crutches were for the leg: they go with its plaster (an old person's stick stays)
+            if ((base.injury & Look.INJ_LEG) != 0 && (l.injury & Look.INJ_LEG) == 0 && l.aid == Look.AID_CRUTCHES) l.aid = Look.AID_NONE;
+        }
+        List<Integer> cc = body && o < 0 ? new java.util.ArrayList<Integer>() : colorsIn(text);
         if (!cc.isEmpty()) { l.primary = cc.get(0); l.secondary = cc.size() > 1 ? cc.get(1) : darker(cc.get(0), 0.7f); }
+        if (body) return l;
         if (Txt.has(text, "चश्मा उतार", "चश्मा हटा", "takes off his glasses", "takes off her glasses", "took off his glasses", "took off her glasses", "removes his glasses", "removes her glasses",
                 "takes off the goggles", "takes off his goggles", "takes off her goggles")) l.glasses = 0;
         else if (Txt.has(text, "गॉगल", "goggle")) l.glasses = 3;
@@ -103,6 +124,7 @@ public final class LookDesigner {
 
     /** v34: true when a sentence changes what a character wears ("पहनकर आती है", "changes into", "puts on"). */
     public static boolean changesClothes(String s) {
+        if (bodyChange(s)) return true;
         return Txt.has(s, "कपड़े बदल", "ड्रेस बदल", "पोशाक बदल", "वेशभूषा बदल", "वस्त्र बदल", "पहनकर", "पहन कर", "पहन लेत", "पहन लिय", "पहन ली", "पहने हुए", "पहनती है", "पहनता है",
                 "चश्मा लगा", "चश्मा पहन", "चश्मा उतार", "चश्मा हटा", "changes into", "changed into", "change into", "changes her clothes", "changes his clothes", "puts on", "put on",
                 "now wearing", "now in a", "dressed in", "dresses up", "dressed up", "wearing", "takes off his glasses", "takes off her glasses", "removes his glasses", "removes her glasses");
@@ -115,12 +137,57 @@ public final class LookDesigner {
      */
     public static int aidIn(String t, boolean old) {
         if (Txt.has(t, "व्हीलचेयर", "व्हील चेयर", "व्हील-चेयर", "पहिया कुर्सी", "पहियों वाली कुर्सी", "wheelchair", "wheel chair", "wheel-chair")) return Look.AID_WHEELCHAIR;
+        if (Txt.has(t, "वॉकर", "वाकर के सहारे", "walking frame", "zimmer", "with a walker", "with her walker", "with his walker", "on a walker", "on her walker", "on his walker",
+                "behind a walker", "uses a walker", "pushes her walker", "pushes his walker")) return Look.AID_WALKER;
         if (Txt.has(t, "बैसाखी", "बैसाखियों", "बैसाखियाँ", "crutch")) return Look.AID_CRUTCHES;
         if (Txt.has(t, "जादुई छड़ी", "magic wand", "magic stick", "wand")) return Look.AID_NONE;
         if (Txt.has(t, "लाठी", "छड़ी के सहारे", "छड़ी टेक", "छड़ी लेकर चल", "छड़ी से चल", "walking stick", "walking-stick", "walking cane", "with a cane", "a cane", "his cane", "her cane",
                 "leans on a stick", "leaning on a stick", "with a stick", "his stick", "her stick")) return Look.AID_STICK;
         if (old && Txt.has(t, "छड़ी", "stick", "cane")) return Look.AID_STICK;
         return Look.AID_NONE;
+    }
+
+    /**
+     * v34: what is hurt and bandaged, named in a description or an action — an arm in plaster or a sling ("हाथ पर
+     * प्लास्टर", "arm in a sling"), a leg in plaster or a sprain ("पैर में प्लास्टर", "broken leg"), a bandage round the
+     * head ("सिर पर पट्टी") — as Look.INJ_* bits. A slingshot (गुलेल) is no sling.
+     */
+    public static int injuryIn(String t) {
+        int inj = 0;
+        if (Txt.has(t, "हाथ पर प्लास्टर", "हाथ में प्लास्टर", "बाँह पर प्लास्टर", "बांह पर प्लास्टर", "बाँह में प्लास्टर", "बांह में प्लास्टर", "हाथ टूट", "टूटा हाथ", "टूटी बाँह", "टूटी बांह",
+                "हाथ पर पट्टी", "बाँह पर पट्टी", "बांह पर पट्टी", "हाथ गले में लटका", "arm in a sling", "arm in sling", "arm in a cast", "arm in plaster", "broken arm", "plaster on his arm",
+                "plaster on her arm", "cast on his arm", "cast on her arm", "bandaged arm", "fractured arm")) inj |= Look.INJ_ARM;
+        if (Txt.has(t, "पैर में प्लास्टर", "पैर पर प्लास्टर", "टांग में प्लास्टर", "टाँग में प्लास्टर", "टांग पर प्लास्टर", "टाँग पर प्लास्टर", "पैर टूट", "टूटा पैर", "टूटी टांग", "टूटी टाँग",
+                "टांग टूट", "टाँग टूट", "पैर पर पट्टी", "पैर में पट्टी", "पैर में मोच", "टखने में मोच", "पाँव में मोच", "पांव में मोच", "leg in a cast", "leg in plaster", "broken leg",
+                "plaster on his leg", "plaster on her leg", "cast on his leg", "cast on her leg", "bandaged leg", "bandaged foot", "fractured leg", "sprained ankle", "sprained her ankle",
+                "sprained his ankle", "twisted ankle")) inj |= Look.INJ_LEG;
+        if (Txt.has(t, "सिर पर पट्टी", "माथे पर पट्टी", "सिर में पट्टी", "सिर पर बैंडेज", "माथे पर बैंडेज", "सिर में चोट", "सिर पर चोट", "माथे पर चोट", "bandage on his head",
+                "bandage on her head", "bandage round his head", "bandage around his head", "bandage round her head", "bandage around her head", "bandaged head", "head bandage",
+                "head injury", "bandage on his forehead", "bandage on her forehead", "plaster on his forehead", "plaster on her forehead")) inj |= Look.INJ_HEAD;
+        // "the doctor bandages Rohan's leg", "डॉक्टर ने हाथ पर प्लास्टर चढ़ाया": a bandage or a plaster put on, and the part it goes on
+        if (inj == 0 && Txt.has(t, "bandage", "plaster cast", "in plaster", "a cast", "पट्टी बाँध", "पट्टी बांध", "पट्टी लगा", "प्लास्टर चढ़", "प्लास्टर लग", "प्लास्टर बँध", "प्लास्टर बंध")) {
+            if (Txt.has(t, " leg", " foot", " knee", "ankle", "पैर", "टांग", "टाँग", "पाँव", "पांव", "टखन", "घुटन")) inj |= Look.INJ_LEG;
+            if (Txt.has(t, " arm", " wrist", " elbow", "हाथ", "बाँह", "बांह", "कलाई", "कोहनी")) inj |= Look.INJ_ARM;
+            if (Txt.has(t, " head", "forehead", "सिर", "माथ")) inj |= Look.INJ_HEAD;
+        }
+        return inj;
+    }
+
+    /** v34: a sentence that puts on or takes off a bandage, a plaster, a sling, a blindfold or an eye patch. */
+    static boolean bodyChange(String s) {
+        return injuryIn(s) != 0 || coverIn(s) > 0 || Txt.has(s, "प्लास्टर कट", "प्लास्टर उतर", "प्लास्टर खुल", "पट्टी खुल", "पट्टी खोल", "पट्टी हटा", "पट्टी उतार", "plaster comes off",
+                "cast comes off", "cast is removed", "plaster is removed", "cast is cut", "bandage comes off", "bandage is removed", "removes the bandage", "takes off the bandage",
+                "out of the sling", "sling comes off", "removes the blindfold", "takes off the blindfold", "took off the blindfold", "blindfold off", "unties the blindfold",
+                "removes the eye patch", "takes off the eye patch", "removes his eye patch", "removes her eye patch");
+    }
+
+    /** v34: a cloth blindfold over both eyes (4: Gandhari, a game of blind man's buff) or a patch over one eye (5: a pirate); 0 none. */
+    public static int coverIn(String t) {
+        if (Txt.has(t, "eye patch", "eyepatch", "eye-patch", "एक आँख पर पट्टी", "एक आंख पर पट्टी", "आँख पर काली पट्टी", "आंख पर काली पट्टी", "patch over one eye", "patch over his eye",
+                "patch over her eye", "आई पैच", "आईपैच", "आँख पर पैच", "आंख पर पैच")) return 5;
+        if (Txt.has(t, "आँखों पर पट्टी", "आंखों पर पट्टी", "आँखों पर बँधी", "आंखों पर बंधी", "आँखों पर कपड़ा", "आंखों पर कपड़ा", "blindfold", "eyes covered with", "eyes bandaged",
+                "cloth over her eyes", "cloth over his eyes", "cloth tied over")) return 4;
+        return 0;
     }
 
     static String sentenceWith(String text, String... keys) {
@@ -589,6 +656,11 @@ public final class LookDesigner {
                     : Txt.has(glassS, "AR glass", "ar glass", "काला चश्मा", "dark glass", "sunglass", "धूप का चश्मा", "visor", "काले चश्म", "black glass") ? 2 : 1;
             l.glowGlasses = l.glasses == 2 && Txt.has(glassS, "चमक", "glow", "लाल");
         }
+        // v34: a blindfold or an eye patch; a bandage, a plaster cast or a sling; an umbrella for the rain
+        int cover = coverIn(face + "\n" + clothes + "\n" + all);
+        if (cover > 0) l.glasses = cover;
+        l.injury = injuryIn(all);
+        l.umbrella = Txt.has(all, "छाता", "छतरी", "umbrella");
         // v34: what helps the character walk
         l.aid = aidIn(all, l.kind == Look.OLD_MAN || Txt.has(all, "बूढ़", "बुज़ुर्ग", "बुजुर्ग", "दादा", "दादी", "नाना", "नानी", "old ", "elderly", "grandpa", "grandma"));
         // v34: a blind character: dark glasses and a white cane

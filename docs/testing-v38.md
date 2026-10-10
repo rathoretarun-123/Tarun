@@ -131,7 +131,7 @@ All 25 test stories (the sample, four test scripts, twenty soak stories): every 
 Rendered (no pictures, the studio's own drawing) and found two more: the living room was a garden (`Sets.detect` knew
 "living room" only in English letters), and "पापा, सिया और परी सोफ़े पर बैठे हैं" seated only पापा
 (`Director.joinedPlural`: names joined with a plural verb apply to all of them). After: a room, all three on the sofa,
-asserted in the test. Places of all 25 test stories unchanged.
+asserted in the test. Places of all 25 test stories unchanged; postures (every character every half second) changed in two places, both now right: "कान्हा और बापू थके हुए रेत पर बैठ जाते हैं" (बापू sits too) and "तारा और इनाया bean bags पर बैठी हैं" (इनाया sits too).
 
 ## 3d. The user's pictures: "save in library and check upload and splitting"
 
@@ -156,4 +156,7 @@ New: `v38CraftGuideTrainedAndReported`, `v38EditListAndSubtitlesByInstruction`, 
 `v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio`, `v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices`, `v38SeveralPicturesThroughTheButtonsForEveryKind`, `v38PhotosAndTheCameraAllowedAgain` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
 `directorUsesTheRightPictureForEachShot` and `framesRenderThroughAndroidCanvas` (7 of 7).
 
-Full suite: see below.
+Full suite on the final code: **65 tests, 0 failures** (43 min; `twentyStoriesSoak` is opt-in and was not run — its twenty
+stories parse, place and pose exactly as before, checked with the dumps above). Two older tests were updated for the
+pictures pop-up's buttons (they pressed the first item of a list); the user's 36 pictures go through
+`v38UserSheetsSplitSavedAndGroupLinesSpokenByTheCast`.

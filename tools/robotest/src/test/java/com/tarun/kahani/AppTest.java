@@ -197,7 +197,8 @@ public class AppTest {
         String pick = dialogText();
         System.out.println("PICKER: " + pick);
         assertTrue(pick.contains("Next 4"));
-        assertTrue(pick.contains("camera"));
+        // v37: a character's picture is animated only — no camera is offered
+        assertTrue("no camera for a character's picture", !pick.toLowerCase(java.util.Locale.ROOT).contains("camera"));
         org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss();
 
         // voice chooser
@@ -4336,30 +4337,31 @@ public class AppTest {
         for (int i = 0; i < px[0].length; i++) if (px[0][i] != px[1][i]) diff++;
         System.out.println("MAKEUP v37: pixels the make-up changes " + diff);
         assertTrue("kajal, lipstick, a bindi, mehndi and face paint are drawn (" + diff + ")", diff > 200);
+        // the curtain and the screen drawn alone and over the character: below their top nothing of the body may show
+        // (the frames must be the same there)
         for (int kind = 0; kind < 2; kind++) {
-            Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
-            AndroidGfx g = new AndroidGfx(bmp, 2);
-            g.color(0xFFFFFFFF); g.rect(0, 0, 300, 300);
-            g.save(); g.translate(150, 290);
-            Pose p = new Pose(); p.reset(); p.facing = 1;
-            float h = 260;
-            Puppet.draw(g, raju, p, h);
-            float top = kind == 0 ? Puppet.shoulderY(raju, h) + 0.04f * h : Puppet.shoulderY(raju, h) - 0.03f * h;
-            if (kind == 0) Props.curtain(g, h, top, 1.3f); else Props.screen(g, h, top, 0xFFFDD835, 1.3f);
-            g.restore();
+            int[][] q = new int[2][];
+            float h = 260, top = 0;
+            for (int withBody = 0; withBody < 2; withBody++) {
+                Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
+                AndroidGfx g = new AndroidGfx(bmp, 2);
+                g.color(0xFFFFFFFF); g.rect(0, 0, 300, 300);
+                g.save(); g.translate(150, 290);
+                Pose p = new Pose(); p.reset(); p.facing = 1;
+                if (withBody == 1) Puppet.draw(g, raju, p, h);
+                top = kind == 0 ? Puppet.shoulderY(raju, h) + 0.04f * h : Puppet.shoulderY(raju, h) - 0.03f * h;
+                if (kind == 0) Props.curtain(g, h, top, 1.3f); else Props.screen(g, h, top, 0xFFFDD835, 1.3f);
+                g.restore();
+                q[withBody] = new int[300 * 300]; bmp.getPixels(q[withBody], 0, 300, 0, 0, 300, 300);
+                g.release();
+            }
             int shown = 0, total = 0;
             for (int y = (int) (290 + top) + 4; y < 288; y++) for (int x = (int) (150 - 0.38f * h); x < 150 + 0.38f * h; x++) {
-                int c = bmp.getPixel(x, y);
                 total++;
-                // the puppet's own colours (skin, the red shirt, the blue shorts) must not show below the top
-                int r = c >> 16 & 255, gg = c >> 8 & 255, b = c & 255;
-                boolean skin = r > 170 && gg > 110 && gg < 190 && b < 140 && r - b > 60;
-                boolean shirt = r > 150 && gg < 80 && b < 80, shorts = b > 120 && r < 90;
-                if (skin || shirt || shorts) shown++;
+                if (q[0][y * 300 + x] != q[1][y * 300 + x]) shown++;
             }
             System.out.println("FAMILY v37: " + (kind == 0 ? "bath curtain" : "dressing screen") + " — body pixels below its top " + shown + " of " + total);
             assertTrue((kind == 0 ? "the curtain" : "the screen") + " hides the body below the shoulders (" + shown + ")", shown < total / 200);
-            g.release();
         }
     }
 

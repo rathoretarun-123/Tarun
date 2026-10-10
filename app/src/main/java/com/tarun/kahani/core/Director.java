@@ -4430,10 +4430,11 @@ public final class Director {
                 act.item = pg;
                 a.acts.add(act);
                 if (pg == Film.PG_SLIDE) {
-                    // down the chute: the stage position moves with the slide (so they stay at its foot afterwards)
+                    // down the chute: the stage position moves with the slide (so they stay at its foot afterwards);
+                    // the laugh from the moment they set off (its keys after the move's: keys go in time order)
                     Film.Key down = a.at(t0 + lag + dur * 0.5f); down.x = x + f * Props.SLIDE_LEN * h; down.moveDur = dur * 0.3f; down.facing = f;
+                    feel(a, t0 + lag + dur * 0.5f, dur * 0.4f, Pose.LAUGH);
                     film.sfx.add(sfxAt(Film.SFX_WHOOSH, t0 + lag + dur * 0.5f, dur * 0.3f, 0.4f, a));
-                    feel(a, t0 + lag + dur * 0.45f, dur * 0.5f, Pose.LAUGH);
                 } else {
                     film.sfx.add(sfxAt(Film.SFX_CREAK, t0 + lag, dur, 0.25f, a));
                     feel(a, t0 + lag, dur, Pose.HAPPY);
@@ -4516,7 +4517,7 @@ public final class Director {
             // the forehead for a child (or when the story says so), the cheek otherwise
             k.item = Txt.has(s, "माथे", "माथा", "ललाट", "forehead") || (to.look.isChild() && !a.look.isChild()) ? 1 : 0;
             a.acts.add(k);
-            feel(to, t + 1.2f, 1.6f, Pose.HAPPY);
+            feel(to, t + 1.2f, 1.1f, Pose.HAPPY);          // (ends before the next line can begin)
             film.sfx.add(sfxAt(Film.SFX_KISS, t + 1.45f, 0.3f, 0.3f, a));
             pecks++;
             return 2.6f;

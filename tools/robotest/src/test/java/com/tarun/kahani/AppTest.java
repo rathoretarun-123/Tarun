@@ -1115,7 +1115,8 @@ public class AppTest {
             int shotsN = 0, used = 0, real = 0, cycles = 0;
             for (String l : qc.split("\n")) {
                 if (l.startsWith("SHOT ID:")) shotsN++;
-                if (l.startsWith("PICTURES USED:")) { used++; if (l.contains("your picture")) real++; if (l.contains("stepping through")) cycles++; }
+                // v39: the rigged front picture is the user's own picture too (the user asked for it to play every shot)
+                if (l.startsWith("PICTURES USED:")) { used++; if (l.contains("your picture") || l.contains("the front picture (rigged)")) real++; if (l.contains("stepping through")) cycles++; }
             }
             java.util.Map<String, Integer> usedLines = new java.util.TreeMap<String, Integer>();
             for (String l : qc.split("\n")) if (l.startsWith("PICTURES USED:")) { Integer c = usedLines.get(l); usedLines.put(l, c == null ? 1 : c + 1); }

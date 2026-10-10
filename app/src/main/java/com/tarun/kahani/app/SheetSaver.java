@@ -593,7 +593,13 @@ final class SheetSaver {
             for (String old : new String[]{project.manifestLine("scene", key), project.manifestLine("scene", key + "r")}) {
                 if (old == null) continue;
                 String[] of = old.split("\\|");
-                if (of.length >= 3 && project.has(of[2].trim())) keepViews.add(of[2].trim());
+                if (of.length < 3 || !project.has(of[2].trim())) continue;
+                keepViews.add(of[2].trim());
+                // (v33) the earlier picture also stays in the library
+                try {
+                    byte[] ob = com.tarun.kahani.app.AudioIO.readFile(project.file(of[2].trim()));
+                    if (ob != null && ob.length > 0) { Library.Item prev = library.addBytes(Library.PIC, "place", shown + " (earlier)", "", ob, ".jpg", "angles"); prev.setMeta("ofName", shown); }
+                } catch (Exception ignored) { }
             }
             for (int i = 1; i <= 98; i++) {
                 String old = project.manifestLine("scene", key + "v" + i);

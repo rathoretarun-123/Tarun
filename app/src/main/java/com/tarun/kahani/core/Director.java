@@ -3885,6 +3885,17 @@ public final class Director {
                 // a group keeps its spacing
                 float shift = x < 640 ? 300 : -300;
                 float dest = Math.max(160, Math.min(1120, x + shift));
+                // never onto another one standing there: stop beside them (an arm's length), short of them if need be
+                for (int pass = 0; pass < 3; pass++) {
+                    boolean moved = false;
+                    for (Film.Actor o : seg.actors) {
+                        if (o == a || (all && who.contains(o)) || !o.stateAt(t).visible) continue;
+                        float ox = xAt(o, t);
+                        if (Math.abs(dest - ox) < 130) { dest = ox + (x < ox ? -140 : 140); moved = true; }
+                    }
+                    dest = Math.max(160, Math.min(1120, dest));
+                    if (!moved) break;
+                }
                 if (Math.abs(dest - x) < 60) continue;
                 float dur = Math.min(4.0f, Math.max(0.7f, Math.abs(dest - x) / speed));
                 if (!all) frameAround(go - 0.1f, x, dest);

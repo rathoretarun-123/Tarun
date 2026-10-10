@@ -105,7 +105,9 @@ public final class Rig {
         int w = r.w, h = r.h;
         float aspect = h / (float) w;
         boolean beast = look != null && (look.kind == Look.ANIMAL || look.kind == Look.BIRD);
-        if (beast || aspect < 1.25f) {
+        // v34: a rider on her animal is wider than tall, but she is a person (her lips speak) with the animal's jaw
+        boolean rider = look != null && (look.mount >= 0 || look.aid == Look.AID_WHEELCHAIR) && !beast;
+        if (beast || (aspect < 1.25f && !rider)) {
             // an upright animal picture (a monkey, a bear standing) moves like a person
             if (beast && aspect >= 1.5f && r.h >= 80) beast = false;
             else {
@@ -241,6 +243,13 @@ public final class Rig {
             g.armsFixed = true;
             g.armUp[0] = g.armUp[1] = false;
             if (look.mount >= 0) { g.legs = false; findMountJaw(g, r, left, right, topRow, botRow); }
+        }
+        // v34: a picture with a wheelchair (the chair is in the picture) never walks; one with a walking stick or
+        // crutches keeps its arms on them (no swing that would leave the stick behind)
+        if (look != null && look.aid != Look.AID_NONE) {
+            g.armsFixed = true;
+            g.armUp[0] = g.armUp[1] = false;
+            if (look.aid == Look.AID_WHEELCHAIR) g.legs = false;
         }
         g.gapX = g.legs ? gapSum / two / w : g.cx;
         g.legHalf = g.legs ? halfSum / two / w : 0.1f;
@@ -504,6 +513,24 @@ public final class Rig {
         o[1] = f.hipCY + f.lSin * dx + f.lCos * dy;
     }
 
+    /**
+     * v34: where the rider's animal's open mouth is in this frame — {hinge x, y, upper tip x, y, lowered tip x, y}
+     * in the picture's drawing coordinates — or null while it is shut. The renderer fills it dark (with a tongue),
+     * as it does for an animal of its own, so the animal's words read as speech, not as a warp of its snout.
+     */
+    public float[] mountMouth(Frame f, State s) {
+        if (!mountJaw || s.mountJaw < 0.1f) return null;
+        float hx = f.L0 + mjX * f.W0, hy = f.T0 + mjY * f.H0;
+        float tx = hx + (mjTipX - mjX) * f.W0 * 0.92f;
+        double a = Math.toRadians(mjSide * 22 * s.mountJaw);
+        float lx = hx + (float) Math.cos(a) * (tx - hx), ly = hy + (float) Math.sin(a) * Math.abs(tx - hx);
+        float[] o = new float[6], q = new float[2];
+        moveBody(f, s, hx, hy, q); o[0] = q[0]; o[1] = q[1];
+        moveBody(f, s, tx, hy, q); o[2] = q[0]; o[3] = q[1];
+        moveBody(f, s, lx, ly, q); o[4] = q[0]; o[5] = q[1];
+        return o;
+    }
+
     /** Where one point of the picture (local coordinates) goes in this frame. */
     private void move(Frame f, State s, float x, float y, float[] o) {
         if (animal) { moveAnimal(f, s, x, y, o); return; }
@@ -514,7 +541,7 @@ public final class Rig {
                     * (mjSide < 0 ? smooth(mjX + 0.02f, mjX - 0.03f, u) : smooth(mjX - 0.02f, mjX + 0.03f, u));
             if (zone > 0) {
                 float hx = f.L0 + mjX * f.W0, hy = f.T0 + mjY * f.H0;
-                double a = Math.toRadians(mjSide * 16 * s.mountJaw * zone);
+                double a = Math.toRadians(mjSide * 22 * s.mountJaw * zone);
                 float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = x - hx, dy = y - hy;
                 x = hx + c * dx - sn * dy; y = hy + sn * dx + c * dy;
             }
@@ -773,7 +800,17 @@ public final class Rig {
             if (right[y] > bestR) { bestR = right[y]; rowR = y; }
         }
         if (rowL < 0 || rowR < 0) return;
-        int side = (cx - bestL) > (bestR - cx) ? -1 : 1;
+        // v34: the head is the bulky end, a tail the thin one — compare how much of the figure lies within a sixth
+        // of the picture's width of each end (a lion's tail can reach as far out as its muzzle); the farther end
+        // decides only when the two are close
+        int band = Math.max(4, w / 6);
+        long massL = 0, massR = 0;
+        for (int y = y0; y <= y1; y++) {
+            int row = y * w;
+            for (int x = bestL; x < Math.min(w, bestL + band); x++) if ((r.px[row + x] >>> 24) > 128) massL++;
+            for (int x = Math.max(0, bestR - band + 1); x <= bestR; x++) if ((r.px[row + x] >>> 24) > 128) massR++;
+        }
+        int side = massL > massR * 1.25f ? -1 : massR > massL * 1.25f ? 1 : (cx - bestL) > (bestR - cx) ? -1 : 1;
         int tip = side < 0 ? bestL : bestR, tipRow = side < 0 ? rowL : rowR;
         // the head: the rows near the tip that reach within a sixth of the picture's width of it
         int top = tipRow, bot = tipRow;

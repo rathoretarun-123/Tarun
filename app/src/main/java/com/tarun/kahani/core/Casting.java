@@ -44,7 +44,7 @@ public final class Casting {
                 int best = choose(sp, w);
                 // v33: a beast (fur, four legs, a monster) is never bent through the rig: its front picture is drawn as it is
                 boolean beast = a.c.look != null && (a.c.look.kind == Look.ANIMAL || a.c.look.kind == Look.BIRD || a.c.look.kind == Look.MONSTER || a.c.look.kind == Look.MONKEY
-                        || a.c.look.arms > 2 || a.c.look.mount >= 0);      // v34: a many-armed goddess or a rider is never bent either
+                        || a.c.look.arms > 2 || a.c.look.mount >= 0 || a.c.look.aid == Look.AID_WHEELCHAIR);      // v34: a many-armed goddess, a rider or a wheelchair is never bent either
                 if (best == MAIN && beast) {
                     for (int i = 0; i < sp.poses.size(); i++) {
                         Art.PoseSprite p = sp.poses.get(i);

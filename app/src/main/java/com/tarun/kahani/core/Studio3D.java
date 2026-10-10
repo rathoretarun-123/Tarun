@@ -101,6 +101,24 @@ public final class Studio3D {
 
         public int triangles() { return nt; }
 
+        /**
+         * v34: a copy of the vertices v0..v1 and their triangles t0..t1 (a part already built, such as a head),
+         * scaled by s about (cx, cy, cz) and moved by (dx, dy, dz), with the same materials.
+         */
+        public void copyPart(int v0, int v1, int t0, int t1, float cx, float cy, float cz, float s, float dx, float dy, float dz) {
+            int base = nv;
+            for (int i = v0; i < v1; i++) {
+                float x = v[i * 3], y = v[i * 3 + 1], z = v[i * 3 + 2], nx = n[i * 3], ny = n[i * 3 + 1], nz = n[i * 3 + 2];
+                float u = uv[i * 2], tv = uv[i * 2 + 1];
+                vertex(cx + (x - cx) * s + dx, cy + (y - cy) * s + dy, cz + (z - cz) * s + dz, nx, ny, nz, u, tv);
+            }
+            for (int k = t0; k < t1; k++) {
+                int a = t[k * 3], b = t[k * 3 + 1], c = t[k * 3 + 2];
+                if (a < v0 || a >= v1 || b < v0 || b >= v1 || c < v0 || c >= v1) continue;
+                tri(base + a - v0, base + b - v0, base + c - v0, tm[k]);
+            }
+        }
+
         /** An ellipsoid (a sphere with three radii). seg = rings; twice as many around. */
         public void sphere(float cx, float cy, float cz, float rx, float ry, float rz, int seg, int m) {
             int rings = Math.max(3, seg), around = Math.max(6, seg * 2);
@@ -114,7 +132,7 @@ public final class Studio3D {
                     vertex(cx + ux * rx, cy + cy1 * ry, cz + uz * rz, ux / rx, cy1 / ry, uz / rz);
                 }
             }
-            grid(base, rings, around, m, false);
+            grid(base, rings, around, m, true);         // v34: wound outward (the front of a sphere was culled and its inside back drawn)
         }
 
         /** A tube between two points with a radius at each end (r1 = 0 is a cone), round caps when capped. */
@@ -252,6 +270,8 @@ public final class Studio3D {
         public int fogColor = 0;
         public float dof = 0f;
         public boolean shadows = true, ao = true;
+        /** v34: how soft the key light's shadow edge is — 1 is the 3x3 filter, 2 a 5x5 filter two texels apart (a rider's shadow on her animal). */
+        public int shadowSoft = 1;
         public float exposure = 1f;
         /** The reach of the ambient occlusion in world units (a fraction of the subject's size). */
         public float aoRadius = 0.05f;
@@ -517,6 +537,17 @@ public final class Studio3D {
             int ia = (int) a, ib = (int) b;
             if (ia < 1 || ib < 1 || ia >= SHADOW - 1 || ib >= SHADOW - 1) return 1f;
             float sum = 0;
+            if (s.shadowSoft > 1) {
+                int k = 2 * s.shadowSoft;
+                if (ia < k || ib < k || ia >= SHADOW - k || ib >= SHADOW - k) return 1f;
+                bias += texel * k;
+                int n = 0;
+                for (int j = -k; j <= k; j += 2) for (int i = -k; i <= k; i += 2) {
+                    float sd = shadow[(ib + j) * SHADOW + ia + i];
+                    sum += d - bias <= sd ? 1 : 0; n++;
+                }
+                return sum / n;
+            }
             for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
                 float sd = shadow[(ib + j) * SHADOW + ia + i];
                 sum += d - bias <= sd ? 1 : 0;

@@ -905,6 +905,24 @@ public final class Puppet {
 
     static void drawHeld(Gfx g, Look l, Pose p, Body b, int side, float[] h, int hold) {
         float hx = h[4], hy = h[5];
+        // v34: a walking stick from the right hand to the ground (its crook over the hand); crutches under both arms
+        boolean onFeet = p.body != Pose.SIT && p.body != Pose.LIE && p.body != Pose.HANG && p.body != Pose.KNEEL;
+        if (onFeet && hold == Pose.I_NONE && side == 1 && l.aid == Look.AID_STICK) {
+            float sw = Math.max(3, b.armW * 0.5f), gx = hx + p.facing * b.headR * 0.22f;
+            g.color(0xFF5D4037);
+            g.line(hx, hy, gx, -1, sw);
+            g.begin(); g.moveTo(hx - p.facing * b.armW * 1.3f, hy + b.armW * 0.3f); g.quadTo(hx - p.facing * b.armW * 0.6f, hy - b.armW * 1.5f, hx, hy); g.strokePath(sw);
+            g.color(0xFF3E2723); g.oval(gx, -2, sw * 0.8f, sw * 0.4f);
+        }
+        if (onFeet && l.aid == Look.AID_CRUTCHES) {
+            float tx = h[0] + side * b.armW * 0.5f, ty = h[1] + b.armW * 1.3f, fx = hx + side * b.armW * 0.7f, cw = Math.max(3, b.armW * 0.45f);
+            g.color(0xFF90A4AE);
+            g.line(tx, ty, fx, -1, cw);
+            g.color(0xFF455A64);
+            g.line(tx - b.armW * 0.7f, ty, tx + b.armW * 0.7f, ty, b.armW * 0.55f);           // the pad under the arm
+            g.line(hx - b.armW * 0.6f, hy, hx + b.armW * 0.6f, hy, b.armW * 0.42f);           // the grip in the hand
+            g.color(0xFF263238); g.oval(fx, -2, cw * 0.9f, cw * 0.45f);
+        }
         // default props when not holding anything special
         if (hold == Pose.I_NONE) {
             if (side == 1 && l.spear) {
@@ -1255,6 +1273,19 @@ public final class Puppet {
             if (l.glowGlasses) {
                 g.color(alpha(0xFFFF1744, 0.55f + 0.3f * (float) Math.sin(p.time * 3)));
                 g.rect(ex - r * 0.6f, -r * 0.1f, r * 1.2f, r * 0.05f);
+            }
+        } else if (l.glasses == 3) {
+            // v34: goggles — two big round lenses with thick rims on a strap round the head; the eyes show through
+            g.color(0xFF3E2723);
+            g.line(-r * 0.98f, -r * 0.1f, r * 0.98f, -r * 0.1f, Math.max(2, r * 0.11f));
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                float gx = ex + s2 * r * 0.37f;
+                g.color(0xFF5D4037);
+                g.oval(gx, -r * 0.08f, r * 0.3f, r * 0.27f);
+                g.color(alpha(0xFF80DEEA, 0.5f));
+                g.oval(gx, -r * 0.08f, r * 0.22f, r * 0.2f);
+                g.color(alpha(0xFFFFFFFF, 0.45f));
+                g.oval(gx - r * 0.08f, -r * 0.15f, r * 0.06f, r * 0.04f);
             }
         }
         // headwear on top

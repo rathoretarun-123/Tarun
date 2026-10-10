@@ -34,7 +34,7 @@ public final class ScenePlan {
     }
 
     static int setOf(Story.Scene sc) {
-        return Sets.detect(Director.firstSentence(sc.setting.length() > 0 ? sc.setting : sc.title));
+        return Sets.forScene(sc);
     }
 
     /** Every scene the director adds to this story, in order. */

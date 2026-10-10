@@ -60,6 +60,12 @@ public final class Sets {
     }
 
     /** Guesses the set from a free-text location description. */
+    /** v34: words of open land (a battlefield, mountains, a valley, a desert, fields) — a place of its own, though drawn as the open place. */
+    public static boolean openLand(String text) {
+        return Txt.has(text, "युद्ध का मैदान", "युद्धभूमि", "युद्ध भूमि", "रणभूमि", "रणक्षेत्र", "पहाड़", "पर्वत", "घाटी", "रेगिस्तान", "मरुस्थल", "खेत")
+                || Txt.hasWord(text, "battlefield", "battleground", "mountain", "mountains", "hill", "hills", "valley", "desert", "meadow", "field", "fields");
+    }
+
     public static int detect(String text) {
         if (Txt.has(text, "गुफा के अंदर", "गुफा में", "inside the cave", "अपनी गुफा")) return CAVE_IN;
         if (Txt.has(text, "मुहान", "गुफा के बाहर", "गुफा के दरवाज", "cave entrance")) return CAVE_MOUTH;
@@ -74,9 +80,13 @@ public final class Sets {
         if (Txt.has(text, "गुफा", "cave", "कैदखान")) return CAVE_IN;
         if (Txt.has(text, "जंगल", "वन ", "forest", "jungle", "woods")) return FOREST;
         if (Txt.has(text, "सजा", "उत्सव", "जश्न", "रोशनियों", "ढोल", "celebration", "festival")) return CELEBRATION;
+        // v34: open land — a battlefield, mountains, a valley, a desert — unless a built place is named with it
+        // ("पहाड़ों के बीच युद्ध का मैदान" is no palace courtyard; "पहाड़ी पर महल का द्वार" stays the gate)
+        if (openLand(text) && !Txt.has(text, "महल", "palace", "द्वार", "gate", "आँगन", "प्रांगण", "courtyard", "बगीच", "garden", "दरबार", "hall", "गाँव", "village", "मंदिर", "temple"))
+            return GENERIC_OUT;
         if (Txt.has(text, "मुख्य द्वार", "द्वार", "गेट", "फाटक", "gate")) return GATE;
         if (Txt.has(text, "प्रांगण", "आँगन", "मैदान", "courtyard", "arena")) return COURTYARD;
-        if (Txt.has(text, "बगीच", "बाग", "उद्यान", "garden")) return GARDEN;
+        if (Txt.has(text, "बगीच", "बाग", "उद्यान", "वाटिका", "फुलवारी", "garden")) return GARDEN;
         if (Txt.has(text, "दरबार", "सिंहासन", "throne", "palace hall", "महल के अंदर", "राजमहल", "दरबार") || (Txt.has(text, "महल", "palace") && Txt.has(text, "कक्ष", "कमरे", "hall", "room"))) return HALL;
         if (Txt.has(text, "कमरा", "कमरे", "कक्ष", "ऑफिस", "दफ़्तर", "दफ्तर", "कक्षा", "स्कूल", "क्लास", "रसोई", "अस्पताल", "दुकान", "पुस्तकालय", "घर के अंदर", "स्टूडियो")
                 || Txt.hasWord(text, "living room", "bedroom", "bedrooms", "office", "offices", "classroom", "classrooms", "school", "schools", "kitchen", "hospital",
@@ -87,6 +97,24 @@ public final class Sets {
         if (Txt.has(text, "गाँव", "गांव", "बाज़ार", "village", "market")) return VILLAGE;
         if (Txt.has(text, "महल", "palace")) return GARDEN;
         return GENERIC_OUT;
+    }
+
+    /**
+     * v34: the one place of a scene, the same for the director, the scene plan, the 3D place maker and the scene card:
+     * the setting's first sentence (later sentences mention other places), then the whole setting; a title that names
+     * the place more surely wins over a bare "palace" (read as its garden) or an open place ("स्वर्ग का दरबार" with
+     * "स्वर्ग का सुनहरा महल" is the hall).
+     */
+    public static int forScene(Story.Scene sc) {
+        String setting = sc.setting == null ? "" : sc.setting, title = sc.title == null ? "" : sc.title;
+        String first = Director.firstSentence(setting.length() > 0 ? setting : title);
+        int s = detect(first);
+        if (s == GENERIC_OUT && setting.length() > 0) s = detect(setting);
+        if (title.length() > 0 && setting.length() > 0 && (s == GENERIC_OUT || (s == GARDEN && !Txt.has(first, "बगीच", "बाग", "उद्यान", "वाटिका", "फुलवारी", "garden")))) {
+            int t = detect(title);
+            if (t != GENERIC_OUT && t != GARDEN) s = t;
+        }
+        return s;
     }
 
     public static int detectTime(String text, int fallback) {

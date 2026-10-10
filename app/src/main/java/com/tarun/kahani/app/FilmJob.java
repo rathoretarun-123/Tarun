@@ -67,6 +67,7 @@ public final class FilmJob implements Runnable {
             return null;
         }
         current = new FilmJob(ctx, p);
+        current.askForPictures = Prefs.askUploads(ctx);           // v34: the user is asked for pictures before any 3D one is made
         FilmService.start(ctx);
         thread = new Thread(current, "film-job");
         thread.setPriority(Thread.NORM_PRIORITY);
@@ -236,12 +237,37 @@ public final class FilmJob implements Runnable {
                 int n = FreeArt.fetchFor(project, story, Prefs.cloud(ctx), Library.get(ctx), 6, got);
                 if (n > 0) objectNotes = got;
             }
+            // v34: the 3D maker only when it must — whatever still has no picture after the library is asked of the
+            // user first: the film waits on this screen while they add pictures (each row has its button); it goes on
+            // the moment everything has one, or when they choose to have the rest built in 3D or drawn
+            boolean build3d = Prefs.studio3d(ctx);
+            if (askForPictures && !remake) {
+                java.util.List<String> needed = neededPictures(story);
+                if (!needed.isEmpty()) {
+                    StringBuilder nb = new StringBuilder();
+                    for (int i = 0; i < needed.size() && i < 8; i++) nb.append(i > 0 ? ", " : "").append(needed.get(i));
+                    if (needed.size() > 8) nb.append(" and ").append(needed.size() - 8).append(" more");
+                    picturesNeeded = nb.toString();
+                    stage = "Waiting for you: please add pictures of " + picturesNeeded;
+                    pictureChoice = 0;
+                    picturesWaiting = true;
+                    while (picturesWaiting && !cancelled) {
+                        try { Thread.sleep(400); } catch (InterruptedException e) { break; }
+                        if (neededPictures(story).isEmpty()) break;
+                    }
+                    picturesWaiting = false;
+                    check();
+                    if (pictureChoice == 2) build3d = false;
+                    else if (pictureChoice == 1) build3d = true;
+                    if (pictureChoice == 0) info = "Thank you — every picture is there now";
+                }
+            }
             // Studio 3D: whatever still has no picture (AI off, offline, or the service down) is built in three
             // dimensions on the phone — characters with their face points, places with their floor line
-            if (Prefs.studio3d(ctx) && !remake) {
+            if (build3d && !remake) {
                 check();
                 step("Reading the style of your pictures…", 0.024f);
-                final com.tarun.kahani.core.StyleCue cue = Studio3DArt.styleCue(project, story);
+                final com.tarun.kahani.core.StyleCue cue = Studio3DArt.styleCue(project, story, Library.get(ctx));
                 styleNote = cue.describe();
                 boolean ask = Prefs.ask3d(ctx);
                 Studio3DArt.Progress sp = new Studio3DArt.Progress() {
@@ -592,6 +618,22 @@ public final class FilmJob implements Runnable {
     final java.util.List<String> stillQaNotes = new java.util.ArrayList<String>();
     /** The job waits for the user's decision on the pictures the studio made in 3D (proposals in the manifest). */
     public volatile boolean proposalsWaiting;
+    /** v34: started from the app: before any 3D picture is made, the user is asked for the missing pictures. */
+    public boolean askForPictures;
+    /** v34: the film waits for the user's pictures (picturesNeeded); pictureChoice: 0 waiting, 1 build the rest in 3D, 2 draw them. */
+    public volatile boolean picturesWaiting;
+    public volatile String picturesNeeded = "";
+    public volatile int pictureChoice;
+    public void choosePictures(int choice) { pictureChoice = choice; picturesWaiting = false; }
+
+    /** v34: the characters and places of the story with no picture yet (names to show). */
+    java.util.List<String> neededPictures(com.tarun.kahani.core.Story story) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        try {
+            for (String[] t : AutoLibrary.missingTargets(project, story)) if (t[0].startsWith("char:") || t[0].startsWith("place:")) out.add(t[1]);
+        } catch (Throwable ignored) { }
+        return out;
+    }
     public void proposalsDone() { proposalsWaiting = false; }
     private String styleNote = "";
     /** The user's fix per shot (index into film.shots → Director.FIX_*), set by the screen before approving. */

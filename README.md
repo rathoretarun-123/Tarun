@@ -18,6 +18,21 @@ All screens and instructions in the app are in English; the story, dialogue and 
 * **Back views are used, not only behind a shoulder** — a character who turns away or leaves ("पीठ फेरकर", "चला जाता है", "walks away", "turns her back") is drawn from the back (the user's back picture, or the back view) until they turn round to speak.
 * **A rider and the animal both lip-sync** — when the animal a character rides is a character of the story (Durga's lion speaks), it is not staged a second time beside her: its lines open the lion's jaw in her picture (found in the picture: the snout on the side the animal's head points to), framed medium-wide so both are seen, while her own lines move her lips; the drawn puppet and the doll do the same.
 * **Characters with more than two arms, and riders (Durga on her lion)** — the arm count and the animal ridden are read from the name or the description ("आठ भुजाओं वाली", "चार हाथों वाला", "six-armed", "शेर पर सवार", "चूहे की सवारी", "riding a peacock", "mounted on a white bull"; Durga's eight arms and lion by name); the ridden animal is never taken for the character's own species. In the user's picture the arms stay as drawn (no swing, nothing beside the face read as a raised hand) and a rider's legs never walk (the whole picture glides); such a character is drawn as it is when no pose picture fits, like a beast; the drawn puppet gets its extra pairs of arms fanned behind the body and the animal under the seated rider; the doll the same (the lion side-on at half height, the goddess seated on its back). Test `manyArmedRidersAndShorterShots`.
+* **Retested as films: three new stories (Durga and Mahishasura, Ravana and Hanuman, an English park story) made with 3D dolls for every character and 3D sets for every place, looked at frame by frame. Fixed from that run:**
+  * the 3D renderer drew every sphere inside-out (its front was culled and its inside drawn), so heads and eyes were shaded wrongly and a neck showed through the chin — spheres are now wound outward;
+  * the lion's mane hid its eye and muzzle — the mane sits behind the face;
+  * Durga stood in front of her lion — she now sits on it (thighs forward, shins down, the saree over her lap), her shadow on the lion is soft, and her picture stands a quarter taller than a standing person instead of making her smaller than Indra beside her;
+  * the lion's jaw was found at its tail when the tail reached as far out as the muzzle — the head is now the bulky end of the picture; the jaw opens a little wider (22°) and a dark mouth with a tongue shows between the snout and the jaw, so the lion's words read as speech;
+  * a giant's head rose above the top of the picture (the camera never looks above the place's picture) — the whole cast of that part is drawn smaller together so the tallest keeps its head in the frame;
+  * reaction close-ups are framed by the face, so a crown or a head is never cut; a goddess who answers fear with "डरो मत" reacts with resolve, not fear;
+  * Ravana's doll had one head — the 3D doll now has the row of heads (ten for Ravana, three for a three-headed demon), the face on the central one; Ravana and the other villains of the epics never stand with the heroes on the last page;
+  * Hanuman hung upside down from the tree for a whole scene — "पेड़ से कूदकर नीचे आते हैं" now brings him down to the ground; a vanara (Hanuman, Sugriva, Angad, a mighty monkey) is a man's height, a pet monkey stays small;
+  * the title and end pages drew the lion twice (under Durga and again on its own);
+  * the director, the 3D place maker and the scene card read a place differently ("स्वर्ग का दरबार" a garden to one and a hall to the other; the sample's garden scenes a gate to the 3D maker) — one reading for all (`Sets.forScene`): the setting's first sentence, a title that names the place over a bare "palace", a battlefield or mountains as open land, "वाटिका" a garden;
+  * Maya with "two ponytails with yellow ribbons" was made a boy with short hair — what a character wears and how her hair is done now count, and two ponytails are drawn as two;
+  * every doll's shadow edges are soft (the hair's shadow across a face read as a scar).
+  Test `godsDemonsAndVanarasAreStagedWell`.
+
 
 ## New in v33
 

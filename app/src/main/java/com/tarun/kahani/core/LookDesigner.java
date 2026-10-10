@@ -63,6 +63,66 @@ public final class LookDesigner {
     }
 
     /** The sentence (split on । . ,) containing a keyword. */
+    /** v34: the outfit a text names (Look.O_*), or -1 when it names none. */
+    static int outfitIn(String clothes, boolean female) {
+        if (Txt.has(clothes, "trench", "overcoat", "ओवरकोट", "long coat", "लंबा कोट", "coat", "कोट")) return Look.O_COAT;
+        if (Txt.has(clothes, "hoodie", "हुडी", "हूडी", "sweatshirt")) return Look.O_HOODIE;
+        if (Txt.has(clothes, "t-shirt", "tshirt", "टी-शर्ट", "टीशर्ट", "tee ", "shorts", "हाफ पैंट", "निकर")) return Look.O_TSHIRT;
+        if (Txt.has(clothes, "suit", "सूट", "blazer", "ब्लेज़र", "tuxedo", "formal")) return Look.O_SUIT;
+        if (Txt.has(clothes, "jeans", "जींस", "जीन्स", "trousers", "pants", "पैंट", "denim")) return Look.O_JEANS;
+        if (Txt.has(clothes, "घाघरा", "लहंगा", "lehenga", "ghagra")) return Look.O_LEHENGA;
+        if (Txt.has(clothes, "साड़ी", "saree", "sari")) return Look.O_SAREE;
+        if (Txt.has(clothes, "सलवार", "salwar")) return Look.O_SALWAR;
+        if (Txt.has(clothes, "अचकन", "शेरवानी", "achkan", "sherwani")) return Look.O_ACHKAN;
+        if (Txt.has(clothes, "वर्दी", "uniform", "सैनिक पोशाक")) return Look.O_UNIFORM;
+        if (Txt.has(clothes, "लबादा", "cloak", "robe", "चोगा")) return Look.O_CLOAK;
+        if (Txt.has(clothes, "कवच", "armor", "armour")) return Look.O_ARMOR;
+        if (Txt.has(clothes, "बंडी", "jacket", "जैकेट")) return Look.O_JACKET;
+        if (Txt.has(clothes, "फ्रॉक", "frock", "gown", "गाउन", "dress", "ड्रेस")) return female ? Look.O_FROCK : -1;
+        if (Txt.has(clothes, "कुर्ता", "kurta")) return female ? Look.O_SALWAR : Look.O_KURTA;
+        return -1;
+    }
+
+    /**
+     * v34: the look after a change of clothes named in a sentence — the outfit and its colours, glasses or goggles
+     * put on or taken off; everything else (the face, the hair, the build) stays the character's own.
+     */
+    public static Look restyle(Look base, String text) {
+        Look l = base.copy();
+        int o = outfitIn(text, base.female);
+        if (o >= 0) l.outfit = o;
+        List<Integer> cc = colorsIn(text);
+        if (!cc.isEmpty()) { l.primary = cc.get(0); l.secondary = cc.size() > 1 ? cc.get(1) : darker(cc.get(0), 0.7f); }
+        if (Txt.has(text, "चश्मा उतार", "चश्मा हटा", "takes off his glasses", "takes off her glasses", "took off his glasses", "took off her glasses", "removes his glasses", "removes her glasses",
+                "takes off the goggles", "takes off his goggles", "takes off her goggles")) l.glasses = 0;
+        else if (Txt.has(text, "गॉगल", "goggle")) l.glasses = 3;
+        else if (Txt.has(text, "काला चश्मा", "sunglass", "धूप का चश्मा", "dark glasses")) l.glasses = 2;
+        else if (Txt.has(text, "चश्मा लगा", "चश्मा पहन", "puts on his glasses", "puts on her glasses", "put on his glasses", "put on her glasses", "wearing glasses", "with glasses")) l.glasses = Math.max(1, l.glasses);
+        return l;
+    }
+
+    /** v34: true when a sentence changes what a character wears ("पहनकर आती है", "changes into", "puts on"). */
+    public static boolean changesClothes(String s) {
+        return Txt.has(s, "कपड़े बदल", "ड्रेस बदल", "पोशाक बदल", "वेशभूषा बदल", "वस्त्र बदल", "पहनकर", "पहन कर", "पहन लेत", "पहन लिय", "पहन ली", "पहने हुए", "पहनती है", "पहनता है",
+                "चश्मा लगा", "चश्मा पहन", "चश्मा उतार", "चश्मा हटा", "changes into", "changed into", "change into", "changes her clothes", "changes his clothes", "puts on", "put on",
+                "now wearing", "now in a", "dressed in", "dresses up", "dressed up", "wearing", "takes off his glasses", "takes off her glasses", "removes his glasses", "removes her glasses");
+    }
+
+    /**
+     * v34: a walking stick, crutches or a wheelchair named in a description or an action ("लाठी टेकते हुए",
+     * "छड़ी के सहारे", "बैसाखी", "व्हीलचेयर पर", "walks with a cane", "in a wheelchair"); a bare "छड़ी" is a walking
+     * stick only for an old person (a magic wand otherwise).
+     */
+    public static int aidIn(String t, boolean old) {
+        if (Txt.has(t, "व्हीलचेयर", "व्हील चेयर", "व्हील-चेयर", "पहिया कुर्सी", "पहियों वाली कुर्सी", "wheelchair", "wheel chair", "wheel-chair")) return Look.AID_WHEELCHAIR;
+        if (Txt.has(t, "बैसाखी", "बैसाखियों", "बैसाखियाँ", "crutch")) return Look.AID_CRUTCHES;
+        if (Txt.has(t, "जादुई छड़ी", "magic wand", "magic stick", "wand")) return Look.AID_NONE;
+        if (Txt.has(t, "लाठी", "छड़ी के सहारे", "छड़ी टेक", "छड़ी लेकर चल", "छड़ी से चल", "walking stick", "walking-stick", "walking cane", "with a cane", "a cane", "his cane", "her cane",
+                "leans on a stick", "leaning on a stick", "with a stick", "his stick", "her stick")) return Look.AID_STICK;
+        if (old && Txt.has(t, "छड़ी", "stick", "cane")) return Look.AID_STICK;
+        return Look.AID_NONE;
+    }
+
     static String sentenceWith(String text, String... keys) {
         String[] sents = text.split("[।\\n]|\\. ");
         for (String s : sents) if (Txt.has(s, keys)) return s;
@@ -340,7 +400,9 @@ public final class LookDesigner {
         int fem = 0, mal = 0;
         String[] femW = {"राजकुमारी", "रानी", "लड़की", "बेटी", "सहेली", "माँ", "दादी", "नानी", "बहन", "दीदी", "बिंदी", "साड़ी", "देवी", "goddess", "माता",
                 "लहंगा", "घाघरा", "चोली", "सिंदूर", "चूड़ि", "princess", "queen", "girl", "woman", "mother", "lady", "aunt", "आंटी", "she ", " her ",
-                "गोरी", "दुबली", "मोटी", "सुंदरी", "बहादुर लड़की", "sister", "daughter", "grandmother", "बुआ", "मौसी", "चाची", "मैडम", "madam", "miss "};
+                "गोरी", "दुबली", "मोटी", "सुंदरी", "बहादुर लड़की", "sister", "daughter", "grandmother", "बुआ", "मौसी", "चाची", "मैडम", "madam", "miss ",
+                // v34: what she wears says it when no word does ("two ponytails with yellow ribbons")
+                "ponytails", "pigtails", "ribbons", "ribbon", "रिबन", "frock", "फ्रॉक", "skirt", "स्कर्ट", "a dress", "her dress", "gown", "earrings", "झुमके", "hair clip", "hairband"};
         String[] malW = {"राजा", "राजकुमार", "लड़का", "बेटा", "पिता", "दादा", "भाई", "भैया", "गार्ड", "सिपाही", "सैनिक", "मूँछ", "मूंछ", "देवता", " god ",
                 "दाढ़ी", "पगड़ी", "अचकन", "king", "prince", "boy", "man ", "father", "guard", "soldier", " he ", " his ",
                 "गोरा ", "दुबला", "मोटा", "mister", "मिस्टर", "sir ", "uncle", "अंकल", "चाचा", "मामा", "grandfather", "brother", "son "};
@@ -369,6 +431,11 @@ public final class LookDesigner {
             // the role after the name says which side they are on ("The Corporate Rakshas", "AI Witch"), without changing what they are
             if (c.role != null && Txt.has(c.role, "राक्षस", "rakshas", "villain", "witch", "डायन", "चुड़ैल", "evil", "thief", "चोर", "dark lord", "demon", "boss", "khalnayak")) l.hero = false;
             if (species == Look.SP_FOX || species == Look.SP_WOLF) l.hero = !Txt.has(all, "चालाक", "धूर्त", "दुष्ट", "cunning", "wicked", "sly") && l.hero;
+            // v34: the well-known villains of the epics are on the other side whatever their description says
+            // ("रावण — दस सिर वाला लंका का राजा" names no evil, yet he never stands with the heroes on the last page)
+            if (Txt.has(c.displayName + " " + (c.role == null ? "" : c.role), "रावण", "दशानन", "कंस", "महिषासुर", "हिरण्यकश्यप", "हिरण्यकशिपु", "शूर्पणखा",
+                    "दुर्योधन", "शकुनि", "ताड़का", "ताडका", "पूतना", "मारीच", "बकासुर", "रक्तबीज", "शुंभ", "निशुंभ", "ravana", "ravan", "kansa", "mahishasur",
+                    "hiranyakashipu", "shurpanakha", "duryodhan", "shakuni", "tadaka", "putana")) l.hero = false;
         }
 
         // ---- body language (§26): every character moves in its own way
@@ -387,7 +454,9 @@ public final class LookDesigner {
             case Look.WOMAN: l.height = 0.93f; break;
             case Look.MONSTER: l.height = Txt.has(all, "8 फीट", "8 feet", "विशाल", "भीमकाय", "giant") ? 1.42f : 1.3f; break;
             case Look.WITCH: l.height = 0.92f; break;
-            case Look.MONKEY: l.height = 0.36f; break;
+            // v34: a vanara (Hanuman, Sugriva, Angad) or a mighty monkey warrior stands as tall as a man; a pet monkey is small
+            case Look.MONKEY: l.height = Txt.has(all, "हनुमान", "वानर", "सुग्रीव", "बाली", "अंगद", "बलवान", "महाबली", "hanuman", "vanara", "sugriva", "angad",
+                    "mighty", "monkey god", "monkey warrior", "monkey king", "giant monkey", "gorilla") ? 0.98f : 0.36f; break;
             default: l.height = 1f;
         }
         if (Txt.has(face, "गोल-मटोल", "मोटा", "भारी", "chubby", "fat") && !l.isChild()) l.girth = 1.22f;
@@ -415,7 +484,7 @@ public final class LookDesigner {
         String hairS = sentenceWith(face, "बाल", "चोटी", "चोटि", "hair", "braid", "जूड़ा", "ponytail", "पोनीटेल", "bun");
         l.curly = Txt.has(hairS, "घुंघराले", "घुँघराले", "curly");
         l.wings = Txt.has(c.description == null ? "" : c.description, "पंख", "परी", "fairy", "wings", "winged", "angel", "फ़रिश्ता", "फरिश्ता");
-        if (Txt.has(hairS, "दो चोटि", "दो साधारण चोटि", "two braids", "pigtail")) l.hair = Look.H_PIGTAILS;
+        if (Txt.has(hairS, "दो चोटि", "दो साधारण चोटि", "two braids", "pigtail", "ponytails", "two pony", "दो पोनी", "twin tails", "bunches")) l.hair = Look.H_PIGTAILS;
         else if (Txt.has(hairS, "ponytail", "पोनीटेल", "पोनी")) l.hair = Look.H_PONYTAIL;
         else if (Txt.has(hairS, "चोटी", "braid")) l.hair = Look.H_BRAID;
         else if (Txt.has(hairS, "जूड़ा", "bun")) l.hair = Look.H_BUN;
@@ -513,10 +582,19 @@ public final class LookDesigner {
         if (!sc.isEmpty()) l.shoeColor = sc.get(0);
         l.lightShoes = Txt.has(shoeS, "लाइट", "light", "led", "चमक", "glow");
         // ---- glasses, gadgets, little lights
-        String glassS = sentenceWith(face + "\n" + clothes, "चश्म", "glass", "spectacle", "specs", "goggle", "visor");
-        if (glassS.length() > 0) {
-            l.glasses = Txt.has(glassS, "AR glass", "ar glass", "काला चश्मा", "dark glass", "sunglass", "goggle", "visor", "काले चश्म", "black glass") ? 2 : 1;
+        String glassS = sentenceWith(face + "\n" + clothes, "चश्म", "glass", "spectacle", "specs", "goggle", "visor", "गॉगल", "ऐनक");
+        if (glassS.length() > 0 && !Txt.has(glassS, "glass of", "गिलास", "wine glass", "glass door", "glass window")) {
+            // v34: 1 spectacles, 2 dark glasses or a visor, 3 goggles (big round lenses on a strap: swimming, flying, welding)
+            l.glasses = Txt.has(glassS, "goggle", "गॉगल", "swimming glass", "तैराकी") && !Txt.has(glassS, "sunglass", "धूप का चश्मा", "काला चश्मा") ? 3
+                    : Txt.has(glassS, "AR glass", "ar glass", "काला चश्मा", "dark glass", "sunglass", "धूप का चश्मा", "visor", "काले चश्म", "black glass") ? 2 : 1;
             l.glowGlasses = l.glasses == 2 && Txt.has(glassS, "चमक", "glow", "लाल");
+        }
+        // v34: what helps the character walk
+        l.aid = aidIn(all, l.kind == Look.OLD_MAN || Txt.has(all, "बूढ़", "बुज़ुर्ग", "बुजुर्ग", "दादा", "दादी", "नाना", "नानी", "old ", "elderly", "grandpa", "grandma"));
+        // v34: a blind character: dark glasses and a white cane
+        if (Txt.has(all, "अंधा", "अंधी", "नेत्रहीन", "दृष्टिहीन", "blind man", "blind woman", "blind boy", "blind girl", "blind old", "is blind", "who is blind", "visually impaired")) {
+            if (l.glasses == 0) l.glasses = 2;
+            if (l.aid == Look.AID_NONE) l.aid = Look.AID_STICK;
         }
         if (Txt.has(all, "controller", "कंट्रोलर", "joystick", "जॉयस्टिक", "gamepad")) l.gadget = Look.GD_CONTROLLER;
         else if (wordIn(all, "iphone") || wordIn(all, "phone") || wordIn(all, "फ़ोन") || wordIn(all, "फोन") || wordIn(all, "मोबाइल") || wordIn(all, "mobile") || wordIn(all, "smartphone")) l.gadget = Look.GD_PHONE;
@@ -552,7 +630,7 @@ public final class LookDesigner {
         if (Txt.has(all, "कटार", "dagger")) l.katar = true;
         if (Txt.has(all, "भाला", "भाले", "spear")) l.spear = true;
         if (Txt.has(all, "ढाल", "shield")) l.shield = true;
-        if (Txt.has(all, "छड़ी", "wand", "staff")) l.wand = true;
+        if (Txt.has(all, "छड़ी", "wand", "staff") && l.aid != Look.AID_STICK) l.wand = true;
         if (Txt.has(all, "परशु", "कुल्हाड़ी", "axe")) l.axe = true;
         if (Txt.has(all, "गदा", "mace")) l.mace = true;
         if (Txt.has(all, "पोटली", "थैला", "satchel", "bag")) l.satchel = true;

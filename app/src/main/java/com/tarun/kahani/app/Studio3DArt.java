@@ -52,7 +52,39 @@ final class Studio3DArt {
     // ------------------------------------------------------------------ the style of the user's pictures
 
     /** Reads the style cue from the pictures the story already has (characters and places). */
-    static StyleCue styleCue(Project project, Story story) {
+    static StyleCue styleCue(Project project, Story story) { return styleCue(project, story, null); }
+
+    /**
+     * v34: the style of the user's own pictures — this story's, and when it has few, the pictures they uploaded to
+     * the library (figures and places they gave, never a 3D-made or built-in one): the made pictures take their
+     * light, skin and grade from what the user already uploaded, not from nothing.
+     */
+    static StyleCue styleCue(Project project, Story story, Library lib) {
+        StyleCue cue = styleCueOfStory(project, story);
+        if (lib == null || cue.pictures >= 4) return cue;
+        int figures = 0, places = 0;
+        try {
+            for (Library.Item it : lib.find(Library.PIC, null, null)) {
+                if (figures >= 10 && places >= 5) break;
+                if (it.builtIn || "1".equals(it.meta("3d")) || "view".equals(it.kind) || it.name.startsWith("3d_")) continue;
+                boolean place = "place".equals(it.kind);
+                if (place ? places >= 5 : figures >= 10) continue;
+                com.tarun.kahani.core.PicSense.Info in = lib.info(it);
+                if (!place && (in == null || !in.figure)) continue;
+                try {
+                    int[] d = MainActivity.decodeBytes(Project.readAll(lib.open(it)), 600);
+                    if (d == null) continue;
+                    int[] px = new int[d[0] * d[1]];
+                    System.arraycopy(d, 2, px, 0, px.length);
+                    if (place) { cue.add(px, d[0], d[1], false); places++; }
+                    else { Cutout.Result r = Cutout.process(px, d[0], d[1], false); cue.add(r.px, r.w, r.h, true); figures++; }
+                } catch (Throwable ignored) { /* one unreadable picture never stops the cue */ }
+            }
+        } catch (Throwable ignored) { }
+        return cue;
+    }
+
+    static StyleCue styleCueOfStory(Project project, Story story) {
         StyleCue cue = new StyleCue();
         for (String line : project.read("cast.txt").split("\n")) {
             String[] f = line.trim().split("\\|");
@@ -606,7 +638,7 @@ final class Studio3DArt {
     /** The picture of a place without one, made in 3D in the film's shape; a proposal when ask is set. Returns the file name. */
     static String makePlace(Project project, Story story, Story.Scene sc, Edits ed, Library lib, Context ctx, StyleCue cue, boolean ask) throws IOException {
         String where = sc.setting.length() > 0 ? sc.setting : sc.title;
-        int set = Sets.detect(sc.title + " " + where);
+        int set = Sets.forScene(sc);                                     // v34: the director's own reading of the place
         int tod = Sets.detectTime(sc.title + " " + where, Sets.DAY);
         int[] size = ed.size();
         int w = size[0] >= size[1] ? 1280 : Math.round(1280f * size[0] / size[1]), h = size[0] >= size[1] ? Math.round(1280f * size[1] / size[0]) : 1280;
@@ -797,7 +829,28 @@ final class Studio3DArt {
         if (b2 >= 0 && in.hue[b2] > 0.08f) out.secondary = hueColour(b2);
         com.tarun.kahani.core.PicSense.Traits tr = com.tarun.kahani.core.PicSense.Traits.fromMeta(best.meta);
         if (tr != null && tr.greyHair > 0) out.hairColor = 0xFFBDBDBD;
-        if (note != null && note.length > 0) note[0] = String.format(Locale.US, "reference: your picture \"%s\" (fit %.0f%%) lends its colours", best.label(), bestS * 100);
+        // v34: the face's own skin and the hair's own colour from the reference picture (the style cue never
+        // replaces them with another picture's skin)
+        try {
+            int[] d = MainActivity.decodeBytes(Project.readAll(lib.open(best)), 700);
+            if (d != null) {
+                int[] px = new int[d[0] * d[1]];
+                System.arraycopy(d, 2, px, 0, px.length);
+                Cutout.Result r = Cutout.process(px, d[0], d[1], c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD));
+                if (r.faceFound && c.look != null && c.look.kind != Look.ANIMAL && c.look.kind != Look.BIRD && c.look.kind != Look.MONSTER) {
+                    out.skin = r.skin; out.skinFixed = true;
+                    int y0 = Math.max(0, Math.round(r.headTop * r.h)), y1 = Math.max(y0 + 1, Math.round(r.faceTop * r.h + (r.eyeY - r.faceTop) * 0.3f * r.h));
+                    long sr = 0, sg = 0, sb = 0, n = 0;
+                    for (int y = y0; y < Math.min(r.h, y1); y++) for (int x = 0; x < r.w; x++) {
+                        int col = r.px[y * r.w + x];
+                        if ((col >>> 24) < 128 || Cutout.isSkin(col)) continue;
+                        sr += (col >> 16) & 255; sg += (col >> 8) & 255; sb += col & 255; n++;
+                    }
+                    if (n > 30) out.hairColor = 0xFF000000 | (int) (sr / n) << 16 | (int) (sg / n) << 8 | (int) (sb / n);
+                }
+            }
+        } catch (Throwable ignored) { /* the colours above are enough */ }
+        if (note != null && note.length > 0) note[0] = String.format(Locale.US, "reference: your picture \"%s\" (fit %.0f%%) lends its colours, skin and hair", best.label(), bestS * 100);
         return out;
     }
 

@@ -426,7 +426,7 @@ public final class DirectorsManual {
     private static void beat(StringBuilder b, int no, String name, Story.Scene sc, String what, Map<Story.CharacterDef, String> cids, Film film, String understand) {
         b.append("  ").append(no).append(". ").append(name).append(" — ").append(sc.heading.length() > 0 ? sc.heading : "scene " + sc.number).append('\n');
         b.append("     what happens: ").append(Handbook.clip(what, 140)).append('\n');
-        b.append("     who: ").append(whoIn(sc, cids)).append("  |  where: ").append(Sets.label(Sets.detect(sc.title + " " + sc.setting))).append('\n');
+        b.append("     who: ").append(whoIn(sc, cids)).append("  |  where: ").append(Sets.label(Sets.forScene(sc))).append('\n');
         b.append("     the audience must understand: ").append(understand).append("  |  what changes: ").append(feelingChange(sc)).append('\n');
         b.append("     the next beat needs: ").append(exitOf(sc)).append('\n');
     }

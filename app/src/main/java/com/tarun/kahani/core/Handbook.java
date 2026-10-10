@@ -194,7 +194,7 @@ public final class Handbook {
         }
         if (obstacle.isEmpty()) obstacle = Txt.has(sc.setting + " " + first + " " + last, "तूफ़ान", "तूफान", "बारिश", "आग", "अँधेर", "storm", "rain", "fire", "dark") ? "the elements of the scene itself" : "the scene's own turn (what goes wrong or is found)";
         String change = (firstManner.isEmpty() ? "calm" : firstManner) + " → " + (lastManner.isEmpty() ? "calm" : lastManner);
-        int set = Sets.detect(sc.title + " " + sc.setting);
+        int set = Sets.forScene(sc);
         int tod = Sets.detectTime(sc.title + " " + sc.setting, Sets.DAY);
         return "SCENE OBJECTIVE (ch. 2, from the script)\n"
                 + "  narrative objective: " + (first.isEmpty() ? sc.title : clip(first, 110)) + "\n"

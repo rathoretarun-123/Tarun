@@ -105,6 +105,8 @@ public final class ScriptParser {
         genderFromVerbs(story);
         LookDesigner.designAll(story);
         linkMounts(story);
+        aidsFromActions(story);
+        costumesFromActions(story);
         return story;
     }
 
@@ -113,6 +115,49 @@ public final class ScriptParser {
      * cast, or a character whose name says "शेर" / "lion"): the two are one picture on the stage, and each speaks with
      * its own mouth — the rider's lips and the animal's jaw.
      */
+    /**
+     * v34: a walking stick, crutches or a wheelchair named only in the action ("दादाजी लाठी टेकते हुए आते हैं",
+     * "Grandpa rolls in on his wheelchair") belongs to the one character the sentence names.
+     */
+    static void aidsFromActions(Story story) {
+        for (Story.Scene sc : story.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type != Story.Beat.DIRECTION) continue;
+            for (String sent : b.text.split("[।.!?]")) {
+                List<Story.CharacterDef> who = mentions(story, sent);
+                if (who.size() != 1 || who.get(0).look == null || who.get(0).look.aid != Look.AID_NONE) continue;
+                Look l = who.get(0).look;
+                if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) continue;
+                int aid = LookDesigner.aidIn(sent, l.kind == Look.OLD_MAN);
+                if (aid != Look.AID_NONE) { l.aid = aid; if (aid == Look.AID_STICK) l.wand = false; }
+            }
+        }
+    }
+
+    /**
+     * v34: a change of clothes in the action ("मीरा लाल लहंगा पहनकर आती है", "Kabir changes into his school uniform",
+     * "दादाजी चश्मा उतारते हैं"): the character the sentence names wears that look from then on. A turban or a crown
+     * has its own handling (taken, put on); a sentence that changes nothing is no change.
+     */
+    static void costumesFromActions(Story story) {
+        for (Story.Scene sc : story.scenes) for (int bi = 0; bi < sc.beats.size(); bi++) {
+            Story.Beat b = sc.beats.get(bi);
+            if (b.type != Story.Beat.DIRECTION) continue;
+            for (String sent : b.text.split("[।.!?]")) {
+                if (!LookDesigner.changesClothes(sent) || Txt.has(sent, "पगड़ी", "टोपी", "turban", " cap", "मुकुट", "crown")) continue;
+                List<Story.CharacterDef> who = mentions(story, sent);
+                if (who.size() != 1) continue;
+                Story.CharacterDef c = who.get(0);
+                if (c.look == null || !c.look.isHumanoid()) continue;
+                Look cur = c.costumes.isEmpty() ? c.look : c.costumes.get(c.costumes.size() - 1).look;
+                Look nl = LookDesigner.restyle(cur, sent);
+                if (nl.outfit == cur.outfit && nl.primary == cur.primary && nl.secondary == cur.secondary && nl.glasses == cur.glasses) continue;
+                Story.Costume k = new Story.Costume();
+                k.scene = sc.number; k.beat = bi; k.text = sent.trim(); k.look = nl;
+                c.costumes.add(k);
+            }
+        }
+    }
+
     static void linkMounts(Story story) {
         for (Story.CharacterDef r : story.characters) {
             if (r.look == null || r.look.mount < 0 || r.voiceOnly) continue;
@@ -144,7 +189,7 @@ public final class ScriptParser {
                 String head = sc.title + " । " + (first.length() > 240 ? first.substring(0, 240) : first);
                 Story.PlaceDef p = placeNamedIn(st, head);
                 if (p != null) sc.setting = p.name + (p.description.length() > 0 ? "। " + p.description : "");
-                else if (prev.length() > 0 && Sets.detect(head) == Sets.GENERIC_OUT && !Txt.has(head, "बाहर", "outside", "सड़क", "street", "रास्त", "road", "सफ़र", "journey"))
+                else if (prev.length() > 0 && Sets.detect(head) == Sets.GENERIC_OUT && !Sets.openLand(head) && !Txt.has(head, "बाहर", "outside", "सड़क", "street", "रास्त", "road", "सफ़र", "journey"))
                     sc.setting = prev;
             }
             prev = sc.setting;

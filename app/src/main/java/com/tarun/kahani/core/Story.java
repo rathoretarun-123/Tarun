@@ -30,6 +30,15 @@ public final class Story {
         return text;
     }
 
+    /** v34: a change of clothes in the action ("मीरा लाल लहंगा पहनकर आती है", "Kabir changes into his uniform"). */
+    public static final class Costume {
+        public int scene, beat;          // where it happens: the scene's number and the action's index in it
+        public String text = "";         // the sentence that says it
+        public Look look;                // the character's look from then on
+        /** A few words for buttons and lists ("लाल लहंगा"). */
+        public String label() { String t = text.length() > 48 ? text.substring(0, 48) + "…" : text; return t; }
+    }
+
     public static final class CharacterDef {
         public String id;            // stable key
         public String displayName;   // e.g. "वृंदा"
@@ -39,6 +48,8 @@ public final class Story {
         public int age = -1;
         public boolean fromScript;   // false when invented for an unknown speaker
         public Look look;
+        /** v34: the clothes the character changes into during the story, in order (the film's costume 1, 2, …). */
+        public final List<Costume> costumes = new ArrayList<Costume>();
         public String label;          // name as the user wrote it (Hinglish), or null
         /** "The Coder Didi", "Robo-Dog": the role written after the name in the character list (never used for the look). */
         public String role = "";

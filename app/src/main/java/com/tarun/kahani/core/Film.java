@@ -120,12 +120,14 @@ public final class Film {
         public boolean backTurned;
         public int holdR = Pose.I_NONE, holdL = Pose.I_NONE;
         public int seat = -1;       // when sitting: SEAT_* (-1 = none drawn)
+        /** v34: the clothes worn now — 0 the character's own, n the n-th change of the story (CharacterDef.costumes). */
+        public int costume;
         public Key copy() {
             Key k = new Key();
             k.t = t; k.moveDur = 0; k.x = x; k.depth = depth; k.body = body; k.facing = facing; k.emotion = emotion; k.anchor = anchor;
             k.anchorActor = anchorActor; k.visible = visible; k.run = false; k.disguised = disguised; k.noHeadwear = noHeadwear;
             k.wearsTurban = wearsTurban; k.redFace = redFace; k.tears = tears; k.netted = netted; k.sweat = sweat; k.eyesShut = eyesShut;
-            k.holdR = holdR; k.holdL = holdL; k.seat = seat; k.backTurned = backTurned;
+            k.holdR = holdR; k.holdL = holdL; k.seat = seat; k.backTurned = backTurned; k.costume = costume;
             return k;
         }
     }
@@ -144,7 +146,7 @@ public final class Film {
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
     /** Seats under a sitting character. */
-    public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3;
+    public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3, SEAT_WHEELCHAIR = 4;   // v34: a wheelchair goes where its sitter goes
 
     public static final class Act {
         public float t0, t1;

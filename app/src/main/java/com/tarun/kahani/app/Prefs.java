@@ -34,6 +34,8 @@ public final class Prefs {
     public static boolean fps30(Context c) { return !"0".equals(get(c, "fps30", "1")); }
     /** The director asks before any picture the studio made in 3D is used (a proposal with Use / Reject). */
     public static boolean ask3d(Context c) { return !"0".equals(get(c, "ask3d", "1")); }
+    /** v34: before the 3D maker makes anything, the film asks the user for the missing pictures and waits. */
+    public static boolean askUploads(Context c) { return !"0".equals(get(c, "askUploads", "1")); }
     /** An image-to-3D model service key (Meshy), entered by the user, kept only on the phone. */
     public static String meshyKey(Context c) { return get(c, "meshyKey", "").trim(); }
     /** Free 3D character models from GitHub (CC0 / CC-BY) for characters without a picture, when online. */

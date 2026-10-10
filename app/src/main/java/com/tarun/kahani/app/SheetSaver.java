@@ -270,6 +270,22 @@ final class SheetSaver {
         final String[] p = tgt.split(":", 4);
         final String kind = p.length > 1 ? p[1] : "char";
         final String keyGiven = p.length > 2 ? p[2] : "";
+        if (kind.equals("costume")) {
+            // v34: a picture of a change of clothes ("key#n"): the first readable picture is that costume's picture,
+            // drawn from the moment of the change (the character's own picture recoloured until now)
+            for (byte[] d : datas) {
+                boolean image = d != null && d.length > 8 && (((d[0] & 255) == 0xFF && (d[1] & 255) == 0xD8) || ((d[0] & 255) == 0x89 && d[1] == 'P') || (d[0] == 'R' && d[1] == 'I') || (d[4] == 'f' && d[5] == 't'));
+                if (!image && MainActivity.decodeBytes(d, 512) == null) continue;
+                String f = project.savePicture(d, "costume");
+                project.setManifest("costume", keyGiven, "costume|" + keyGiven + "|" + f);
+                try {
+                    Library.Item it = library.addBytes(Library.PIC, "person", (p.length > 3 ? p[3] : keyGiven), "front", d, d.length > 8 && (d[1] & 255) == 'P' ? ".png" : ".jpg", "costume");
+                    it.setMeta("costume", keyGiven);
+                } catch (Exception ignored) { /* the story has it either way */ }
+                return "The picture of the new clothes is saved — the film shows it from the moment of the change";
+            }
+            return "This picture could not be read";
+        }
         Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, keyGiven) : null;
         // v34: one key per character, whichever name the button used (the Studio's cast key, the popup's display name,
         // an alias): the key of the character's existing line, so its front, views, poses and settings never split in two

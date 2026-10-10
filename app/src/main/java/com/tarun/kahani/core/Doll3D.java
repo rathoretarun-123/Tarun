@@ -37,7 +37,7 @@ public final class Doll3D {
      */
     public static Result make(Look look, int size, int seed, float angleDeg, int emotion, StyleCue cue, float light) {
         if (look == null) look = new Look();
-        if (cue != null && cue.skins.length > 0 && look.kind != Look.ANIMAL && look.kind != Look.BIRD && look.kind != Look.MONSTER) {
+        if (cue != null && cue.skins.length > 0 && !look.skinFixed && look.kind != Look.ANIMAL && look.kind != Look.BIRD && look.kind != Look.MONSTER) {
             Look l2 = look.copy();
             l2.skin = cue.skin(seed, look.skin);
             look = l2;
@@ -52,20 +52,36 @@ public final class Doll3D {
         else if (look.kind == Look.BIRD) marks = bird(s, look, H);
         else if (rider) {
             // v34: Durga on her lion — the animal (side-on, as the doll maker draws animals) at 0.55 of the height,
-            // the character built standing and then lifted so she sits on its back with her legs along its side
+            // the character built seated (thighs forward, shins hanging) and lifted so she sits on its back, her legs along its side
             Look ml = new Look();
             ml.kind = look.mount >= 20 ? Look.BIRD : Look.ANIMAL; ml.species = look.mount; ml.furColor = Look.furOf(look.mount);
             ml.skin = Studio3D.shade(ml.furColor, 1.25f); ml.eyeColor = 0xFF2B1B10;
             float Hm = H * (ml.kind == Look.BIRD ? 0.5f : 0.55f);
+            // the animal first, then the rider: the builders put their eyes and mouth first in the marks, so the
+            // rider's become the picture's face points; only the rider's own vertices and marks are lifted onto the back
             if (ml.kind == Look.BIRD) bird(s, ml, Hm); else animal(s, ml, Hm);
-            int v0 = s.mesh.nv, m0 = s.marks.size();
+            java.util.Set<float[]> animalMarks = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<float[], Boolean>());
+            animalMarks.addAll(s.marks);
+            int v0 = s.mesh.nv;
             float Hr = 0.78f * H;
-            marks = human(s, look, Hr, emotion);
+            marks = human(s, look, Hr, emotion, true);
             float back = (ml.species == Look.SP_RABBIT || ml.species == Look.SP_MOUSE) ? Hm * 0.72f : ml.kind == Look.BIRD ? Hm * 0.6f : Hm * 0.85f;
-            float lift = back - Hr * 0.36f;                                   // the hips at the animal's back, the legs along its side
-            for (int i = v0; i < s.mesh.nv; i++) { s.mesh.v[i * 3 + 1] += lift; s.mesh.v[i * 3 + 2] += 0.12f * H; }
-            for (int i = m0; i < s.marks.size(); i++) { s.marks.get(i)[1] += lift; s.marks.get(i)[2] += 0.12f * H; }
+            float lift = back - Hr * 0.37f;                                   // the seat on the animal's back, the shins along its side
+            for (int i = v0; i < s.mesh.nv; i++) { s.mesh.v[i * 3 + 1] += lift; s.mesh.v[i * 3 + 2] += 0.06f * H; }
+            for (float[] mk : s.marks) if (!animalMarks.contains(mk)) { mk[1] += lift; mk[2] += 0.06f * H; }
             extentW = 1.9f * Hm; extentH = back + Hr * 0.66f + 0.02f * H;
+        }
+        else if (look.aid == Look.AID_WHEELCHAIR) {
+            // v34: seated in a wheelchair — the seated figure lowered onto the chair's seat, the chair built round it
+            int v0 = s.mesh.nv;
+            java.util.Set<float[]> before = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<float[], Boolean>());
+            before.addAll(s.marks);
+            marks = human(s, look, H, emotion, true);
+            float drop = look.isChild() ? -0.09f * H : -0.13f * H;
+            for (int i = v0; i < s.mesh.nv; i++) s.mesh.v[i * 3 + 1] += drop;
+            for (float[] mk : s.marks) if (!before.contains(mk)) mk[1] += drop;
+            wheelchair(s.mesh, H, look.isChild() ? 0.8f : 1f);
+            extentH = 0.95f * H;
         }
         else marks = human(s, look, H, emotion);
         // a long lens far away: no distortion of the face (handbook ch. 5), the same as a drawn front view;
@@ -75,8 +91,14 @@ public final class Doll3D {
         float sn = (float) Math.sin(a), cs = (float) Math.cos(a);
         s.camX = dist * sn; s.camY = extentH * 0.48f; s.camZ = dist * cs;
         s.lookX = 0; s.lookY = extentH * 0.48f; s.lookZ = 0;
+        if (!beast && !rider && look.heads > 1) {
+            // v34: the row of heads is wider than the shoulders: the picture widens to hold it (a child's head is larger)
+            float hr = (look.isChild() ? 0.165f : look.kind == Look.MONSTER ? 0.125f : 0.12f) * H;
+            extentW = Math.max(extentW, 2 * (headSpacing((Math.min(9, look.heads - 1) + 1) / 2, hr) + 1.25f * hr));
+        }
         int w = beast ? size : rider ? size : Math.round(size * 2 / 3f), h = beast ? Math.round(size * 2 / 3f) : rider ? Math.round(size * 0.9f) : size;
         if (angleDeg != 0 && !beast && !rider) w = Math.round(size * 0.75f);
+        if (!beast && !rider && look.heads > 1) w = Math.max(w, Math.round(size * Math.min(2.4f, extentW / extentH)));
         float half = Math.max(extentH / 2f, extentW / 2f * h / (float) w) * 1.04f;
         s.fovDeg = (float) Math.toDegrees(2 * Math.atan(half / dist));
         float side = cue != null && cue.lightSure > 0.3f ? cue.lightSide : -1;      // the key light from the references' side
@@ -86,6 +108,10 @@ public final class Doll3D {
         s.skyTop = 0;
         s.ao = true; s.shadows = true;
         s.aoRadius = 0.045f * H;
+        // v34: soft shadow edges on every doll — the hair's shadow across a face read as a hard line (a scar), and a
+        // rider's shadow on her animal as a dark stain; a rider's animal gets a little more fill too
+        s.shadowSoft = 2;
+        if (rider) s.fillStrength *= 1.25f;
         if (light > 1f) { s.exposure = Math.min(1.5f, light); s.fillStrength *= 1.35f; s.keyStrength *= 1.1f; }
         else if (light < 1f) { s.fillStrength *= 1.3f; s.keyStrength *= Math.max(0.7f, light); s.rimStrength *= 0.85f; }
         // v34 (the still-picture manual: at least 2048 px): a large doll is drawn without supersampling (the same
@@ -149,7 +175,10 @@ public final class Doll3D {
     /** Builds a standing person (or witch, monster, monkey); returns {1 if a turban mark was added}. */
     static int[] human(Studio3D.Scene s, Look l, float H) { return human(s, l, H, Pose.NEUTRAL); }
 
-    static int[] human(Studio3D.Scene s, Look l, float H, int emotion) {
+    static int[] human(Studio3D.Scene s, Look l, float H, int emotion) { return human(s, l, H, emotion, false); }
+
+    /** seated: a rider — the thighs come forward to the knees and the shins hang (the saree drapes over the lap). */
+    static int[] human(Studio3D.Scene s, Look l, float H, int emotion, boolean seated) {
         Studio3D.Mesh m = s.mesh;
         // the expression: how the brows tilt (inner ends up = sad, down = angry), how the mouth curves, how open the eyes are
         float browIn = emotion == Pose.SAD || emotion == Pose.SCARED ? 0.22f : emotion == Pose.ANGRY || emotion == Pose.EVIL ? -0.25f : emotion == Pose.SURPRISED ? 0.12f : 0;
@@ -193,9 +222,18 @@ public final class Doll3D {
         boolean skirt = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_SAREE || l.outfit == Look.O_FROCK || (l.outfit == Look.O_KURTA && l.female && !child);
         boolean shorts = l.outfit == Look.O_TSHIRT;
         boolean trousers = !skirt && !shorts;
+        float kneeY = hipY - 0.01f * H, kneeZ = 0.19f * H, footY = hipY - 0.52f * L;    // a seated rider's knees and feet
         for (int side = -1; side <= 1; side += 2) {
             float lx = side * hw * 0.5f;
             int legMat = trousers ? bottom : skin;
+            if (seated) {
+                m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.05f, kneeY, kneeZ, legW * 0.56f, legW * 0.5f, seg, legMat);
+                m.capsule(lx * 1.05f, kneeY, kneeZ, lx * 1.05f, footY + 0.05f * H, kneeZ + 0.01f * H, legW * 0.5f, legW * 0.42f, seg, legMat);
+                int shoeMat = l.lightShoes ? m.mat(Studio3D.glowing(l.shoeColor, 0x8040C8FF)) : shoe;
+                m.sphere(lx * 1.05f, footY + 0.035f * H, kneeZ + 0.035f * H, legW * 0.62f, 0.035f * H, legW * 1.05f, seg, shoeMat);
+                if (l.anklets) m.torus(lx * 1.05f, footY + 0.075f * H, kneeZ + 0.01f * H, legW * 0.5f, legW * 0.06f, 1, 8, gold);
+                continue;
+            }
             m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.05f, 0.06f * H, 0.01f * H, legW * 0.52f, legW * 0.42f, seg, legMat);
             if (shorts) m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.03f, hipY - 0.45f * L, 0, legW * 0.6f, legW * 0.56f, seg, bottom);
             // the shoe
@@ -207,6 +245,12 @@ public final class Doll3D {
         if (skirt) {
             float waist = hipY + T * 0.25f;
             boolean wide = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_FROCK;
+            if (seated) {
+                // to the seat, over the lap to the knees, then falling over the shins
+                m.cylinder(0, waist, 0, 0, hipY - 0.02f * H, 0, hw * 1.05f, hw * 1.2f, 24, bottom);
+                m.capsule(0, hipY, 0.01f * H, 0, kneeY, kneeZ, hw * 1.0f, hw * 1.02f, 20, bottom);
+                m.cylinder(0, kneeY, kneeZ, 0, footY + 0.07f * H, kneeZ + 0.02f * H, hw * 1.02f, hw * (wide ? 1.7f : 1.3f), 24, bottom);
+            } else
             m.cylinder(0, waist, 0, 0, 0.03f * H, 0, hw * 1.05f, hw * (wide ? 2.4f : 1.35f), 24, bottom);
             torso(m, hipY, shY, hw * 1.0f, sw * 0.98f, headR, seg, top);
             if (l.outfit == Look.O_SAREE) m.capsule(-sw * 0.8f, shY + 0.02f * H, 0.08f * H, hw * 0.6f, waist - 0.02f * H, 0.1f * H, 0.04f * H, 0.05f * H, seg, accent);
@@ -214,6 +258,7 @@ public final class Doll3D {
         } else {
             boolean longTop = l.outfit == Look.O_KURTA || l.outfit == Look.O_ACHKAN || l.outfit == Look.O_COAT || l.outfit == Look.O_CLOAK;
             float bottomY = longTop ? hipY - L * (l.outfit == Look.O_COAT || l.outfit == Look.O_ACHKAN ? 0.55f : 0.3f) : hipY - 0.03f * H;
+            if (seated) bottomY = Math.max(bottomY, hipY - 0.03f * H);               // a rider's coat ends at the seat
             if (longTop) {
                 // the chest, then a coat that widens to its hem, with a sash or a belt at the waist
                 torso(m, hipY + T * 0.15f, shY, hw * 1.0f, sw * 0.98f, headR, seg, top);
@@ -265,8 +310,28 @@ public final class Doll3D {
             if (side == 1) props(m, l, hx, hy, H, armW, gold);
             if (side == -1 && l.shield) m.disc(hx - armW * 0.2f, hy + armW * 0.2f, 0.09f * H, 0.1f * H, 2, 16, m.mat(Studio3D.metal(0xFF3F6FB5)));
         }
+        // v34: a walking stick in the right hand down to the ground (its crook over the hand); crutches under both arms
+        if (!seated && (l.aid == Look.AID_STICK || l.aid == Look.AID_CRUTCHES)) {
+            int wood = m.mat(l.aid == Look.AID_STICK ? Studio3D.wood(0xFF6D4C41) : Studio3D.metal(0xFF90A4AE));
+            for (int side = -1; side <= 1; side += 2) {
+                if (l.aid == Look.AID_STICK && side < 0) continue;
+                float sy = shY - armW * 0.3f, ey = sy - armLen * 0.45f;
+                float hx = side * (sw + armLen * 0.34f), hy = ey - armLen * 0.46f;
+                if (l.aid == Look.AID_STICK) {
+                    m.capsule(hx, hy, 0.045f * H, hx + 0.02f * H, 0.012f * H, 0.07f * H, 0.011f * H, 0.011f * H, 8, wood);
+                    m.capsule(hx, hy, 0.045f * H, hx - 0.045f * H, hy + 0.02f * H, 0.045f * H, 0.011f * H, 0.011f * H, 8, wood);
+                    m.sphere(hx + 0.02f * H, 0.012f * H, 0.07f * H, 0.014f * H, 0.01f * H, 0.014f * H, 6, m.mat(Studio3D.plastic(0xFF263238)));
+                } else {
+                    float tx = side * sw * 0.95f, ty = sy - 0.05f * H;
+                    m.capsule(tx, ty, 0.02f * H, hx + side * 0.01f * H, 0.012f * H, 0.05f * H, 0.01f * H, 0.01f * H, 8, wood);
+                    m.capsule(tx - 0.03f * H, ty, 0.02f * H, tx + 0.03f * H, ty, 0.02f * H, 0.016f * H, 0.016f * H, 8, m.mat(Studio3D.plastic(0xFF455A64)));
+                    m.capsule(hx - 0.025f * H, hy, 0.04f * H, hx + 0.025f * H, hy, 0.04f * H, 0.012f * H, 0.012f * H, 8, m.mat(Studio3D.plastic(0xFF455A64)));
+                }
+            }
+        }
         // ---- neck and head
         m.capsule(0, shY - 0.01f * H, 0, 0, headY - headR * 0.6f, 0, headR * 0.34f, headR * 0.36f, seg, skin);
+        int hv0 = m.nv, ht0 = m.nt;                         // v34: where the head begins (copied for the other heads)
         m.sphere(0, headY, 0, headR * 0.98f, headR * 1.02f, headR, 22, skin);
         // ears
         m.sphere(-headR * 0.97f, headY - headR * 0.05f, 0, headR * 0.14f, headR * 0.22f, headR * 0.1f, 8, skin);
@@ -324,6 +389,12 @@ public final class Doll3D {
             for (int side = -1; side <= 1; side += 2) m.torus(side * eyeX, eyeY, eyeZ + eyeRad * 0.95f, eyeRad * 1.25f, eyeRad * 0.09f, 2, 10, frame);
             m.capsule(-eyeX + eyeRad * 1.25f, eyeY, eyeZ + eyeRad * 0.95f, eyeX - eyeRad * 1.25f, eyeY, eyeZ + eyeRad * 0.95f, eyeRad * 0.07f, eyeRad * 0.07f, 4, frame);
             if (l.glasses == 2) for (int side = -1; side <= 1; side += 2) m.disc(side * eyeX, eyeY, eyeZ + eyeRad * 0.97f, eyeRad * 1.2f, 2, 10, m.mat(Studio3D.plastic(0xFF1A1E24)));
+            if (l.glasses == 3) {
+                // v34: goggles — thick round rims on a strap round the head
+                int rim = m.mat(Studio3D.plastic(0xFF5D4037));
+                for (int side = -1; side <= 1; side += 2) m.torus(side * eyeX, eyeY, eyeZ + eyeRad * 1.05f, eyeRad * 1.55f, eyeRad * 0.26f, 2, 12, rim);
+                m.torus(0, eyeY, 0, headR * 1.03f, headR * 0.06f, 1, 20, m.mat(Studio3D.cloth(0xFF3E2723)));
+            }
         }
         if (l.earrings) for (int side = -1; side <= 1; side += 2) m.sphere(side * headR * 1.0f, headY - headR * 0.36f, 0, headR * 0.05f, headR * 0.08f, headR * 0.05f, 6, gold);
         if (l.necklace > 0) m.torus(0, shY + 0.005f * H, 0.02f * H, headR * 0.55f, headR * (l.necklace == 2 ? 0.05f : 0.035f), 1, 12,
@@ -389,6 +460,17 @@ public final class Doll3D {
         if (monster) {
             int horn = m.mat(Studio3D.stone(0xFF4E342E));
             if (l.headwear != Look.HW_HORNS) for (int side = -1; side <= 1; side += 2) m.capsule(side * headR * 0.55f, headY + headR * 0.8f, 0, side * headR * 0.8f, headY + headR * 1.35f, 0, headR * 0.12f, 0.004f, 8, horn);
+        }
+        int hv1 = m.nv, ht1 = m.nt;                         // the head ends here
+        // v34: a many-headed character (Ravana): the other heads in a row beside the main one, each a little further
+        // back, lower and smaller (as the drawn puppet has them); the face points stay on the central head, which speaks
+        int extraHeads = Math.min(9, l.heads - 1);
+        for (int i = 1; i <= extraHeads; i++) {
+            int side = i % 2 == 1 ? -1 : 1, k = (i + 1) / 2;
+            float sc = 1f - 0.05f * k;
+            m.copyPart(hv0, hv1, ht0, ht1, 0, headY, 0, sc, side * headSpacing(k, headR), -k * headR * 0.1f, -k * headR * 0.4f);
+        }
+        if (monster) {
             for (int side = -1; side <= 1; side += 2) for (int i = 0; i < 3; i++) m.sphere(side * sw * (0.5f + 0.2f * i), shY + 0.02f * H, 0.03f * H, 0.014f * H, 0.014f * H, 0.014f * H, 5, m.mat(Studio3D.metal(0xFFB0BEC5)));
         }
         if (monkey) {
@@ -404,6 +486,33 @@ public final class Doll3D {
         if (turban == 0) s.marks.add(new float[]{0, hairTop, 0});
         return new int[]{turban};
     }
+
+    /** v34: a wheelchair round a seated doll: two big wheels with hand-rims and spokes, seat, backrest with push handles, armrests, footrest and front casters. */
+    static void wheelchair(Studio3D.Mesh m, float H, float k) {
+        int frame = m.mat(Studio3D.metal(0xFF78909C)), tyre = m.mat(Studio3D.plastic(0xFF212121)), fabric = m.mat(Studio3D.cloth(0xFF37474F));
+        float R = 0.2f * H * k, wx = 0.175f * H * k, cy = R, cz = -0.04f * H * k, seatY = 0.26f * H * k;
+        for (int side = -1; side <= 1; side += 2) {
+            float x = side * wx;
+            m.torus(x, cy, cz, R, 0.018f * H * k, 0, 24, tyre);
+            m.torus(x + side * 0.012f * H * k, cy, cz, R * 0.84f, 0.006f * H * k, 0, 20, frame);
+            for (int i = 0; i < 6; i++) {
+                double a = i * Math.PI / 3;
+                m.capsule(x, cy, cz, x, cy + (float) Math.sin(a) * R * 0.9f, cz + (float) Math.cos(a) * R * 0.9f, 0.003f * H * k, 0.003f * H * k, 4, frame);
+            }
+            m.sphere(x, cy, cz, 0.02f * H * k, 0.02f * H * k, 0.02f * H * k, 6, frame);
+            m.capsule(x * 0.92f, seatY + 0.13f * H * k, -0.14f * H * k, x * 0.92f, seatY + 0.13f * H * k, 0.1f * H * k, 0.008f * H * k, 0.008f * H * k, 6, frame);
+            m.capsule(x * 0.9f, seatY, -0.15f * H * k, x * 0.9f, seatY + 0.33f * H * k, -0.17f * H * k, 0.008f * H * k, 0.008f * H * k, 6, frame);
+            m.capsule(x * 0.9f, seatY + 0.33f * H * k, -0.17f * H * k, x * 0.9f, seatY + 0.34f * H * k, -0.24f * H * k, 0.01f * H * k, 0.01f * H * k, 6, tyre);
+            m.capsule(x * 0.8f, seatY, 0.12f * H * k, x * 0.7f, 0.06f * H * k, 0.22f * H * k, 0.007f * H * k, 0.007f * H * k, 6, frame);
+            m.sphere(x * 0.75f, 0.035f * H * k, 0.2f * H * k, 0.035f * H * k, 0.035f * H * k, 0.012f * H * k, 8, tyre);
+        }
+        m.box(0, seatY - 0.012f * H * k, -0.01f * H * k, wx * 1.85f, 0.02f * H * k, 0.27f * H * k, fabric);
+        m.box(0, seatY + 0.18f * H * k, -0.165f * H * k, wx * 1.75f, 0.25f * H * k, 0.012f * H * k, fabric);
+        m.box(0, 0.06f * H * k, 0.23f * H * k, wx * 1.4f, 0.012f * H * k, 0.07f * H * k, frame);
+    }
+
+    /** How far the k-th head out from the centre stands (heads touch and overlap a little, the farther behind). */
+    static float headSpacing(int k, float headR) { return k * headR * 1.5f; }
 
     private static void props(Studio3D.Mesh m, Look l, float hx, float hy, float H, float armW, int gold) {
         float gx = hx + armW * 0.3f, gy = hy - armW * 0.3f, gz = 0.06f * H;
@@ -461,7 +570,8 @@ public final class Doll3D {
         if (sp == Look.SP_HORSE || sp == Look.SP_DEER) { headY = bodyY + bodyRy * 1.3f; m.capsule(bodyRx * 0.6f, bodyY + bodyRy * 0.5f, 0, headX, headY - headR * 0.3f, 0, 0.09f * H, 0.07f * H, 10, fur); }
         if (robot) m.box(headX, headY, 0, headR * 1.8f, headR * 1.6f, headR * 1.6f, fur);
         else m.sphere(headX, headY, 0, headR, headR * 0.95f, headR * 0.9f, 16, fur);
-        if (sp == Look.SP_LION) m.sphere(headX - headR * 0.2f, headY, 0, headR * 1.5f, headR * 1.5f, headR * 1.2f, 16, dark);
+        // v34: the mane sits behind the face (it was wider than the head and hid the eye and the muzzle)
+        if (sp == Look.SP_LION) m.sphere(headX - headR * 0.35f, headY + headR * 0.05f, -headR * 0.05f, headR * 1.2f, headR * 1.45f, headR * 0.85f, 16, dark);
         // muzzle, nose, mouth
         float muzX = headX + headR * 0.75f, muzY = headY - headR * 0.2f;
         if (!robot) m.sphere(muzX, muzY, 0, headR * 0.5f, headR * 0.38f, headR * 0.42f, 12, belly);
@@ -483,7 +593,7 @@ public final class Doll3D {
         switch (sp) {
             case Look.SP_RABBIT: for (int side = -1; side <= 1; side += 2) m.sphere(earX, earY + headR * 0.7f, side * headR * 0.35f, headR * 0.16f, headR * 0.9f, headR * 0.12f, 10, earM); break;
             case Look.SP_ELEPHANT: for (int side = -1; side <= 1; side += 2) m.sphere(earX - headR * 0.3f, headY + headR * 0.1f, side * headR * 0.9f, headR * 0.65f, headR * 0.8f, headR * 0.12f, 12, earM); break;
-            case Look.SP_BEAR: case Look.SP_MOUSE: case Look.SP_LION: for (int side = -1; side <= 1; side += 2) m.sphere(earX, earY, side * headR * 0.5f, headR * (sp == Look.SP_MOUSE ? 0.4f : 0.26f), headR * (sp == Look.SP_MOUSE ? 0.4f : 0.26f), headR * 0.12f, 8, earM); break;
+            case Look.SP_BEAR: case Look.SP_MOUSE: case Look.SP_LION: for (int side = -1; side <= 1; side += 2) m.sphere(earX, earY, side * headR * (sp == Look.SP_LION ? 0.78f : 0.5f), headR * (sp == Look.SP_MOUSE ? 0.4f : 0.26f), headR * (sp == Look.SP_MOUSE ? 0.4f : 0.26f), headR * 0.12f, 8, earM); break;
             case Look.SP_COW: case Look.SP_GOAT: for (int side = -1; side <= 1; side += 2) { m.sphere(earX, earY - headR * 0.2f, side * headR * 0.75f, headR * 0.3f, headR * 0.14f, headR * 0.1f, 8, earM); m.capsule(earX, earY, side * headR * 0.4f, earX - headR * 0.2f, earY + headR * (sp == Look.SP_COW ? 0.45f : 0.55f), side * headR * 0.55f, headR * 0.09f, 0.003f, 6, m.mat(Studio3D.stone(0xFFD7CCC8))); } break;
             case Look.SP_HORSE: case Look.SP_DEER: for (int side = -1; side <= 1; side += 2) m.capsule(earX, earY, side * headR * 0.4f, earX - headR * 0.1f, earY + headR * 0.5f, side * headR * 0.45f, headR * 0.13f, headR * 0.04f, 6, earM); if (sp == Look.SP_DEER) for (int side = -1; side <= 1; side += 2) { int ant = m.mat(Studio3D.wood(0xFF8D6E4A)); m.capsule(earX - headR * 0.1f, earY, side * headR * 0.3f, earX - headR * 0.3f, earY + headR * 0.9f, side * headR * 0.5f, headR * 0.05f, headR * 0.04f, 5, ant); m.capsule(earX - headR * 0.2f, earY + headR * 0.45f, side * headR * 0.4f, earX + headR * 0.1f, earY + headR * 0.8f, side * headR * 0.55f, headR * 0.04f, headR * 0.03f, 5, ant); } break;
             case Look.SP_TORTOISE: break;

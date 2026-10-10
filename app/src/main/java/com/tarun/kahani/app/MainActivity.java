@@ -765,7 +765,7 @@ public class MainActivity extends Activity {
         if (project == null) return;
         final Story st = loadStory();
         if (st == null || st.scenes.isEmpty()) return;
-        List<String[]> miss = AutoLibrary.missingTargets(project, st);
+        List<String[]> miss = AutoLibrary.missingForUser(project, st);
         LinearLayout m = Ui.card(this);
         m.addView(Ui.text(this, "📷 The director's plan: every character, place and thing below gets a picture of its own (up to 10 angles each from the phone, "
                 + "the camera or the library; a sheet of several angles is split). Each new place also gets an establishing moment of its own. "
@@ -778,6 +778,7 @@ public class MainActivity extends Activity {
             if (t[0].equals("title") || t[0].equals("end")) continue;
             String tgt = null;
             if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
+            else if (t[0].startsWith("costume:")) tgt = "angles:costume:" + t[0].substring(8) + ":" + t[1];     // v34: a change of clothes
             else if (t[0].startsWith("place:")) {
                 String place = t[0].substring(6);
                 for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, place)) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; }
@@ -1137,7 +1138,7 @@ public class MainActivity extends Activity {
         if (noPic + noBg > 0) sum.addView(Ui.small(this, "🧊 Build all " + (noPic + noBg) + " missing pictures in 3D now (on the phone)", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building the missing pictures…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
+                    public Object run() throws Exception { return Studio3DArt.makeMissing(project, st, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, st, library), Prefs.ask3d(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build them: " + e.getMessage()); else toast("Studio 3D made " + res + " picture(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
                 });
@@ -1149,7 +1150,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 background("Studio 3D is making the views from the pictures…", new Work() {
                     public Object run() throws Exception {
-                        return Studio3DArt.makeAllViews(project, st, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
+                        return Studio3DArt.makeAllViews(project, st, library, MainActivity.this, Studio3DArt.styleCue(project, st, library), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
                     }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not make them: " + e.getMessage()); else toast("Views made for " + res + " character(s)" + (Prefs.ask3d(MainActivity.this) ? " — decide on each below" : "")); showStudio(); }
@@ -1334,7 +1335,7 @@ public class MainActivity extends Activity {
         if (file == null) r3.addView(Ui.small(this, "🧊 3D doll", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building " + c.shown() + " from the description…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
+                    public Object run() throws Exception { return Studio3DArt.makeCharacter(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st, library), Prefs.ask3d(MainActivity.this), Prefs.online(MainActivity.this) && Prefs.freeModels(MainActivity.this) ? Prefs.cloud(MainActivity.this) : null, Prefs.freeModels(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
                 });
@@ -1344,7 +1345,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 background("Studio 3D is making the three-quarter, side and back views of " + c.shown() + " from the picture…", new Work() {
                     public Object run() throws Exception {
-                        return Studio3DArt.makeViews(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
+                        return Studio3DArt.makeViews(project, st, c, library, MainActivity.this, Studio3DArt.styleCue(project, st, library), Prefs.ask3d(MainActivity.this), Prefs.meshyKey(MainActivity.this), Prefs.cloud(MainActivity.this), null, Prefs.online(MainActivity.this) && Prefs.freeSpaces(MainActivity.this));
                     }
                 }, new Done() {
                     public void done(Object res, Exception e) {
@@ -1453,7 +1454,7 @@ public class MainActivity extends Activity {
         final String key = String.valueOf(sc.number);
         final String file = sceneFile(sc);
         card.addView(Ui.text(this, (castStory.hindi ? "Part " : "Part ") + sc.number + (sc.title.length() > 0 ? ": " + sc.title : ""), 16, Ui.TEXT, true));
-        card.addView(Ui.text(this, "Place: " + Sets.label(Sets.detect(sc.setting)) + "   •   Lines: " + countDialogue(sc), 13, Ui.SUB, false));
+        card.addView(Ui.text(this, "Place: " + Sets.label(Sets.forScene(sc)) + "   •   Lines: " + countDialogue(sc), 13, Ui.SUB, false));
         if (file != null) {
             ImageView iv = new ImageView(this);
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -1480,7 +1481,7 @@ public class MainActivity extends Activity {
         r.addView(Ui.small(this, "🧊 3D place", Ui.PRIMARY_DARK, new View.OnClickListener() {
             public void onClick(View v) {
                 background("Studio 3D is building the place…", new Work() {
-                    public Object run() throws Exception { return Studio3DArt.makePlace(project, castStory, sc, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, castStory), Prefs.ask3d(MainActivity.this)); }
+                    public Object run() throws Exception { return Studio3DArt.makePlace(project, castStory, sc, edits(), library, MainActivity.this, Studio3DArt.styleCue(project, castStory, library), Prefs.ask3d(MainActivity.this)); }
                 }, new Done() {
                     public void done(Object res, Exception e) { if (e != null) toast("Could not build it: " + e.getMessage()); showStudio(); }
                 });
@@ -3591,10 +3592,11 @@ public class MainActivity extends Activity {
         final List<String[]> uploadable = new ArrayList<String[]>();     // {angles target, label} of what has no picture yet (v23)
         try {
             Story st = FilmJob.storyOf(project);
-            List<String[]> miss = AutoLibrary.missingTargets(project, st);
+            List<String[]> miss = AutoLibrary.missingForUser(project, st);
             for (String[] t : miss) {
                 String tgt = null;
                 if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
+                else if (t[0].startsWith("costume:")) tgt = "angles:costume:" + t[0].substring(8) + ":" + t[1];
                 else if (t[0].startsWith("place:")) { for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, t[0].substring(6))) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; } }
                 else if (t[0].startsWith("shot:")) { String[] sk = t[0].split(":", 3); if (sk.length == 3) tgt = "angles:obj:" + sk[2] + ":" + t[1]; }
                 if (tgt != null) uploadable.add(new String[]{tgt, t[1]});
@@ -3611,12 +3613,13 @@ public class MainActivity extends Activity {
             for (com.tarun.kahani.core.ScenePlan.Extra x : extras) if (project.manifestLine("scene", x.key) == null) xs.append(xs.length() > 0 ? "; " : "").append(x.label);
             if (xs.length() > 0) body.addView(Ui.text(this, "\n🎬 The director adds " + extras.size() + " scene(s) of its own and asks for their pictures (up to 10 each, 10 angles in each): " + xs + ". Without one it shows the place itself.", 14, Ui.PRIMARY_DARK, false));
             if (shown > 0) {
-                body.addView(Ui.text(this, "\nNo picture yet: " + m + ". The director looks in your library first — or tap \"Pictures first\" below to add up to 10 angles of any of them now.", 14, Ui.SUB, false));
+                body.addView(Ui.text(this, "\nNo picture yet: " + m + ". Please add them — tap \"Pictures first\" below (up to 10 angles of each). The director looks in your library first, "
+                        + "and before anything is built in 3D the film stops and asks you for the rest.", 14, Ui.PRIMARY_DARK, false));
                 ai.setText("Make the rest with free AI in 3D animated style (made natively in the film's shape)");
                 ai.setChecked(Prefs.autoArt(this) && Prefs.online(this));
                 ai.setEnabled(Prefs.online(this));
                 body.addView(ai);
-                three.setText("Studio 3D: build whatever is still missing in 3D on the phone (characters and places, no internet)");
+                three.setText("Only if I give no picture: Studio 3D may build the missing ones in 3D from the style of my pictures (I am asked first)");
                 three.setChecked(Prefs.studio3d(this));
                 body.addView(three);
             }
@@ -4057,6 +4060,21 @@ public class MainActivity extends Activity {
         c.addView(pause);
         c.addView(stop);
         body.addView(c);
+        // v34: the film waits for the user's pictures before the 3D maker makes any: add them in the rows below, or choose
+        final boolean shownWaiting = cur != null && cur.picturesWaiting;
+        if (shownWaiting) {
+            LinearLayout ask = Ui.card(this);
+            ask.addView(Ui.text(this, "📷 The director needs your pictures of: " + cur.picturesNeeded, 16, Ui.PRIMARY_DARK, true));
+            ask.addView(Ui.text(this, "Add them with the buttons below (up to 10 each; a sheet of several angles is split). The film goes on by itself once every one has a picture. "
+                    + "Only if you have none, the studio can build the rest in 3D from the style of your other pictures — or draw them.", 14, Ui.SUB, false));
+            ask.addView(Ui.button(this, "🧊 I have no pictures — build the rest in 3D", Ui.BLUE, new View.OnClickListener() {
+                public void onClick(View v) { FilmJob j = FilmJob.current; if (j != null) j.choosePictures(1); }
+            }));
+            ask.addView(Ui.small(this, "✏️ Draw them instead (no 3D)", Ui.SUB, new View.OnClickListener() {
+                public void onClick(View v) { FilmJob j = FilmJob.current; if (j != null) j.choosePictures(2); }
+            }));
+            body.addView(ask);
+        }
         missingCard(body);
         try { picturesCard(body, loadStory()); } catch (Throwable ignored) { /* the progress itself matters more */ }
         ui.post(new Runnable() {
@@ -4065,6 +4083,7 @@ public class MainActivity extends Activity {
                 FilmJob j = FilmJob.current;
                 if (j == null) { showStory(); return; }
                 if (j.proposalsWaiting) { showProposals(j); return; }
+                if (j.picturesWaiting != shownWaiting) { showProgress(); return; }      // v34: the pictures card comes and goes
                 if (j.qcWaiting) { showQc(j); return; }
                 stage.setText(j.paused ? "⏸ Paused — tap Resume to carry on" : j.stage);
                 eta.setText(j.paused ? "" : j.eta());

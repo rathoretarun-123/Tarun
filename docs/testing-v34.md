@@ -96,3 +96,38 @@ Test `riderAndAnimalBothSpeakAndBacksAreUsed`:
 ## 6. Full suite
 
 35 tests, 34 run, 1 skipped (the twenty-story soak, run with `-Dkahani.soak=1`): see the end of this file.
+
+## 7. Retest as films: three new stories with 3D dolls
+
+Three stories written for this round were made as films on the desktop (`DollFilm`, a harness that gives every character a 3D doll with its three made views and every place a 3D set, as the phone's 3D maker does, then runs the same director and renderer), and their frames were looked at every two seconds:
+
+* **Durga and Mahishasura** (Hindi, three scenes): Durga with eight arms riding her lion, the lion speaking, a giant buffalo-horned demon, Indra; the demon turns his back and runs.
+* **Ravana and Hanuman** (Hindi, two scenes): ten-headed Ravana, Hanuman jumping down from a tree, Sita.
+* **The Park** (English, two scenes): two children and a dog; a boy turns away and walks home.
+
+| Found in the frames | Fixed |
+|---|---|
+| Heads and eyes shaded wrongly, a neck showing through the chin | Every 3D sphere was wound inside-out (its front culled, its inside drawn): `Studio3D.Mesh.sphere` winds outward |
+| The lion's face hidden behind its mane | The mane sits behind the face (`Doll3D.animal`) |
+| Durga standing in front of the lion, not on it | A rider is built seated: thighs forward, shins hanging, the saree over the lap |
+| Durga's shadow a dark stain on the lion; the hair's shadow a hard line across faces | Soft shadow edges (a 5×5 filter two texels apart) on every doll; no measurable cost at 2900 px |
+| The lion's jaw rigged at its tail | The head is found as the bulky end of the picture (`Rig.findMountJaw`), the jaw opens 22° |
+| Durga smaller than Indra (her picture holds the lion too) | A rider's picture stands 1.25× a standing person (1.0× on a bird) |
+| The giant's head above the top of the picture in every wide shot, his close-ups showing his chest | The camera never looks above the place's picture, so the whole cast of a part is drawn smaller together until the tallest keeps its head inside (the parts drew everyone at 55 % and 45 % of the frame instead of 60 %) |
+| A reaction close-up cutting Durga's crown | Reaction shots of a picture with a known face are framed by the face (`faceCam`), headroom included |
+| Durga scared by Indra's fear | A listener whose own next line reassures ("डरो मत", "don't worry", "I'm here") reacts with resolve |
+| The lion's jaw moved in the film, but only as a small warp of its snout: its speech did not read | A dark mouth with a tongue and a tooth opens between the snout and the lowered jaw (`Rig.mountMouth`), as for an animal of its own |
+| Ravana's doll with one head | The doll copies its head for the others in a row (`Studio3D.Mesh.copyPart`); the picture widens for the row |
+| Ravana among the heroes on the end page | The epics' villains by name are never heroes |
+| Hanuman hanging upside down from the branch through the whole scene, his face out of every shot | "पेड़ से कूदकर नीचे आते हैं" (jumps down) brings him to the ground beside Sita |
+| Hanuman drawn at a pet monkey's size | A vanara or a mighty monkey is a man's height |
+| The lion drawn twice on the title and end pages | A mount appears under its rider only; the line-up is spaced by each picture's width |
+| Heaven's court a garden to the director and a hall to the 3D maker; the sample's garden scenes a gate to the 3D maker | One reading of a place for everyone (`Sets.forScene`) |
+| Battlefield between mountains read as a palace courtyard | Open land (battlefield, mountains, valley, desert, fields) is the open place unless a built place is named |
+| Maya ("two ponytails with yellow ribbons") made a boy with short hair | Clothing and hair cues count for a girl; two ponytails are drawn as two |
+
+What was looked at and found right after the fixes: the battlefield at dusk with hills; the demon's back view while he runs and his front when he speaks; over-the-shoulder shots with the back views; Durga's and the lion's separate lip-sync (her face changes 3 225 px when she speaks and the lion's head 0; the lion's head 760 px when it speaks); the night court with diyas; Ravana's ten crowned heads in wides and close-ups; Hanuman walking in and speaking on the ground; the park and street at morning and evening.
+
+The Durga story was also made with drawn puppets (no pictures at all): Durga side-saddle on her lion, the giant's head inside every wide shot, the court and the battlefield as their own places.
+
+Test `godsDemonsAndVanarasAreStagedWell` checks each fix in the app's own code paths.

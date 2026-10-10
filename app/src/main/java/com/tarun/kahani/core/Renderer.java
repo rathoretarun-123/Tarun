@@ -31,7 +31,10 @@ public final class Renderer {
         float lock = seg == null ? 0.6f : seg.charScale;
         float base = (sprite ? 1f : 0.8625f) * 720f * lock;
         float h = l.height;
-        if (sprite && l.kind == Look.MONKEY) h = 0.42f;
+        if (sprite && l.kind == Look.MONKEY && l.height < 0.6f) h = 0.42f;      // a small monkey; a vanara keeps a man's height
+        // v34: a rider's picture holds her animal too: seated on a lion, a horse or a bull she stands a quarter higher
+        // than on her feet (on a bird, about her own height), so she is not drawn smaller than the people beside her
+        if (l.mount >= 0 && l.kind != Look.ANIMAL && l.kind != Look.BIRD && l.kind != Look.MONKEY) h *= l.mount >= 20 ? 1.0f : 1.25f;
         return base * h;
     }
 
@@ -288,15 +291,30 @@ public final class Renderer {
         List<Story.CharacterDef> heroes = new ArrayList<Story.CharacterDef>();
         final java.util.Map<Story.CharacterDef, Integer> count = new java.util.HashMap<Story.CharacterDef, Integer>();
         for (Film.Line l : film.lines) if (l.who != null) { Integer c = count.get(l.who); count.put(l.who, c == null ? 1 : c + 1); }
-        for (Story.CharacterDef c : film.story.characters) if (c.look.hero && count.containsKey(c)) heroes.add(c);
+        // v34: a rider's animal comes on the page under its rider, never a second time on its own
+        for (Story.CharacterDef c : film.story.characters) if (c.look.hero && count.containsKey(c) && c.rider == null) heroes.add(c);
         Collections.sort(heroes, new Comparator<Story.CharacterDef>() {
             public int compare(Story.CharacterDef a, Story.CharacterDef b) { return count.get(b) - count.get(a); }
         });
         while (heroes.size() > max) heroes.remove(heroes.size() - 1);
         int n = heroes.size();
+        // v34: each stands in a place as wide as its picture (a rider on her lion is wider than a person), packed
+        // closer when the page is full
+        float[] wd = new float[n];
+        float total = 0;
         for (int i = 0; i < n; i++) {
             Story.CharacterDef c = heroes.get(i);
-            float x = cx + (i - (n - 1) / 2f) * Math.min(220, 1000f / Math.max(1, n));
+            Art.Sprite sp0 = art.sprites.get(c.id);
+            float h0 = actorHeight(c.look, c, art, null) * scale;
+            float aspect = sp0 != null ? sp0.w / (float) Math.max(1, sp0.h) : c.look.mount >= 0 ? 1f : 0.45f;
+            wd[i] = Math.max(170, Math.min(560, h0 * aspect * 0.95f));
+            total += wd[i];
+        }
+        float pack = Math.min(1f, 1000f / Math.max(1, total)), run = cx - total * pack / 2;
+        for (int i = 0; i < n; i++) {
+            Story.CharacterDef c = heroes.get(i);
+            float x = run + wd[i] * pack / 2;
+            run += wd[i] * pack;
             pose.reset();
             pose.time = t; pose.seed = i;
             pose.facing = x < cx ? 1 : -1;
@@ -932,6 +950,14 @@ public final class Renderer {
         if (stepFps > 0 && stepFps >= 24 && k.emotion == Pose.SCARED && moving(a, t) != null && moving(a, t).run) stepFps = 12;
         final float tp = stepFps > 0 && stepFps < 24 ? (float) (Math.floor(t * stepFps) / stepFps) : t;
         Art.Sprite sp = art.sprites.get(a.c.id);
+        // v34: the clothes worn now — the costume's own picture (the user's, or the user's own picture recoloured)
+        // and its look for a drawn character
+        Look look = a.look;
+        if (k.costume > 0 && k.costume <= a.c.costumes.size()) {
+            look = a.c.costumes.get(k.costume - 1).look;
+            Art.Sprite cs = art.costumeSprite(a.c.id, k.costume);
+            if (cs != null) sp = cs;
+        }
         float h = actorHeight(a.look, a.c, art, s);
         float x = Director.xAt(a, t);
         // nobody far outside the frame is drawn (their pixel-level mesh would cost time for nothing); anyone
@@ -992,6 +1018,11 @@ public final class Renderer {
             mo.rot = (float) Math.sin(p.walk) * (mv.run ? 1.8f : 1.1f) * amt;
             p.armL = 8 + (17 + (float) Math.sin(p.walk) * 25) * amt;
             p.armR = 8 + (17 - (float) Math.sin(p.walk) * 25) * amt;
+            if (a.look.aid == Look.AID_STICK || a.look.aid == Look.AID_CRUTCHES) {
+                // v34: a slow step on a stick: the stick hand stays on the stick, the body dips a little with each step
+                p.armR = 8; if (a.look.aid == Look.AID_CRUTCHES) p.armL = 8; else p.armL = 8 + (p.armL - 8) * 0.4f;
+                mo.dy *= 1.2f;
+            }
         } else {
             // anticipation: just before setting off the body dips and leans back a little; after arriving it
             // settles forward and back once (slow in, slow out, follow-through)
@@ -1134,10 +1165,14 @@ public final class Renderer {
         if (scale != 1f) g.scale(scale, scale);
         if (k.netted) mo.sy *= 0.97f;
         if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
+        // v34: a wheelchair rolls with its sitter: no steps, its wheels turn with the distance covered
+        boolean chair = a.look.aid == Look.AID_WHEELCHAIR && sp == null && k.body != Pose.LIE;
+        if (a.look.aid == Look.AID_WHEELCHAIR) { p.walkAmt = 0; mo.dy = 0; mo.rot *= 0.3f; }
+        if (chair) { p.body = Pose.SIT; p.sit = 1; drawWheelchair(g, h, false, p.facing, Director.xAt(a, t) / (0.22f * h)); }
         g.save();
         // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
         // it is for the whole shot (nothing bent, nothing swaying, no step cycle): the pose is in the picture
-        Art.PoseSprite chosen = chosenPicture(sp, a, t, p);
+        Art.PoseSprite chosen = k.costume > 0 ? null : chosenPicture(sp, a, t, p);     // pose pictures show the character's own clothes
         if (chosen != null && chosen.sprite() != null) {
             Art.Sprite real = chosen.sprite();
             g.restore();
@@ -1177,27 +1212,28 @@ public final class Renderer {
             if (before != null && before != chosen && before.sprite() != null) {
                 float u = fade / 0.33f;
                 g.setAlpha(1 - u);
-                drawSprite(g, before.sprite(), a.look, p, h * before.hRatio, 0, a);
+                drawSprite(g, before.sprite(), look, p, h * before.hRatio, 0, a);
                 g.setAlpha(u);
-                drawSprite(g, real, a.look, p, hReal, 0, a);
+                drawSprite(g, real, look, p, hReal, 0, a);
                 g.setAlpha(1);
-            } else drawSprite(g, real, a.look, p, hReal, 0, a);
+            } else drawSprite(g, real, look, p, hReal, 0, a);
             g.restore();
             g.restore();
             return;
         }
-        if (sp != null) drawSprite(g, viewOf(sp, a, s, p, k, spk != null, t), a.look, p, h, mo.rot, a);
+        if (sp != null) drawSprite(g, k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t), look, p, h, mo.rot, a);
         else {
             if (mo.rot != 0) g.rotate(mo.rot * 0.5f);
             // a drawn character keeps a little of the hand (Miyazaki's 10 %): its lines wobble a hair's breadth, on twos
             int boil = (int) (t * 12) * 31 + a.order * 17;
             float wx = ((boil * 1103515245 + 12345) >>> 16 & 255) / 255f - 0.5f, wy = ((boil * 22695477 + 1) >>> 16 & 255) / 255f - 0.5f;
             g.translate(wx * 0.9f, wy * 0.9f);
-            Puppet.draw(g, a.look, p, h);
+            Puppet.draw(g, look, p, h);
         }
         g.restore();
+        if (chair) drawWheelchair(g, h, true, p.facing, Director.xAt(a, t) / (0.22f * h));
         // seated on a throne or stool: its front (cushion edge, armrests) is in front of the sitter's legs
-        if (seat >= Film.SEAT_STOOL && p.sit > 0.35f && p.body != Pose.LIE) {
+        if (seat >= Film.SEAT_STOOL && seat != Film.SEAT_WHEELCHAIR && p.sit > 0.35f && p.body != Pose.LIE) {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
             drawSeat(g, seat, h, true);
@@ -1583,6 +1619,49 @@ public final class Renderer {
         }
     }
 
+    /**
+     * v34: a wheelchair (feet line at 0,0; h = the sitter's standing height) seen from the side the sitter faces:
+     * behind them the far wheel, the backrest with its push handle and the seat; in front the near wheel with its
+     * hand-rim and spokes (turned by spin), the armrest, the footrest and the small front wheel.
+     */
+    private static void drawWheelchair(Gfx g, float h, boolean front, float facing, float spin) {
+        float R = 0.22f * h, cx = -facing * 0.04f * h, cy = -R, seatY = -0.3f * h, back = -facing * 0.2f * h, fwd = facing * 0.2f * h;
+        if (!front) {
+            wheel(g, cx + facing * 0.025f * h, cy - 0.008f * h, R, spin, 0xFF151515, 0xFF5F6B70);
+            g.color(0xFF37474F);
+            g.roundRect(Math.min(back, back - facing * 0.04f * h) - 0.01f * h, -0.72f * h, 0.07f * h, 0.4f * h, 0.015f * h);
+            g.color(0xFF546E7A);
+            g.line(back, seatY, back - facing * 0.03f * h, -0.78f * h, 0.022f * h);
+            g.line(back - facing * 0.03f * h, -0.78f * h, back - facing * 0.11f * h, -0.77f * h, 0.022f * h);
+            g.color(0xFF263238);
+            g.oval(back - facing * 0.11f * h, -0.77f * h, 0.018f * h, 0.018f * h);
+            g.color(0xFF37474F);
+            g.rect(Math.min(back, fwd), seatY - 0.02f * h, Math.abs(fwd - back), 0.05f * h);
+        } else {
+            wheel(g, cx, cy, R, spin, 0xFF212121, 0xFFB0BEC5);
+            g.color(0xFF546E7A);
+            g.line(back, -0.46f * h, fwd * 0.55f, -0.46f * h, 0.02f * h);                   // the armrest
+            g.line(fwd * 0.85f, seatY, facing * 0.3f * h, -0.065f * h, 0.02f * h);          // down to the footrest
+            g.line(facing * 0.24f * h, -0.065f * h, facing * 0.37f * h, -0.065f * h, 0.026f * h);
+            g.color(0xFF212121);
+            g.oval(facing * 0.31f * h, -0.042f * h, 0.042f * h, 0.042f * h);                // the small front wheel
+            g.color(0xFF9E9E9E);
+            g.oval(facing * 0.31f * h, -0.042f * h, 0.012f * h, 0.012f * h);
+        }
+    }
+
+    private static void wheel(Gfx g, float cx, float cy, float R, float spin, int tyre, int metal) {
+        g.color(tyre);
+        g.strokeOval(cx, cy, R * 0.95f, R * 0.95f, R * 0.11f);
+        g.color(metal);
+        g.strokeOval(cx, cy, R * 0.8f, R * 0.8f, R * 0.035f);                                  // the hand-rim
+        for (int i = 0; i < 8; i++) {
+            double an = spin + i * Math.PI / 4;
+            g.line(cx, cy, cx + (float) Math.cos(an) * R * 0.86f, cy + (float) Math.sin(an) * R * 0.86f, Math.max(1, R * 0.022f));
+        }
+        g.oval(cx, cy, R * 0.09f, R * 0.09f);
+    }
+
     /** Draws one character in a given pose at (0,0) = feet (previews and checks). */
     public void drawPosed(Gfx g, Story.CharacterDef c, Pose p, float h) {
         Art.Sprite sp = art == null ? null : art.sprites.get(c.id);
@@ -1691,6 +1770,7 @@ public final class Renderer {
         if (open < 0.06f && p.emotion == Pose.SURPRISED) open = 0.3f;
         if (open < 0.06f && p.emotion == Pose.LAUGH) open = 0.32f + 0.12f * (float) Math.sin(t * 9);
         st.jaw = open > 0.04f ? open : 0;
+        st.mountJaw = Math.min(1, p.mountMouth * 1.3f);          // v34: the rider's animal speaks with its own jaw
         st.lipWide = Math.max(0, Math.min(1, (p.mouthWide - 0.5f) * 2.2f));
         st.lipRound = Math.max(0, Math.min(1, (0.5f - p.mouthWide) * 2.2f));
         if (p.wave > 0) st.armR = 20 + 7 * (float) Math.sin(t * 12);
@@ -1753,7 +1833,6 @@ public final class Renderer {
         if (p.walkAmt > 0) amp = Math.max(amp, 9);
         st.tail = droop + amp * (float) Math.sin(t * freq + seed);     // + hangs down, - held up
         st.jaw = Math.min(1, p.mouth * 1.3f + (p.emotion == Pose.ANGRY && p.mouth > 0.05f ? 0.25f : 0));
-        st.mountJaw = Math.min(1, p.mountMouth * 1.3f);
         if (p.emotion == Pose.LAUGH) st.jaw = Math.max(st.jaw, 0.35f + 0.2f * (float) Math.sin(t * 9));
         // an ear flick now and then, more when listening
         float flick = (float) Math.sin(t * 0.83f + seed * 3.1f);
@@ -1968,6 +2047,19 @@ public final class Renderer {
                 g.setAlpha(k);
                 g.imageMesh(rim, rf.cols, rf.rows, rf.body);
                 g.restore();
+            }
+            // v34: the rider's animal speaks: a dark mouth between its snout and its lowered jaw, a tongue inside
+            float[] mm = rig.mountMouth(rf, st);
+            if (mm != null) {
+                g.color(0xF0300C0C);
+                g.begin(); g.moveTo(mm[0], mm[1]); g.lineTo(mm[2], mm[3]); g.lineTo(mm[4], mm[5]); g.close(); g.fillPath();
+                float jl = (float) Math.hypot(mm[2] - mm[0], mm[3] - mm[1]), drop = Math.abs(mm[5] - mm[3]);
+                if (st.mountJaw > 0.3f) {
+                    g.color(0xE0D9636B);
+                    g.oval(mm[0] + (mm[4] - mm[0]) * 0.62f, mm[1] + (mm[5] - mm[1]) * 0.55f, jl * 0.2f, drop * 0.16f + 1);
+                }
+                g.color(0xF0F5F2EA);    // a tooth or two at the front
+                g.oval(mm[2] - Math.signum(mm[2] - mm[0]) * jl * 0.1f, mm[3] + drop * 0.08f, jl * 0.05f, drop * 0.09f + 0.5f);
             }
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);

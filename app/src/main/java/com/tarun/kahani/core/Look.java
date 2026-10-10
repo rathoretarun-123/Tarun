@@ -73,6 +73,11 @@ public final class Look {
     public int arms = 2;
     /** v34: the animal the character rides or sits on (a species, SP_*), or -1: Durga on her lion, Ganesha on his mouse. */
     public int mount = -1;
+    /** v34: what helps the character walk — a walking stick, crutches or a wheelchair (AID_*). */
+    public int aid = AID_NONE;
+    public static final int AID_NONE = 0, AID_STICK = 1, AID_CRUTCHES = 2, AID_WHEELCHAIR = 3;
+    /** v34: the skin was read from the user's own reference picture: the style cue never replaces it. */
+    public boolean skinFixed;
 
     /** The word for a species, in English or Hindi. */
     public static String speciesWord(int sp, boolean hi) {
@@ -115,6 +120,7 @@ public final class Look {
         l.energy = energy; l.poise = poise; l.heads = heads; l.arms = arms; l.mount = mount;
         l.glasses = glasses; l.glowGlasses = glowGlasses; l.gadget = gadget; l.techWand = techWand; l.robot = robot;
         l.ledClip = ledClip; l.earphones = earphones; l.lightShoes = lightShoes;
+        l.aid = aid; l.skinFixed = skinFixed;
         return l;
     }
 

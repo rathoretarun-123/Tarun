@@ -128,6 +128,10 @@ public final class Art {
     }
 
     public final Map<String, Sprite> sprites = new HashMap<String, Sprite>();   // by character id
+    /** v34: the pictures of a character's changes of clothes, by "id#n" (the user's picture, else their own recoloured). */
+    public final Map<String, Sprite> costumes = new HashMap<String, Sprite>();
+
+    public Sprite costumeSprite(String id, int n) { return costumes.get(id + "#" + n); }
     public final Map<String, Backdrop> scenes = new HashMap<String, Backdrop>(); // "1", "10a", "10b"
     public final List<Shot> shots = new ArrayList<Shot>();
     public Backdrop title, end;
@@ -191,7 +195,24 @@ public final class Art {
      * Prepares the bare-headed version of a character who wears a turban or cap (for when it is snatched or
      * taken off) and the headwear itself (for whoever puts it on).
      */
-    public static void takeOffHeadwear(Sprite s, Loader L) {
+    public static void takeOffHeadwear(Sprite s, Loader L) { takeOffHeadwearImpl(s, L); }
+
+    /** v34: a change of clothes made from a character's own picture (its pixels recoloured): the same face points, its own rig. */
+    static Sprite costumeVariant(Sprite base, Cutout.Result cr, int[] px, Look look, Loader L) {
+        Sprite v = new Sprite();
+        v.w = base.w; v.h = base.h;
+        v.img = L.create(px, cr.w, cr.h);
+        v.mouthX = base.mouthX; v.mouthY = base.mouthY; v.mouthHW = base.mouthHW;
+        v.eyeLX = base.eyeLX; v.eyeRX = base.eyeRX; v.eyeLY = base.eyeLY; v.eyeRY = base.eyeRY; v.eyeR = base.eyeR;
+        v.faceKnown = base.faceKnown; v.skin = base.skin; v.lip = base.lip; v.lid = base.lid; v.turbanY = base.turbanY;
+        int[] keep = cr.px;
+        cr.px = px;
+        try { v.rig = Rig.build(cr, v, look, L); } catch (RuntimeException e) { v.rig = null; } finally { cr.px = keep; }
+        v.rimL = base.rimL; v.rimR = base.rimR;
+        return v;
+    }
+
+    private static void takeOffHeadwearImpl(Sprite s, Loader L) {
         Cutout.Result r = s.pixelsForSampling;
         if (r == null || !s.faceKnown) return;
         try {
@@ -399,6 +420,7 @@ public final class Art {
         boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
         java.util.List<String[]> views = new java.util.ArrayList<String[]>();
         java.util.List<String[]> poses = new java.util.ArrayList<String[]>();
+        java.util.List<String[]> costumeLines = new java.util.ArrayList<String[]>();
         for (String raw : text.split("\n")) {
             String line = raw.trim();
             if (line.length() == 0 || line.startsWith("#")) continue;
@@ -408,6 +430,8 @@ public final class Art {
                     poses.add(f);            // v27: after the characters, below
                 } else if (f[0].equals("view") && f.length >= 4) {
                     views.add(f);            // after the characters, below
+                } else if (f[0].equals("costume") && f.length >= 3) {
+                    costumeLines.add(f);     // v34: after the characters, below
                 } else if (f[0].equals("char") && f.length >= 3) {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
                     if (c == null) continue;
@@ -465,6 +489,16 @@ public final class Art {
                         Cutout.Result cr = s.pixelsForSampling;
                         s.wetImg = L.create(wetPixels(cr.px), cr.w, cr.h);
                     }
+                    // v34: every change of clothes of the story, from this very picture recoloured (a picture of the
+                    // new clothes, when the user gives one, replaces it below)
+                    if (s.pixelsForSampling != null && !beast) for (int ci = 0; ci < c.costumes.size(); ci++) {
+                        try {
+                            Look cl = c.costumes.get(ci).look;
+                            Cutout.Result cr = s.pixelsForSampling;
+                            Sprite v = costumeVariant(s, cr, Costumes.recolour(cr.px, cr.w, cr.h, s.faceKnown ? Math.max(cr.chinY, s.mouthY + 0.02f) : 0.3f, cl.primary, cl.secondary), cl, L);
+                            if (v != null) art.costumes.put(c.id + "#" + (ci + 1), v);
+                        } catch (Throwable ignored) { /* the character's own picture stays */ }
+                    }
                     s.pixelsForSampling = null;
                     art.sprites.put(c.id, s);
                 } else if (f[0].equals("scene") && f.length >= 3) {
@@ -498,6 +532,21 @@ public final class Art {
             }
         }
         // the views of the characters (view|name|angle|file|mouthX|mouthY|mouthHW|eyeLX|eyeLY|eyeRX|eyeRY|eyeR)
+        // v34: the user's own pictures of a change of clothes ("costume|key#n|file") replace the recoloured ones
+        for (String[] f : costumeLines) {
+            try {
+                int hash = f[1].lastIndexOf('#');
+                if (hash <= 0) continue;
+                Story.CharacterDef c = ScriptParser.resolve(story, f[1].substring(0, hash));
+                int n = Integer.parseInt(f[1].substring(hash + 1).trim());
+                if (c == null || n < 1 || n > c.costumes.size()) continue;
+                Sprite v = makeSprite(L, f[2], spriteSide, false);
+                if (v == null) continue;
+                try { v.rig = Rig.build(v.pixelsForSampling, v, c.costumes.get(n - 1).look, L); } catch (RuntimeException e) { v.rig = null; }
+                v.pixelsForSampling = null;
+                art.costumes.put(c.id + "#" + n, v);
+            } catch (RuntimeException ignored) { /* a broken line never stops the film */ }
+        }
         for (String[] f : views) {
             try {
                 Story.CharacterDef c = ScriptParser.resolve(story, f[1]);

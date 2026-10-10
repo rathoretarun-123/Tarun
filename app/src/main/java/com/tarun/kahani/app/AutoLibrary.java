@@ -71,6 +71,23 @@ final class AutoLibrary {
 
     // ------------------------------------------------------------------ pictures
 
+    /**
+     * v34: what the user is asked for — every picture still needed, and each change of clothes of the story that has
+     * no picture of its own yet ("costume:key#n"; the film recolours the character's own picture until one is given).
+     * Never filled from the library automatically: a picture of the character is not a picture of the new clothes.
+     */
+    static List<String[]> missingForUser(Project project, Story st) {
+        List<String[]> t = missingTargets(project, st);
+        String cast = project.read("cast.txt");
+        for (Story.CharacterDef c : st.cast()) for (int i = 0; i < c.costumes.size(); i++) {
+            String key = SheetSaver.charKey(project, st, c, c.displayName) + "#" + (i + 1);
+            if (cast.contains("costume|" + key + "|")) continue;
+            Story.Costume co = c.costumes.get(i);
+            t.add(new String[]{"costume:" + key, c.shown() + " — changes clothes (scene " + co.scene + "): " + co.label(), co.text});
+        }
+        return t;
+    }
+
     /** Every picture this story still needs: {target, label, description}. */
     static List<String[]> missingTargets(Project project, Story st) {
         Set<Story.CharacterDef> haveChar = new HashSet<Story.CharacterDef>();

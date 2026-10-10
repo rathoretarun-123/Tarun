@@ -3014,6 +3014,273 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /** v34 retest: a doll picture saved in the project, with its char line (face points from the doll's marks). */
+    static String dollLine(Project p, Story.CharacterDef d, int size) throws Exception {
+        Doll3D.Result r = Doll3D.make(d.look, size, 7, 0, Pose.NEUTRAL, null);
+        Bitmap b = Bitmap.createBitmap(r.px, r.w, r.h, Bitmap.Config.ARGB_8888);
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        b.compress(Bitmap.CompressFormat.PNG, 100, bo);
+        String f = p.savePicture(bo.toByteArray(), "doll");
+        return String.format(java.util.Locale.US, "char|%s|%s|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f\n", d.displayName, f, r.mouthX, r.mouthY, r.mouthHW,
+                r.eyeLX, r.eyeLY, r.eyeRX, r.eyeRY, r.eyeR, r.turbanY);
+    }
+
+    /**
+     * v34 retest of stories of gods, demons and vanaras made with 3D dolls (found by making them as films): one
+     * reading of every place; Durga sits on a lion whose face shows and stands taller than the people beside her; a
+     * giant keeps his head in the picture; a reaction close-up keeps the whole head; a goddess who answers fear with
+     * "डरो मत" is not scared by it; Ravana has ten heads in his doll and is no hero; Hanuman is a man's height and
+     * jumps down from the tree instead of hanging there.
+     */
+    @Test
+    public void godsDemonsAndVanarasAreStagedWell() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        Story durgaSt = ScriptParser.parse("पात्र और रूप-रंग (Characters):\n1. दुर्गा देवी (30 वर्ष):\n * चेहरा और शरीर: आठ भुजाओं वाली तेजस्वी देवी, शेर पर सवार।\n * पहनावा: लाल और सुनहरी साड़ी, सिर पर सोने का मुकुट।\n"
+                + "2. शेर:\n * चेहरा और शरीर: एक बड़ा सुनहरा शेर।\n3. महिषासुर:\n * चेहरा और शरीर: भैंसे के सींगों वाला विशाल काला राक्षस।\n4. इंद्र देव:\n * चेहरा: गोरा, घनी मूँछें।\n * पहनावा: सफ़ेद धोती, सिर पर मुकुट।\n"
+                + "\nदृश्य 1: स्वर्ग का दरबार\n(स्थान: स्वर्ग का सुनहरा महल। सुबह का समय।)\nइंद्र देव (घबराकर): \"महिषासुर ने स्वर्ग पर हमला कर दिया है! अब हमें कौन बचाएगा?\"\n"
+                + "(दुर्गा देवी शेर पर सवार होकर प्रकट होती हैं।)\nदुर्गा देवी (शांत मुस्कान से): \"डरो मत, इंद्र। मैं आ गई हूँ।\"\nशेर (गरजकर): \"गर्र! हम उस राक्षस को सबक सिखाएँगे!\"\n"
+                + "\nदृश्य 2: युद्ध का मैदान\n(स्थान: पहाड़ों के बीच युद्ध का मैदान। शाम का समय।)\nमहिषासुर (गुस्से से हँसते हुए): \"हा हा हा! एक देवी मुझसे लड़ेगी?\"\nदुर्गा देवी (गुस्से से): \"अहंकार तुम्हें ले डूबेगा, महिषासुर!\"\n\nसमाप्त\n");
+        Story ravanaSt = ScriptParser.parse("पात्र और रूप-रंग (Characters):\n1. रावण:\n * चेहरा और शरीर: दस सिर वाला लंका का राजा, घनी काली मूँछें।\n * पहनावा: सुनहरा कवच, हर सिर पर सोने का मुकुट।\n"
+                + "2. हनुमान:\n * चेहरा और शरीर: बलवान वानर, लाल-भूरा चेहरा, लंबी पूँछ।\n * पहनावा: लाल लंगोट, हाथ में गदा।\n3. सीता माता:\n * चेहरा: शांत और कोमल चेहरा।\n * पहनावा: पीली साड़ी।\n"
+                + "\nदृश्य 1: अशोक वाटिका\n(स्थान: लंका की अशोक वाटिका, घने पेड़ और फूल। सुबह का समय।)\nसीता माता (उदास होकर): \"राम कब आएँगे?\"\n(हनुमान पेड़ से कूदकर नीचे आते हैं।)\n"
+                + "हनुमान (प्रणाम करते हुए): \"माता, मैं राम का दूत हनुमान हूँ।\"\n\nदृश्य 2: रावण का दरबार\n(स्थान: लंका का सुनहरा महल। दोपहर का समय।)\nरावण (गुस्से से): \"यह बंदर कौन है?\"\nहनुमान (मुस्कुराकर): \"मैं श्री राम का सेवक हूँ।\"\n\nसमाप्त\n");
+        Story.CharacterDef durga = null, lion = null, mahi = null, indra = null, ravana = null, hanuman = null;
+        for (Story.CharacterDef c : durgaSt.characters) { if (c.displayName.contains("दुर्गा")) durga = c; else if (c.displayName.equals("शेर")) lion = c; else if (c.displayName.contains("महिषासुर")) mahi = c; else if (c.displayName.contains("इंद्र")) indra = c; }
+        for (Story.CharacterDef c : ravanaSt.characters) { if (c.displayName.contains("रावण")) ravana = c; else if (c.displayName.contains("हनुमान")) hanuman = c; }
+        assertNotNull(durga); assertNotNull(lion); assertNotNull(mahi); assertNotNull(indra); assertNotNull(ravana); assertNotNull(hanuman);
+
+        // 1. one reading of every place: the court is the hall (its title wins over a bare "palace"), the battlefield
+        // between mountains is open land, Ashok Vatika a garden; the sample story's garden scenes stay gardens for the
+        // 3D place maker too (it read "the main gate" from their later sentences before)
+        assertTrue("heaven's court: " + Sets.label(Sets.forScene(durgaSt.scenes.get(0))), Sets.forScene(durgaSt.scenes.get(0)) == Sets.HALL);
+        assertTrue("the battlefield: " + Sets.label(Sets.forScene(durgaSt.scenes.get(1))), Sets.forScene(durgaSt.scenes.get(1)) == Sets.GENERIC_OUT);
+        assertTrue("Ashok Vatika: " + Sets.label(Sets.forScene(ravanaSt.scenes.get(0))), Sets.forScene(ravanaSt.scenes.get(0)) == Sets.GARDEN);
+        assertTrue("Ravana's court: " + Sets.label(Sets.forScene(ravanaSt.scenes.get(1))), Sets.forScene(ravanaSt.scenes.get(1)) == Sets.HALL);
+        assertTrue("a gate on a hill stays the gate", Sets.detect("पहाड़ी पर बने महल का मुख्य द्वार") == Sets.GATE);
+        Project sp = sampleProject();
+        Story sample = ScriptParser.parse(sp.read("script.txt"));
+        for (Story.Scene sc : sample.scenes) if (sc.number == 5 || sc.number == 7)
+            assertTrue("sample scene " + sc.number + ": " + Sets.label(Sets.forScene(sc)), Sets.forScene(sc) == Sets.GARDEN);
+
+        // 2. who they are: Ravana has ten heads and is no hero; Hanuman stands as tall as a man; the sample's pet monkey stays small
+        assertTrue("ten heads", ravana.look.heads == 10);
+        assertTrue("Ravana is no hero", !ravana.look.hero);
+        assertTrue("Durga is a hero", durga.look.hero);
+        assertTrue("Hanuman a man's height: " + hanuman.look.kind + " " + hanuman.look.height, hanuman.look.kind == Look.MONKEY && hanuman.look.height > 0.9f);
+        for (Story.CharacterDef c : sample.characters) if (c.look.kind == Look.MONKEY) assertTrue("Raju stays small: " + c.look.height, c.look.height < 0.6f);
+
+        // 3. the dolls: the lion's eye shows (the mane sits behind the face); Ravana's doll is a row of heads with the
+        // face points on the middle one; a rider's picture rigs the lion's jaw on its head's side, not its tail's
+        Doll3D.Result lr = Doll3D.make(lion.look, 700, 7, 0, Pose.NEUTRAL, null);
+        int ex = Math.round(lr.eyeLX * lr.w), ey = Math.round(lr.eyeLY * lr.h), er = Math.max(3, Math.round(lr.eyeR * lr.w * 1.2f)), white = 0;
+        for (int y = ey - er; y <= ey + er; y++) for (int x = ex - er; x <= ex + er; x++) {
+            if (x < 0 || y < 0 || x >= lr.w || y >= lr.h) continue;
+            int c = lr.px[y * lr.w + x];
+            if (((c >> 16) & 255) > 200 && ((c >> 8) & 255) > 200 && (c & 255) > 190) white++;
+        }
+        assertTrue("the lion's eye white shows: " + white + " px", white >= 4);
+        Doll3D.Result rr = Doll3D.make(ravana.look, 700, 7, 0, Pose.NEUTRAL, null);
+        assertTrue("a row of ten heads is wide: " + rr.w + "x" + rr.h, rr.w > rr.h * 1.3f);
+        assertTrue("the face is the middle head's: eyes " + rr.eyeLX + "/" + rr.eyeRX, Math.abs(rr.eyeRX - rr.eyeLX) < 0.08f && rr.eyeLX > 0.3f && rr.eyeRX < 0.7f);
+        Project p = Project.create(ctx);
+        StringBuilder cast = new StringBuilder();
+        for (Story.CharacterDef c : durgaSt.characters) cast.append(dollLine(p, c, 700));
+        Art art = Art.fromManifest(cast.toString(), durgaSt, p.loader());
+        Rig rig = art.sprites.get(durga.id).rig;
+        assertNotNull("a rig for the rider's doll", rig);
+        assertTrue("the lion's jaw on its head's side (right): " + rig.mjSide + " tip " + rig.mjTipX, rig.mountJaw && rig.mjSide > 0 && rig.mjTipX > 0.8f);
+        // the lion speaks: a dark mouth opens at its head in her picture, and her face stays as it was
+        Renderer rd = new Renderer(null, art);
+        int[][] pix = new int[2][];
+        for (int k = 0; k < 2; k++) {
+            Bitmap b = Bitmap.createBitmap(520, 560, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(b, 1);
+            g.color(0xFFDDE8D8); g.rect(0, 0, 520, 560);
+            Pose pp = new Pose(); pp.time = 2; pp.seed = 3; pp.facing = 1; pp.mountMouth = k;
+            g.save(); g.translate(260, 540); rd.drawPosed(g, durga, pp, 490); g.restore();
+            pix[k] = new int[520 * 560];
+            b.getPixels(pix[k], 0, 520, 0, 0, 520, 560);
+            g.release();
+        }
+        int lionChanged = 0, faceChanged = 0;
+        for (int y = 0; y < 560; y++) for (int x = 0; x < 520; x++) {
+            int c0 = pix[0][y * 520 + x], c1 = pix[1][y * 520 + x];
+            int dd = Math.abs(((c0 >> 16) & 255) - ((c1 >> 16) & 255)) + Math.abs(((c0 >> 8) & 255) - ((c1 >> 8) & 255)) + Math.abs((c0 & 255) - (c1 & 255));
+            if (dd <= 40) continue;
+            if (y < 186) faceChanged++; else if (x >= 260) lionChanged++;
+        }
+        System.out.println("THE LION SPEAKS: its head " + lionChanged + " px changed, her face " + faceChanged);
+        assertTrue("the lion's mouth opens: " + lionChanged + " px", lionChanged > 150);
+        assertTrue("her face stays: " + faceChanged + " px", faceChanged < 60);
+
+        // 4. the film: Durga taller than Indra; the giant's head in the picture; reaction close-ups keep the head;
+        // Durga hears Indra's fear with resolve
+        Director d = new Director(durgaSt, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        int checkedParts = 0, reactions = 0;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE || sg.actors.isEmpty()) continue;
+            checkedParts++;
+            Film.Actor aD = null, aI = null;
+            for (Film.Actor a : sg.actors) {
+                float h = Renderer.actorHeight(a.look, a.c, art, sg);
+                assertTrue(a.c.displayName + " keeps the head in the picture: top " + (sg.ground - h), sg.ground - h >= 0.06f * 720f - 1);
+                if (a.c == durga) aD = a; else if (a.c == indra) aI = a;
+            }
+            if (aD != null && aI != null)
+                assertTrue("Durga on her lion stands taller than Indra", Renderer.actorHeight(durga.look, durga, art, sg) > Renderer.actorHeight(indra.look, indra, art, sg) * 1.1f);
+            for (Film.Shot sh : film.shots) {
+                if (!sh.reaction || sh.t < sg.t0 || sh.t >= sg.t1) continue;
+                Film.Cam cam = null;
+                for (Film.Cam c : sg.cams) if (Math.abs(c.t - sh.t) < 0.02f) cam = c;
+                Film.Actor who = null;
+                for (Film.Actor a : sg.actors) if (sh.subject.contains(a.c.shown()) || a.c.shown().contains(sh.subject)) who = a;
+                if (cam == null || who == null) continue;
+                float top = sg.ground - Renderer.actorHeight(who.look, who.c, art, sg);
+                assertTrue("a reaction close-up keeps " + who.c.displayName + "'s head: frame top " + (cam.cy - 360f / cam.zoom) + ", head " + top, cam.cy - 360f / cam.zoom <= top + 2);
+                reactions++;
+            }
+            if (aD != null && aI != null) {
+                Film.Line fear = null;
+                for (Film.Line l : film.lines) if (l.who == indra && l.text.contains("बचाएगा")) fear = l;
+                if (fear != null) for (Film.Key k : aD.keys) if (k.t > fear.start && k.t < fear.start + fear.dur + 3f)
+                    assertTrue("Durga is not scared by Indra's fear", k.emotion != Pose.SCARED);
+            }
+        }
+        System.out.println("GODS: parts " + checkedParts + ", reaction shots checked " + reactions + "; notes: " + film.notes);
+        assertTrue("parts checked", checkedParts >= 2);
+
+        // 5. Hanuman jumps down from the tree: on the ground when he speaks
+        Director dr = new Director(ravanaSt, new Director.Options());
+        dr.prepare();
+        Film rf = dr.direct(Art.fromManifest("", ravanaSt, sampleProject().loader()));
+        Film.Line hl = null;
+        for (Film.Line l : rf.lines) if (l.who == hanuman) { hl = l; break; }
+        assertNotNull("Hanuman speaks", hl);
+        Film.Seg hs = rf.segAt(hl.start + 0.1f);
+        Film.Actor ha = null;
+        for (Film.Actor a : hs.actors) if (a.c == hanuman) ha = a;
+        assertNotNull(ha);
+        Film.Key hk = ha.stateAt(hl.start + 0.1f);
+        assertTrue("Hanuman is on the ground when he speaks: anchor " + hk.anchor + " body " + hk.body, hk.anchor == Film.A_GROUND && hk.body != Pose.HANG);
+    }
+
+    /**
+     * v34 (the user's final instructions): spectacles and goggles, a walking stick, crutches and a wheelchair; a
+     * change of clothes in the middle of a story (asked as a picture of its own, the character's own picture
+     * recoloured until then); the film asks for the user's pictures before the 3D maker makes any; the 3D maker
+     * takes its style from the pictures already uploaded to the library.
+     */
+    @Test
+    public void aidsCostumesAndPicturesFirst() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        // 1. who needs what
+        Story st = ScriptParser.parse("पात्र और रूप-रंग (Characters):\n1. दादाजी (72 वर्ष):\n * चेहरा: सफ़ेद बाल, गोल चश्मा।\n * पहनावा: सफ़ेद कुर्ता, हाथ में लकड़ी की लाठी।\n"
+                + "2. दादी (68 वर्ष):\n * चेहरा: सफ़ेद बाल।\n * पहनावा: नीली साड़ी। वह व्हीलचेयर पर रहती हैं।\n3. रोहन (10 वर्ष):\n * चेहरा: आँखों पर तैराकी के गॉगल्स (goggles)।\n * पहनावा: लाल टी-शर्ट।\n"
+                + "4. मीरा (12 वर्ष):\n * चेहरा: दो चोटियाँ।\n * पहनावा: पीला फ्रॉक। बैसाखी के सहारे चलती है।\n5. जादूगर:\n * पहनावा: काला लबादा, हाथ में जादुई छड़ी।\n6. सूरदास:\n * चेहरा: एक अंधा बूढ़ा गायक।\n"
+                + "\nदृश्य 1: आँगन\n(स्थान: घर का आँगन। सुबह।)\n(दादाजी लाठी टेकते हुए आते हैं।)\nदादाजी: \"चलो पिकनिक पर!\"\n(रोहन दौड़कर आता है।)\nरोहन: \"वाह!\"\n(दादी व्हीलचेयर चलाकर पास आती हैं।)\nदादी: \"मैं लड्डू लाई हूँ।\"\n(मीरा धीरे-धीरे चलकर आती है।)\nमीरा: \"मैं भी चलूँगी।\"\nजादूगर: \"अबरा का डबरा!\"\nसूरदास: \"राधे राधे।\"\n\nसमाप्त\n");
+        Story.CharacterDef dada = null, dadi = null, rohan = null, meera = null, magician = null, blind = null;
+        for (Story.CharacterDef c : st.characters) {
+            if (c.displayName.contains("दादाजी")) dada = c; else if (c.displayName.contains("दादी")) dadi = c; else if (c.displayName.contains("रोहन")) rohan = c;
+            else if (c.displayName.contains("मीरा")) meera = c; else if (c.displayName.contains("जादूगर")) magician = c; else if (c.displayName.contains("सूरदास")) blind = c;
+        }
+        assertNotNull(dada); assertNotNull(dadi); assertNotNull(rohan); assertNotNull(meera); assertNotNull(magician); assertNotNull(blind);
+        assertTrue("grandpa: a stick and spectacles: " + dada.look.aid + "/" + dada.look.glasses, dada.look.aid == Look.AID_STICK && dada.look.glasses == 1 && !dada.look.wand);
+        assertTrue("grandma: a wheelchair", dadi.look.aid == Look.AID_WHEELCHAIR);
+        assertTrue("Rohan: goggles", rohan.look.glasses == 3);
+        assertTrue("Meera: crutches", meera.look.aid == Look.AID_CRUTCHES);
+        assertTrue("a magic wand is no walking stick", magician.look.wand && magician.look.aid == Look.AID_NONE);
+        assertTrue("a blind singer: dark glasses and a cane: " + blind.look.glasses + "/" + blind.look.aid, blind.look.glasses == 2 && blind.look.aid == Look.AID_STICK);
+        // 2. how they move: the wheelchair rolls seated (drawn) and never runs; the stick never runs either
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(new Art());
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            if (a.c == dadi) for (Film.Key k : a.keys) assertTrue("grandma sits in her wheelchair: " + k.body + "/" + k.seat, k.body == Pose.SIT && k.seat == Film.SEAT_WHEELCHAIR && !k.run);
+            if (a.c == dada || a.c == meera) for (Film.Key k : a.keys) assertTrue("no running on a stick or crutches", !k.run);
+        }
+        // the dolls: grandma in her wheelchair is lower than standing, with dark tyres at the bottom
+        Doll3D.Result chair = Doll3D.make(dadi.look, 600, 7, 0, Pose.NEUTRAL, null);
+        Look standing = dadi.look.copy(); standing.aid = Look.AID_NONE;
+        Doll3D.Result stand = Doll3D.make(standing, 600, 7, 0, Pose.NEUTRAL, null);
+        int dark = 0;
+        for (int y = chair.h * 85 / 100; y < chair.h; y++) for (int x = 0; x < chair.w; x++) {
+            int c = chair.px[y * chair.w + x];
+            if ((c >>> 24) > 200 && ((c >> 16) & 255) < 70 && ((c >> 8) & 255) < 70 && (c & 255) < 70) dark++;
+        }
+        System.out.println("WHEELCHAIR doll " + chair.w + "x" + chair.h + " (standing " + stand.w + "x" + stand.h + "), dark tyre pixels " + dark);
+        assertTrue("the wheelchair's tyres show: " + dark, dark > 40);
+        assertTrue("seated in the chair, the face is lower in the picture than standing: " + chair.mouthY + " vs " + stand.mouthY, chair.mouthY > stand.mouthY);
+
+        // 3. a change of clothes in the middle of the story
+        Story cs = ScriptParser.parse("Characters:\n1. Maya (9 years):\n * Face: round face, two ponytails with yellow ribbons.\n * Clothes: a blue hoodie and jeans.\n"
+                + "2. Grandpa (70 years):\n * Face: white hair, round glasses.\n * Clothes: a white kurta.\n\nScene 1: The Room\n(Place: a living room. Morning.)\n"
+                + "Maya (excited): \"Grandpa, today is my birthday!\"\nGrandpa: \"Then go and get ready.\"\n(Maya runs out of the room.)\n(Maya comes back wearing a red frock with golden stars.)\n"
+                + "Maya (happy): \"How do I look?\"\n(Grandpa takes off his glasses and wipes his eyes.)\nGrandpa: \"Like a princess.\"\n\nThe End\n");
+        Story.CharacterDef maya = null, grandpa = null;
+        for (Story.CharacterDef c : cs.characters) { if (c.displayName.equals("Maya")) maya = c; else if (c.displayName.equals("Grandpa")) grandpa = c; }
+        assertNotNull(maya); assertNotNull(grandpa);
+        assertTrue("Maya changes into a red frock: " + maya.costumes.size(), maya.costumes.size() == 1 && maya.costumes.get(0).look.outfit == Look.O_FROCK && maya.costumes.get(0).look.primary != maya.look.primary);
+        assertTrue("Grandpa takes off his glasses", grandpa.costumes.size() == 1 && grandpa.look.glasses > 0 && grandpa.costumes.get(0).look.glasses == 0);
+        Project p = Project.create(ctx);
+        p.write("script.txt", "x");
+        StringBuilder cast = new StringBuilder();
+        cast.append(dollLine(p, maya, 600)).append(dollLine(p, grandpa, 600));
+        p.write("cast.txt", cast.toString());
+        Art art = Art.fromManifest(p.read("cast.txt"), cs, p.loader());
+        assertNotNull("Maya's own picture recoloured for the new clothes", art.costumeSprite(maya.id, 1));
+        Director dc = new Director(cs, new Director.Options());
+        dc.prepare();
+        Film cf = dc.direct(art);
+        Film.Actor ma = null;
+        for (Film.Seg sg : cf.segs) for (Film.Actor a : sg.actors) if (a.c == maya) ma = a;
+        assertNotNull(ma);
+        Film.Line first = null, after = null;
+        for (Film.Line l : cf.lines) { if (l.who == maya && first == null) first = l; if (l.who == maya && l.text.contains("How do I look")) after = l; }
+        assertNotNull(first); assertNotNull(after);
+        assertTrue("in her own clothes first", ma.stateAt(first.start + 0.1f).costume == 0);
+        assertTrue("in the red frock after the change", ma.stateAt(after.start + 0.1f).costume == 1);
+        // the user is asked for a picture of the new clothes; once given, it is the one drawn
+        List<String[]> asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingForUser", p, cs);
+        String costumeTarget = null;
+        for (String[] t : asked) if (t[0].startsWith("costume:")) costumeTarget = t[0];
+        assertNotNull("a picture of the change of clothes is asked for", costumeTarget);
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        File sheet = new File(userSheets()[0].getParentFile(), "sheet15.jpg");
+        List<byte[]> one = new ArrayList<byte[]>(); one.add(Files.readAllBytes(sheet.toPath()));
+        call("com.tarun.kahani.app.SheetSaver", "save", p, lib, cs, "angles:" + costumeTarget.replaceFirst("^costume:", "costume:") + ":Maya in a red frock", one, null);
+        assertTrue("the costume line is saved: " + p.read("cast.txt"), p.read("cast.txt").contains("costume|" + costumeTarget.substring(8) + "|"));
+        asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingForUser", p, cs);
+        for (String[] t : asked) assertTrue("no longer asked: " + t[0] + " in " + p.read("cast.txt"), !t[0].equals(costumeTarget));
+
+        // 4. the style of the user's uploaded pictures reaches the 3D maker even for a story with no picture yet
+        Project empty = Project.create(ctx);
+        empty.write("script.txt", "x");
+        lib.addBytes(com.tarun.kahani.app.Library.PIC, "person", "Asha", "front", Files.readAllBytes(sheet.toPath()), ".jpg", "test");
+        com.tarun.kahani.core.StyleCue cue = (com.tarun.kahani.core.StyleCue) s3d("styleCue", empty, cs, lib);
+        System.out.println("STYLE from the library: " + cue.describe());
+        assertTrue("the library's pictures give the style: " + cue.pictures, cue.pictures > 0);
+
+        // 5. pictures first: started from the app, the film waits for the user's pictures before any 3D one is made
+        Project need = Project.create(ctx);
+        need.write("script.txt", "Characters:\n1. Zara (8 years):\n * Face: curly hair.\n\nScene 1: The Moon\n(Place: the surface of the moon. Night.)\nZara: \"Hello moon!\"\n\nThe End\n");
+        final com.tarun.kahani.app.FilmJob job = new com.tarun.kahani.app.FilmJob(ctx, need);
+        job.askForPictures = true;
+        Thread th = new Thread(job);
+        th.start();
+        long until = System.currentTimeMillis() + 120000;
+        while (!job.picturesWaiting && th.isAlive() && System.currentTimeMillis() < until) Thread.sleep(200);
+        System.out.println("PICTURES FIRST: " + job.stage + " | " + job.picturesNeeded);
+        assertTrue("the film waits for the user's pictures: " + job.stage, job.picturesWaiting && job.stage.startsWith("Waiting for you"));
+        assertTrue("nothing built in 3D while waiting", !need.read("cast.txt").contains("3d_"));
+        job.choosePictures(2);
+        job.cancel();
+        th.join(60000);
+    }
+
     /** Every visible view with a click action, in screen order. */
     static List<View> clickables(View v, List<View> out) {
         if (v.getVisibility() != View.VISIBLE) return out;

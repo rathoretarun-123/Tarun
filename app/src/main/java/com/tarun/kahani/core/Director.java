@@ -195,7 +195,7 @@ public final class Director {
                 if (si > 0) film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH_CARD, t - 0.3f, 1.0f, 0.35f));
                 // the phone guide (8.2) and the manual (3.2): a new place is established before anyone speaks in it — a
                 // bridge of the place alone (its picture, a slow push) when the place changes between two scenes
-                int newSet = Sets.detect(firstSentence(sc.setting.length() > 0 ? sc.setting : sc.title));
+                int newSet = Sets.forScene(sc);
                 Film.Seg last = film.segs.isEmpty() ? null : film.segs.get(film.segs.size() - 1);
                 // v26: the user's own picture of the journey into this place (ScenePlan) is the bridge when given
                 Art.Backdrop journey = this.art.journeyBackdrop(sc.number);
@@ -225,7 +225,7 @@ public final class Director {
             card.t1 = t + 3.0f;
             card.text1 = sc.heading;
             card.text2 = sc.title;
-            card.set = Sets.detect(firstSentence(sc.setting));
+            card.set = Sets.forScene(sc);
             card.tod = Sets.detectTime(sc.setting, Sets.DAY);
             card.backdrop = this.art.sceneBackdrop(sc.number, 0);
             card.fadeIn = 0.4f; card.fadeOut = 0.4f;
@@ -276,6 +276,7 @@ public final class Director {
         film.sfx.add(new Film.Sfx(Film.SFX_MAGIC, t + 0.6f, 2f, 0.5f));
         film.notes.add("End page: \"" + end.text1 + "\"" + (this.art.end != null ? " (your picture)" : " (made by the studio)") + " + music");
         film.duration = end.t1;
+        mobility();
         scoreMusic();
         if (opt.technical) {
             // the Technical Director protocol, in its own order: lock the camera, then no shot may move a character
@@ -787,8 +788,11 @@ public final class Director {
         seg.type = Film.S_SCENE;
         seg.scene = si;
         seg.t0 = t;
-        seg.set = Sets.detect(firstSentence(where));
-        if (seg.set == Sets.GENERIC_OUT) seg.set = Sets.detect(where);
+        if (pi == 0 && where.equals(sc.setting.length() > 0 ? sc.setting : sc.title)) seg.set = Sets.forScene(sc);   // v34: the scene's one place
+        else {
+            seg.set = Sets.detect(firstSentence(where));
+            if (seg.set == Sets.GENERIC_OUT) seg.set = Sets.detect(where);
+        }
         // the hour: the scene's own words first (its title, the first line of its action), then the place's first
         // sentence (a place description that says the flowers glow "at night" does not make the morning night)
         String firstDir = "";
@@ -893,6 +897,8 @@ public final class Director {
             k.facing = k.x < 640 ? 1 : -1;
             k.noHeadwear = bool(pNoHead.get(c));
             k.wearsTurban = bool(pTurban.get(c));
+            Integer cn = costumeNow.get(c);
+            k.costume = cn == null ? 0 : cn;                     // v34: the clothes they last changed into
             k.disguised = bool(pDisguise.get(c));
             Integer ent = entryBeat.get(c);
             if (ent != null) k.visible = false;
@@ -900,6 +906,16 @@ public final class Director {
             // Spider-Verse: the frame rate this character's poses step on (only when the user asks for it)
             a.stepFps = opt.onTwos ? PixarLead.stepFps(c) : 0;
             seg.actors.add(a);
+        }
+        // v34: the tallest of the part (a giant, a rider on her lion) keeps its head inside the picture — the camera
+        // never looks above the place's picture, so the whole cast is drawn smaller together (their sizes keep to
+        // each other) when the tallest would rise above its top
+        float tallest = 0;
+        for (Film.Actor a : seg.actors) tallest = Math.max(tallest, heightOf(a));
+        float room = ground - 0.06f * 720f;
+        if (tallest > room && room > 0) {
+            seg.charScale *= Math.max(0.5f, room / tallest);
+            film.notes.add("  ↳ everyone drawn at " + Math.round(seg.charScale * 100) + "% so the tallest keeps its head in the picture");
         }
 
         // ---------- ambience & music
@@ -946,6 +962,19 @@ public final class Director {
         int fastRun = 0;
         for (int bi = b0; bi < b1; bi++) {
             Story.Beat b = sc.beats.get(bi);
+            // v34: a change of clothes at this beat — from here on the character wears it (in this part and the next)
+            for (Story.CharacterDef c : story.characters) for (int ci = 0; ci < c.costumes.size(); ci++) {
+                Story.Costume co = c.costumes.get(ci);
+                if (co.scene != sc.number || co.beat != bi) continue;
+                costumeNow.put(c, ci + 1);
+                Film.Actor ca = actor(c);
+                if (ca != null) {
+                    Film.Key ck = ca.at(tc + 0.05f);
+                    ck.costume = ci + 1;
+                    film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, tc, 0.5f, 0.3f));
+                }
+                film.notes.add("    ↳ " + c.shown() + " changes clothes: " + co.text);
+            }
             // entrances that happen at this beat
             for (Film.Actor a : seg.actors) {
                 Integer ent = entryBeat.get(a.c);
@@ -1077,6 +1106,19 @@ public final class Director {
             Film.Key k = a.at(tc);
             k.x = 250; k.anchor = Film.A_BRANCH; k.body = Pose.HANG; k.visible = true;
             film.sfx.add(new Film.Sfx(Film.SFX_RUSTLE, tc, 1.2f, 0.7f));
+            // v34: "पेड़ से कूदकर नीचे आते हैं" — he comes down: a moment on the branch, then a jump to the ground
+            // beside the others (before, he hung upside down through the whole scene, his face out of every shot)
+            if (!Txt.has(sentence, "उल्टा लटक") && Txt.has(sentence, "कूद", "उतर", "नीचे आ", "jump down", "jumps down", "jumped down",
+                    "climbs down", "climb down", "drops down", "comes down", "came down")) {
+                k.body = Pose.STAND;
+                Film.Key down = a.at(tc + 0.9f);
+                down.anchor = Film.A_GROUND; down.body = Pose.STAND; down.x = dest; down.moveDur = 0.6f; down.run = true;
+                down.facing = dest > 250 ? 1 : -1;
+                a.acts.add(new Film.Act(tc + 0.8f, tc + 1.5f, Film.G_JUMP));
+                film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, tc + 0.85f, 0.5f, 0.5f));
+                film.sfx.add(new Film.Sfx(Film.SFX_THUD, tc + 1.5f, 0.4f, 0.45f));
+                return tc + 1.7f;
+            }
             return tc;
         }
         if (Txt.has(sentence, "हरी", "रोशनी", "जादुई", "धुएँ") && !a.look.hero) {
@@ -2130,7 +2172,7 @@ public final class Director {
     private void listenerPerformance(Film.Actor sp, Film.Actor to, float start, float end, Film.Line line, ShotPlanner.Plan plan) {
         Film.Key cur = to.stateAt(start);
         if (cur.anchor != Film.A_GROUND || cur.body == Pose.LIE) return;
-        int e = empathy(line.emotion, sp, to);
+        int e = takes(line, sp, to);
         if (plan.intensity >= 0.5f && cur.emotion == Pose.NEUTRAL && e != Pose.NEUTRAL && end - start > 1.2f) {
             Film.Key k = to.at(start + 0.6f);        // a beat later: they take it in, then react
             k.emotion = e;
@@ -2146,6 +2188,68 @@ public final class Director {
     }
 
     /** What the listener feels on hearing a line. */
+    /**
+     * v34: the listener's own next words say how they take the news — a goddess who answers a frightened king with
+     * "डरो मत, मैं आ गई हूँ" hears his fear with resolve, not fear (her next line within the next four).
+     */
+    /**
+     * v34: what helps a character walk decides how they move — a wheelchair rolls (never stands, kneels, runs or
+     * jumps; a drawn character sits in it, a picture is drawn as it is, since it shows the chair); a walking stick
+     * or crutches walk a third slower and never run or jump.
+     */
+    private void mobility() {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            int aid = a.look == null ? Look.AID_NONE : a.look.aid;
+            if (aid == Look.AID_NONE) continue;
+            boolean picture = art != null && art.sprites.containsKey(a.c.id);
+            for (int i = 0; i < a.keys.size(); i++) {
+                Film.Key k = a.keys.get(i);
+                k.run = false;
+                if (aid == Look.AID_WHEELCHAIR) {
+                    if (k.body != Pose.LIE) { k.body = picture ? Pose.STAND : Pose.SIT; k.seat = picture ? -1 : Film.SEAT_WHEELCHAIR; }
+                } else if (k.moveDur > 0) {
+                    float room = i + 1 < a.keys.size() ? a.keys.get(i + 1).t - k.t : k.moveDur * 1.35f;
+                    k.moveDur = Math.max(k.moveDur, Math.min(k.moveDur * 1.35f, room));
+                }
+            }
+            for (java.util.Iterator<Film.Act> it = a.acts.iterator(); it.hasNext(); ) {
+                int ty = it.next().type;
+                if (ty == Film.G_JUMP || ty == Film.G_BOUNCE || (aid == Look.AID_WHEELCHAIR && (ty == Film.G_DANCE || ty == Film.G_WALK_PLACE))) it.remove();
+            }
+        }
+    }
+
+    /** v34: the clothes each character last changed into (CharacterDef.costumes, 1-based; absent = their own). */
+    private final Map<Story.CharacterDef, Integer> costumeNow = new HashMap<Story.CharacterDef, Integer>();
+
+    private Film.Line nextOwnLine(Film.Actor to, Film.Line line) {
+        int i0 = film.lines.indexOf(line);
+        if (i0 < 0) return null;
+        for (int i = i0 + 1; i < Math.min(film.lines.size(), i0 + 5); i++) if (film.lines.get(i).who == to.c) return film.lines.get(i);
+        return null;
+    }
+
+    private boolean reassures(Film.Actor to, Film.Line line) {
+        Film.Line l = nextOwnLine(to, line);
+        return l != null && Txt.has(l.text + " " + l.manner, "डरो मत", "डरो नहीं", "घबराओ मत", "घबराओ नहीं", "चिंता मत", "चिंता न", "फ़िक्र मत", "फिक्र मत",
+                "मैं आ गई", "मैं आ गया", "मैं हूँ न", "हम हैं न", "मैं बचाऊँग", "मैं बचाउंग", "शांत", "don't worry", "do not worry", "don't be afraid",
+                "do not be afraid", "fear not", "i am here", "i'm here", "calm", "relax", "it's okay", "it is okay");
+    }
+
+    /**
+     * v34: how this listener takes the line — the empathy of the line, unless the listener's own next words say
+     * otherwise: a goddess who answers fear with "डरो मत" hears it with resolve, one who answers a demon's threat
+     * in anger hears it in anger; a frightened answer keeps the fear.
+     */
+    private int takes(Film.Line line, Film.Actor sp, Film.Actor to) {
+        int e = empathy(line.emotion, sp, to);
+        if (e != Pose.SCARED && e != Pose.SAD) return e;
+        if (reassures(to, line)) return e == Pose.SCARED ? Pose.DETERMINED : Pose.SAD;
+        Film.Line next = nextOwnLine(to, line);
+        if (e == Pose.SCARED && next != null && (next.emotion == Pose.ANGRY || next.emotion == Pose.DETERMINED)) return next.emotion;
+        return e;
+    }
+
     private static int empathy(int emo, Film.Actor sp, Film.Actor to) {
         switch (emo) {
             case Pose.SAD: case Pose.PAIN: return Pose.SAD;
@@ -2170,6 +2274,14 @@ public final class Director {
         float zoom = ShotPlanner.zoomFor(size, th);
         float cy = (tk.body == Pose.SIT ? ground - th * 0.4f : ground - th * 0.8f) + 0.1f * (720f / zoom);
         Film.Cam c = new Film.Cam(end + 0.05f, tx + tk.facing * (1280f / zoom) * 0.12f, cy, zoom, 0);
+        Art.Sprite tsp = art == null ? null : art.sprites.get(to.c.id);
+        if (tsp != null && tsp.faceKnown) {
+            // v34: a picture whose face is known is framed by its face, as the speaking close-ups are — the whole head
+            // with its crown in the frame (a rider's face is near the top of a picture that holds her animal too)
+            Film.Cam fc = faceCam(to, end + 0.05f, plan.light, size >= ShotPlanner.CU ? 1f : 0.75f);
+            float hw = 360f / fc.zoom * TechnicalDirector.ratio(opt.aspect);
+            c = new Film.Cam(end + 0.05f, Math.max(hw, Math.min(1280 - hw, fc.cx + tk.facing * (1280f / fc.zoom) * 0.08f)), fc.cy, fc.zoom, 0);
+        }
         c.still = true;
         c.light = plan.light;
         c.reverse = true;                       // the listener's face: the place's reverse angle behind it when the user gave one
@@ -2177,7 +2289,7 @@ public final class Director {
         boolean changed = false;
         Film.Key r = to.at(end + 0.3f);     // anticipation: a tiny pause, then the face changes (§23)
         if (r.emotion == Pose.NEUTRAL) {
-            int e = empathy(line.emotion, sp, to);
+            int e = takes(line, sp, to);
             r.emotion = e == Pose.NEUTRAL ? Pose.SURPRISED : e;
             changed = true;
         }

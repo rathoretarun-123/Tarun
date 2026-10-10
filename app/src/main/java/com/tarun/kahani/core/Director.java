@@ -960,6 +960,8 @@ public final class Director {
                 String txt = b.text;
                 for (String sent : sentences(txt)) {
                     List<Story.CharacterDef> ms = presentWithGroups(sent);
+                    // v39: "चारों पार्क में चलते हुए आते हैं" with no name: the scene's own people (those who speak or are named in it)
+                    if (ms.isEmpty() && Txt.has(sent, "चारों", "तीनों", "दोनों", "पाँचों", "पांचों", "सब ", "सभी") && isEntry(sent)) ms = sceneCast(sc, b0, b1, sent);
                     for (int k = 0; k < ms.size(); k++) {
                         Story.CharacterDef m = ms.get(k);
                         if (order.contains(m)) {
@@ -968,7 +970,9 @@ public final class Director {
                             continue;
                         }
                         order.add(m);
-                        if (bi > b0 && isEntry(sent)) entryBeat.put(m, bi);
+                        // v39: also in the opening description, when it is a walk or a run in ("वनुशा दौड़ती हुई कमरे में आती
+                        // है", "चारों पार्क में चलते हुए आते हैं") — they come in, they are not found standing there
+                        if ((bi > b0 || walkingIn(sent)) && isEntry(sent)) entryBeat.put(m, bi);
                     }
                 }
             }
@@ -1197,6 +1201,33 @@ public final class Director {
             }
         }
         return out;
+    }
+
+    /** v39: the middle of a group on the stage at t (where it leaves from together). */
+    private static float groupSide(List<Film.Actor> who, float t) {
+        float sum = 0; int n = 0;
+        for (Film.Actor a : who) { if (!a.stateAt(t).visible) continue; sum += xAt(a, t); n++; }
+        return n == 0 ? 640 : sum / n;
+    }
+
+    /** v39: a walk or a run into the place ("दौड़ती हुई … आती है", "चलते हुए आते हैं", "walks in"). */
+    static boolean walkingIn(String s) {
+        return Txt.has(s, "चलते हुए आ", "चलती हुई आ", "चलता हुआ आ", "चलकर आ", "चल कर आ", "दौड़ते हुए आ", "दौड़ती हुई", "दौड़ता हुआ", "भागते हुए आ",
+                "भागती हुई आ", "भागता हुआ आ", "दौड़कर आ", "भागकर आ", "walks in", "runs in", "comes in", "enters", "rushes in", "hurries in");
+    }
+
+    /** v39: the people of a part (who speak or are named in it), at most as many as the group word says. */
+    private List<Story.CharacterDef> sceneCast(Story.Scene sc, int b0, int b1, String sent) {
+        List<Story.CharacterDef> out = new ArrayList<Story.CharacterDef>();
+        for (int bi = b0; bi < b1; bi++) {
+            Story.Beat b = sc.beats.get(bi);
+            if (b.type == Story.Beat.DIALOGUE) {
+                if (b.speaker != null && !b.speaker.voiceOnly && !out.contains(b.speaker)) out.add(b.speaker);
+                for (Story.CharacterDef m : b.chorus) if (!m.voiceOnly && !out.contains(m)) out.add(m);
+            } else for (Story.CharacterDef m : ScriptParser.mentions(story, b.text)) if (!out.contains(m)) out.add(m);
+        }
+        int n = Txt.has(sent, "दोनों") ? 2 : Txt.has(sent, "तीनों") ? 3 : Txt.has(sent, "चारों") ? 4 : Txt.has(sent, "पाँचों", "पांचों") ? 5 : out.size();
+        return n < out.size() ? new ArrayList<Story.CharacterDef>(out.subList(0, n)) : out;
     }
 
     static boolean isEntry(String s) {
@@ -3717,7 +3748,9 @@ public final class Director {
             "runs away", "ran away", "goes away", "went away", "walks off", "walked off", "runs off", "ran off", "walks out", "walked out", "runs out of",
             "goes out of", "leaves the", "leaves for", "leaves with", "leaves home", "left the", "घर चला", "घर चली", "घर चले", "घर की ओर चल", "घर की तरफ चल",
             "घर लौट", "चला जाता", "चली जाती", "चले जाते", "चला गया", "चली गई", "चली गयी", "चले गए", "भाग जाता", "भाग जाती", "भाग जाते", "भाग गया", "भाग गई",
-            "भाग गयी", "भाग गए", "भागने लग", "भाग खड़ा", "भाग खड़ी", "भाग खड़े", "भाग निकल", "दूर चला", "दूर चली", "दूर चले"};
+            "भाग गयी", "भाग गए", "भागने लग", "भाग खड़ा", "भाग खड़ी", "भाग खड़े", "भाग निकल", "दूर चला", "दूर चली", "दूर चले",
+            // v39: "भागते हुए पार्क से बाहर जाते हैं"
+            "बाहर जाता", "बाहर जाती", "बाहर जाते", "बाहर चला", "बाहर चली", "बाहर चले", "बाहर भाग", "बाहर निकल जा", "से निकल जा"};
     /** v34: moving across the place (or round it) without a goal named. */
     static final String[] CROSS = {"runs across", "ran across", "walks across", "walked across", "dashes across", "races across", "rushes across",
             "runs around", "ran around", "runs about", "runs round", "walks around", "walks about", "दौड़ता है", "दौड़ती है", "दौड़ते हैं", "दौड़ पड़",
@@ -3730,7 +3763,10 @@ public final class Director {
     /** v34: going up to someone. */
     static final String[] GO_TO = {"runs to", "ran to", "walks to", "walked to", "goes to", "went to", "comes to", "came to", "runs towards", "runs toward",
             "ran towards", "walks towards", "walks toward", "walks up to", "runs up to", "goes up to", "walks over to", "runs over to", "rushes to", "hurries to",
-            "moves to", "steps towards", "के पास जा", "के पास आ", "के पास दौड़", "की ओर दौड़", "की तरफ दौड़", "की ओर भाग", "की तरफ भाग", "के पास पहुँच"};
+            "moves to", "steps towards", "के पास जा", "के पास आ", "के पास दौड़", "की ओर दौड़", "की तरफ दौड़", "की ओर भाग", "की तरफ भाग", "के पास पहुँच",
+            // v39: the spoken forms of the user's scripts — "खिड़की के पास जाती है", "झूले की तरफ़ दौड़ती है", "पास आकर बैठती है"
+            "की तरफ़ दौड़", "की तरफ़ भाग", "की तरफ़ जा", "की तरफ जा", "की तरफ़ चल", "की तरफ चल", "की ओर जा", "की ओर चल", "की ओर बढ़", "की तरफ़ बढ़",
+            "की तरफ बढ़", "के पास चल", "के पास भाग", "पास आकर", "पास जाकर", "के करीब जा", "के करीब आ", "के पास पहुंच"};
 
     /**
      * v34 (the director trained for any story's stage directions, not only the sample's): "Kabir runs across the
@@ -3747,7 +3783,8 @@ public final class Director {
         // "They all walk home", "Both run off", "सब घर चले जाते हैं": with no names, everyone on the stage
         String head = s.trim().toLowerCase(java.util.Locale.ROOT);
         if (group.size() <= 1 && (head.startsWith("they ") || head.startsWith("both ") || head.startsWith("all ") || head.startsWith("everyone ")
-                || head.startsWith("everybody ") || head.startsWith("सब") || head.startsWith("दोनों") || head.startsWith("तीनों") || head.startsWith("वे "))) {
+                || head.startsWith("everybody ") || head.startsWith("सब") || head.startsWith("दोनों") || head.startsWith("तीनों") || head.startsWith("चारों")
+                || head.startsWith("पाँचों") || head.startsWith("पांचों") || head.startsWith("वे "))) {
             List<Film.Actor> on = new ArrayList<Film.Actor>();
             for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) on.add(a);
             if (on.size() > 1) group = on;
@@ -3783,18 +3820,31 @@ public final class Director {
             }
             return d;
         }
-        if (isEntry(s)) return 0;
+        // v39: "comes to the window" is a move for one already on the stage (an entrance only for one who is not)
+        boolean goWords = Txt.has(s, GO_TO);
+        if (isEntry(s) && !(goWords && subj.stateAt(t).visible)) return 0;
         // the verb and where to may have words between them ("walks slowly home", "runs happily across the grass")
         boolean walkVerb = Txt.hasWord(s, WALK_VERBS);
         boolean leave = leaving(s);
         boolean cross = Txt.has(s, CROSS) || (walkVerb && Txt.hasWord(s, "across", "around", "round", "about"));
-        boolean goTo = (Txt.has(s, GO_TO) || (walkVerb && Txt.hasWord(s, "to", "towards", "toward")))
+        boolean goTo = (goWords || (walkVerb && Txt.hasWord(s, "to", "towards", "toward")))
                 && !Txt.has(s, "to know", "to realise", "to realize", "to understand", "to an end", "to life", "to terms", "to sleep", "to bed", "to school");
         // whom they go up to: the one named right after "to" / "towards", or right before "के पास" / "की ओर" — not
         // just anyone the sentence mentions ("Maya runs to the door and Kabir follows" is not a run to Kabir)
         target = goTo ? goalOf(s, subj, group) : null;
-        if (goTo && target == null && !Txt.has(s, CROSS)) goTo = false;
-        if (!leave && !cross && !goTo) return 0;
+        // v39: "उसके पास आकर" — up to the one spoken of (the nearest other on the stage); "खिड़की के पास जाती है" — to a
+        // spot of the place (no one named there): a walk across a part of the stage, so the walk is seen
+        boolean spot = false;
+        if (goTo && target == null && Txt.has(s, "उसके पास", "उनके पास", "उसकी तरफ", "उनकी तरफ", "उसकी ओर", "उनकी ओर", "उसके करीब", "उनके करीब", "to her", "to him", "to them")) {
+            float best = 1e9f;
+            for (Film.Actor o : seg.actors) {
+                if (o == subj || !o.stateAt(t).visible) continue;
+                float dd = Math.abs(xAt(o, t) - xAt(subj, t));
+                if (dd < best) { best = dd; target = o; }
+            }
+        }
+        if (goTo && target == null && !Txt.has(s, CROSS)) { goTo = false; spot = true; }
+        if (!leave && !cross && !goTo && !spot) return 0;
         boolean all = group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे "));
         List<Film.Actor> who = new ArrayList<Film.Actor>();
         if (all) who.addAll(group); else who.add(subj);
@@ -3818,6 +3868,31 @@ public final class Director {
             // a blindfolded walk is careful but not "slowly" on top of it; no walk on the stage lasts more than 4.5 s
             // (a film shortens a long walk; a story that waits ten seconds for one loses its audience)
             float speed = (blind ? 120f : run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
+            // v39: one who gets up in the same sentence ("सोफे से उठकर … आता है") walks once on their feet
+            float go = t + 0.15f;
+            Film.Key before = a.stateAt(Math.max(seg.t0, t - 0.02f));
+            if (before.body == Pose.SIT || before.body == Pose.KNEEL || before.body == Pose.LIE) go = t + 1.1f;
+            // v39: "पास आकर बैठती है" — they come first and sit there: the sit this sentence staged waits for the walk
+            Film.Key sitAfter = null;
+            if (Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat")) {
+                for (Film.Key kk : a.keys) if (kk.t >= t - 0.01f && kk.body == Pose.SIT) { sitAfter = kk; break; }
+                if (sitAfter != null) { sitAfter.body = Pose.STAND; go = t + 0.15f; }
+            }
+            if (spot && !leave) {
+                // to a spot of the place: towards the middle of the stage (or the other side), a walk worth seeing;
+                // a group keeps its spacing
+                float shift = x < 640 ? 300 : -300;
+                float dest = Math.max(160, Math.min(1120, x + shift));
+                if (Math.abs(dest - x) < 60) continue;
+                float dur = Math.min(4.0f, Math.max(0.7f, Math.abs(dest - x) / speed));
+                if (!all) frameAround(go - 0.1f, x, dest);
+                Film.Key k = a.at(go);
+                k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
+                if (sitAfter != null) { Film.Key sk = a.at(go + dur + 0.05f); sk.body = Pose.SIT; sk.seat = sitAfter.seat; }
+                approaches++;
+                d = Math.max(d, go - t + dur + (sitAfter != null ? 1.0f : 0.3f));
+                continue;
+            }
             if (goTo && target != null && target != a && !all) {
                 float tx = xAt(target, t);
                 // an arm's length apart, as people stand to talk (not shoulder to shoulder)
@@ -3825,17 +3900,20 @@ public final class Director {
                 float dest = x < tx ? tx - gap : tx + gap;
                 if (Math.abs(dest - x) < 30) continue;
                 float dur = Math.min(4.5f, Math.max(0.6f, Math.abs(dest - x) / speed));
-                frameAround(t + 0.05f, x, dest);
-                Film.Key k = a.at(t + 0.15f);
+                frameAround(go - 0.1f, x, dest);
+                Film.Key k = a.at(go);
                 k.x = dest; k.moveDur = dur; k.run = run; k.facing = tx > dest ? 1 : -1;
-                if (blind) { if (!cane) a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
-                watch(a, t + 0.15f, t + 0.45f + dur, false);
+                if (blind) { if (!cane) a.acts.add(new Film.Act(go, go + dur, Film.G_REACH)); feltWay++; }
+                watch(a, go, go + 0.3f + dur, false);
+                if (sitAfter != null) { Film.Key sk = a.at(go + dur + 0.05f); sk.body = Pose.SIT; sk.seat = sitAfter.seat; sk.facing = tx > dest ? 1 : -1; }
                 approaches++;
                 // the whole walk before the story goes on (a listener turned mid-walk would walk backwards)
-                d = Math.max(d, dur + 0.3f);
+                d = Math.max(d, go - t + dur + (sitAfter != null ? 1.0f : 0.15f));
             } else if (leave) {
                 boolean back = speaksLater(a.c);
-                float edge = x < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
+                // v39: a group leaves together, by one side (the side most of them stand nearer)
+                float side = all ? groupSide(who, t) : x;
+                float edge = side < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
                 float start = t + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
                 float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(edge - x) / ((blind ? 120f : run ? 245f : slow ? 150f : 200f) * weightSpeed(a))));
                 // a still frame they walk out of (the camera does not chase them off the stage)
@@ -3849,14 +3927,14 @@ public final class Director {
                     Film.Key gone = a.at(start + dur + 0.05f);
                     gone.visible = false;
                     if (indoors(seg.set)) door(start + dur - 0.3f, edge < 640 ? -0.6f : 0.6f);
-                    watch(a, start, start + dur + 0.6f, true);
+                    if (!all) watch(a, start, start + dur + 0.6f, true);      // v39: a group leaving together watches no one go
                     // once they have gone: a cut to those left behind, still looking after them
                     frameCut(start + dur + 0.1f);
                     d = Math.max(d, start - t + dur + 0.6f);
                     leftFrom.put(a, x);
                     goneAt.put(a, gone.t);
                 } else {
-                    watch(a, start, start + dur + 0.3f, false);
+                    if (!all) watch(a, start, start + dur + 0.3f, false);
                     d = Math.max(d, start - t + dur);
                 }
                 exits++;
@@ -4036,7 +4114,7 @@ public final class Director {
 
     /** v34: a word for everyone in the sentence ("all", "both", "together", "सब", "दोनों") — whole words only ("small" is not "all"). */
     static boolean everyone(String s) {
-        return Txt.has(s, "सब ", "सभी", "दोनों", "तीनों") || Txt.hasWord(s, "all", "both", "everyone", "together");
+        return Txt.has(s, "सब ", "सभी", "दोनों", "तीनों", "चारों", "पाँचों", "पांचों") || Txt.hasWord(s, "all", "both", "everyone", "together");
     }
 
     /** v34: running words ("runs", "rushed", "दौड़", "भाग", "तेज़ी से") — whole English words ("grace" is not "race"). */

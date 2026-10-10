@@ -969,7 +969,10 @@ public final class Renderer {
         p.turbanBand = 0xFFC62828;
         for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; p.turbanOwner = o.c.id; }
         Film.Speak spk = speakingAt(a, t);
-        if (spk != null) {
+        if (spk != null && spk.mount) {
+            p.mountMouth = mouthAt(a, t);             // v34: the rider's animal speaks (its jaw), the rider listens
+            spk = null;
+        } else if (spk != null) {
             p.mouth = mouthAt(a, t);
             p.mouthWide = mouthShapeAt(a, t);
             if (spk.emotion != Pose.NEUTRAL) p.emotion = spk.emotion;
@@ -1163,6 +1166,7 @@ public final class Renderer {
             p.wave = 0; p.swing = false; p.twirl = false; p.headTilt = 0; p.tilt = 0; p.nod = 0;
             if (chosen.emotion != PoseSense.NEUTRAL) { p.emotion = Pose.NEUTRAL; p.tears = false; p.redFace = false; }
             if (chosen.pose != PoseSense.STAND) p.blink = 0;
+            if (Math.abs(chosen.angle) > 170 || chosen.emotion == PoseSense.NO_FACE) { p.mouth = 0; p.blink = 0; p.eyesClosed = false; }   // v34: a back never talks or blinks
             mo.sy = 1 + (float) Math.sin(tp * 2.1f + a.order) * 0.004f; mo.sx = 1;
             float facing = p.facing;
             if (Math.abs(chosen.angle) > 1 && Math.abs(chosen.angle) < 179) p.facing = facing;      // a side or three-quarter picture faces the way of the picture; mirrored when the character faces the other way
@@ -1749,6 +1753,7 @@ public final class Renderer {
         if (p.walkAmt > 0) amp = Math.max(amp, 9);
         st.tail = droop + amp * (float) Math.sin(t * freq + seed);     // + hangs down, - held up
         st.jaw = Math.min(1, p.mouth * 1.3f + (p.emotion == Pose.ANGRY && p.mouth > 0.05f ? 0.25f : 0));
+        st.mountJaw = Math.min(1, p.mountMouth * 1.3f);
         if (p.emotion == Pose.LAUGH) st.jaw = Math.max(st.jaw, 0.35f + 0.2f * (float) Math.sin(t * 9));
         // an ear flick now and then, more when listening
         float flick = (float) Math.sin(t * 0.83f + seed * 3.1f);
@@ -1771,6 +1776,8 @@ public final class Renderer {
      * never lying, sitting or carried.
      */
     private Art.Sprite viewOf(Art.Sprite sp, Film.Actor a, Film.Seg s, Pose p, Film.Key k, boolean speaking, float t) {
+        // v34: turned away or leaving: the back view (the user's back picture, or the one made from the front)
+        if (sp.views != null && k.backTurned && !speaking && k.anchor == Film.A_GROUND && sp.view(2) != null) return sp.view(2);
         if (sp.views == null || speaking || k.body != Pose.STAND || k.anchor != Film.A_GROUND || p.sit > 0) return sp;
         if (p.walkAmt > 0.35f && sp.view(1) != null) return sp.view(1);
         Film.Shot sh = shotAt(t);

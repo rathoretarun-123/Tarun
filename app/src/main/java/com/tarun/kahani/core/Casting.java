@@ -43,7 +43,8 @@ public final class Casting {
                 Want w = want(film, s, sh, a, mid);
                 int best = choose(sp, w);
                 // v33: a beast (fur, four legs, a monster) is never bent through the rig: its front picture is drawn as it is
-                boolean beast = a.c.look != null && (a.c.look.kind == Look.ANIMAL || a.c.look.kind == Look.BIRD || a.c.look.kind == Look.MONSTER || a.c.look.kind == Look.MONKEY);
+                boolean beast = a.c.look != null && (a.c.look.kind == Look.ANIMAL || a.c.look.kind == Look.BIRD || a.c.look.kind == Look.MONSTER || a.c.look.kind == Look.MONKEY
+                        || a.c.look.arms > 2 || a.c.look.mount >= 0);      // v34: a many-armed goddess or a rider is never bent either
                 if (best == MAIN && beast) {
                     for (int i = 0; i < sp.poses.size(); i++) {
                         Art.PoseSprite p = sp.poses.get(i);
@@ -69,6 +70,7 @@ public final class Casting {
         // the angle: the back for the shoulder in the foreground, the side while walking, the three-quarter in a
         // two-shot turned to the other, the front otherwise
         if (sh.ots.length() > 0 && sh.ots.equals(a.c.shown())) { w.angle = Angles.BACK; w.ots = true; }
+        else if (k.backTurned) { w.angle = Angles.BACK; w.ots = true; }          // v34: turned away or leaving: the back picture
         else if (mv != null && k.body == Pose.STAND && k.anchor == Film.A_GROUND) w.angle = Angles.SIDE;
         else if (sh.type == ShotPlanner.TWO_SHOT && k.anchor == Film.A_GROUND) {
             for (Film.Actor o : s.actors) {
@@ -89,6 +91,7 @@ public final class Casting {
             switch (ac.type) {
                 case Film.G_SWORD: case Film.G_BLOCK: w.pose = PoseSense.FIGHT; break;
                 case Film.G_POINT: w.pose = PoseSense.POINT; break;
+                case Film.G_BOW: w.pose = PoseSense.BEND; break;                                   // v34: a bow wants the bending picture
                 case Film.G_WAVE: case Film.G_SALUTE: w.pose = PoseSense.WAVE; break;
                 case Film.G_CLAP: case Film.G_DANCE: case Film.G_JUMP: case Film.G_FLAIL: case Film.G_BOUNCE: w.pose = PoseSense.ARMS_UP; break;
                 default:
@@ -96,8 +99,8 @@ public final class Casting {
         }
         // the feeling: the line being spoken, else the key's emotion
         int emo = k.emotion;
-        for (Film.Speak spk : a.speaks) if (t >= spk.t0 && t < spk.t1) { w.speaking = true; if (spk.emotion != Pose.NEUTRAL) emo = spk.emotion; }
-        if (!w.speaking) for (Film.Speak spk : a.speaks) if (spk.t0 < sh.t + sh.dur && spk.t1 > sh.t) { w.speaking = true; if (spk.emotion != Pose.NEUTRAL) emo = spk.emotion; }
+        for (Film.Speak spk : a.speaks) if (!spk.mount && t >= spk.t0 && t < spk.t1) { w.speaking = true; if (spk.emotion != Pose.NEUTRAL) emo = spk.emotion; }
+        if (!w.speaking) for (Film.Speak spk : a.speaks) if (!spk.mount && spk.t0 < sh.t + sh.dur && spk.t1 > sh.t) { w.speaking = true; if (spk.emotion != Pose.NEUTRAL) emo = spk.emotion; }
         w.emotion = PoseSense.groupOf(emo);
         if (k.eyesShut && w.pose == PoseSense.LIE) w.emotion = PoseSense.ASLEEP;
         return w;
@@ -165,6 +168,7 @@ public final class Casting {
         else s -= 1;
         // feeling
         if (emotion == w.emotion) s += 3;                                                       // the feeling of the moment: the reason to cut to a real picture
+        else if (emotion == PoseSense.NO_FACE) s += sameAngle(w.angle, Angles.BACK) ? 0.7f : -1.5f;   // v34: a faceless picture is for the shots that want a back, never for a face
         else if (emotion == PoseSense.NEUTRAL) s += 0.7f;
         else if (w.emotion == PoseSense.NEUTRAL && emotion == PoseSense.HAPPY) s += 0.4f;
         else if ((emotion == PoseSense.HAPPY && w.emotion == PoseSense.LAUGH) || (emotion == PoseSense.LAUGH && w.emotion == PoseSense.HAPPY)) s += 1.3f;
@@ -189,7 +193,7 @@ public final class Casting {
             if (idx == null) continue;
             Art.Sprite sp = art.sprites.get(a.c.id);
             String what;
-            if (idx == MAIN_STILL) what = "the front picture, drawn as it is (a beast is never bent)";
+            if (idx == MAIN_STILL) what = "the front picture, drawn as it is (a beast, a rider or a many-armed figure is never bent)";
             else if (idx < 0 || sp == null || sp.poses == null || idx >= sp.poses.size()) what = "the front picture (rigged)";
             else {
                 Art.PoseSprite p = sp.poses.get(idx);

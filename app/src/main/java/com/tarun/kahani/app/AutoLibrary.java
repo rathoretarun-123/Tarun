@@ -103,7 +103,7 @@ final class AutoLibrary {
             for (Story.Beat bt : sc.beats) {
                 if (bt.type != Story.Beat.DIRECTION) continue;          // what is done, not what is said
                 for (String o : ShotBook.OBJECTS) {
-                    if (!Txt.has(bt.text, o) || haveShot.contains(sc.number + ":" + o) || !objSeen.add(sc.number + ":" + o)) continue;
+                    if (!Txt.has(bt.text, o) || haveShot.contains(sc.number + ":" + o) || haveShot.contains(":" + o) || !objSeen.add(sc.number + ":" + o)) continue;   // v34: a picture of the thing itself covers every scene
                     t.add(new String[]{"shot:" + sc.number + ":" + o, o + " (scene " + sc.number + ")", "close-up insert shot of the " + o + ": " + Bible.oneLine(bt.text)});
                 }
             }

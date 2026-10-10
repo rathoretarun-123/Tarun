@@ -144,12 +144,16 @@ final class SheetSaver {
                 }
             } else break;
         }
-        // the main picture: the largest front; the best of each other angle its view
-        int main = -1; long mainArea = -1;
+        // the main picture: v34 the best of the sheet's figures (a front, else a three-quarter, with a face, standing,
+        // calm, sure, large); the best of each other angle its view
+        int main = -1;
+        long maxArea = 1;
+        for (com.tarun.kahani.core.Angles.Piece pc : parts) maxArea = Math.max(maxArea, (long) pc.w * pc.h);
+        float mainS = -1e9f;
         for (int i = 0; i < parts.size(); i++) {
             long area = (long) parts.get(i).w * parts.get(i).h;
-            boolean front = Math.abs(angles[i]) < 1;
-            if (main < 0 || (front && !(Math.abs(angles[main]) < 1)) || (front == (Math.abs(angles[main]) < 1) && area > mainArea)) { main = i; mainArea = area; }
+            float sc = thing ? area : mainScore(cuts[i], tags[i], angles[i], area, maxArea, hRatios[i]);
+            if (sc > mainS) { mainS = sc; main = i; }
         }
         int[] bestOf = new int[4];
         java.util.Arrays.fill(bestOf, -1);
@@ -210,8 +214,53 @@ final class SheetSaver {
         }
     }
 
+    /**
+     * v34: how good a picture is as a character's main picture (the one on the card, the one that speaks): a front
+     * first, then a three-quarter, never a back; a face found; standing; a calm or happy face; a sure reading in good
+     * light; large; as tall as the standing figures.
+     */
+    static float mainScore(com.tarun.kahani.core.Cutout.Result r, com.tarun.kahani.core.PoseSense.Tag t, float angle, long area, long maxArea, float hRatio) {
+        float a = Math.abs(angle), s = 0;
+        s += a < 1 ? 4 : Math.abs(a - Math.abs(com.tarun.kahani.core.Angles.THREE_QUARTER)) < 1 ? 2 : Math.abs(a - com.tarun.kahani.core.Angles.BACK) < 1 ? -6 : 0;
+        if (r != null && r.faceFound) s += 2;
+        if (t != null) {
+            s += t.pose == com.tarun.kahani.core.PoseSense.STAND ? 2 : t.pose == com.tarun.kahani.core.PoseSense.WALK ? 0.5f : t.pose == com.tarun.kahani.core.PoseSense.LIE ? -2 : 0;
+            s += t.emotion == com.tarun.kahani.core.PoseSense.NEUTRAL ? 1.5f : t.emotion == com.tarun.kahani.core.PoseSense.HAPPY ? 1.2f : t.emotion == com.tarun.kahani.core.PoseSense.NO_FACE ? -2 : 0;
+            s += 1.5f * t.conf;
+            if (t.light <= com.tarun.kahani.core.Cutout.NORMAL) s += 0.5f;
+        }
+        s += 2f * area / Math.max(1f, maxArea);
+        if (hRatio > 0) s += 1 - Math.min(1, Math.abs(1 - hRatio));
+        return s;
+    }
+
     /** The target string of the split-and-save for a character key, a scene number or a thing. */
     static String target(String kind, String key, String shown) { return "angles:" + kind + ":" + key + ":" + shown; }
+
+    /** v34: the key the story's manifest already uses for this character (its char, view or pose lines), else the key given. */
+    static String charKey(Project project, Story st, Story.CharacterDef c, String given) {
+        for (String l : project.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 3 && (f[0].equals("char") || f[0].equals("view") || f[0].equals("pose")) && ScriptParser.resolve(st, f[1]) == c) return f[1];
+        }
+        return given;
+    }
+
+    /**
+     * v34: the insert line of a thing (shot||key|file|object), replacing the earlier one of the same thing — the
+     * manifest's own replace works by the scene field, which a thing's line leaves empty.
+     */
+    static void setObjectLine(Project project, String key, String line) {
+        StringBuilder sb = new StringBuilder();
+        for (String l : project.read("cast.txt").split("\n")) {
+            if (l.trim().length() == 0) continue;
+            String[] f = l.split("\\|");
+            boolean same = f.length >= 5 && f[0].equals("shot") && f[1].trim().length() == 0 && f[2].trim().equals(key) && f[4].trim().equals("object");
+            if (!same) sb.append(l).append('\n');
+        }
+        if (line != null) sb.append(line).append('\n');
+        project.write("cast.txt", sb.toString());
+    }
 
     /**
      * Reads, splits and saves the pictures for the target ("angles:char:key:shown", "angles:scene:n:name",
@@ -219,9 +268,14 @@ final class SheetSaver {
      */
     static Object save(Project project, Library library, Story st, String tgt, List<byte[]> datas, List<String> newPosesIn) throws Exception {
         final String[] p = tgt.split(":", 4);
-        final String kind = p.length > 1 ? p[1] : "char", key = p.length > 2 ? p[2] : "", shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
+        final String kind = p.length > 1 ? p[1] : "char";
+        final String keyGiven = p.length > 2 ? p[2] : "";
+        Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, keyGiven) : null;
+        // v34: one key per character, whichever name the button used (the Studio's cast key, the popup's display name,
+        // an alias): the key of the character's existing line, so its front, views, poses and settings never split in two
+        final String key = c != null ? charKey(project, st, c, keyGiven) : keyGiven;
+        final String shown = p.length > 3 && p[3].length() > 0 ? p[3] : key;
         final List<String> newPoses = newPosesIn != null ? newPosesIn : new ArrayList<String>();
-        Story.CharacterDef c = kind.equals("char") ? ScriptParser.resolve(st, key) : null;
         boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER || c.look.kind == Look.MONKEY);   // v32/v33: fur reads like a beast
         // 1. every picture; a sheet of several figures split into them
         List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
@@ -295,6 +349,12 @@ final class SheetSaver {
                 boolean cut = (Boolean) pics.get(i)[3];
                 try {
                     tags[i] = com.tarun.kahani.core.PoseSense.tag(r, cut ? standH : 0, beast);
+                    if (c != null && c.look != null) {
+                        // v34: a many-armed character's own arms are not a wave or a cheer; a rider's low, wide figure sits
+                        int ps = tags[i].pose;
+                        if (c.look.arms > 2 && (ps == com.tarun.kahani.core.PoseSense.ARMS_UP || ps == com.tarun.kahani.core.PoseSense.WAVE || ps == com.tarun.kahani.core.PoseSense.POINT || ps == com.tarun.kahani.core.PoseSense.FIGHT)) tags[i].pose = com.tarun.kahani.core.PoseSense.STAND;
+                        if (c.look.mount >= 0 && (ps == com.tarun.kahani.core.PoseSense.LIE || ps == com.tarun.kahani.core.PoseSense.CROUCH)) tags[i].pose = com.tarun.kahani.core.PoseSense.SIT;
+                    }
                     guessed[i] = tags[i].angle;
                     hRatios[i] = cut && standH > 0 ? Math.max(0.2f, Math.min(1.5f, r.h / (float) standH)) : 1f;
                 } catch (Throwable e) { tags[i] = null; }
@@ -305,10 +365,25 @@ final class SheetSaver {
             float[] angles = new float[pics.size()];
             java.util.Arrays.fill(angles, Float.NaN);
             float[] slotAngles = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
+            // v34: the main picture is the best of all the pictures given (up to 100): a front (else a three-quarter)
+            // with a face, standing, calm, sure, well lit and large — so the card's picture is always one of the new ones
+            long maxArea = 1;
+            for (Object[] o : pics) maxArea = Math.max(maxArea, (long) (Integer) o[1] * (Integer) o[2]);
+            int mainI = -1; float mainS = -1e9f;
+            for (int pass = 0; pass < 2 && mainI < 0; pass++) {
+                for (int i = 0; i < pics.size(); i++) {
+                    float want = pass == 0 ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.THREE_QUARTER;
+                    if (Math.abs(Math.abs(guessed[i]) - Math.abs(want)) > 1) continue;
+                    float sc = mainScore(cuts[i], tags[i], guessed[i], (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2], maxArea, hRatios[i]);
+                    if (sc > mainS) { mainS = sc; mainI = i; }
+                }
+            }
+            if (mainI >= 0) angles[mainI] = com.tarun.kahani.core.Angles.FRONT;
             for (float sa : slotAngles) {
+                if (sa == com.tarun.kahani.core.Angles.FRONT) continue;
                 int best = -1; long bestArea = -1;
                 for (int i = 0; i < pics.size(); i++) {
-                    if (guessed[i] != sa) continue;
+                    if (i == mainI || guessed[i] != sa) continue;
                     long area = (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2];
                     if (area > bestArea) { bestArea = area; best = i; }
                 }
@@ -327,6 +402,11 @@ final class SheetSaver {
                         prev.setMeta("ofName", shown);
                     }
                 } catch (Exception ignored) { /* the old front is still in the story's own folder */ }
+                // every line of this character goes (under any key): the new front is the one the Studio shows and the film uses
+                for (String l : project.read("cast.txt").split("\n")) {
+                    String[] f = l.split("\\|");
+                    if (f.length >= 3 && f[0].equals("char") && ScriptParser.resolve(st, f[1]) == c) project.setManifest("char", f[1], null);
+                }
                 project.setManifest("char", key, null);
                 have = null;
             }
@@ -393,6 +473,8 @@ final class SheetSaver {
                             made.setMeta("posetag", pl.substring(pl.indexOf('|', pl.indexOf('|', pl.indexOf('|') + 1) + 1) + 1));
                             made.setMeta("pose", com.tarun.kahani.core.PoseSense.poseName(tags[i].pose));
                             made.setMeta("emotion", com.tarun.kahani.core.PoseSense.emotionName(tags[i].emotion));
+                            made.setMeta("conf", String.format(java.util.Locale.US, "%.2f", tags[i].conf));           // v34: the guide's record
+                            made.setMeta("light", com.tarun.kahani.core.Cutout.lightName(tags[i].light));
                         }
                     } catch (Exception ignored) { /* the picture stays a view / library picture */ }
                 }
@@ -444,7 +526,7 @@ final class SheetSaver {
                 byte[] b = Studio3DArt.encode((int[]) o[0], (Integer) o[1], (Integer) o[2], cut);
                 if (!haveObj) {
                     String f = project.savePicture(b, "obj");
-                    project.setManifest("shot", ":" + key, "shot||" + key + "|" + f + "|object");
+                    setObjectLine(project, key, "shot||" + key + "|" + f + "|object");      // v34: replaces the earlier insert of this thing
                     haveObj = true;
                     done.append("the insert picture; ");
                 } else done.append("angle ").append(i + 1).append(" (library); ");

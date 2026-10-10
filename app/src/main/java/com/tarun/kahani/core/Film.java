@@ -116,6 +116,8 @@ public final class Film {
         public int anchor = A_GROUND;
         public Actor anchorActor;
         public boolean visible = true, run, disguised, noHeadwear, wearsTurban, redFace, tears, netted, sweat, eyesShut;
+        /** v34: the back is to the camera (turns away, walks away, leaves): the back picture is drawn. */
+        public boolean backTurned;
         public int holdR = Pose.I_NONE, holdL = Pose.I_NONE;
         public int seat = -1;       // when sitting: SEAT_* (-1 = none drawn)
         public Key copy() {
@@ -123,7 +125,7 @@ public final class Film {
             k.t = t; k.moveDur = 0; k.x = x; k.depth = depth; k.body = body; k.facing = facing; k.emotion = emotion; k.anchor = anchor;
             k.anchorActor = anchorActor; k.visible = visible; k.run = false; k.disguised = disguised; k.noHeadwear = noHeadwear;
             k.wearsTurban = wearsTurban; k.redFace = redFace; k.tears = tears; k.netted = netted; k.sweat = sweat; k.eyesShut = eyesShut;
-            k.holdR = holdR; k.holdL = holdL; k.seat = seat;
+            k.holdR = holdR; k.holdL = holdL; k.seat = seat; k.backTurned = backTurned;
             return k;
         }
     }
@@ -155,6 +157,8 @@ public final class Film {
         public float t0, t1;
         public int line;
         public int emotion;
+        /** v34: spoken by the animal the actor rides (Durga's lion): the animal's jaw moves, not the rider's lips. */
+        public boolean mount;
     }
 
     public static final class Actor {

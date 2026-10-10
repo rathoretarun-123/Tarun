@@ -18,6 +18,14 @@ public final class Rig {
     public float armEnd;          // where the hands end (fraction of the picture height)
     public float armInner;        // distance from the middle where the arms start (fraction of shoulderHalf)
     public final boolean[] armUp = new boolean[2];   // an arm raised beside the face (e.g. a hand on the moustache)
+    /** v34: the arms never swing — a many-armed character (Durga) keeps her fan of arms as drawn. */
+    public boolean armsFixed;
+    /**
+     * v34: the jaw of the animal a rider sits on, found in the rider's picture (fractions of the picture): the hinge
+     * (mjX, mjY), the snout's tip mjTipX, the side the head points to (-1 left, +1 right) and the head's height mjH.
+     */
+    public boolean mountJaw;
+    public float mjX, mjY, mjTipX, mjSide = 1, mjH = 0.15f;
     public float headHalf = 0.12f;                   // half the face width (fraction of the picture width)
     public float eyeV;
     // face landmarks
@@ -64,6 +72,8 @@ public final class Rig {
         public float time;
         // animals: tail swing (degrees), jaw open 0..1, ear twitch -1..1, ears folded back 0..1, walking
         public float tail, jaw, ear, earBack, walkPhase, walkAmt;
+        /** v34: the rider's animal's jaw (0..1). */
+        public float mountJaw;
         // lips (people): how wide (ee, s) or round (oo, o) the mouth is while it opens with the voice (jaw)
         public float lipWide, lipRound;
         /** Follow-through: how far the head (degrees) and the body's lean have just turned (hair and cloth lag). */
@@ -71,7 +81,7 @@ public final class Rig {
         public void reset() {
             follow = followLean = 0;
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
-            tail = jaw = ear = earBack = walkPhase = walkAmt = 0;
+            tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
             lipWide = lipRound = 0;
             legScale = 1; sit = 0; twirl = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
@@ -218,6 +228,20 @@ public final class Rig {
         }
         if (DEBUG) System.out.println("armRows " + armRows[0] + "/" + armRows[1] + " of " + rowsN);
         for (int side = 0; side < 2; side++) g.armUp[side] = rowsN > 4 && armRows[side] > rowsN * 0.3f;
+        // v34: a many-headed character (Ravana): the heads beside the face are heads, not raised arms, and the whole
+        // row is the head (it nods and turns together; only the central face speaks)
+        if (r.heads > 1 || (look != null && look.heads > 1)) {
+            g.armUp[0] = g.armUp[1] = false;
+            int er = Math.max(topRow, Math.min(botRow, eyeRow));
+            if (left[er] >= 0 && right[er] > left[er]) g.headHalf = Math.max(g.headHalf, (right[er] - left[er]) / 2f / w);
+        }
+        // v34: many arms (Durga) stay as drawn — no swing, nothing beside the face is "a raised hand"; a rider's
+        // legs are the animal's: they never walk (the whole picture glides), and the arms keep still too
+        if (look != null && (look.arms > 2 || look.mount >= 0)) {
+            g.armsFixed = true;
+            g.armUp[0] = g.armUp[1] = false;
+            if (look.mount >= 0) { g.legs = false; findMountJaw(g, r, left, right, topRow, botRow); }
+        }
         g.gapX = g.legs ? gapSum / two / w : g.cx;
         g.legHalf = g.legs ? halfSum / two / w : 0.1f;
         g.hairW = new float[(BW + 1) * (BH + 1)];
@@ -433,7 +457,8 @@ public final class Rig {
         f.lCos = (float) Math.cos(lr); f.lSin = (float) Math.sin(lr);
         for (int side = 0; side < 2; side++) {
             float ang = side == 0 ? s.armL : -s.armR;
-            if (armUp[side]) {
+            if (armsFixed) ang = 0;
+            else if (armUp[side]) {
                 // a hand held at the face does not swing out; it fidgets (twirls the moustache), more when acting
                 float fid = (float) (Math.sin(s.time * 2.2 + side) * 2.5 + (s.twirl ? Math.sin(s.time * 7) * 5 : 0));
                 ang = (side == 0 ? 1 : -1) * fid;
@@ -482,6 +507,18 @@ public final class Rig {
     /** Where one point of the picture (local coordinates) goes in this frame. */
     private void move(Frame f, State s, float x, float y, float[] o) {
         if (animal) { moveAnimal(f, s, x, y, o); return; }
+        if (mountJaw && s.mountJaw > 0.02f) {
+            // v34: the rider's animal speaks — the lower front of its snout drops open about a hinge behind the mouth
+            float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+            float zone = smooth(mjY - mjH * 0.04f, mjY + mjH * 0.08f, v) * (1 - smooth(mjY + mjH * 0.45f, mjY + mjH * 0.7f, v))
+                    * (mjSide < 0 ? smooth(mjX + 0.02f, mjX - 0.03f, u) : smooth(mjX - 0.02f, mjX + 0.03f, u));
+            if (zone > 0) {
+                float hx = f.L0 + mjX * f.W0, hy = f.T0 + mjY * f.H0;
+                double a = Math.toRadians(mjSide * 16 * s.mountJaw * zone);
+                float c = (float) Math.cos(a), sn = (float) Math.sin(a), dx = x - hx, dy = y - hy;
+                x = hx + c * dx - sn * dy; y = hy + sn * dx + c * dy;
+            }
+        }
         moveBody(f, s, x, y, o);
         float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
         float hair = 0;
@@ -717,6 +754,38 @@ public final class Rig {
                 f.face[k++] = f.o[1];
             }
         }
+    }
+
+    /**
+     * v34: the animal under a rider (Durga's lion), found in the rider's picture: below the rider's hips the animal
+     * reaches further out on the side its head is; the snout's tip is the farthest point on that side, the head the
+     * rows that reach near it, the jaw's hinge a little behind the tip, a little below the head's middle.
+     */
+    static void findMountJaw(Rig g, Cutout.Result r, int[] left, int[] right, int topRow, int botRow) {
+        int w = r.w, h = r.h;
+        int y0 = Math.max(topRow, (int) (h * 0.42f)), y1 = Math.min(botRow, (int) (h * 0.9f));
+        if (y1 - y0 < 8) return;
+        float cx = g.cx * w;
+        int bestL = w, bestR = -1, rowL = -1, rowR = -1;
+        for (int y = y0; y <= y1; y++) {
+            if (left[y] < 0) continue;
+            if (left[y] < bestL) { bestL = left[y]; rowL = y; }
+            if (right[y] > bestR) { bestR = right[y]; rowR = y; }
+        }
+        if (rowL < 0 || rowR < 0) return;
+        int side = (cx - bestL) > (bestR - cx) ? -1 : 1;
+        int tip = side < 0 ? bestL : bestR, tipRow = side < 0 ? rowL : rowR;
+        // the head: the rows near the tip that reach within a sixth of the picture's width of it
+        int top = tipRow, bot = tipRow;
+        for (int y = tipRow; y >= y0; y--) { int e = side < 0 ? left[y] : right[y]; if (e < 0 || Math.abs(e - tip) > w / 6) break; top = y; }
+        for (int y = tipRow; y <= y1; y++) { int e = side < 0 ? left[y] : right[y]; if (e < 0 || Math.abs(e - tip) > w / 6) break; bot = y; }
+        float headH = Math.max(0.05f, (bot - top) / (float) h);
+        g.mountJaw = true;
+        g.mjSide = side;
+        g.mjTipX = tip / (float) w;
+        g.mjH = headH;
+        g.mjY = (top + (bot - top) * 0.6f) / (float) h;
+        g.mjX = g.mjTipX - side * Math.min(0.12f, headH * 0.8f * h / w);
     }
 
     /** How far the lower lip comes down when the mouth is fully open (pixels, from the mouth's half width). */

@@ -529,14 +529,15 @@ public final class Angles {
     /** How dark the two eye spots are against the face's skin (1 = as bright as skin, 0 = black): real eyes are dark. */
     public static float eyeDarkness(Cutout.Result r) {
         if (r.px == null || r.w <= 0) return 1;
-        float skinL = lum(r.skin);
+        int[] px = r.read();                                   // v34: a dark figure is read from its brightened copy
+        float skinL = lum(skinRead(r));
         float sum = 0; int n = 0;
         float rad = Math.max(1.5f, r.eyeR * r.w * 0.55f);
         float[][] eyes = {{r.eyeLX * r.w, r.eyeY * r.h}, {r.eyeRX * r.w, r.eyeY * r.h}};
         for (float[] e : eyes) {
             for (int y = Math.round(e[1] - rad); y <= e[1] + rad; y++) for (int x = Math.round(e[0] - rad); x <= e[0] + rad; x++) {
                 if (x < 0 || y < 0 || x >= r.w || y >= r.h) continue;
-                int c = r.px[y * r.w + x];
+                int c = px[y * r.w + x];
                 if ((c >>> 24) < 100) continue;
                 sum += lum(c); n++;
             }
@@ -545,6 +546,21 @@ public final class Angles {
     }
 
     static float lum(int c) { return 0.299f * ((c >> 16) & 255) + 0.587f * ((c >> 8) & 255) + 0.114f * (c & 255); }
+
+    /** v34: the skin colour as the reading copy shows it (the cheeks of the read pixels), else the cut-out's own. */
+    static int skinRead(Cutout.Result r) {
+        if (r.pxRead == null) return r.skin;
+        float inter = Math.max(0.02f, r.eyeRX - r.eyeLX);
+        int x0 = Math.max(0, Math.round((r.eyeLX - inter * 0.3f) * r.w)), x1 = Math.min(r.w, Math.round((r.eyeRX + inter * 0.3f) * r.w));
+        int y0 = Math.max(0, Math.round((r.eyeY + inter * 0.2f) * r.h)), y1 = Math.min(r.h, Math.round((r.mouthY - inter * 0.05f) * r.h));
+        long sr = 0, sg = 0, sb = 0; int n = 0;
+        for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
+            int c = r.pxRead[y * r.w + x];
+            if ((c >>> 24) < 100 || !Cutout.isSkin(c)) continue;
+            sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+        }
+        return n < 4 ? 0xFFD9A074 : 0xFF000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8) | (int) (sb / n);
+    }
 
     /** The measures the guess is made from, for checking. */
     public static String debug(Cutout.Result r) {
@@ -560,8 +576,9 @@ public final class Angles {
         int x0 = Math.max(0, Math.round(fx0 * r.w)), x1 = Math.min(r.w, Math.round(fx1 * r.w));
         int y0 = Math.max(0, Math.round(fy0 * r.h)), y1 = Math.min(r.h, Math.round(fy1 * r.h));
         int n = 0, skin = 0;
+        int[] px = r.read();                                   // v34: a dark figure is read from its brightened copy
         for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
-            int c = r.px[y * r.w + x];
+            int c = px[y * r.w + x];
             if ((c >>> 24) < 100) continue;
             n++;
             if (Cutout.isSkin(c)) skin++;

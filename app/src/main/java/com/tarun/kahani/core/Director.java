@@ -339,7 +339,7 @@ public final class Director {
                 Film.Cam c = sg.cams.get(i);
                 float next = i + 1 < sg.cams.size() ? sg.cams.get(i + 1).t : sg.t1;
                 if (next - c.t <= max) continue;
-                int n = (int) Math.ceil((next - c.t) / TechnicalDirector.SHOT_SECONDS);
+                int n = (int) Math.ceil((next - c.t) / max);      // v34: every piece under the cut (2.2 s), not under the 3-s nominal shot
                 float step = (next - c.t) / n;
                 for (int k = 1; k < n; k++) {
                     boolean tight = k % 2 == 1;
@@ -855,6 +855,17 @@ public final class Director {
             }
         }
 
+        // v34: an animal ridden by a character of this part (Durga's lion) is part of the rider's picture: it is not
+        // staged on its own (its lines move its jaw in the rider's picture); a rider is staged whenever the animal is
+        for (int i = 0; i < order.size(); i++) {
+            Story.CharacterDef c = order.get(i);
+            if (c.rider == null) continue;
+            if (!order.contains(c.rider)) order.set(i, c.rider);
+            else { order.remove(i); i--; }
+        }
+        java.util.LinkedHashSet<Story.CharacterDef> once = new java.util.LinkedHashSet<Story.CharacterDef>(order);
+        order.clear(); order.addAll(once);
+
         // ---------- layout: heroes from the left, villains on the right
         List<Story.CharacterDef> heroes = new ArrayList<Story.CharacterDef>(), villains = new ArrayList<Story.CharacterDef>();
         for (Story.CharacterDef c : order) (c.look.hero ? heroes : villains).add(c);
@@ -1115,6 +1126,9 @@ public final class Director {
     private float dialogue(int si, int bi, Story.Beat b, float tc) {
         Film.Line line = film.lines.get(beatLine[si][bi]);
         Film.Actor sp = actor(b.speaker);
+        // v34: the animal a rider sits on speaks from the rider's picture (its jaw, not her lips)
+        boolean mountLine = false;
+        if (sp == null && b.speaker != null && b.speaker.rider != null) { sp = actor(b.speaker.rider); mountLine = sp != null; }
         if (sp == null) {
             // should not happen (speakers are always staged) — keep audio anyway
             line.start = tc;
@@ -1125,7 +1139,8 @@ public final class Director {
         sceneryFrom(b.text, tc);
         String cue = newCues(b.cue, b.text + " " + b.manner);
         if (cue.length() > 0) natureFrom(cue, tc, sp);
-        // speaker must be visible
+        // speaker must be visible (and facing us again to speak: a turned back turns round)
+        if (!mountLine && sp.stateAt(tc).backTurned) { Film.Key kb = sp.at(tc); kb.backTurned = false; }
         Film.Key cur = sp.stateAt(tc);
         if (!cur.visible) { Film.Key k = sp.at(tc); k.visible = true; }
         if (cur.anchor == Film.A_HIDDEN) { Film.Key k = sp.at(tc); k.anchor = Film.A_GROUND; }
@@ -1157,14 +1172,16 @@ public final class Director {
             if (to.stateAt(start).anchor == Film.A_GROUND && to.stateAt(start).body != Pose.LIE) kt.facing = sx >= tx ? 1 : -1;
         }
         Film.Speak s = new Film.Speak();
-        s.t0 = start; s.t1 = end; s.line = line.index; s.emotion = line.emotion;
+        s.t0 = start; s.t1 = end; s.line = line.index; s.emotion = line.emotion; s.mount = mountLine;
         sp.speaks.add(s);
-        sp.acts.add(new Film.Act(start, end, Film.G_TALK));
-        // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
-        mannerActions(sp, to, b.manner, start, end, line.emotion);
+        if (!mountLine) {
+            sp.acts.add(new Film.Act(start, end, Film.G_TALK));
+            // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
+            mannerActions(sp, to, b.manner, start, end, line.emotion);
+        }
         cuesFrom(b.manner, start, sp, to, null);
-        headwearFromWords(sp, to, b.text, start);
-        if (line.emotion == Pose.SAD) { Film.Key k = sp.at(start); k.tears = true; }
+        if (!mountLine) headwearFromWords(sp, to, b.text, start);
+        if (line.emotion == Pose.SAD && !mountLine) { Film.Key k = sp.at(start); k.tears = true; }
         if (line.emotion == Pose.LAUGH && sp.look.hero && Txt.has(b.text, "हा हा", "हँस")) {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
         }
@@ -1175,6 +1192,19 @@ public final class Director {
             int words = line.text.trim().split("\\s+").length;
             if (words > 6 && plan.size < ShotPlanner.CU) { plan.size = ShotPlanner.CU; plan.type = ShotPlanner.SINGLE; plan.hold = false; }
             else if (plan.size < ShotPlanner.MCU && !(plan.type == ShotPlanner.TWO_SHOT && words <= 6)) plan.size = ShotPlanner.MCU;
+        }
+        if (mountLine) {
+            // the animal speaks: the whole picture (the rider and the animal's head) in a medium-wide frame, never
+            // the rider's face alone
+            ShotPlanner.Plan mp = new ShotPlanner.Plan();
+            if (plan != null) { mp.intensity = plan.intensity; mp.stage = plan.stage; mp.light = plan.light; mp.height = plan.height; }
+            mp.size = ShotPlanner.MWIDE; mp.type = ShotPlanner.SINGLE; mp.move = ShotPlanner.STATIC;
+            standStillToSpeak(sp, start, end);
+            camDialogue(sp, null, start, line.emotion, mp, line);
+            lastSpeaker = sp;
+            lastSubject = b.speaker;
+            dlgCount++;
+            return end + 0.35f;
         }
         if (opt.technical) { standStillToSpeak(sp, start, end); lipSyncShots(sp, to, start, end, line, plan); }
         else camDialogue(sp, to, start, line.emotion, plan, line);
@@ -3037,6 +3067,11 @@ public final class Director {
     static final String[] SIT_DOWN = {"बैठ गया", "बैठ गई", "बैठ गए", "बैठ गयी", "बैठ जाता", "बैठ जाती", "बैठ जाते", "बैठते हैं", "बैठा है", "बैठी है",
             "बैठे हैं", "बैठा हुआ", "बैठी हुई", "बैठे हुए", "पर बैठा", "पर बैठी", "पर बैठे", "बैठकर", "बैठ कर", "sat down", "sits down", "sat on", "sits on",
             "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi"};
+    /** v34: words for turning the back to the camera (turning away, walking away, leaving). */
+    static final String[] TURN_AWAY = {"पीठ फेर", "मुँह फेर", "मुंह फेर", "पीठ करके", "पीठ कर के", "पलटकर चल", "मुड़कर चल", "चला जाता", "चली जाती", "चले जाते",
+            "चला गया", "चली गई", "चले गए", "दूर चला", "दूर चली", "turns away", "turned away", "turns his back", "turns her back", "turns their back",
+            "walks away", "walked away", "leaves", "goes away", "back to the camera", "back to us"};
+
     static final String[] STAND_UP = {"उठ खड़", "उठकर खड़", "खड़ा हो गया", "खड़ी हो गई", "खड़े हो गए", "खड़ी हो गयी", "उठ गया", "उठ गई", "उठ गए",
             "stood up", "stands up", "got up", "gets up", "rose to", "uth khada"};
     static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "सो गया", "सो गई", "सो गए", "lay down", "lies down", "fell asleep"};
@@ -3056,6 +3091,16 @@ public final class Director {
         List<Film.Actor> who = group != null && group.size() > 1 && Txt.has(s, "सब", "सभी", "दोनों", "तीनों", "all", "both", "everyone") ? group : null;
         if (who == null) { who = new ArrayList<Film.Actor>(); who.add(subj); }
         boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
+        if (Txt.has(s, TURN_AWAY)) {
+            // v34: the back is to the camera for a while (or until the character has gone): the back picture is used
+            boolean leaves = Txt.has(s, "चला जा", "चली जा", "चले जा", "चला गया", "चली गई", "चले गए", "walks away", "leaves", "goes away", "walked away");
+            for (Film.Actor a : who) {
+                Film.Key k = a.at(t + 0.1f);
+                k.backTurned = true;
+                if (!leaves) { Film.Key k2 = a.at(t + 2.4f); k2.backTurned = false; }
+            }
+            d = Math.max(d, 0.8f);
+        }
         if (Txt.has(s, STAND_UP)) {
             for (Film.Actor a : who) { Film.Key k = a.at(t + 0.1f); if (k.body == Pose.SIT || k.body == Pose.KNEEL || k.body == Pose.LIE) { k.body = Pose.STAND; } }
             d = Math.max(d, 1.0f);

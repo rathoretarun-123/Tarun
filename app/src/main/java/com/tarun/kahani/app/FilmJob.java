@@ -165,6 +165,19 @@ public final class FilmJob implements Runnable {
         return p.read("script.txt");
     }
 
+    /** v34: the story as the Studio and the director read it — the script, with the user's own decisions on it applied. */
+    static Story storyOf(Project p) { return overrides(p, ScriptParser.parse(scriptOf(p))); }
+
+    /**
+     * v34: the user's decisions kept in the story's settings: a character whose name reads like a voice (a radio, a
+     * phone, an announcer) is pictured after all when the user chose "Picture it anyway" (pictured.<name> = 1).
+     */
+    static Story overrides(Project p, Story st) {
+        if (p == null || st == null) return st;
+        for (Story.CharacterDef c : st.characters) if (c.voiceOnly && "1".equals(p.setting("pictured." + c.displayName, ""))) c.voiceOnly = false;
+        return st;
+    }
+
     public void run() {
         Voices voices = null;
         // every job has its own working folder; old leftovers (e.g. after the app was killed) are removed
@@ -180,7 +193,7 @@ public final class FilmJob implements Runnable {
             step("Reading the story…", 0.01f);
             String script = scriptOf(project);
             if (script.trim().length() < 10) throw new IllegalStateException("The story is empty. Write or paste a story first.");
-            Story story = ScriptParser.parse(script);
+            Story story = overrides(project, ScriptParser.parse(script));
             if (story.dialogueCount() == 0 && story.scenes.size() <= 1)
                 throw new IllegalStateException("No dialogue found in the story. Write lines like  Name: \"dialogue\"  — or tap \"Read with AI\".");
             Edits ed = Edits.fromJson(project.read("edits.json"));
@@ -575,6 +588,8 @@ public final class FilmJob implements Runnable {
     public volatile boolean qcWaiting;
     /** v33: true when this run only applies an instruction to the last film (story and pictures unchanged). */
     public boolean remake;
+    /** v34: the still-picture checklist of each picture the AI service made for this film. */
+    final java.util.List<String> stillQaNotes = new java.util.ArrayList<String>();
     /** The job waits for the user's decision on the pictures the studio made in 3D (proposals in the manifest). */
     public volatile boolean proposalsWaiting;
     public void proposalsDone() { proposalsWaiting = false; }
@@ -722,6 +737,11 @@ public final class FilmJob implements Runnable {
             });
             film.shotList += "\n" + r.text();
             film.shotList += "\n" + com.tarun.kahani.core.DirectorTraining.scoreCard(film, art, null, r);     // v30: the training guide's score with what the QC saw
+            if (!stillQaNotes.isEmpty()) {
+                StringBuilder sq = new StringBuilder("\nSTILL-PICTURE CHECKLIST (the pictures made by the AI service this time):\n");
+                for (String q : stillQaNotes) sq.append("  • ").append(q).append('\n');
+                film.shotList += sq.toString();
+            }
             qcBoiling = r.boilingLeft; qcShaking = r.shakingLeft; qcFloating = r.floating;
             // the handbook's approval gates and scores (ch. 13) and the delivery checklist (ch. 16), from what was checked
             if (film.stats != null) {
@@ -1061,6 +1081,15 @@ public final class FilmJob implements Runnable {
                 else {
                     byte[] img = makePictureNative(cloud, com.tarun.kahani.core.TechnicalDirector.clean(t[2]), Integer.parseInt(t[3]), Integer.parseInt(t[4]), seed + i);
                     file = project.savePicture(img, "ai_" + t[0]);
+                    try {
+                        // v34: the still-picture manual's checklist on what the service made (its hands are looked at by the user)
+                        int[] d = project.loader().decode(file, 1024);
+                        if (d != null) {
+                            int[] qpx = new int[d[0] * d[1]];
+                            System.arraycopy(d, 2, qpx, 0, qpx.length);
+                            stillQaNotes.add(t[5] + ": " + com.tarun.kahani.core.StillQa.check(qpx, d[0], d[1], null, null, !t[0].equals("char"), com.tarun.kahani.core.StillQa.HANDS_LOOK).summary());
+                        }
+                    } catch (Throwable ignored) { /* the picture is used either way */ }
                     try { lib.addBytes(Library.PIC, t[0].equals("char") ? "person" : t[0].equals("scene") ? "place" : t[0], t[5],
                             t[6].length() > 200 ? t[6].substring(0, 200) : t[6], img, ".jpg", "AI (studio)"); } catch (Exception ignored) {}
                     if (t[0].equals("scene")) placeFile.put(t[5], file);

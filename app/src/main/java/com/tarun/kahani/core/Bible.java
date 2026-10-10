@@ -69,25 +69,28 @@ public final class Bible {
     }
 
     public static String characterPrompt(Story.CharacterDef c) {
+        // v34: the still-picture manual's six blocks (subject, action / emotion, locked style, lighting, quality,
+        // camera) and its negative list, around the studio's own subject and pose rules
         StringBuilder b = new StringBuilder();
-        b.append("Create ONE character for a premium 3D animated Indian film for children (6-15 years), in the style of a modern 3D animation studio feature (soft global illumination, subsurface skin, detailed fabric). ");
+        b.append("Create ONE character for a premium 3D animated Indian film for children (6-15 years). ");
         b.append("Name: ").append(c.displayName);
         if (c.age > 0) b.append(", age ").append(c.age);
         if (c.look != null) b.append(", ").append(kindWord(c.look, false));
+        if (c.look != null && c.look.heads > 1) b.append(" with ").append(c.look.heads).append(" heads side by side on one body (the central head is the main face)");
+        if (c.look != null && c.look.arms > 2) b.append(" with ").append(c.look.arms).append(" arms (the front pair holds things, the other pairs fan out behind)");
+        if (c.look != null && c.look.mount >= 0) b.append(", seated on a ").append(Look.speciesWord(c.look.mount, false)).append(" (the animal is part of the picture, under the character)");
         b.append(". Description: ").append(oneLine(c.description));
-        b.append(" Pose: full body from head to feet, standing straight and facing the camera, arms a little away from the body (A-pose), ");
-        b.append("both hands visible, nothing held in front of the body, feet a little apart, mouth closed, eyes open, ");
-        b.append("fully and modestly dressed, isolated on a plain pure-white background, soft studio light, no text, no other people. ");
-        b.append("Avoid: blurry, extra limbs, distorted hands, a cropped body.");
-        return b.toString();
+        String action = "standing straight and facing the camera, arms a little away from the body (A-pose), both hands visible, nothing held in front of the body, "
+                + "feet a little apart, mouth closed, eyes open, a gentle friendly expression, fully and modestly dressed, isolated on a plain pure-white background, no other people";
+        return StillPrompt.build(b.toString(), action, false);
     }
 
     public static String placePrompt(String name, String description, String aspect) {
         // the aspect ratio is a parameter of the picture (its width and height), never words in the prompt (C3)
-        return TechnicalDirector.clean("Cinematic 3D animated film background plate for a premium Indian children's film, establishing plate, "
+        // v34: the still-picture manual's blocks and negative list around the plate's own layer rules
+        return TechnicalDirector.clean(StillPrompt.build("Cinematic 3D animated film background plate for a premium Indian children's film, establishing plate, "
                 + "no people, no characters, no text. Place: " + name + ". " + oneLine(description)
-                + " Layers: blurry foreground 0-1 m, empty midground stage 2-4 m with flat ground, background 10-100 m. "
-                + "Style: rich 3D render, volumetric light, depth of field, atmospheric perspective, vivid but natural colours. " + TechnicalDirector.STABLE + ".");
+                + " Layers: blurry foreground 0-1 m, empty midground stage 2-4 m with flat ground, background 10-100 m. Vivid but natural colours. " + TechnicalDirector.STABLE + ".", "", true));
     }
 
     public static String oneLine(String s) {

@@ -46,6 +46,8 @@ public final class Story {
         public boolean voiceOnly;
         /** From the verbs the script uses for this character: +1 feminine forms, -1 masculine, 0 unknown. */
         public int genderHint;
+        /** v34: the character riding this one (Durga for her lion), and the animal character this one rides; null when none. */
+        public CharacterDef rider, mountChar;
         public String shown() { return label != null ? label : displayName; }
         public String toString() { return displayName; }
     }

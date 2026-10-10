@@ -174,6 +174,7 @@ public final class Art {
         int[] px = new int[w * h];
         System.arraycopy(d, 2, px, 0, w * h);
         Cutout.Result r = Cutout.process(px, w, h, animal);
+        r.pxRead = null;                                         // v34: the readings are done; the film draws the picture as it is
         Sprite s = new Sprite();
         s.w = r.w; s.h = r.h;
         s.img = L.create(r.px, r.w, r.h);

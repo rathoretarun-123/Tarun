@@ -17,8 +17,63 @@ public final class Cutout {
         public float headTop = 0f, faceTop = 0.05f, chinY = 0.25f;
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E;
         public boolean faceFound;
+        /** v34: heads side by side in the picture (Ravana): the face found is the central one's; 1 for everyone else. */
+        public int heads = 1;
+        /**
+         * v34 (the emotion / activity / angle guide §7.3): the pixels the readings are made from — for a figure so
+         * dark that no face can be read in it as it is, a brightened copy (gamma and a contrast stretch, the
+         * original kept for drawing); null when the figure reads as it is. read() gives the right one.
+         */
+        public int[] pxRead;
+        /** v34: the figure's mean luminance (0..255) and its light level (BRIGHT … SILHOUETTE), tagged on every picture (§6 step 6). */
+        public float light = 128;
+        public int lightLevel = NORMAL;
+        public int[] read() { return pxRead != null ? pxRead : px; }
         /** Where this cut-out sits in the picture it was cut from (pixels), and that picture's width. */
         public int cropX, cropY, cropW, srcW;
+    }
+
+    /** v34: light levels of a figure, from its mean luminance (the guide's bright / normal / low / very_low / silhouette). */
+    public static final int BRIGHT = 0, NORMAL = 1, LOW = 2, VERY_LOW = 3, SILHOUETTE = 4;
+
+    public static String lightName(int level) {
+        switch (level) { case BRIGHT: return "bright"; case LOW: return "low light"; case VERY_LOW: return "very dark"; case SILHOUETTE: return "silhouette"; default: return "normal light"; }
+    }
+
+    public static int lightLevel(float meanLum) { return meanLum >= 165 ? BRIGHT : meanLum >= 70 ? NORMAL : meanLum >= 45 ? LOW : meanLum >= 25 ? VERY_LOW : SILHOUETTE; }
+
+    /**
+     * v34 (§7.3, §7.4): the reading copy of a dark figure — gamma 1.8 then a stretch that puts its brightest 2% near
+     * white, so the eyes, the mouth and the skin can be found in a picture taken in a dark room. Alpha is kept; the
+     * original pixels are what the film draws.
+     */
+    static int[] enhance(int[] px, int w, int h) {
+        int[] out = new int[px.length];
+        int[] lut = new int[256];
+        for (int i = 0; i < 256; i++) lut[i] = Math.min(255, (int) Math.round(255 * Math.pow(i / 255.0, 1 / 1.8)));
+        int[] hist = new int[256];
+        int n = 0;
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i];
+            if ((c >>> 24) < 100) { out[i] = c; continue; }
+            int r = lut[(c >> 16) & 255], g = lut[(c >> 8) & 255], b = lut[c & 255];
+            out[i] = (c & 0xFF000000) | (r << 16) | (g << 8) | b;
+            hist[(r * 299 + g * 587 + b * 114) / 1000]++;
+            n++;
+        }
+        if (n == 0) return out;
+        int acc = 0, p98 = 255;
+        for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.98f) { p98 = i; break; } }
+        if (p98 < 225 && p98 > 0) {
+            float k = 235f / p98;
+            for (int i = 0; i < out.length; i++) {
+                int c = out[i];
+                if ((c >>> 24) < 100) continue;
+                int r = Math.min(255, (int) (((c >> 16) & 255) * k)), g = Math.min(255, (int) (((c >> 8) & 255) * k)), b = Math.min(255, (int) ((c & 255) * k));
+                out[i] = (c & 0xFF000000) | (r << 16) | (g << 8) | b;
+            }
+        }
+        return out;
     }
 
     static int dist(int a, int b) {
@@ -62,9 +117,81 @@ public final class Cutout {
         for (int y = 0; y < ch; y++) System.arraycopy(px, (y + minY) * w + minX, out, y * cw, cw);
         r.px = out; r.w = cw; r.h = ch;
         r.cropX = minX; r.cropY = minY; r.cropW = cw; r.srcW = w;
+        // v34: the light level of the figure; a dark one is read from a brightened copy (the original is drawn)
+        long lsum = 0; int ln = 0;
+        for (int i = 0; i < r.px.length; i += 3) { int c = r.px[i]; if ((c >>> 24) >= 100) { lsum += (((c >> 16) & 255) * 299 + ((c >> 8) & 255) * 587 + (c & 255) * 114) / 1000; ln++; } }
+        r.light = ln == 0 ? 0 : lsum / (float) ln;
+        r.lightLevel = lightLevel(r.light);
+        // the picture as it is first: a face read in its own light is the reading (dark clothes or fur do not make
+        // a dark room, and brightening fur turns it skin-coloured — a monkey's back would read as a face)
         findFace(r);
-        refineFace(r);
+        refineFace(r, 0, r.w);
+        countHeads(r);
+        if (!r.faceFound && r.lightLevel >= LOW && ln > 0) {
+            // the dual path (the guide §7.3): no face could be read in the dark — the brightened copy is read instead
+            int[] orig = r.px;
+            r.px = enhance(orig, r.w, r.h);
+            findFace(r);
+            refineFace(r, 0, r.w);
+            countHeads(r);
+            if (r.faceFound) {
+                r.pxRead = r.px;
+                // the skin colour for drawing is the picture's own: the reading copy's, darkened back
+                long esum = 0; int en = 0;
+                for (int i = 0; i < r.pxRead.length; i += 3) { int c = r.pxRead[i]; if ((c >>> 24) >= 100) { esum += (((c >> 16) & 255) * 299 + ((c >> 8) & 255) * 587 + (c & 255) * 114) / 1000; en++; } }
+                float k = en == 0 ? 1 : Math.max(0.1f, Math.min(1f, r.light / Math.max(1f, esum / (float) en)));
+                r.skin = 0xFF000000 | ((int) (((r.skin >> 16) & 255) * k) << 16) | ((int) (((r.skin >> 8) & 255) * k) << 8) | (int) ((r.skin & 255) * k);
+                r.lip = Puppet.shade(Puppet.mix(r.skin, 0xFFB03A3A, 0.45f), 0.8f);
+            }
+            r.px = orig;
+        }
         return r;
+    }
+
+    /**
+     * v34: a many-headed character (Ravana's ten heads in a row): the face-shaped runs of skin across the head band,
+     * side by side, each about as wide as the face found. Three or more make a many-headed figure (two could be a
+     * hand beside the face); the face is then taken from the central run, since the central head is the one that
+     * speaks and looks at the camera.
+     */
+    static void countHeads(Result r) {
+        if (!r.faceFound || r.w < 40 || r.h < 40) return;
+        int w = r.w, h = r.h;
+        int y0 = Math.max(0, (int) (r.faceTop * h)), y1 = Math.min(h - 1, (int) (r.chinY * h));
+        if (y1 - y0 < 6) return;
+        float faceWpx = Math.max(8f, (r.eyeRX - r.eyeLX) * w * 2.5f);
+        float[] share = new float[w];
+        for (int x = 0; x < w; x++) {
+            int n = 0;
+            for (int y = y0; y <= y1; y++) if (isSkin(r.px[y * w + x])) n++;
+            share[x] = n / (float) (y1 - y0 + 1);
+        }
+        java.util.List<int[]> runs = new java.util.ArrayList<int[]>();
+        int start = -1, gap = 0;
+        for (int x = 0; x <= w; x++) {
+            boolean on = x < w && share[x] > 0.45f;
+            if (on) { if (start < 0) start = x; gap = 0; }
+            else if (start >= 0 && ++gap > faceWpx * 0.12f) { runs.add(new int[]{start, x - gap}); start = -1; gap = 0; }
+        }
+        if (start >= 0) runs.add(new int[]{start, w - 1});
+        java.util.List<int[]> heads = new java.util.ArrayList<int[]>();
+        for (int[] run : runs) {
+            int rw = run[1] - run[0] + 1;
+            if (rw < faceWpx * 0.45f || rw > faceWpx * 1.8f) continue;
+            float mean = 0;
+            for (int x = run[0]; x <= run[1]; x++) mean += share[x];
+            if (mean / rw < 0.62f) continue;                       // a hand in the band fills less of it than a face does
+            heads.add(run);
+        }
+        if (heads.size() < 3) return;
+        r.heads = heads.size();
+        int[] central = heads.get(0);
+        for (int[] run : heads) if (Math.abs((run[0] + run[1]) / 2f - w / 2f) < Math.abs((central[0] + central[1]) / 2f - w / 2f)) central = run;
+        float mx = r.mouthX * w;
+        if (mx < central[0] - faceWpx * 0.1f || mx > central[1] + faceWpx * 0.1f) {
+            // the eyes found belong to a side head: the central head's own, if a convincing pair is there
+            refineFace(r, Math.max(0, central[0] - (int) (faceWpx * 0.2f)), Math.min(w, central[1] + (int) (faceWpx * 0.2f)));
+        }
     }
 
     /**
@@ -73,9 +200,13 @@ public final class Cutout {
      * reddest short line below them, at a distance that fits the eyes' spacing. Keeps the old guess when no
      * convincing pair is found.
      */
-    static void refineFace(Result r) {
+    static void refineFace(Result r) { refineFace(r, 0, r.w); }
+
+    /** rx0..rx1: the columns the eyes may lie in (v34: one head of a many-headed figure); the whole width otherwise. */
+    static void refineFace(Result r, int rx0, int rx1) {
         int w = r.w, h = r.h;
         if (w < 40 || h < 40) return;
+        final float rc = (rx0 + rx1) / 2f, rw = Math.max(1, rx1 - rx0);
         int W1 = w + 1;
         long[] iy = new long[W1 * (h + 1)], ia = new long[W1 * (h + 1)], is = new long[W1 * (h + 1)], ib = new long[W1 * (h + 1)], ic = new long[W1 * (h + 1)];
         int[] lum = new int[w * h];
@@ -108,7 +239,7 @@ public final class Cutout {
             int in = Math.max(1, (int) (rad * 0.6f)), out = (int) (rad * 1.55f);
             int step = Math.max(1, rad / 3);
             for (int y = top + out; y < yMax - out; y += step) {
-                for (int x = out; x < w - out; x += step) {
+                for (int x = Math.max(out, rx0); x < Math.min(w - out, rx1); x += step) {
                     long aIn = box(ia, W1, x - in, y - in, x + in, y + in), aOut = box(ia, W1, x - out, y - out, x + out, y + out);
                     int nIn = (2 * in + 1) * (2 * in + 1), nOut = (2 * out + 1) * (2 * out + 1);
                     float mIn = box(iy, W1, x - in, y - in, x + in, y + in) / (float) nIn;
@@ -148,7 +279,7 @@ public final class Cutout {
             float ratio = L[2] / R[2];
             if (ratio < 0.6f || ratio > 1.65f) continue;
             float mid = (L[0] + R[0]) / 2;
-            if (Math.abs(mid - w / 2f) > w * 0.3f) continue;
+            if (Math.abs(mid - rc) > rw * 0.3f) continue;
             // between the eyes: the bridge of the nose is brighter than the irises
             float bridge = box(iy, W1, (int) (mid - rr * 0.5f), (int) ((L[1] + R[1]) / 2 - rr * 0.5f), (int) (mid + rr * 0.5f), (int) ((L[1] + R[1]) / 2 + rr * 0.5f))
                     / (float) ((2 * (int) (rr * 0.5f) + 1) * (2 * (int) (rr * 0.5f) + 1));

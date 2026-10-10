@@ -1,0 +1,98 @@
+# Testing v34 — pictures for everything, many-headed characters, the emotion / activity / angle guide
+
+## 1. Uploads rechecked for every character, place and thing
+
+Test `everyCharacterPlaceAndThingTakesPictures` (the sample story: 12 characters, 10 parts, 8 director-added scenes, 17 things + one named on the spot).
+
+| What | How it was checked | Result |
+|---|---|---|
+| Every character takes pictures from the Studio button (its cast key) and again from the make-film popup (its display name) | `SheetSaver.save` twice per character; the Studio's `charFile`, the film's `Studio3DArt.charFile`, the count of `char` lines and the keys of the `pose`/`view` lines | 12 of 12: the newest front is shown and used, one `char` line each, all pictures under one key |
+| Every place takes a new picture | `sceneFile` before and after; the earlier one in the library as "(earlier)" | 10 of 10 replaced, 10 earlier pictures kept |
+| Every added scene takes a picture | `manifestLine("scene", key)` | 8 of 8 |
+| Every thing takes a picture twice; the newest is the insert | the `shot||key|file|object` lines | 18 of 18: one insert line each (before v34 the lines piled up and the first — the oldest — was used) |
+| One upload button per character and place in the Studio, one per thing | the "📷 Pictures (up to 10)", "📷 Angles / More angles" buttons counted | 22 and 18 |
+| A row with its button for everything on the progress card | "📷 Add / More" counted | 48 of 48 |
+| The make-film popup lists every character, part, added scene and thing, and lets a thing be named | the list's items | all present |
+| A character whose name reads like a voice ("रेडियो की आवाज़") can be pictured | "📷 Picture it anyway" → the picker opens; `FilmJob.storyOf` then lists it in the cast | passes |
+
+Fixed by this check:
+
+* `SheetSaver.charKey` — the key of the character's existing line is used whatever the button passed, and on a new front every old `char` line of that character goes (`ScriptParser.resolve`), so the Studio (first line) and the film (last line) can never show different pictures.
+* `SheetSaver.setObjectLine` — a thing's insert line is replaced (the manifest's own replace matches the scene field, which a thing's line leaves empty, so it never matched).
+* `AutoLibrary.missingTargets` — a picture of the thing itself counts for every scene that mentions it.
+* The popup's things, the QC screen's pictures card, `FilmJob.storyOf` with the "pictured" override.
+
+## 2. Many-headed characters
+
+Test `manyHeadedCharactersKeepTheirHeads`:
+
+| Check | Result |
+|---|---|
+| "रावण — दस सिर वाला राक्षस" → 10; "दशानन" → 10; "तीन सिरों वाला अजगर" → 3; "a three-headed dragon" → 3; "a monster with 5 heads" → 5; "उसके सिर पर लाल पगड़ी" → 1; "head held high" → 1 | all as expected |
+| A drawn figure with five heads in a row: heads counted in the picture, the face taken from the central head | heads = 5, mouth at x = 320 of 640 |
+| The rig: no raised arm from the heads beside the face; the head is the whole row | armUp false/false, headHalf 0.50 |
+| The drawn puppet with ten heads is wider at the head than with one | 67 px → 532 px |
+
+## 3. The Emotion, Activity & Camera Angle guide (v2.0)
+
+What is applied (see `EmotionActivityGuide.STEPS` in the app's protocols screen for the full map): the EXIF fix, a light level on every picture, a brightened reading copy for a figure so dark that no face reads in it as it is (gamma 1.8 + contrast stretch, the original drawn; a picture that reads in its own light is never brightened, since brightened fur turns skin-coloured), the NO_FACE gate (a back or faceless figure never carries a feeling, is cast only for back shots, never talks or blinks), a confidence on every reading with the unsure ones confirmed first in the review dialog, the bending activity, the structured record (angle, activity, feeling, height ratio, face points, confidence, light level) in every pose line.
+
+What is not done, said plainly: no neural model (vision transformer, YOLO, RTMPose, MiDaS, Zero-DCE) runs on the phone and nothing is trained; the rules are fixed in code and the user's corrections re-tag the picture at hand.
+
+Test `darkPicturesReadLikeBrightOnes` — the user's sheets 02, 15 (the kurta girl) and 01 (the monkey) darkened to 30 % as if photographed in a dark room:
+
+| Measure | Result |
+|---|---|
+| Angle agreement, dark vs bright (the guide's "robustness drop") | 28 of 30 figures (93 %) |
+| The two misses | sheet02 #6 (back → side) at confidence 0.43, sheet01 #7 (front → back) at 0.50 — both below 0.65, so both are flagged "please confirm" in the review dialog |
+| Light level on the dark copies | "very dark" on 29, "silhouette" on 1 |
+| Confidence lower on the dark copies | 30 of 30 |
+| A feeling on a back or faceless figure (the guide's "false emotion on back") | 0 of 60 readings |
+| The gold set of v27 (`poseSenseReadsTheUsersSheets`: five sheets, the sure cases) | still passes with the new reading path |
+
+## 4. The 3D Still Picture Maker manual
+
+Test `dollPassesTheStillPictureChecklist` (a man in a white kurta and a black-haired monster, made by the doll maker at the large size):
+
+| Check | Result |
+|---|---|
+| Every character prompt and the place prompt carry the six blocks and the negative list after the Technical Director's cleaning | yes (the negative list's "cropped body" was being stripped by the cleaner: it now says "body cut off at the frame") |
+| Dolls at least 2048 px tall | 2057 px (the man), 2070 px (the monster) |
+| Eyes with catch-lights | both, on both dolls |
+| Skin glows (warm shadows, little shine) | both |
+| The mouth is the face's, not the shirt's | yes |
+| Light | the man "harsh" (16 % blown whites) at the first light, the monster "too dark" — both reported in the proposal |
+| A white kurta lit again (softer key, stronger fill) | 75/100 → 100/100 |
+| The 3D maker's real path (`makeCharacter`) | proposal "Still QA 100/100 … lit again after the first check" |
+| A 300-px library picture as a reference / a 900-px one | refused / allowed |
+
+Found by the checklist and fixed: the torso of an adult or a monster ended in a half-sphere as wide as the shoulders, which rose into the lower face (a monster's head was buried entirely, so its eyes had no catch-light because they were not visible). `Doll3D.torso` now ends in low rounded shoulders.
+
+## 5. Shorter shots, many arms, riders
+
+Test `manyArmedRidersAndShorterShots`:
+
+| Check | Result |
+|---|---|
+| "आठ भुजाओं वाली … शेर पर सवार" → 8 arms, a lion, a woman, not an animal; "a six-armed god riding a peacock" → 6 arms, a peacock; "हाथ में लाल पतंग" → 2 arms, no mount; "एक बड़ा सुनहरा शेर" → a lion, no mount | all as expected (the cast block needs the script's "दृश्य 1:" heading, as every script does) |
+| "चार हाथों वाला" → 4; "चूहे की सवारी" → a mouse (oblique form); "mounted on a white bull" → a bull (an adjective between); "a girl who loves her dog" → no mount | passes |
+| The drawn puppet: eight arms fan wider than two at the shoulders; the lion under her wider than her feet | passes |
+| The doll: wider than tall (the lion), her face in the upper part | passes |
+| The rig of a rider's picture: arms fixed, legs off the walk | passes |
+| The cut: 2 s; the sample story's shots | 476 shots, 1.34 s on average, the longest 2.0 s, none over the cut |
+
+Test `riderAndAnimalBothSpeakAndBacksAreUsed`:
+
+| Check | Result |
+|---|---|
+| Durga (on a lion) and a lion character "शेर" in the cast are linked | yes |
+| The lion is not staged on its own while Durga is in the part | yes |
+| Durga's two lines move her lips; the lion's line is a mount line on her actor | 2 and 1 |
+| The lion's line has a mouth envelope; its shot is medium-wide (the whole picture) | yes, size 2 (medium-wide) |
+| The rig of a rider's picture finds the animal's jaw on the side its head points to | yes (right) |
+| "रामू पीठ फेरकर धीरे-धीरे चला जाता है" turns his back; the casting wants his back picture | at 19.6 s, yes |
+| Sheet 15 (the kurta girl: crying, laughing, angry, sitting…) given at once: the main picture | a standing, neutral front |
+
+## 6. Full suite
+
+35 tests, 34 run, 1 skipped (the twenty-story soak, run with `-Dkahani.soak=1`): see the end of this file.

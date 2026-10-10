@@ -107,7 +107,7 @@ public final class LookDesigner {
                 {Look.SP_FOX, "लोमड़ी", "fox"}, {Look.SP_LION, "शेर", "सिंह", "lion"}, {Look.SP_TIGER, "बाघ", "tiger"},
                 {Look.SP_BEAR, "भालू", "रीछ", "bear"}, {Look.SP_ELEPHANT, "हाथी", "elephant"}, {Look.SP_RABBIT, "खरगोश", "rabbit", "hare"},
                 {Look.SP_CAT, "बिल्ली", "cat"}, {Look.SP_DOG, "कुत्ता", "कुत्ते", "dog"}, {Look.SP_DEER, "हिरण", "deer"},
-                {Look.SP_GOAT, "बकरी", "बकरा", "goat"}, {Look.SP_COW, "गाय", "बैल", "cow", "ox"}, {Look.SP_WOLF, "भेड़िया", "wolf"},
+                {Look.SP_GOAT, "बकरी", "बकरा", "goat"}, {Look.SP_COW, "गाय", "बैल", "cow", "ox", "bull"}, {Look.SP_WOLF, "भेड़िया", "wolf"},
                 {Look.SP_MOUSE, "चूहा", "चुहिया", "mouse", "rat"}, {Look.SP_TORTOISE, "कछुआ", "tortoise", "turtle"}, {Look.SP_HORSE, "घोड़ा", "घोड़ी", "horse"},
                 {Look.SP_CROW, "कौआ", "कौवा", "crow"}, {Look.SP_SPARROW, "गौरैया", "चिड़िया", "sparrow"}, {Look.SP_PARROT, "तोता", "मैना", "parrot"},
                 {Look.SP_PEACOCK, "मोर", "peacock"}, {Look.SP_OWL, "उल्लू", "owl"}, {Look.SP_HEN, "मुर्गी", "मुर्गा", "hen", "rooster"},
@@ -232,6 +232,92 @@ public final class LookDesigner {
         if (band.length() > 0) { List<Integer> bc = colorsIn(band.substring(Math.max(0, Txt.firstIndex(band, "गले", "bandana", "रुमाल", "scarf")))); if (!bc.isEmpty()) l.secondary = bc.get(0); }
     }
 
+    /**
+     * v34: how many heads the name or the description gives a character: Ravana (दशानन) has ten; "दस सिर", "तीन सिरों
+     * वाला", "three-headed", "2 heads" are read as the number; "कई सिर" / "many heads" as three. Else 1.
+     */
+    public static int headsIn(String text) {
+        if (text == null) return 1;
+        String t = text.toLowerCase(java.util.Locale.ROOT);
+        if (Txt.has(t, "रावण", "दशानन", "ravan", "raavan", "dashanan")) return 10;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("([\\p{L}\\p{M}]+|\\d+)[\\s\\-]*(?:सिरों|सिरो|सिर|मुखों|मुख|शीश|heads?|headed)(?![\\p{L}\\p{M}])").matcher(t);
+        int best = 1;
+        while (m.find()) {
+            String n = m.group(1);
+            int v = 0;
+            if (n.matches("\\d+")) { try { v = Integer.parseInt(n); } catch (NumberFormatException ignored) { v = 0; } }
+            else {
+                String[][] words = {{"दो", "two"}, {"तीन", "three"}, {"चार", "four"}, {"पाँच", "पांच", "five"}, {"छह", "छः", "six"}, {"सात", "seven"},
+                        {"आठ", "eight"}, {"नौ", "nine"}, {"दस", "ten"}, {"कई", "अनेक", "many", "several", "multi"}};
+                int[] vals = {2, 3, 4, 5, 6, 7, 8, 9, 10, 3};
+                for (int i = 0; i < words.length && v == 0; i++) for (String w : words[i]) if (n.equals(w)) v = vals[i];
+            }
+            if (v > best) best = v;
+        }
+        return Math.min(100, best);
+    }
+
+    /**
+     * v34: how many arms the name or the description gives a character: Durga has eight; "आठ भुजाएँ", "चार हाथों वाला",
+     * "अष्टभुजा", "चतुर्भुज", "ten-armed", "4 arms" are read as the number. Else 2.
+     */
+    public static int armsIn(String text) {
+        if (text == null) return 2;
+        String t = text.toLowerCase(java.util.Locale.ROOT);
+        int best = 2;
+        if (Txt.has(t, "अष्टभुज", "ashtabhuj")) best = 8;
+        if (Txt.has(t, "चतुर्भुज", "chaturbhuj")) best = Math.max(best, 4);
+        if (Txt.has(t, "दशभुज")) best = 10;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("([\\p{L}\\p{M}]+|\\d+)[\\s\\-]*(?:भुजाओं|भुजाएँ|भुजाएं|भुजाओ|भुजा|हाथों|हाथ|arms|armed|hands|handed)(?![\\p{L}\\p{M}])").matcher(t);
+        while (m.find()) {
+            String n = m.group(1);
+            int v = 0;
+            if (n.matches("\\d+")) { try { v = Integer.parseInt(n); } catch (NumberFormatException ignored) { v = 0; } }
+            else {
+                String[][] words = {{"चार", "four"}, {"छह", "छः", "six"}, {"आठ", "eight"}, {"दस", "ten"}, {"बारह", "twelve"}, {"सोलह", "sixteen"}, {"अठारह", "eighteen"}, {"बीस", "twenty"}, {"कई", "अनेक", "many", "several", "multi"}};
+                int[] vals = {4, 6, 8, 10, 12, 16, 18, 20, 6};
+                for (int i = 0; i < words.length && v == 0; i++) for (String w : words[i]) if (n.equals(w)) v = vals[i];
+            }
+            if (v > best) best = v;
+        }
+        if (best == 2 && Txt.has(t, "दुर्गा", "durga", "दुर्गे")) best = 8;
+        return Math.min(20, best);
+    }
+
+    /**
+     * v34: the animal a character rides or sits on, from "शेर पर सवार", "सिंह पर बैठी", "बाघ की सवारी", "riding a
+     * lion", "on a tiger", "mounted on an elephant"; Durga's lion when nothing else is said. -1 when none.
+     */
+    public static int mountIn(String text) {
+        if (text == null) return -1;
+        String t = text.toLowerCase(java.util.Locale.ROOT);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("([\\p{L}\\p{M}]+)\\s+(?:पर|पे)\\s+(?:सवार|बैठी|बैठा|बैठे|बैठकर|खड़ी|खड़ा|विराजमान|आरूढ़)").matcher(t);
+        while (m.find()) { int sp = speciesWord(m.group(1)); if (sp >= 0) return sp; }
+        m = java.util.regex.Pattern.compile("([\\p{L}\\p{M}]+)\\s+(?:की|के)\\s+(?:सवारी|पीठ पर)").matcher(t);
+        while (m.find()) { int sp = speciesWord(m.group(1)); if (sp >= 0) return sp; }
+        m = java.util.regex.Pattern.compile("(?:riding|rides|astride|mounted on|sitting on|seated on|sits on|on the back of|on)\\s+(?:a |an |the |her |his |its )?([a-z]+)(?:\\s+([a-z]+))?").matcher(t);
+        while (m.find()) {
+            int sp = speciesWord(m.group(1));                                       // "on a lion"
+            if (sp < 0 && m.group(2) != null) sp = speciesWord(m.group(2));         // "on a white bull"
+            if (sp >= 0) return sp;
+        }
+        if (Txt.has(t, "दुर्गा", "durga", "दुर्गे")) return Look.SP_LION;
+        return -1;
+    }
+
+    /** The species one word names (the mount's word), or -1. */
+    static int speciesWord(String word) {
+        String w = word.trim();
+        if (w.length() < 2) return -1;
+        // the species table's words are matched whole; a Hindi word before "पर" / "की" is in its oblique form
+        // ("चूहे", "घोड़े", "हाथी"), an English one may be a plural
+        int sp = speciesOf(w + "।");
+        if (sp < 0 && w.endsWith("े")) sp = speciesOf(w.substring(0, w.length() - 1) + "ा।");
+        if (sp < 0 && w.endsWith("ों")) sp = speciesOf(w.substring(0, w.length() - 2) + "ा।");
+        if (sp < 0 && w.endsWith("s") && w.length() > 3) sp = speciesOf(w.substring(0, w.length() - 1) + "।");
+        return sp;
+    }
+
     public static Look design(Story.CharacterDef c, Look base) {
         String all = c.fullName + "\n" + c.description;
         String face = section(c.description, "चेहरा", "face", "शरीर", "body", "रूप");
@@ -246,13 +332,16 @@ public final class LookDesigner {
         boolean witch = wordIn(all, "चुड़ैल") || wordIn(all, "डायन") || wordIn(all, "witch") || wordIn(all, "जादूगरनी")
                 || (c.role != null && (wordIn(c.role, "witch") || wordIn(c.role, "डायन") || wordIn(c.role, "चुड़ैल")));
         boolean monkey = Txt.has(all, "बंदर", "वानर", "मकाक", "monkey", "macaque");
+        // v34: the animal a character rides (Durga's lion) is a mount, never the character's own species
+        int mount = mountIn(all);
         int species = monkey ? -1 : speciesOf(c.fullName + " " + c.description);
+        if (mount >= 0 && species == mount) species = -1;
         String noPrincess = Txt.norm(all).replace(Txt.norm("राजकुमारी"), "");
         int fem = 0, mal = 0;
-        String[] femW = {"राजकुमारी", "रानी", "लड़की", "बेटी", "सहेली", "माँ", "दादी", "नानी", "बहन", "दीदी", "बिंदी", "साड़ी",
+        String[] femW = {"राजकुमारी", "रानी", "लड़की", "बेटी", "सहेली", "माँ", "दादी", "नानी", "बहन", "दीदी", "बिंदी", "साड़ी", "देवी", "goddess", "माता",
                 "लहंगा", "घाघरा", "चोली", "सिंदूर", "चूड़ि", "princess", "queen", "girl", "woman", "mother", "lady", "aunt", "आंटी", "she ", " her ",
                 "गोरी", "दुबली", "मोटी", "सुंदरी", "बहादुर लड़की", "sister", "daughter", "grandmother", "बुआ", "मौसी", "चाची", "मैडम", "madam", "miss "};
-        String[] malW = {"राजा", "राजकुमार", "लड़का", "बेटा", "पिता", "दादा", "भाई", "भैया", "गार्ड", "सिपाही", "सैनिक", "मूँछ", "मूंछ",
+        String[] malW = {"राजा", "राजकुमार", "लड़का", "बेटा", "पिता", "दादा", "भाई", "भैया", "गार्ड", "सिपाही", "सैनिक", "मूँछ", "मूंछ", "देवता", " god ",
                 "दाढ़ी", "पगड़ी", "अचकन", "king", "prince", "boy", "man ", "father", "guard", "soldier", " he ", " his ",
                 "गोरा ", "दुबला", "मोटा", "mister", "मिस्टर", "sir ", "uncle", "अंकल", "चाचा", "मामा", "grandfather", "brother", "son "};
         for (String w : femW) if (Txt.has(all, w)) fem++;
@@ -362,6 +451,9 @@ public final class LookDesigner {
         l.wrinkles = Txt.has(face, "झुर्रि", "wrinkle");
         l.crookedNose = Txt.has(face, "टेढ़ी", "नुकीली नाक", "crooked", "hooked nose");
         l.dimples = Txt.has(face, "डिंपल", "गड्ढे", "dimple");
+        l.heads = Math.max(1, headsIn(all));                    // v34: Ravana's ten heads, a three-headed dragon's three
+        l.arms = Math.max(2, armsIn(all));                      // v34: Durga's eight arms
+        l.mount = l.isHumanoid() ? mount : -1;                  // v34: the lion she sits on
         l.longNails = Txt.has(face, "नाखून", "nails");
         String eyeS = sentenceWith(face, "आँखें", "आंखें", "आँखों", "eyes");
         List<Integer> ec = colorsIn(eyeS);

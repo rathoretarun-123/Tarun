@@ -10,15 +10,25 @@ package com.tarun.kahani.core;
 public final class PoseSense {
     private PoseSense() {}
 
-    public static final int STAND = 0, WALK = 1, RUN = 2, SIT = 3, LIE = 4, CROUCH = 5, ARMS_UP = 6, WAVE = 7, POINT = 8, FIGHT = 9;
-    public static final int NEUTRAL = 0, HAPPY = 1, LAUGH = 2, SAD = 3, ANGRY = 4, SURPRISED = 5, THINK = 6, ASLEEP = 7;
+    public static final int STAND = 0, WALK = 1, RUN = 2, SIT = 3, LIE = 4, CROUCH = 5, ARMS_UP = 6, WAVE = 7, POINT = 8, FIGHT = 9, BEND = 10;
+    public static final int POSES = 11;
+    /** v34: NO_FACE — the guide's gate: a back view or a figure without a face never carries a feeling. */
+    public static final int NEUTRAL = 0, HAPPY = 1, LAUGH = 2, SAD = 3, ANGRY = 4, SURPRISED = 5, THINK = 6, ASLEEP = 7, NO_FACE = 8;
+    public static final int EMOTIONS = 9;
 
     /** What was read of one figure. */
     public static final class Tag {
         public float angle = Angles.FRONT;
         public int pose = STAND, emotion = NEUTRAL;
+        /** v34: how sure the reading is (0..1) and the figure's light level (Cutout.BRIGHT … SILHOUETTE): a dark or thin reading asks the user to confirm. */
+        public float conf = 1f;
+        public int light = Cutout.NORMAL;
         public M m;
         public String toString() { return Angles.name(angle) + " " + poseName(pose) + " " + emotionName(emotion); }
+        /** The reading as the guide's record: view, activity, emotion, light level, confidence. */
+        public String record() { return String.format(java.util.Locale.US, "view=%s activity=%s emotion=%s light=%s confidence=%.2f", Angles.name(angle), poseName(pose), emotionName(emotion), Cutout.lightName(light), conf); }
+        /** v34: a reading the user should confirm (the guide §11 layer 6): dark, or decided by a thin margin. */
+        public boolean unsure() { return conf < 0.65f; }
     }
 
     /** The measures the reading is made from (fractions of the figure's height, width or face). */
@@ -33,11 +43,11 @@ public final class PoseSense {
     }
 
     public static String poseName(int p) {
-        switch (p) { case WALK: return "walking"; case RUN: return "running"; case SIT: return "sitting"; case LIE: return "lying"; case CROUCH: return "crouching"; case ARMS_UP: return "arms up"; case WAVE: return "waving"; case POINT: return "pointing"; case FIGHT: return "fighting"; default: return "standing"; }
+        switch (p) { case WALK: return "walking"; case RUN: return "running"; case SIT: return "sitting"; case LIE: return "lying"; case CROUCH: return "crouching"; case ARMS_UP: return "arms up"; case WAVE: return "waving"; case POINT: return "pointing"; case FIGHT: return "fighting"; case BEND: return "bending"; default: return "standing"; }
     }
 
     public static String emotionName(int e) {
-        switch (e) { case HAPPY: return "happy"; case LAUGH: return "laughing"; case SAD: return "sad"; case ANGRY: return "angry"; case SURPRISED: return "surprised"; case THINK: return "thinking"; case ASLEEP: return "asleep"; default: return "neutral"; }
+        switch (e) { case HAPPY: return "happy"; case LAUGH: return "laughing"; case SAD: return "sad"; case ANGRY: return "angry"; case SURPRISED: return "surprised"; case THINK: return "thinking"; case ASLEEP: return "asleep"; case NO_FACE: return "no face (back or hidden)"; default: return "neutral"; }
     }
 
     /** The film's emotion (Pose.*) this reading stands for. */
@@ -66,7 +76,7 @@ public final class PoseSense {
     public static M measure(Cutout.Result r, int standH) {
         M m = new M();
         int w = r.w, h = r.h;
-        int[] px = r.px;
+        int[] px = r.read();                                    // v34: a dark figure is read from its brightened copy (same silhouette)
         if (w < 4 || h < 4 || px == null) return m;
         m.aspect = w / (float) h;
         m.hRatio = standH > 0 ? h / (float) standH : 0;
@@ -222,6 +232,15 @@ public final class PoseSense {
         t.angle = Angles.guess(r, beast);
         M m = measure(r, standH);
         t.m = m;
+        t.light = r.lightLevel;
+        // v34 (the guide §11): how sure the angle is — a dark figure, or one decided by a thin margin of skin or eye
+        // darkness, is marked for the user to confirm; a back read without any face at all is sure enough
+        float conf = r.lightLevel == Cutout.BRIGHT || r.lightLevel == Cutout.NORMAL ? 1f : r.lightLevel == Cutout.LOW ? 0.7f : r.lightLevel == Cutout.VERY_LOW ? 0.5f : 0.35f;
+        if (m.face) {
+            if (Math.abs(m.skin - 0.42f) < 0.08f) conf *= 0.75f;
+            if (Math.abs(m.eyeDark - 0.42f) < 0.06f) conf *= 0.85f;
+            if (m.hairAbove > 1.3f && m.hairAbove < 1.9f) conf *= 0.85f;
+        } else conf *= r.w / (float) Math.max(1, r.h) < 0.3f ? 0.8f : 0.9f;
         // ---- the pose, from the silhouette
         boolean sideways = t.angle == Angles.SIDE || t.angle == Angles.THREE_QUARTER;
         boolean low = m.hRatio > 0 ? m.hRatio < 0.86f && m.lowMass >= 0.32f : m.lowMass > 0.5f;   // a low, bottom-heavy figure sits or crouches (crossed legs spread the "feet": still a seat)
@@ -230,12 +249,15 @@ public final class PoseSense {
         else if (low) t.pose = m.lean > 0.1f || m.aspect < 0.62f ? CROUCH : SIT;
         else if (reach >= 0.35f && m.feet >= 0.4f) t.pose = FIGHT;
         else if (m.feet >= 0.3f || (m.spanLow >= 0.55f && Math.abs(m.lean) >= 0.05f)) t.pose = RUN;
+        else if (Math.abs(m.lean) >= 0.13f && m.feet < 0.18f && m.spanLow < 0.44f && (m.hRatio == 0 || m.hRatio < 0.93f) && m.aspect >= 0.45f) t.pose = BEND;   // v34: the upper body well off the legs, feet together, shorter than standing: bending (bowing, picking up)
         else if (sideways && (m.feet >= 0.18f || m.spanLow >= 0.44f)) t.pose = WALK;
         else if (m.armsL >= 0.25f && m.armsR >= 0.25f) t.pose = ARMS_UP;
         else if (m.armsL >= 0.4f || m.armsR >= 0.4f) t.pose = WAVE;
         else if (reach >= 0.22f && Math.min(m.reachL, m.reachR) < 0.1f && !sideways) t.pose = POINT;
-        // ---- the emotion, from the face (front or three-quarter only)
-        if (!m.face || t.angle == Angles.BACK) { if (t.pose == LIE) t.emotion = ASLEEP; return t; }
+        // ---- the emotion, from the face (front or three-quarter only); v34: the guide's gate — a back view or a
+        // figure without a face is NO_FACE, never a feeling (no smile on the back of a head)
+        if (!m.face || t.angle == Angles.BACK) { t.emotion = t.pose == LIE ? ASLEEP : NO_FACE; t.conf = conf; return t; }
+        t.conf = conf;
         boolean eyesShut = m.eyeDark > 0.42f && m.skin >= 0.42f;
         // a mouth box that fills its scan limits is hair or clothing, not a mouth: no evidence of an open mouth then
         boolean open = m.mouthOpen >= 0.16f && m.mouthOpen < 0.42f && m.mouthWide >= 0.25f && m.mouthWide < 0.56f && m.mouthDark >= 0.015f;
@@ -247,6 +269,7 @@ public final class PoseSense {
         else if (m.handAtFace >= 0.08f && !beast && !sideways) t.emotion = THINK;
         else if (eyesShut && !sideways) t.emotion = HAPPY;
         else t.emotion = NEUTRAL;
+        if (t.emotion != NEUTRAL && r.lightLevel >= Cutout.LOW) t.conf *= 0.8f;      // a feeling read from a dark face: confirm it
         return t;
     }
 }

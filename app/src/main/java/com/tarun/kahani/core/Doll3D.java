@@ -29,7 +29,13 @@ public final class Doll3D {
     public static Result make(Look look, int size, int seed, float angleDeg, int emotion) { return make(look, size, seed, angleDeg, emotion, null); }
 
     /** With a style cue from the user's own pictures: lit from their side, graded onto their line, their skin tones. */
-    public static Result make(Look look, int size, int seed, float angleDeg, int emotion, StyleCue cue) {
+    public static Result make(Look look, int size, int seed, float angleDeg, int emotion, StyleCue cue) { return make(look, size, seed, angleDeg, emotion, cue, 1f); }
+
+    /**
+     * v34: light: 1 as designed; above 1 a relight after the still-picture checklist found the doll too dark or
+     * flat (more exposure, a stronger fill and key); below 1 a softer light when it was harsh.
+     */
+    public static Result make(Look look, int size, int seed, float angleDeg, int emotion, StyleCue cue, float light) {
         if (look == null) look = new Look();
         if (cue != null && cue.skins.length > 0 && look.kind != Look.ANIMAL && look.kind != Look.BIRD && look.kind != Look.MONSTER) {
             Look l2 = look.copy();
@@ -40,19 +46,37 @@ public final class Doll3D {
         boolean beast = look.kind == Look.ANIMAL || look.kind == Look.BIRD;
         float H = 1f;
         int[] marks;
+        boolean rider = look.mount >= 0 && !beast && look.kind != Look.MONKEY;
+        float extentW = beast ? 1.9f * H : 0.9f * H, extentH = beast ? 1.3f * H : 1.08f * H;
         if (look.kind == Look.ANIMAL) marks = animal(s, look, H);
         else if (look.kind == Look.BIRD) marks = bird(s, look, H);
+        else if (rider) {
+            // v34: Durga on her lion — the animal (side-on, as the doll maker draws animals) at 0.55 of the height,
+            // the character built standing and then lifted so she sits on its back with her legs along its side
+            Look ml = new Look();
+            ml.kind = look.mount >= 20 ? Look.BIRD : Look.ANIMAL; ml.species = look.mount; ml.furColor = Look.furOf(look.mount);
+            ml.skin = Studio3D.shade(ml.furColor, 1.25f); ml.eyeColor = 0xFF2B1B10;
+            float Hm = H * (ml.kind == Look.BIRD ? 0.5f : 0.55f);
+            if (ml.kind == Look.BIRD) bird(s, ml, Hm); else animal(s, ml, Hm);
+            int v0 = s.mesh.nv, m0 = s.marks.size();
+            float Hr = 0.78f * H;
+            marks = human(s, look, Hr, emotion);
+            float back = (ml.species == Look.SP_RABBIT || ml.species == Look.SP_MOUSE) ? Hm * 0.72f : ml.kind == Look.BIRD ? Hm * 0.6f : Hm * 0.85f;
+            float lift = back - Hr * 0.36f;                                   // the hips at the animal's back, the legs along its side
+            for (int i = v0; i < s.mesh.nv; i++) { s.mesh.v[i * 3 + 1] += lift; s.mesh.v[i * 3 + 2] += 0.12f * H; }
+            for (int i = m0; i < s.marks.size(); i++) { s.marks.get(i)[1] += lift; s.marks.get(i)[2] += 0.12f * H; }
+            extentW = 1.9f * Hm; extentH = back + Hr * 0.66f + 0.02f * H;
+        }
         else marks = human(s, look, H, emotion);
         // a long lens far away: no distortion of the face (handbook ch. 5), the same as a drawn front view;
         // the camera (with its lights) walks round the character for the other views
-        float extentW = beast ? 1.9f * H : 0.9f * H, extentH = beast ? 1.3f * H : 1.08f * H;
         float dist = 12f * H;
         double a = Math.toRadians(angleDeg);
         float sn = (float) Math.sin(a), cs = (float) Math.cos(a);
         s.camX = dist * sn; s.camY = extentH * 0.48f; s.camZ = dist * cs;
         s.lookX = 0; s.lookY = extentH * 0.48f; s.lookZ = 0;
-        int w = beast ? size : Math.round(size * 2 / 3f), h = beast ? Math.round(size * 2 / 3f) : size;
-        if (angleDeg != 0 && !beast) w = Math.round(size * 0.75f);
+        int w = beast ? size : rider ? size : Math.round(size * 2 / 3f), h = beast ? Math.round(size * 2 / 3f) : rider ? Math.round(size * 0.9f) : size;
+        if (angleDeg != 0 && !beast && !rider) w = Math.round(size * 0.75f);
         float half = Math.max(extentH / 2f, extentW / 2f * h / (float) w) * 1.04f;
         s.fovDeg = (float) Math.toDegrees(2 * Math.atan(half / dist));
         float side = cue != null && cue.lightSure > 0.3f ? cue.lightSide : -1;      // the key light from the references' side
@@ -62,7 +86,11 @@ public final class Doll3D {
         s.skyTop = 0;
         s.ao = true; s.shadows = true;
         s.aoRadius = 0.045f * H;
-        Studio3D.Picture p = Studio3D.crop(Studio3D.render(s, w, h, 2), 3);
+        if (light > 1f) { s.exposure = Math.min(1.5f, light); s.fillStrength *= 1.35f; s.keyStrength *= 1.1f; }
+        else if (light < 1f) { s.fillStrength *= 1.3f; s.keyStrength *= Math.max(0.7f, light); s.rimStrength *= 0.85f; }
+        // v34 (the still-picture manual: at least 2048 px): a large doll is drawn without supersampling (the same
+        // work as a 1100-px doll at 2x2; the film shrinks it anyway); a small one keeps the 2x2 for clean edges
+        Studio3D.Picture p = Studio3D.crop(Studio3D.render(s, w, h, Math.max(w, h) > 1400 ? 1 : 2), 3);
         if (cue != null) cue.grade(p.px, p.w, p.h);
         Result r = new Result();
         r.px = p.px; r.w = p.w; r.h = p.h;
@@ -105,6 +133,19 @@ public final class Doll3D {
 
     // ================================================================== people
 
+    /**
+     * v34: the torso from y0 up to the shoulders: a tube with a round bottom and LOW rounded shoulders (an ellipsoid
+     * at most a third of the head's radius tall). A capsule's half-sphere top (as wide as the shoulders) rose into
+     * the face of an adult and buried a monster's whole head — found by the still-picture checklist (no catch-light,
+     * a face that was not there).
+     */
+    static void torso(Studio3D.Mesh m, float y0, float shY, float r0, float r1, float headR, int seg, int mat) {
+        m.cylinder(0, y0, 0, 0, shY, 0, r0, r1, seg, mat);
+        m.sphere(0, y0, 0, r0, r0, r0, seg, mat);
+        float ry = Math.min(r1 * 0.35f, headR * 0.35f);
+        m.sphere(0, shY, 0, r1, ry, r1, seg + 4, mat);
+    }
+
     /** Builds a standing person (or witch, monster, monkey); returns {1 if a turban mark was added}. */
     static int[] human(Studio3D.Scene s, Look l, float H) { return human(s, l, H, Pose.NEUTRAL); }
 
@@ -137,7 +178,12 @@ public final class Doll3D {
         int accent = m.mat(Studio3D.silk(l.accent));
         int shoe = m.mat(Studio3D.plastic(l.shoeColor));
         int gold = m.mat(Studio3D.metal(0xFFE2B84A));
-        int white = m.mat(Studio3D.eye(0xFFFAFAF8));
+        // v34 (the still-picture manual: big expressive eyes with highlights): the whites glow a little so they read
+        // white in the shade of the brow, and each eye gets a strong catch-light and a small second one
+        Studio3D.Material whiteM = Studio3D.eye(0xFFFAFAF8);
+        whiteM.emissive = 0x30FFFFFF;
+        int white = m.mat(whiteM);
+        int catchLight = m.mat(Studio3D.glow(0xFFFFFFFF));
         int iris = m.mat(l.glowEyes ? Studio3D.glowing(l.eyeColor, 0xC0FF5030) : Studio3D.eye(l.eyeColor));
         int pupil = m.mat(Studio3D.eye(0xFF101010));
         int lip = m.mat(Studio3D.skin(Studio3D.mix(l.skin, 0xFFB03A3A, 0.45f)));
@@ -162,7 +208,7 @@ public final class Doll3D {
             float waist = hipY + T * 0.25f;
             boolean wide = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_FROCK;
             m.cylinder(0, waist, 0, 0, 0.03f * H, 0, hw * 1.05f, hw * (wide ? 2.4f : 1.35f), 24, bottom);
-            m.capsule(0, hipY, 0, 0, shY, 0, hw * 1.0f, sw * 0.98f, seg, top);
+            torso(m, hipY, shY, hw * 1.0f, sw * 0.98f, headR, seg, top);
             if (l.outfit == Look.O_SAREE) m.capsule(-sw * 0.8f, shY + 0.02f * H, 0.08f * H, hw * 0.6f, waist - 0.02f * H, 0.1f * H, 0.04f * H, 0.05f * H, seg, accent);
             if (l.outfit == Look.O_LEHENGA) m.torus(0, waist, 0, hw * 1.05f, 0.012f * H, 1, 10, gold);
         } else {
@@ -170,11 +216,11 @@ public final class Doll3D {
             float bottomY = longTop ? hipY - L * (l.outfit == Look.O_COAT || l.outfit == Look.O_ACHKAN ? 0.55f : 0.3f) : hipY - 0.03f * H;
             if (longTop) {
                 // the chest, then a coat that widens to its hem, with a sash or a belt at the waist
-                m.capsule(0, hipY + T * 0.15f, 0, 0, shY, 0, hw * 1.0f, sw * 0.98f, seg, top);
+                torso(m, hipY + T * 0.15f, shY, hw * 1.0f, sw * 0.98f, headR, seg, top);
                 m.cylinder(0, hipY + T * 0.2f, 0, 0, bottomY, 0, hw * 1.02f, hw * 1.45f, 20, top);
                 m.torus(0, hipY + T * 0.2f, 0, hw * 1.04f, 0.014f * H, 1, 12, l.outfit == Look.O_ACHKAN ? gold : accent);
                 m.capsule(0, bottomY - 0.004f * H, 0, 0, bottomY + 0.004f * H, 0, hw * 1.45f, hw * 1.45f, 20, top);
-            } else m.capsule(0, bottomY, 0, 0, shY, 0, hw * 1.02f, sw * 0.98f, seg, top);
+            } else torso(m, bottomY, shY, hw * 1.02f, sw * 0.98f, headR, seg, top);
             if (l.outfit == Look.O_SUIT) {
                 m.capsule(0, shY - T * 0.1f, sw * 0.95f, 0, hipY + T * 0.2f, hw * 0.95f, 0.025f * H, 0.028f * H, 8, accent);   // the tie
                 m.capsule(0, shY - T * 0.05f, sw * 0.9f, 0, hipY + T * 0.1f, hw * 0.9f, 0.02f * H, 0.02f * H, 8, m.mat(Studio3D.cloth(0xFFF4F4F4)));
@@ -191,6 +237,20 @@ public final class Doll3D {
 
         // ---- arms: an open A-pose so the rig finds them (short sleeves show the skin)
         boolean shortSleeves = l.outfit == Look.O_TSHIRT || l.outfit == Look.O_LEHENGA || l.outfit == Look.O_FROCK || (l.outfit == Look.O_SAREE);
+        // v34: a many-armed character (Durga): the other pairs fan out behind the front pair, each raised more
+        int pairs = Math.max(1, l.arms / 2);
+        for (int k = 1; k < pairs; k++) for (int side = -1; side <= 1; side += 2) {
+            float sx = side * sw * 0.95f, sy = shY - armW * 0.3f;
+            double th = Math.toRadians(Math.min(150, 30 + 24 * k));
+            float ux = (float) Math.sin(th) * side, uy = (float) Math.cos(th);                    // the upper arm's direction, turned up by th
+            float ex = sx + ux * armLen * 0.5f, ey = sy + uy * armLen * 0.5f;
+            double th2 = th + Math.toRadians(18);
+            float hx = ex + (float) Math.sin(th2) * side * armLen * 0.5f, hy = ey + (float) Math.cos(th2) * armLen * 0.5f;
+            float z = -0.03f * H * k;
+            m.capsule(sx, sy, z, ex, ey, z, armW * 0.5f, armW * 0.44f, seg, top);
+            m.capsule(ex, ey, z, hx, hy, z, armW * 0.44f, armW * 0.36f, seg, shortSleeves ? skin : top);
+            m.sphere(hx, hy + armW * 0.1f, z, armW * 0.56f, armW * 0.64f, armW * 0.4f, seg, skin);
+        }
         for (int side = -1; side <= 1; side += 2) {
             float sx = side * sw * 0.95f, sy = shY - armW * 0.3f;
             float ex = side * (sw + armLen * 0.22f), ey = sy - armLen * 0.45f;
@@ -220,7 +280,8 @@ public final class Doll3D {
             m.sphere(ex, eyeY, eyeZ, eyeRad, eyeRad * 1.05f, eyeRad * 0.75f, 12, white);
             m.sphere(ex, eyeY, eyeZ + eyeRad * 0.62f, eyeRad * 0.5f, eyeRad * 0.5f, eyeRad * 0.22f, 10, iris);
             m.sphere(ex, eyeY, eyeZ + eyeRad * 0.8f, eyeRad * 0.24f, eyeRad * 0.24f, eyeRad * 0.1f, 8, pupil);
-            m.sphere(ex - side * eyeRad * 0.18f, eyeY + eyeRad * 0.2f, eyeZ + eyeRad * 0.9f, eyeRad * 0.09f, eyeRad * 0.09f, eyeRad * 0.05f, 6, white);
+            m.sphere(ex - side * eyeRad * 0.18f, eyeY + eyeRad * 0.2f, eyeZ + eyeRad * 0.92f, eyeRad * 0.15f, eyeRad * 0.15f, eyeRad * 0.06f, 8, catchLight);
+            m.sphere(ex + side * eyeRad * 0.16f, eyeY - eyeRad * 0.2f, eyeZ + eyeRad * 0.9f, eyeRad * 0.07f, eyeRad * 0.07f, eyeRad * 0.04f, 6, catchLight);
             // the eyelid (a half-closed eye for anger or sorrow)
             if (lidDown > 0) m.sphere(ex, eyeY + eyeRad * (1.05f - lidDown * 0.9f), eyeZ + eyeRad * 0.1f, eyeRad * 1.08f, eyeRad * 0.55f, eyeRad * 0.8f, 10, skin);
             // eyebrow: tilted by the expression (a lowered one for anger-prone looks: villains)

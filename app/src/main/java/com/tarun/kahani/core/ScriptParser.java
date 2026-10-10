@@ -104,7 +104,27 @@ public final class ScriptParser {
         placesOfScenes(story);
         genderFromVerbs(story);
         LookDesigner.designAll(story);
+        linkMounts(story);
         return story;
+    }
+
+    /**
+     * v34: a rider (Durga, look.mount = lion) and the animal character of the story that is her mount (a lion of the
+     * cast, or a character whose name says "शेर" / "lion"): the two are one picture on the stage, and each speaks with
+     * its own mouth — the rider's lips and the animal's jaw.
+     */
+    static void linkMounts(Story story) {
+        for (Story.CharacterDef r : story.characters) {
+            if (r.look == null || r.look.mount < 0 || r.voiceOnly) continue;
+            Story.CharacterDef best = null;
+            for (Story.CharacterDef m : story.characters) {
+                if (m == r || m.look == null || m.voiceOnly || m.rider != null) continue;
+                boolean beast = m.look.kind == Look.ANIMAL || m.look.kind == Look.BIRD;
+                boolean named = Txt.has(m.fullName + " " + m.displayName, Look.speciesWord(r.look.mount, true), Look.speciesWord(r.look.mount, false));
+                if ((beast && m.look.species == r.look.mount) || named) { best = m; if (beast && m.look.species == r.look.mount) break; }
+            }
+            if (best != null) { r.mountChar = best; best.rider = r; }
+        }
     }
 
     // ------------------------------------------------------------------ what the scenes leave unsaid

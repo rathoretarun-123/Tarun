@@ -175,7 +175,8 @@ final class Studio3DArt {
         String face = r != null && r.faceFound
                 ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR)
                 : "0|0|0|0|0|0|0|0";
-        return "pose|" + key + "|" + file + "|" + (int) t.angle + "|" + t.pose + "|" + t.emotion + "|" + String.format(Locale.US, "%.3f", hRatio) + "|" + face;
+        return "pose|" + key + "|" + file + "|" + (int) t.angle + "|" + t.pose + "|" + t.emotion + "|" + String.format(Locale.US, "%.3f", hRatio) + "|" + face
+                + "|" + String.format(Locale.US, "%.2f", t.conf) + "|" + t.light;        // v34: confidence and light level (the guide's record)
     }
 
     /** Adds a pose line of a character; beyond 100 pictures the oldest give way (their files deleted). */
@@ -377,11 +378,25 @@ final class Studio3DArt {
         // the phone guide (§7.2) and item 6: the doll takes its reference from the user's pictures — the nearest
         // uploaded picture that fits the description lends its clothing colours and hair; the style cue its light and skin
         String[] refNote = {""};
-        look = referenceLook(look, c, lib, refNote);
-        Doll3D.Result r = Doll3D.make(look, 1100, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue);
+        float[][] refHue = {null};
+        look = referenceLook(look, c, lib, refNote, refHue);
+        // v34 (the still-picture manual): the doll as large as the phone's memory allows (2048 px on a phone with a
+        // large heap), checked against the manual's list, and lit again once when it comes out dark, flat or harsh
+        int size = dollSize();
+        Doll3D.Result r;
+        try { r = Doll3D.make(look, size, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue); }
+        catch (OutOfMemoryError oom) { size = 1100; r = Doll3D.make(look, size, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue); }
+        com.tarun.kahani.core.StillQa.Result qa = stillQa(r, refHue[0]);
+        if (qa.dark || qa.flat || qa.harsh) {
+            try {
+                Doll3D.Result r2 = Doll3D.make(look, size, seed, 0, com.tarun.kahani.core.Pose.NEUTRAL, cue, qa.dark ? 1.5f : qa.harsh ? 0.8f : 1.25f);
+                com.tarun.kahani.core.StillQa.Result qa2 = stillQa(r2, refHue[0]);
+                if (qa2.score >= qa.score) { r = r2; qa = qa2; qa.lines.add("• lit again after the first check"); }
+            } catch (OutOfMemoryError ignored) { /* the first one stands */ }
+        }
         String file = project.savePicture(encode(r.px, r.w, r.h, true), "3d_char");
         int[] ratings = SceneMaker.ratings(false, r.faceKnown, true, cue != null && cue.pictures > 0, 0.8f, true);
-        String verdict = SceneMaker.verdict(ratings, refNote[0]);
+        String verdict = SceneMaker.verdict(ratings, refNote[0]) + " — " + qa.summary();
         String points = String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthHW, r.eyeLX, r.eyeLY, r.eyeRX, r.eyeRY, r.eyeR, r.turbanY);
         dropProposals(project, P_CHAR, key, null, true);
         dropProposals(project, P_VIEW, key, null, true);
@@ -391,12 +406,53 @@ final class Studio3DArt {
         String[] own = viewFiles(project, key);
         if (!beast) for (int i = 0; i < Figure3D.VIEW_ANGLES.length; i++) {
             if (own[i] != null) continue;          // the user's own back or side picture is the best view there is
-            Doll3D.Result v = Doll3D.make(look, 1100, seed, Figure3D.VIEW_ANGLES[i], com.tarun.kahani.core.Pose.NEUTRAL, cue);
+            Doll3D.Result v;
+            try { v = Doll3D.make(look, size, seed, Figure3D.VIEW_ANGLES[i], com.tarun.kahani.core.Pose.NEUTRAL, cue); }
+            catch (OutOfMemoryError oom) { v = Doll3D.make(look, 1100, seed, Figure3D.VIEW_ANGLES[i], com.tarun.kahani.core.Pose.NEUTRAL, cue); }
             String vf = project.savePicture(encode(v.px, v.w, v.h, true), "view");
             addProposal(project, "propose|view|" + key + "|" + (int) Figure3D.VIEW_ANGLES[i] + "|" + vf + "|" + viewPoints(v) + "|" + SceneMaker.score(ratings) + "|" + verdict);
         }
         if (!ask) accept(project, lib, ctx, proposalFor(project, P_CHAR, key));
         return file;
+    }
+
+    /**
+     * v34: the doll's frame height — on a phone whose heap allows it, large enough that the figure itself is at least
+     * 2048 px tall (the still-picture manual's minimum; the figure fills about 70% of its frame), else smaller.
+     */
+    static int dollSize() {
+        int big = Project.bigSide();
+        return big >= 3000 ? 2900 : big >= 2600 ? 2200 : 1100;
+    }
+
+    /** v34: the still-picture manual's checklist on a doll (its eyes known from the geometry). */
+    static com.tarun.kahani.core.StillQa.Result stillQa(Doll3D.Result r, float[] refHue) {
+        float[] eyes = r.faceKnown ? new float[]{r.eyeLX, r.eyeLY, r.eyeRX, r.eyeRY, r.eyeR} : null;
+        return com.tarun.kahani.core.StillQa.check(r.px, r.w, r.h, eyes, refHue, false, com.tarun.kahani.core.StillQa.HANDS_GEOMETRY);
+    }
+
+    /**
+     * v34 (the still-picture manual §6, the cleaning rule): a library picture smaller than 512 px on its long side
+     * is never the 3D maker's reference (a figure cut from a sheet is tall and narrow: its height is what counts).
+     * The size is read once from the file and kept with the picture.
+     */
+    static boolean bigEnough(Library lib, Library.Item it) {
+        String dim = it.meta("dim");
+        if (dim == null) {
+            try {
+                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                java.io.InputStream in = lib.open(it);
+                try { android.graphics.BitmapFactory.decodeStream(in, null, o); } finally { in.close(); }
+                dim = o.outWidth + "x" + o.outHeight;
+                it.setMeta("dim", dim);
+            } catch (Throwable e) { return true; }
+        }
+        try {
+            String[] d = dim.split("x");
+            int w = Integer.parseInt(d[0]), h = Integer.parseInt(d[1]);
+            return w <= 0 || h <= 0 || Math.max(w, h) >= 512;
+        } catch (Throwable e) { return true; }
     }
 
     private static String viewPoints(Doll3D.Result v) {
@@ -565,7 +621,7 @@ final class Studio3DArt {
         Set3D.Result r = Set3D.make(set, tod, w, h, sc.number, cue);
         String file = project.savePicture(encode(r.px, r.w, r.h, false), "3d_place");
         int[] ratings = SceneMaker.ratings(false, false, true, cue != null && cue.pictures > 0, 0.8f, true);
-        String verdict = SceneMaker.verdict(ratings, "");
+        String verdict = SceneMaker.verdict(ratings, "") + " — " + com.tarun.kahani.core.StillQa.check(r.px, r.w, r.h, null, null, true, com.tarun.kahani.core.StillQa.HANDS_GEOMETRY).summary();   // v34
         String key = String.valueOf(sc.number);
         dropProposals(project, P_SCENE, key, null, true);
         addProposal(project, String.format(Locale.US, "propose|scene|%s|%s|0|0|1|1|%.4f|%d|%s", key, file, r.ground, SceneMaker.score(ratings), verdict));
@@ -708,7 +764,9 @@ final class Studio3DArt {
      * fits the character's description best (by its traits and worn colours, the name counting double) lends its
      * two main clothing colours and its hair colour. The description still rules kind, outfit and props.
      */
-    static Look referenceLook(Look look, Story.CharacterDef c, Library lib, String[] note) {
+    static Look referenceLook(Look look, Story.CharacterDef c, Library lib, String[] note) { return referenceLook(look, c, lib, note, null); }
+
+    static Look referenceLook(Look look, Story.CharacterDef c, Library lib, String[] note, float[][] hueOut) {
         if (lib == null || c == null) return look;
         Library.Item best = null;
         float bestS = 0.45f;
@@ -718,7 +776,7 @@ final class Studio3DArt {
                 if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
                 if (seen++ > 200) break;
                 com.tarun.kahani.core.PicSense.Info in = lib.info(it);
-                if (in == null || !in.figure) continue;
+                if (in == null || !in.figure || !bigEnough(lib, it)) continue;          // v34: the manual's cleaning rule
                 float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta), c);
                 if (com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null) sc = Math.min(1f, sc + 0.3f);
                 if (sc > bestS) { bestS = sc; best = it; }
@@ -728,6 +786,7 @@ final class Studio3DArt {
         }
         if (best == null) return look;
         com.tarun.kahani.core.PicSense.Info in = lib.info(best);
+        if (hueOut != null && in != null) hueOut[0] = in.hue;
         Look out = look.copy();
         int b1 = -1, b2 = -1;
         for (int i = 0; i < 12 && i < in.hue.length; i++) {
@@ -759,7 +818,7 @@ final class Studio3DArt {
                 if ("view".equals(it.kind) || "place".equals(it.kind) || "object".equals(it.kind) || "1".equals(it.meta("3d"))) continue;
                 if (seen++ > 200) break;
                 com.tarun.kahani.core.PicSense.Info in = lib.info(it);
-                if (in == null || !in.figure) continue;
+                if (in == null || !in.figure || !bigEnough(lib, it)) continue;          // v34: the manual's cleaning rule
                 float sc = com.tarun.kahani.core.PicSense.matchCharacter(in, com.tarun.kahani.core.PicSense.Traits.fromMeta(it.meta), c);
                 if (com.tarun.kahani.core.ScriptAI.matchName(it.name, java.util.Collections.singletonList(c.displayName)) != null) sc = Math.min(1f, sc + 0.3f);
                 if (sc > bestS) { bestS = sc; best = it; }
@@ -782,8 +841,11 @@ final class Studio3DArt {
             String key = keyFor(project, story, c);
             String file = project.savePicture(encode(out, r.w, r.h, true), "3d_char");
             int[] ratings = SceneMaker.ratings(true, r.faceFound, true, cue != null && cue.pictures > 0, bestS, true);
+            com.tarun.kahani.core.PicSense.Info refIn = lib.info(best);
+            com.tarun.kahani.core.StillQa.Result qa = com.tarun.kahani.core.StillQa.check(out, r.w, r.h, r.faceFound ? new float[]{r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR} : null,
+                    refIn != null ? refIn.hue : null, false, com.tarun.kahani.core.StillQa.HANDS_SOURCE);
             String verdict = SceneMaker.verdict(ratings, "") + String.format(Locale.US, " — made from your picture \"%s\" (fit %.0f%%), recoloured to the description; reject it if %s must not look like that picture",
-                    best.label(), bestS * 100, c.shown());
+                    best.label(), bestS * 100, c.shown()) + " — " + qa.summary();
             String points = r.faceFound ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR, 0f)
                     : "0|0|0|0|0|0|0|0|0";
             dropProposals(project, P_CHAR, key, null, true);

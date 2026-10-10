@@ -17,6 +17,7 @@ public final class Pose {
     public float facing = 1f;          // +1 right, -1 left
     public float mouth;                // 0..1 open
     public float mouthWide = 0.5f;     // 0 round ("oo") .. 1 wide ("ee", "s"), from the sound of the voice
+    public float mountMouth;           // v34: 0..1 open — the jaw of the animal a rider sits on (Durga's lion speaking)
     public float blink;                // 0..1 closed
     public float armL = 8, armR = 8;   // degrees, 0 = down, 90 = sideways out, 170 = up
     public float elbowL = 10, elbowR = 10;
@@ -41,6 +42,19 @@ public final class Pose {
     public boolean swing;
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
     public long seed;
+
+    /** v34: a copy of this pose with another body state (a rider seated on the mount). */
+    public Pose copyFor(int bodyState) {
+        Pose q = new Pose();
+        q.body = bodyState; q.emotion = emotion; q.facing = facing; q.mouth = mouth; q.mouthWide = mouthWide; q.blink = blink;
+        q.armL = armL; q.armR = armR; q.elbowL = elbowL; q.elbowR = elbowR; q.walk = 0; q.walkAmt = 0; q.tilt = tilt; q.headTilt = headTilt;
+        q.bob = 0; q.squash = 1f; q.mountMouth = mountMouth; q.holdR = holdR; q.holdL = holdL; q.holdColor = holdColor;
+        q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
+        q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
+        q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
+        q.turbanOwner = turbanOwner; q.seed = seed;
+        return q;
+    }
 
     public void reset() {
         body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; swing = false; turbanOwner = null; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;

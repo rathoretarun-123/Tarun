@@ -53,6 +53,7 @@ import com.tarun.kahani.core.CommandParser;
 import com.tarun.kahani.core.Director;
 import com.tarun.kahani.core.Edits;
 import com.tarun.kahani.core.Film;
+import com.tarun.kahani.core.Cutout;
 import com.tarun.kahani.core.Look;
 import com.tarun.kahani.core.Pose;
 import com.tarun.kahani.core.Puppet;
@@ -582,10 +583,21 @@ public class MainActivity extends Activity {
      * each a button that cycles through the choices; Save writes the corrections into the pose lines. The director
      * casts the shots from these readings, so a wrong one shows as a wrong picture in a shot.
      */
+    /** v34: the confidence a pose line carries (field 15), 1 when an older line has none. */
+    static float confOf(String[] f) {
+        try { return f.length >= 15 ? Float.parseFloat(f[14].trim()) : 1f; } catch (NumberFormatException e) { return 1f; }
+    }
+
     void reviewPoses(final String key, final String shown, List<String> files, final Runnable after) {
         final List<String[]> lines = new ArrayList<String[]>();
         for (String[] f : Studio3DArt.poseLines(project, key)) if (files.contains(f[2])) lines.add(f);
         if (lines.isEmpty()) { after.run(); return; }
+        // v34 (the guide §11, layer 6): the unsure readings first — a dark picture, or a thin margin — so they are confirmed
+        java.util.Collections.sort(lines, new java.util.Comparator<String[]>() {
+            public int compare(String[] a, String[] b) { return Float.compare(confOf(a), confOf(b)); }
+        });
+        int unsureN = 0;
+        for (String[] f : lines) if (confOf(f) < 0.65f) unsureN++;
         final float[] angleOf = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
         final int[] angles = new int[lines.size()], poses = new int[lines.size()], emotions = new int[lines.size()];
         float d = getResources().getDisplayMetrics().density;
@@ -594,15 +606,16 @@ public class MainActivity extends Activity {
         int pad = (int) (8 * d);
         list.setPadding(pad, pad, pad, pad);
         TextView head = new TextView(this);
-        head.setText("The director read these from " + shown + "'s pictures. Tap a button to correct it; the shots are cast from this.");
+        head.setText("The director read these from " + shown + "'s pictures. Tap a button to correct it; the shots are cast from this."
+                + (unsureN > 0 ? "\n⚠ " + unsureN + " reading(s) are unsure (a dark picture, or a thin margin between front and back) — please confirm those first." : ""));
         head.setPadding(0, 0, 0, pad);
         list.addView(head);
         for (int i = 0; i < lines.size(); i++) {
             final String[] f = lines.get(i);
             final int idx = i;
             try { float a = Float.parseFloat(f[3].trim()); angles[i] = 0; for (int k = 0; k < angleOf.length; k++) if (Math.abs(angleOf[k] - a) < 1) angles[i] = k; } catch (NumberFormatException e) { angles[i] = 0; }
-            try { poses[i] = Math.max(0, Math.min(9, Integer.parseInt(f[4].trim()))); } catch (NumberFormatException e) { poses[i] = 0; }
-            try { emotions[i] = Math.max(0, Math.min(7, Integer.parseInt(f[5].trim()))); } catch (NumberFormatException e) { emotions[i] = 0; }
+            try { poses[i] = Math.max(0, Math.min(com.tarun.kahani.core.PoseSense.POSES - 1, Integer.parseInt(f[4].trim()))); } catch (NumberFormatException e) { poses[i] = 0; }
+            try { emotions[i] = Math.max(0, Math.min(com.tarun.kahani.core.PoseSense.EMOTIONS - 1, Integer.parseInt(f[5].trim()))); } catch (NumberFormatException e) { emotions[i] = 0; }
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setPadding(0, pad / 2, 0, pad / 2);
@@ -630,9 +643,20 @@ public class MainActivity extends Activity {
             bp.setText("Pose: " + com.tarun.kahani.core.PoseSense.poseName(poses[i]));
             be.setText("Feeling: " + com.tarun.kahani.core.PoseSense.emotionName(emotions[i]));
             ba.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { angles[idx] = (angles[idx] + 1) % angleOf.length; ba.setText("Angle: " + com.tarun.kahani.core.Angles.name(angleOf[angles[idx]])); } });
-            bp.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { poses[idx] = (poses[idx] + 1) % 10; bp.setText("Pose: " + com.tarun.kahani.core.PoseSense.poseName(poses[idx])); } });
-            be.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { emotions[idx] = (emotions[idx] + 1) % 8; be.setText("Feeling: " + com.tarun.kahani.core.PoseSense.emotionName(emotions[idx])); } });
+            bp.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { poses[idx] = (poses[idx] + 1) % com.tarun.kahani.core.PoseSense.POSES; bp.setText("Pose: " + com.tarun.kahani.core.PoseSense.poseName(poses[idx])); } });
+            be.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { emotions[idx] = (emotions[idx] + 1) % com.tarun.kahani.core.PoseSense.EMOTIONS; be.setText("Feeling: " + com.tarun.kahani.core.PoseSense.emotionName(emotions[idx])); } });
             col.addView(ba); col.addView(bp); col.addView(be);
+            if (confOf(f) < 0.65f) {
+                // v34: the guide's confirmation prompt — "the picture is dark / the reading is thin: is this right?"
+                int lv = Cutout.NORMAL;
+                try { if (f.length >= 16) lv = Integer.parseInt(f[15].trim()); } catch (NumberFormatException ignored) { }
+                TextView warn = new TextView(this);
+                warn.setText("⚠ " + (lv >= Cutout.LOW ? "Dark picture (" + Cutout.lightName(lv) + ")" : "Unsure reading") + ": read as " + com.tarun.kahani.core.Angles.name(angleOf[angles[i]])
+                        + ", " + com.tarun.kahani.core.PoseSense.emotionName(emotions[i]) + " — please confirm or correct");
+                warn.setTextColor(0xFFB00020);
+                warn.setTextSize(12);
+                col.addView(warn);
+            }
             row.addView(col);
             list.addView(row);
         }
@@ -817,11 +841,13 @@ public class MainActivity extends Activity {
             String file = line == null ? null : line.split("\\|")[2];
             pictureRow(card, "🎬 " + x.label, file == null ? "▫ none (the place itself is shown)" : "✅ picture", file, "angles:scene:" + x.key + ":" + x.label);
         }
-        Set<String> seen = new HashSet<String>();
-        for (String[] o : FreeArt.wanted(st)) if (seen.add(o[0])) pictureRow(card, o[1], cast.contains("|" + o[0] + "|") ? "✅ picture" : "▫ none", null, "angles:obj:" + o[0] + ":" + o[1]);
-        for (String l : cast.split("\n")) {
-            String[] f = l.split("\\|");
-            if (f.length >= 5 && f[0].equals("shot") && f[4].trim().equals("object") && seen.add(f[2])) pictureRow(card, f[2].replace(',', ' '), "✅ picture", f[3], "angles:obj:" + f[2] + ":" + f[2].replace(',', ' '));
+        for (String[] o : things(st)) {
+            String file = null;
+            for (String l : cast.split("\n")) {
+                String[] f = l.split("\\|");
+                if (f.length >= 5 && f[0].equals("shot") && f[2].trim().equals(o[0]) && f[4].trim().equals("object")) file = f[3];
+            }
+            pictureRow(card, "🔑 " + o[1], file != null ? "✅ picture" : "▫ none", file, "angles:obj:" + o[0] + ":" + o[1]);
         }
         card.addView(Ui.small(this, "➕ A thing of the story (name it) — its pictures", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { askThingName(null); }
@@ -847,13 +873,8 @@ public class MainActivity extends Activity {
         card.addView(r);
     }
 
-    /** The things the story names (keys, props, fruit, a kite…): their pictures from the library or from you, up to ten angles each (item 3). */
-    private LinearLayout objectsCard(final Story st) {
-        LinearLayout card = Ui.card(this);
-        card.addView(Ui.text(this, "Things of the story — a real picture of each makes its insert and the hand props look real. Up to 10 angles (front, side, rear) from the phone, the camera or the library; the director keeps them all.", 13, Ui.SUB, false));
-        String cast = project.read("cast.txt");
-        int n = 0;
-        // every thing the story names: the insert words, the free-picture words, and the things the user named (v25)
+    /** Every thing of the story, {key, shown}: the insert words, the free-picture words, and the things the user named (v25). */
+    private List<String[]> things(Story st) {
         List<String[]> things = new ArrayList<String[]>(FreeArt.wanted(st));
         Set<String> seenKeys = new HashSet<String>();
         for (String[] o : things) seenKeys.add(o[0]);
@@ -862,10 +883,20 @@ public class MainActivity extends Activity {
             String[] sk = t[0].split(":", 3);
             if (sk.length == 3 && seenKeys.add(sk[2])) things.add(new String[]{sk[2], sk[2]});
         }
-        for (String l : cast.split("\n")) {
+        for (String l : project.read("cast.txt").split("\n")) {
             String[] f = l.split("\\|");
             if (f.length >= 5 && f[0].equals("shot") && f[4].trim().equals("object") && seenKeys.add(f[2])) things.add(new String[]{f[2], f[2].replace(',', ' ')});
         }
+        return things;
+    }
+
+    /** The things the story names (keys, props, fruit, a kite…): their pictures from the library or from you, up to ten angles each (item 3). */
+    private LinearLayout objectsCard(final Story st) {
+        LinearLayout card = Ui.card(this);
+        card.addView(Ui.text(this, "Things of the story — a real picture of each makes its insert and the hand props look real. Up to 10 angles (front, side, rear) from the phone, the camera or the library; the director keeps them all.", 13, Ui.SUB, false));
+        String cast = project.read("cast.txt");
+        int n = 0;
+        List<String[]> things = things(st);
         card.addView(Ui.small(this, "➕ Another thing of the story (name it)", Ui.BLUE, new View.OnClickListener() {
             public void onClick(View v) { askThingName(null); }
         }));
@@ -1059,7 +1090,7 @@ public class MainActivity extends Activity {
     // ================================================================== studio
 
     private Story loadStory() {
-        Story st = ScriptParser.parse(FilmJob.scriptOf(project));
+        Story st = FilmJob.storyOf(project);
         castStory = st;
         return st;
     }
@@ -1154,7 +1185,23 @@ public class MainActivity extends Activity {
         // ---- characters
         heading(body, "Characters (pictures and voices)");
         for (Story.CharacterDef c : st.cast()) body.addView(characterCard(st, c));
-        for (Story.CharacterDef c : st.characters) if (c.voiceOnly) body.addView(Ui.text(this, "🔊 " + c.shown() + " — a voice only (heard, never pictured); its voice is chosen like the others' below", 13, Ui.SUB, false));
+        for (final Story.CharacterDef c : st.characters) {
+            if (!c.voiceOnly) continue;
+            // v34: a name that reads like a voice (a radio, a phone, an announcer) is still pictured when the user says so
+            LinearLayout vr = Ui.row(this);
+            vr.setGravity(Gravity.CENTER_VERTICAL);
+            vr.addView(Ui.text(this, "🔊 " + c.shown() + " — a voice only (heard, never pictured); its voice is chosen like the others' below", 13, Ui.SUB, false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            vr.addView(Ui.small(this, "📷 Picture it anyway", Ui.PRIMARY, new View.OnClickListener() {
+                public void onClick(View v) {
+                    project.setSetting("pictured." + c.displayName, "1");
+                    Story st2 = loadStory();
+                    Story.CharacterDef c2 = ScriptParser.resolve(st2, c.displayName);
+                    String k = c2 != null ? keyFor(c2) : c.displayName;
+                    anglesFor("angles:char:" + k + ":" + c.shown(), c.shown());
+                }
+            }));
+            body.addView(vr);
+        }
         if (st.hasNarrator) body.addView(narratorCard());
 
         // ---- parts of the story
@@ -1491,7 +1538,7 @@ public class MainActivity extends Activity {
             case Look.BIRD: kind = "bird"; break;
             default: kind = "man";
         }
-        return kind + (c.age > 0 ? ", " + c.age + " yrs" : "") + (l.hero ? "" : " • villain") + (c.fromScript ? "" : " • (no description found)");
+        return kind + (c.age > 0 ? ", " + c.age + " yrs" : "") + (l.heads > 1 ? " • " + l.heads + " heads (the central one speaks)" : "") + (l.arms > 2 ? " • " + l.arms + " arms" : "") + (l.mount >= 0 ? " • rides a " + Look.speciesWord(l.mount, false) : "") + (l.hero ? "" : " • villain") + (c.fromScript ? "" : " • (no description found)");
     }
 
     static Bitmap thumb(File f, int max) {
@@ -3543,7 +3590,7 @@ public class MainActivity extends Activity {
         final CheckBox three = new CheckBox(this);
         final List<String[]> uploadable = new ArrayList<String[]>();     // {angles target, label} of what has no picture yet (v23)
         try {
-            Story st = ScriptParser.parse(FilmJob.scriptOf(project));
+            Story st = FilmJob.storyOf(project);
             List<String[]> miss = AutoLibrary.missingTargets(project, st);
             for (String[] t : miss) {
                 String tgt = null;
@@ -3586,10 +3633,16 @@ public class MainActivity extends Activity {
             public void onClick(DialogInterface d, int w) {
                 final List<String[]> all = new ArrayList<String[]>(uploadable);
                 try {
-                    Story st = ScriptParser.parse(FilmJob.scriptOf(project));
+                    Story st = FilmJob.storyOf(project);
                     Set<String> seen = new HashSet<String>();
                     for (String[] u : all) seen.add(u[0]);
-                    for (Story.CharacterDef c : st.cast()) { String t = "angles:char:" + c.displayName + ":" + c.shown(); if (seen.add(t)) all.add(new String[]{t, c.shown() + " (more angles)"}); }
+                    castStory = st;
+                    for (Story.CharacterDef c : st.cast()) {
+                        String t = "angles:char:" + keyFor(c) + ":" + c.shown();          // v34: the Studio's key, never a second one
+                        boolean dup = false;
+                        for (String[] u : all) if (u[0].startsWith("angles:char:" + c.displayName + ":") || u[0].startsWith("angles:char:" + keyFor(c) + ":")) dup = true;
+                        if (!dup && seen.add(t)) all.add(new String[]{t, c.shown() + " (more angles)"});
+                    }
                     for (Story.Scene sc : st.scenes) {
                         String nm = sc.title.length() > 0 ? sc.title : "part " + sc.number;
                         String t = "angles:scene:" + sc.number + ":" + nm;
@@ -3600,6 +3653,14 @@ public class MainActivity extends Activity {
                     for (com.tarun.kahani.core.ScenePlan.Extra x : com.tarun.kahani.core.ScenePlan.extras(st)) {
                         String t = "angles:scene:" + x.key + ":" + x.label;
                         if (seen.add(t)) all.add(new String[]{t, "🎬 " + x.label + (project.manifestLine("scene", x.key) != null ? " ✅" : "")});
+                    }
+                    // v34: every thing of the story, with a picture (more angles) or without
+                    String cast = project.read("cast.txt");
+                    for (String[] o : things(st)) {
+                        String t = "angles:obj:" + o[0] + ":" + o[1];
+                        boolean dup = false;
+                        for (String[] u : all) if (u[0].startsWith("angles:obj:" + o[0] + ":")) dup = true;
+                        if (!dup && seen.add(t)) all.add(new String[]{t, "🔑 " + o[1] + (cast.contains("|" + o[0] + "|") ? " (more angles)" : "")});
                     }
                 } catch (Exception ignored) {}
                 String[] names = new String[all.size() + 1];
@@ -3808,6 +3869,7 @@ public class MainActivity extends Activity {
         body.addView(nav);
         body.addView(info);
         missingCard(body);
+        try { picturesCard(body, loadStory()); } catch (Throwable ignored) { /* v34: the check itself matters more */ }
         LinearLayout c = Ui.card(this);
         c.addView(Ui.button(this, "✔  Approve and make the film", Ui.GREEN, new View.OnClickListener() {
             public void onClick(View v) { j.approve(); showProgress(); }
@@ -3901,6 +3963,12 @@ public class MainActivity extends Activity {
         String reference;
         try { reference = new String(Project.readAll(getAssets().open("director_reference_training_guide.md")), "UTF-8"); } catch (Exception e) { reference = ""; }
         handbook += "\n\n" + com.tarun.kahani.core.DirectorTraining.SUMMARY + "\n\n" + reference;
+        String emo;
+        try { emo = new String(Project.readAll(getAssets().open("director_reference_emotion_activity_guide.md")), "UTF-8"); } catch (Exception e) { emo = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.EmotionActivityGuide.SUMMARY + "\n\n" + emo;
+        String still;
+        try { still = new String(Project.readAll(getAssets().open("still_picture_maker_guide.md")), "UTF-8"); } catch (Exception e) { still = ""; }
+        handbook += "\n\n" + com.tarun.kahani.core.StillImageGuide.SUMMARY + "\n\n" + still;
         String how = "HOW THE APP APPLIES IT\n"
                 + "• Every film is made of shots of about 3 s (never over 4), each with a locked camera and one action.\n"
                 + "• Every spoken line: front-facing close-ups framed on the face, at most 6 words per shot, the listener's silent reaction between; "

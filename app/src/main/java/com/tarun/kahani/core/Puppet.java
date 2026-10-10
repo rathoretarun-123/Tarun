@@ -46,6 +46,7 @@ public final class Puppet {
         else if (l.kind == Look.ANIMAL) drawAnimal(g, l, p, H);
         else if (l.kind == Look.BIRD) drawBird(g, l, p, H);
         else if (l.kind == Look.WITCH && p.disguised) drawHuman(g, disguise(l), p, H * 0.95f);
+        else if (l.mount >= 0 && p.body != Pose.LIE && p.body != Pose.HANG) drawRider(g, l, p, H);
         else drawHuman(g, l, p, H);
         g.restore();
     }
@@ -102,6 +103,42 @@ public final class Puppet {
         return new float[]{sx, sy, ex, ey, hx, hy};
     }
 
+    // ------------------------------------------------------------------ a rider (v34)
+
+    /** The animal the character rides, from the species: its fur colour, its kind (a bird for a peacock, a swan, an owl). */
+    static Look mountLook(Look l) {
+        Look m = new Look();
+        m.kind = l.mount >= 20 ? Look.BIRD : Look.ANIMAL;
+        m.species = l.mount;
+        m.furColor = Look.furOf(l.mount);
+        m.skin = shade(m.furColor, 1.25f);
+        m.eyeColor = 0xFF2B1B10;
+        m.hero = l.hero;
+        return m;
+    }
+
+    /**
+     * v34: Durga on her lion — the animal walks or stands below, the character sits on its back (legs folded) at
+     * three quarters of the height; the whole stays H tall. The mount faces the way the rider faces.
+     */
+    static void drawRider(Gfx g, Look l, Pose p, float H) {
+        Look m = mountLook(l);
+        float Hm = H * (m.kind == Look.BIRD ? 0.5f : 0.55f);
+        Pose pm = new Pose();
+        pm.facing = p.facing; pm.walk = p.walk; pm.walkAmt = p.walkAmt; pm.time = p.time; pm.emotion = p.emotion; pm.blink = p.blink;
+        pm.mouth = p.mountMouth;                         // the animal speaks with its own jaw
+        Pose pr0 = p;
+        if (m.kind == Look.BIRD) drawBird(g, m, pm, Hm); else drawAnimal(g, m, pm, Hm);
+        // the back of the animal: its body's top (the body sits at 0.6 of its height with a 0.27 radius; a rabbit or a mouse lower)
+        float back = (m.species == Look.SP_RABBIT || m.species == Look.SP_MOUSE) ? Hm * 0.72f : m.kind == Look.BIRD ? Hm * 0.6f : Hm * 0.85f;
+        Pose pr = pr0.copyFor(Pose.SIT);
+        pr.mountMouth = 0;
+        g.save();
+        g.translate(0, -back);
+        drawHuman(g, l, pr, H * 0.78f);
+        g.restore();
+    }
+
     // ------------------------------------------------------------------ human
 
     static void drawHuman(Gfx g, Look l, Pose p, float H) {
@@ -127,6 +164,15 @@ public final class Puppet {
         // Legs
         drawLegs(g, l, p, b);
 
+        // v34: a many-armed character (Durga): the other pairs of arms fan out behind the body, raised a little more
+        // with each pair, the farthest drawn first; the front pair (below) acts and holds things
+        int pairs = Math.max(1, l.arms / 2);
+        for (int k = pairs - 1; k >= 1; k--) {
+            float raise = Math.min(150, 30 + 24 * k);
+            drawArm(g, l, p, b, -1, raise, 18, 0);
+            drawArm(g, l, p, b, 1, raise, 18, 0);
+        }
+
         // Outfit body
         drawOutfit(g, l, p, b);
 
@@ -142,6 +188,22 @@ public final class Puppet {
         }
         g.translate(p.facing * b.headR * 0.04f, b.headY);
         if (p.headTilt != 0) g.rotate(p.headTilt * p.facing);
+        // v34: a many-headed character (Ravana): the other heads in a row behind the main one, the farther drawn
+        // first, a little lower and smaller; they share the face but keep their mouths shut — the central head speaks
+        int extra = Math.min(9, l.heads - 1);
+        if (extra > 0) {
+            Pose q = new Pose();
+            q.emotion = p.emotion; q.facing = p.facing; q.time = p.time; q.blink = p.blink; q.disguised = p.disguised;
+            for (int i = extra; i >= 1; i--) {
+                int side = i % 2 == 1 ? -1 : 1, k = (i + 1) / 2;
+                g.save();
+                g.translate(side * k * b.headR * 1.7f, k * b.headR * 0.12f);
+                float sc = 1f - 0.04f * k;
+                g.scale(sc, sc);
+                drawHead(g, l, q, b);
+                g.restore();
+            }
+        }
         drawHead(g, l, p, b);
         g.restore();
 

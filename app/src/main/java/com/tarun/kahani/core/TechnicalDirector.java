@@ -31,8 +31,8 @@ public final class TechnicalDirector {
     /** P6: never longer than 4 seconds per shot. */
     public static final float MAX_SHOT_SECONDS = 4f;
     /** Where the director cuts (v24): shots of about 3 s, never over the cap — about a quarter more shots than cutting at the cap. */
-    public static float CUT_SECONDS = 2.6f;          // v33: set from the edits (shot_length) before every film; 2.6 s by default
-    public static final float CUT_SECONDS_DEFAULT = 2.6f;
+    public static float CUT_SECONDS = 2.0f;          // v33: set from the edits (shot_length) before every film; v34: 2 s by default (was 2.6)
+    public static final float CUT_SECONDS_DEFAULT = 2.0f;
     /** C5: a character moves less than 15 % of the frame width in one shot. */
     public static final float MAX_MOTION = 0.15f;
     /** C4.3: one action only, at most 10 % frame movement (the shot table asks for this). */

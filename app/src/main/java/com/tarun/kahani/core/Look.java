@@ -67,6 +67,39 @@ public final class Look {
     public boolean robot;
     /** Small lights: an LED clip in the hair, earphones around the neck, light-up shoes. */
     public boolean ledClip, earphones, lightShoes;
+    /** v34: how many heads (Ravana's ten, a three-headed dragon's three); the central head is the face that speaks. */
+    public int heads = 1;
+    /** v34: how many arms (Durga's eight, a four-armed god's four); the front pair holds things, the others fan out behind. */
+    public int arms = 2;
+    /** v34: the animal the character rides or sits on (a species, SP_*), or -1: Durga on her lion, Ganesha on his mouse. */
+    public int mount = -1;
+
+    /** The word for a species, in English or Hindi. */
+    public static String speciesWord(int sp, boolean hi) {
+        switch (sp) {
+            case SP_FOX: return hi ? "लोमड़ी" : "fox"; case SP_LION: return hi ? "शेर" : "lion"; case SP_BEAR: return hi ? "भालू" : "bear";
+            case SP_ELEPHANT: return hi ? "हाथी" : "elephant"; case SP_RABBIT: return hi ? "खरगोश" : "rabbit"; case SP_CAT: return hi ? "बिल्ली" : "cat";
+            case SP_DOG: return hi ? "कुत्ता" : "dog"; case SP_DEER: return hi ? "हिरण" : "deer"; case SP_GOAT: return hi ? "बकरी" : "goat";
+            case SP_COW: return hi ? "बैल" : "bull"; case SP_TIGER: return hi ? "बाघ" : "tiger"; case SP_WOLF: return hi ? "भेड़िया" : "wolf";
+            case SP_MOUSE: return hi ? "चूहा" : "mouse"; case SP_TORTOISE: return hi ? "कछुआ" : "tortoise"; case SP_HORSE: return hi ? "घोड़ा" : "horse";
+            case SP_CROW: return hi ? "कौआ" : "crow"; case SP_SPARROW: return hi ? "चिड़िया" : "sparrow"; case SP_PARROT: return hi ? "तोता" : "parrot";
+            case SP_PEACOCK: return hi ? "मोर" : "peacock"; case SP_OWL: return hi ? "उल्लू" : "owl"; case SP_HEN: return hi ? "मुर्गी" : "hen";
+            case SP_EAGLE: return hi ? "चील" : "eagle"; case SP_DUCK: return hi ? "हंस" : "swan";
+            default: return hi ? "जानवर" : "animal";
+        }
+    }
+
+    /** The fur colour an animal of this species usually has (for a mount drawn from words). */
+    public static int furOf(int sp) {
+        switch (sp) {
+            case SP_LION: return 0xFFC9963A; case SP_TIGER: return 0xFFE08A2E; case SP_BEAR: return 0xFF5A3A22; case SP_ELEPHANT: return 0xFF8E8E8E;
+            case SP_RABBIT: return 0xFFE8E0D6; case SP_CAT: return 0xFF9A8A7A; case SP_DOG: return 0xFFB08A5A; case SP_DEER: return 0xFFB5793F;
+            case SP_GOAT: return 0xFFD9D2C6; case SP_COW: return 0xFFE8E4DC; case SP_WOLF: return 0xFF7A7A80; case SP_MOUSE: return 0xFF9E9E9E;
+            case SP_TORTOISE: return 0xFF5E7A3A; case SP_HORSE: return 0xFF6B4A2A; case SP_PEACOCK: return 0xFF1E6FA8; case SP_OWL: return 0xFF8A6A4A;
+            case SP_DUCK: return 0xFFF4F4F0; case SP_PARROT: return 0xFF3FA34D; case SP_EAGLE: return 0xFF6A4A2A; case SP_CROW: return 0xFF222222;
+            default: return 0xFF3A2A20;
+        }
+    }
 
     public Look copy() {
         Look l = new Look();
@@ -79,7 +112,7 @@ public final class Look {
         l.katar = katar; l.spear = spear; l.shield = shield; l.wand = wand; l.axe = axe; l.mace = mace;
         l.satchel = satchel; l.chains = chains; l.necklace = necklace; l.bangles = bangles; l.earrings = earrings;
         l.anklets = anklets; l.shoeColor = shoeColor; l.variant = variant; l.hero = hero; l.species = species;
-        l.energy = energy; l.poise = poise;
+        l.energy = energy; l.poise = poise; l.heads = heads; l.arms = arms; l.mount = mount;
         l.glasses = glasses; l.glowGlasses = glowGlasses; l.gadget = gadget; l.techWand = techWand; l.robot = robot;
         l.ledClip = ledClip; l.earphones = earphones; l.lightShoes = lightShoes;
         return l;

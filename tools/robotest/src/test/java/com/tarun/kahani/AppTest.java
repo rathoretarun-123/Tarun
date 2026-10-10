@@ -2470,4 +2470,625 @@ public class AppTest {
         }
         g.release();
     }
+
+    /**
+     * v34: pictures are taken for every character, every place, every added scene and every thing of the story, from
+     * every button that offers them — and the newest front, place or insert is the one the Studio shows and the film
+     * uses, whichever key the button used (the Studio's cast key or the popup's display name).
+     */
+    @Test
+    public void everyCharacterPlaceAndThingTakesPictures() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        Project p = sampleProject();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        set(a, "project", p);
+        Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        Story st = (Story) call("com.tarun.kahani.app.FilmJob", "storyOf", p);
+        set(a, "castStory", st);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method charFile = MainActivity.class.getDeclaredMethod("charFile", Story.CharacterDef.class);
+        charFile.setAccessible(true);
+        Method sceneFile = MainActivity.class.getDeclaredMethod("sceneFile", Story.Scene.class);
+        sceneFile.setAccessible(true);
+        byte[] picA = Files.readAllBytes(new File(ASSETS, "sample/char_vrinda.jpg").toPath());
+        byte[] picB = Files.readAllBytes(new File(ASSETS, "sample/char_kripa.jpg").toPath());
+        byte[] place = Files.readAllBytes(new File(ASSETS, "sample/bg_forest.jpg").toPath());
+        byte[] thing = Files.readAllBytes(new File(ASSETS, "sample/char_kripa_pouch.jpg").toPath());
+        StringBuilder rep = new StringBuilder();
+        // 1. every character: a front from the Studio's button (its cast key), then another from the popup (its display name)
+        assertTrue("characters in the story", st.cast().size() >= 5);
+        for (Story.CharacterDef c : st.cast()) {
+            String key = (String) keyFor.invoke(a, c);
+            List<byte[]> one = new ArrayList<byte[]>(); one.add(picA);
+            call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:char:" + key + ":" + c.shown(), one, null);
+            String first = (String) charFile.invoke(a, c);
+            assertNotNull(c.shown() + ": a front after the Studio's upload", first);
+            List<byte[]> two = new ArrayList<byte[]>(); two.add(picB);
+            call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:char:" + c.displayName + ":" + c.shown(), two, null);
+            String second = (String) charFile.invoke(a, c);
+            assertNotNull(c.shown() + ": a front after the popup's upload", second);
+            assertTrue(c.shown() + ": the newest front is shown (" + first + " -> " + second + ")", !second.equals(first));
+            String film = (String) call("com.tarun.kahani.app.Studio3DArt", "charFile", p, st, c);
+            assertTrue(c.shown() + ": the film uses the same front as the Studio (" + film + " vs " + second + ")", second.equals(film));
+            int lines = 0; java.util.Set<String> keys = new java.util.HashSet<String>();
+            for (String l : p.read("cast.txt").split("\n")) {
+                String[] f = l.split("\\|");
+                if (f.length >= 3 && f[0].equals("char") && ScriptParser.resolve(st, f[1]) == c) lines++;
+                if (f.length >= 3 && (f[0].equals("pose") || f[0].equals("view")) && ScriptParser.resolve(st, f[1]) == c) keys.add(f[1]);
+            }
+            assertTrue(c.shown() + ": one character line, not " + lines, lines == 1);
+            assertTrue(c.shown() + ": its pictures under one key, not " + keys, keys.size() <= 1);
+            rep.append(c.shown()).append(": ").append(first).append(" -> ").append(second).append('\n');
+        }
+        // 2. every place: a new picture replaces the wide view, the earlier one stays in the library
+        for (Story.Scene sc : st.scenes) {
+            String before = (String) sceneFile.invoke(a, sc);
+            List<byte[]> one = new ArrayList<byte[]>(); one.add(place);
+            call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:scene:" + sc.number + ":" + sc.title, one, null);
+            String after = (String) sceneFile.invoke(a, sc);
+            assertNotNull("part " + sc.number + ": a place picture", after);
+            assertTrue("part " + sc.number + ": the new picture is the place now", !after.equals(before));
+            if (before != null) {
+                boolean kept = false;
+                for (com.tarun.kahani.app.Library.Item it : lib.find(com.tarun.kahani.app.Library.PIC, null, null)) if (it.name.endsWith("(earlier)")) kept = true;
+                assertTrue("part " + sc.number + ": the earlier place picture is in the library", kept);
+            }
+            rep.append("part ").append(sc.number).append(": ").append(before).append(" -> ").append(after).append('\n');
+        }
+        // 3. every scene the director adds
+        for (com.tarun.kahani.core.ScenePlan.Extra x : com.tarun.kahani.core.ScenePlan.extras(st)) {
+            List<byte[]> one = new ArrayList<byte[]>(); one.add(place);
+            call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:scene:" + x.key + ":" + x.label, one, null);
+            assertNotNull("added scene " + x.label + ": its picture", p.manifestLine("scene", x.key));
+            rep.append("added scene ").append(x.key).append(": ").append(p.manifestLine("scene", x.key)).append('\n');
+        }
+        // 4. every thing of the story and one named now: the newest insert replaces the earlier one
+        Method things = MainActivity.class.getDeclaredMethod("things", Story.class);
+        things.setAccessible(true);
+        @SuppressWarnings("unchecked") List<String[]> ts = new ArrayList<String[]>((List<String[]>) things.invoke(a, st));
+        ts.add(new String[]{"पगड़ी", "पगड़ी"});
+        assertTrue("things in the story", ts.size() >= 2);
+        for (String[] o : ts) {
+            for (int k = 0; k < 2; k++) {
+                List<byte[]> one = new ArrayList<byte[]>(); one.add(k == 0 ? thing : picB);
+                call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:obj:" + o[0] + ":" + o[1], one, null);
+            }
+            int n = 0; String file = null;
+            for (String l : p.read("cast.txt").split("\n")) {
+                String[] f = l.split("\\|");
+                if (f.length >= 5 && f[0].equals("shot") && f[1].trim().length() == 0 && f[2].trim().equals(o[0]) && f[4].trim().equals("object")) { n++; file = f[3]; }
+            }
+            assertTrue(o[1] + ": one insert line, not " + n, n == 1);
+            assertTrue(o[1] + ": its file is in the story", p.has(file));
+            rep.append("thing ").append(o[1]).append(": ").append(file).append('\n');
+        }
+        // 5. the Studio: one upload button per character and per place, one per thing
+        call(a, "showStudio", new Class<?>[0]);
+        idle();
+        View root = a.findViewById(android.R.id.content);
+        List<String> tx = texts(root, new ArrayList<String>());
+        int up = 0, objUp = 0;
+        for (String t : tx) { if (t.equals("📷 Pictures (up to 10)")) up++; if (t.equals("📷 Angles") || t.equals("📷 More angles")) objUp++; }
+        assertTrue("one upload button per character and place: " + up + " for " + st.cast().size() + " + " + st.scenes.size(), up == st.cast().size() + st.scenes.size());
+        assertTrue("one upload button per thing: " + objUp + " for " + ts.size(), objUp >= Math.min(20, ts.size()));
+        // 6. the progress screen's card: a row for every character, place, added scene and thing
+        LinearLayout card = new LinearLayout(a);
+        call(a, "picturesCard", new Class<?>[]{LinearLayout.class, Story.class}, card, st);
+        idle();
+        List<String> rows = texts(card, new ArrayList<String>());
+        int more = 0;
+        for (String t : rows) if (t.equals("📷 More") || t.equals("📷 Add")) more++;
+        int want = st.cast().size() + st.scenes.size() + com.tarun.kahani.core.ScenePlan.extras(st).size() + ts.size();
+        assertTrue("a row with its button for everything: " + more + " of " + want, more == want);
+        // 7. the make-film popup lists every character, place, added scene and thing
+        call(a, "makeFilm", new Class<?>[0]);
+        idle();
+        android.app.AlertDialog mk = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull("the make-film dialog", mk);
+        mk.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).performClick(); idle();
+        android.app.AlertDialog list = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull(list);
+        List<String> items = new ArrayList<String>();
+        for (int i = 0; i < list.getListView().getCount(); i++) items.add(String.valueOf(list.getListView().getItemAtPosition(i)));
+        for (Story.CharacterDef c : st.cast()) { boolean has = false; for (String it : items) if (it.startsWith(c.shown())) has = true; assertTrue("popup lists " + c.shown() + ": " + items, has); }
+        for (Story.Scene sc : st.scenes) { boolean has = false; for (String it : items) if (it.startsWith("Part " + sc.number + ":")) has = true; assertTrue("popup lists part " + sc.number + ": " + items, has); }
+        for (String[] o : ts) { boolean has = false; for (String it : items) if (it.startsWith("🔑 " + o[1]) || it.startsWith(o[1] + " (scene")) has = true; assertTrue("popup lists the thing " + o[1] + ": " + items, has); }
+        assertTrue("popup lets a thing be named", items.get(items.size() - 1).startsWith("➕"));
+        list.dismiss(); mk.dismiss();
+        // 8. a character whose name reads like a voice is pictured after all when the user says so
+        Project q = Project.create(ctx);
+        q.write("script.txt", "रेडियो की कहानी\n\n(स्थान: एक छोटा घर। सुबह का समय।)\nमीना: \"आज रेडियो पर क्या आएगा?\"\nरेडियो की आवाज़: \"आज की ताज़ा ख़बरें!\"\nमीना: \"वाह!\"\n\nसमाप्त\n");
+        Story vs = (Story) call("com.tarun.kahani.app.FilmJob", "storyOf", q);
+        Story.CharacterDef radio = null;
+        for (Story.CharacterDef c : vs.characters) if (c.voiceOnly) radio = c;
+        assertNotNull("the radio reads as a voice only: " + vs.characters.size(), radio);
+        assertTrue("a voice only is not in the cast", !vs.cast().contains(radio));
+        set(a, "project", q);
+        call(a, "showStudio", new Class<?>[0]);
+        idle();
+        View anyway = byText(a.findViewById(android.R.id.content), "📷 Picture it anyway", new int[]{0});
+        assertNotNull("the voice-only row offers a picture anyway", anyway);
+        anyway.performClick(); idle();
+        firstDialogItem();
+        rep.append("picture it anyway: ").append(pickerStarted(a)).append('\n');
+        Story vs2 = (Story) call("com.tarun.kahani.app.FilmJob", "storyOf", q);
+        boolean pictured = false;
+        for (Story.CharacterDef c : vs2.cast()) if (c.displayName.equals(radio.displayName)) pictured = true;
+        assertTrue("the radio is pictured from now on", pictured);
+        System.out.println("PICTURES FOR EVERYTHING:\n" + rep);
+        ac.pause().stop().destroy();
+    }
+
+    /**
+     * v34: a character with more than one head (Ravana): the head count read from the name or the description, the
+     * face taken from the central head of the picture (the one that speaks), the heads beside it never mistaken
+     * for raised arms, the picture read as a front, and the drawn puppet given its other heads.
+     */
+    @Test
+    public void manyHeadedCharactersKeepTheirHeads() throws Exception {
+        // 1. the description
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("रावण — दस सिर वाला राक्षस, सोने का मुकुट") == 10);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("लंका का राजा, दशानन") == 10);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("तीन सिरों वाला अजगर, हरे शल्क") == 3);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("a three-headed dragon with green scales") == 3);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("a monster with 5 heads") == 5);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("उसके सिर पर लाल पगड़ी है") == 1);
+        assertTrue(com.tarun.kahani.core.LookDesigner.headsIn("a girl with a red ribbon in her hair, head held high") == 1);
+        Story st = ScriptParser.parse("रावण और राम\n\nरावण (दस सिर वाला राक्षस, काले बाल, सोने का मुकुट, लाल आँखें)\nराम (नीला धनुषधारी राजकुमार)\n\n(स्थान: लंका का महल।)\nरावण: \"कौन है?\"\nराम: \"मैं राम हूँ।\"\n\nसमाप्त\n");
+        Story.CharacterDef ravan = null;
+        for (Story.CharacterDef c : st.characters) if (c.displayName.contains("रावण")) ravan = c;
+        assertNotNull(ravan);
+        assertTrue("Ravana has ten heads: " + ravan.look.heads, ravan.look.heads == 10);
+        // 2. a picture: a body with five heads in a row (skin, dark eyes with whites, a red mouth, dark hair above)
+        int w = 640, h = 960;
+        int[] px = new int[w * h];
+        java.util.Arrays.fill(px, 0xFFFFFFFF);
+        for (int y = 330; y < 900; y++) for (int x = 200; x < 440; x++) px[y * w + x] = 0xFF2A4FA0;      // the body
+        for (int y = 300; y < 340; y++) for (int x = 290; x < 350; x++) px[y * w + x] = 0xFFD9A074;      // the neck
+        int[] cxs = {100, 210, 320, 430, 540};
+        for (int cx : cxs) {
+            int cy = 230, r = 52;
+            for (int y = cy - r - 18; y <= cy + r; y++) for (int x = cx - r; x <= cx + r; x++) {
+                float dx = x - cx, dy = y - cy;
+                if (dx * dx + dy * dy <= r * r) px[y * w + x] = y < cy - r * 0.55f ? 0xFF1E1410 : 0xFFD9A074;    // hair above, skin below
+                else if (y < cy - r * 0.3f && dx * dx + (dy + 14) * (dy + 14) <= (r + 6) * (r + 6)) px[y * w + x] = 0xFF1E1410;   // the hair's top
+            }
+            for (int e = -1; e <= 1; e += 2) {
+                int ex = cx + e * 18, ey = cy - 8;
+                for (int y = ey - 8; y <= ey + 8; y++) for (int x = ex - 11; x <= ex + 11; x++) if ((x - ex) * (x - ex) / 121f + (y - ey) * (y - ey) / 64f <= 1) px[y * w + x] = 0xFFFFFFFF;   // the white
+                for (int y = ey - 5; y <= ey + 5; y++) for (int x = ex - 5; x <= ex + 5; x++) if ((x - ex) * (x - ex) + (y - ey) * (y - ey) <= 25) px[y * w + x] = 0xFF1A1008;                  // the iris
+            }
+            for (int y = cy + 22; y <= cy + 26; y++) for (int x = cx - 14; x <= cx + 14; x++) px[y * w + x] = 0xFF9C2A2A;    // the mouth
+        }
+        com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(px, w, h, false);
+        assertTrue("a face is found", r.faceFound);
+        assertTrue("five heads read in the picture: " + r.heads, r.heads >= 3);
+        float mx = r.mouthX * r.w + r.cropX;
+        assertTrue("the face is the central head's (mouth at x=" + mx + ")", Math.abs(mx - 320) < 40);
+        assertTrue("a many-headed front is a front: " + com.tarun.kahani.core.Angles.name(com.tarun.kahani.core.Angles.guess(r)),
+                com.tarun.kahani.core.Angles.guess(r) == com.tarun.kahani.core.Angles.FRONT || com.tarun.kahani.core.Angles.guess(r) == com.tarun.kahani.core.Angles.THREE_QUARTER);
+        // 3. the rig: no raised arm from the heads beside the face, the whole row is the head
+        Art.Sprite sp = new Art.Sprite();
+        sp.faceKnown = true;
+        sp.eyeLX = r.eyeLX; sp.eyeRX = r.eyeRX; sp.eyeLY = r.eyeY; sp.eyeRY = r.eyeY; sp.eyeR = r.eyeR;
+        sp.mouthX = r.mouthX; sp.mouthY = r.mouthY; sp.mouthHW = r.mouthW / 2;
+        Rig rig = Rig.build(r, sp, ravan.look, sampleProject().loader());
+        assertNotNull("a rig for the many-headed figure", rig);
+        assertTrue("no raised arm read from the other heads", !rig.armUp[0] && !rig.armUp[1]);
+        assertTrue("the head is the whole row: " + rig.headHalf, rig.headHalf > 0.3f);
+        // 4. the drawn puppet has its heads: wider at the head than a one-headed one
+        int[] wide = new int[2];
+        for (int k = 0; k < 2; k++) {
+            Look lk = ravan.look.copy();
+            lk.heads = k == 0 ? 1 : 10;
+            Bitmap b = Bitmap.createBitmap(600, 300, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(b, 1);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 600, 300);
+            Pose p = new Pose(); p.time = 1;
+            g.save(); g.translate(300, 290);
+            com.tarun.kahani.core.Puppet.draw(g, lk, p, 260);
+            g.restore();
+            int minX = 600, maxX = 0;
+            for (int y = 0; y < 90; y++) for (int x = 0; x < 600; x++) if ((b.getPixel(x, y) & 0xFFFFFF) != 0xFFFFFF) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+            wide[k] = maxX - minX;
+        }
+        assertTrue("ten drawn heads are wider than one: " + wide[0] + " -> " + wide[1], wide[1] > wide[0] * 2);
+        System.out.println("MANY HEADS: picture heads=" + r.heads + " mouthX=" + mx + " headHalf=" + rig.headHalf + " puppet width " + wide[0] + " -> " + wide[1]);
+    }
+
+    /**
+     * v34 (the emotion / activity / angle guide §11, §13): the user's sheets darkened as if photographed in a dark room
+     * read like the bright ones — the same angle for most figures, a light level on every reading, a lower confidence
+     * on the dark ones (so the user is asked to confirm), and never a feeling on a back or a faceless figure.
+     */
+    @Test
+    public void darkPicturesReadLikeBrightOnes() throws Exception {
+        File[] sheets = userSheets();
+        File dir = sheets[0].getParentFile();
+        String[] names = {"sheet02.jpg", "sheet15.jpg", "sheet01.jpg"};
+        boolean[] beast = {false, false, true};
+        StringBuilder rep = new StringBuilder();
+        int totalFigs = 0, agree = 0, lessSure = 0;
+        for (int n = 0; n < names.length; n++) {
+            int[] wh = new int[2];
+            int[] px = pixelsOf(new File(dir, names[n]), wh);
+            List<com.tarun.kahani.core.Angles.Piece> figs = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, wh[0], wh[1]), wh[0], wh[1]);
+            assertTrue(names[n] + ": " + figs.size(), figs.size() >= 10);
+            int standH = 0;
+            List<com.tarun.kahani.core.Cutout.Result> bright = new ArrayList<com.tarun.kahani.core.Cutout.Result>(), dark = new ArrayList<com.tarun.kahani.core.Cutout.Result>();
+            for (com.tarun.kahani.core.Angles.Piece pc : figs) {
+                com.tarun.kahani.core.Cutout.Result rb = com.tarun.kahani.core.Cutout.process(pc.px.clone(), pc.w, pc.h, beast[n]);
+                int[] dp = pc.px.clone();
+                for (int i = 0; i < dp.length; i++) { int c = dp[i]; dp[i] = (c & 0xFF000000) | ((int) (((c >> 16) & 255) * 0.3f) << 16) | ((int) (((c >> 8) & 255) * 0.3f) << 8) | (int) ((c & 255) * 0.3f); }
+                com.tarun.kahani.core.Cutout.Result rd = com.tarun.kahani.core.Cutout.process(dp, pc.w, pc.h, beast[n]);
+                bright.add(rb); dark.add(rd);
+                if (rb.w < rb.h * 1.25f) standH = Math.max(standH, rb.h);
+            }
+            int sheetAgree = 0;
+            for (int i = 0; i < figs.size(); i++) {
+                com.tarun.kahani.core.Cutout.Result rb = bright.get(i), rd = dark.get(i);
+                // (a dark-furred monkey is "low light" even in a bright sheet — the brightened reading is what saves it)
+                assertTrue(names[n] + " #" + (i + 1) + " bright light level: " + rb.lightLevel, beast[n] || rb.lightLevel <= com.tarun.kahani.core.Cutout.NORMAL);
+                assertTrue(names[n] + " #" + (i + 1) + " dark light level: " + rd.lightLevel + " vs " + rb.lightLevel, rd.lightLevel >= com.tarun.kahani.core.Cutout.LOW && rd.lightLevel > rb.lightLevel);
+                if (rd.faceFound) assertTrue(names[n] + " #" + (i + 1) + " read from a brightened copy", rd.pxRead != null && rd.pxRead != rd.px);
+                com.tarun.kahani.core.PoseSense.Tag tb = com.tarun.kahani.core.PoseSense.tag(rb, standH, beast[n]), td = com.tarun.kahani.core.PoseSense.tag(rd, standH, beast[n]);
+                totalFigs++;
+                if (tb.angle == td.angle) { agree++; sheetAgree++; }
+                if (td.conf < tb.conf) lessSure++;
+                for (com.tarun.kahani.core.PoseSense.Tag t : new com.tarun.kahani.core.PoseSense.Tag[]{tb, td}) {
+                    if (t.angle == com.tarun.kahani.core.Angles.BACK || !t.m.face)
+                        assertTrue(names[n] + " #" + (i + 1) + " a feeling on a back / faceless figure: " + t, t.emotion == com.tarun.kahani.core.PoseSense.NO_FACE || t.emotion == com.tarun.kahani.core.PoseSense.ASLEEP);
+                    assertTrue(t.record(), t.record().contains("light=") && t.record().contains("confidence="));
+                }
+                rep.append(names[n]).append(" #").append(i + 1).append(": bright ").append(tb).append(String.format(java.util.Locale.US, " (%.2f)", tb.conf)).append(" | dark ").append(td).append(String.format(java.util.Locale.US, " (%.2f, %s)", td.conf, com.tarun.kahani.core.Cutout.lightName(td.light))).append('\n');
+            }
+            assertTrue(names[n] + ": the dark readings agree with the bright ones on " + sheetAgree + " of " + figs.size(), sheetAgree >= figs.size() * 3 / 4);
+        }
+        assertTrue("dark readings are less sure: " + lessSure + " of " + totalFigs, lessSure >= totalFigs * 3 / 4);
+        System.out.println("DARK vs BRIGHT (" + agree + "/" + totalFigs + " angles agree):\n" + rep);
+    }
+
+    /**
+     * v34 (the 3D still picture maker manual): every prompt carries the six blocks and the negative list (after the
+     * Technical Director's cleaning); the doll is drawn at least 2048 px tall where the heap allows, its face is never
+     * covered by its own shoulders (adult and monster too), its eyes have catch-lights and its skin warm shadows; a
+     * doll with blown whites is lit again and passes; the 3D maker's proposal carries the checklist; a library
+     * picture smaller than 512 px is never the maker's reference.
+     */
+    @Test
+    public void dollPassesTheStillPictureChecklist() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        Project p = Project.create(ctx);
+        p.write("script.txt", "जंगल की कहानी\n\nभोला (40 साल का आदमी, सफ़ेद कुर्ता, बड़ी मूँछें)\nखान राक्षस (विशालकाय राक्षस, काले बाल, लाल आँखें, सींग)\n\n(स्थान: घना जंगल, सुबह।)\nभोला: \"यह कौन है?\"\nखान राक्षस: \"हा हा हा!\"\n\nसमाप्त\n");
+        Story st = ScriptParser.parse(p.read("script.txt"));
+        StringBuilder rep = new StringBuilder();
+        // 1. the prompt builder
+        for (Story.CharacterDef c : st.cast()) {
+            String pr = TechnicalDirector.clean(com.tarun.kahani.core.Bible.characterPrompt(c));
+            assertTrue("character prompt complete: " + pr, com.tarun.kahani.core.StillPrompt.complete(pr));
+        }
+        String pl = com.tarun.kahani.core.Bible.placePrompt("घना जंगल", "घना जंगल, सुबह", "16:9");
+        assertTrue("place prompt complete: " + pl, com.tarun.kahani.core.StillPrompt.complete(pl));
+        assertTrue("no aspect words in the prompt", !pl.contains("16:9"));
+        // 2. the dolls: faces visible, catch-lights, warm skin, 2048 px
+        for (Story.CharacterDef c : st.cast()) {
+            com.tarun.kahani.core.Doll3D.Result r = com.tarun.kahani.core.Doll3D.make(c.look, 2900, 7, 0, com.tarun.kahani.core.Pose.NEUTRAL, null);
+            com.tarun.kahani.core.StillQa.Result q = com.tarun.kahani.core.StillQa.check(r.px, r.w, r.h, new float[]{r.eyeLX, r.eyeLY, r.eyeRX, r.eyeRY, r.eyeR}, null, false, com.tarun.kahani.core.StillQa.HANDS_GEOMETRY);
+            rep.append(c.shown()).append(": ").append(q.summary()).append('\n');
+            assertTrue(c.shown() + " eyes with catch-lights (face not covered): " + q.summary(), q.catchLights);
+            assertTrue(c.shown() + " skin glows: " + q.summary(), q.warmSkin);
+            assertTrue(c.shown() + " at least 2048 px: " + r.w + "x" + r.h, Math.max(r.w, r.h) >= 2048);
+            // the mouth is the face's, not the shirt's: its colour is far from the outfit's
+            int mc = r.px[Math.min(r.h - 1, (int) (r.mouthY * r.h)) * r.w + (int) (r.mouthX * r.w)];
+            int pc = c.look.primary;
+            int d = Math.abs(((mc >> 16) & 255) - ((pc >> 16) & 255)) + Math.abs(((mc >> 8) & 255) - ((pc >> 8) & 255)) + Math.abs((mc & 255) - (pc & 255));
+            assertTrue(c.shown() + " mouth not covered by the shirt (colour distance " + d + ")", d > 40 || c.look.kind == com.tarun.kahani.core.Look.MONSTER);
+        }
+        // 3. blown whites are lit again and pass
+        Story.CharacterDef bhola = st.cast().get(0);
+        com.tarun.kahani.core.Look white = bhola.look.copy();
+        white.primary = 0xFFF6F6F2; white.secondary = 0xFFF0F0EC;
+        com.tarun.kahani.core.Doll3D.Result w1 = com.tarun.kahani.core.Doll3D.make(white, 2900, 7, 0, com.tarun.kahani.core.Pose.NEUTRAL, null, 1f);
+        com.tarun.kahani.core.Doll3D.Result w2 = com.tarun.kahani.core.Doll3D.make(white, 2900, 7, 0, com.tarun.kahani.core.Pose.NEUTRAL, null, 0.8f);
+        com.tarun.kahani.core.StillQa.Result q1 = com.tarun.kahani.core.StillQa.check(w1.px, w1.w, w1.h, null, null, false, 0), q2 = com.tarun.kahani.core.StillQa.check(w2.px, w2.w, w2.h, null, null, false, 0);
+        rep.append("white kurta: ").append(q1.summary()).append(" → relit: ").append(q2.summary()).append('\n');
+        assertTrue("the relight takes the blown whites down: " + q1.summary() + " → " + q2.summary(), !q2.harsh && q2.score >= q1.score);
+        // 4. the 3D maker's proposal carries the checklist
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(a);
+        String key = (String) s3d("keyFor", p, st, bhola);
+        p.setSetting("rejected3d.ref." + key, "1");
+        s3d("makeCharacter", p, st, bhola, lib, ctx, null, true, null, false);
+        String[] prop = (String[]) s3d("proposalFor", p, "char", key);
+        assertNotNull("a doll proposed", prop);
+        String verdict = prop[prop.length - 1];
+        rep.append("proposal: ").append(verdict).append('\n');
+        assertTrue("the proposal carries the checklist: " + verdict, verdict.startsWith("Score") && verdict.contains("Still QA") && verdict.contains("catch-lights"));
+        // 5. the cleaning rule: no reference under 512 px
+        Bitmap small = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888), big = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888);
+        java.io.ByteArrayOutputStream bs = new java.io.ByteArrayOutputStream(), bb = new java.io.ByteArrayOutputStream();
+        small.compress(Bitmap.CompressFormat.PNG, 100, bs); big.compress(Bitmap.CompressFormat.PNG, 100, bb);
+        com.tarun.kahani.app.Library.Item is = lib.addBytes("pic", "person", "tiny", "", bs.toByteArray(), ".png", "test");
+        com.tarun.kahani.app.Library.Item ib = lib.addBytes("pic", "person", "large", "", bb.toByteArray(), ".png", "test");
+        assertTrue("a 300 px picture is no reference", !(Boolean) s3d("bigEnough", lib, is));
+        assertTrue("a 900 px picture is", (Boolean) s3d("bigEnough", lib, ib));
+        System.out.println("STILL PICTURE CHECKLIST:\n" + rep);
+        ac.pause().stop().destroy();
+    }
+
+    /**
+     * v34: a character with more than two arms and one who sits on an animal (Durga on her lion): the arm count and
+     * the mount read from the description, the drawn puppet and the doll given their arms and the animal, the rig
+     * of such a picture keeping the arms still and the legs off the walk, and the director's cut shortened to 2.2 s.
+     */
+    @Test
+    public void manyArmedRidersAndShorterShots() throws Exception {
+        // 1. the words
+        Story st = ScriptParser.parse("पात्र और रूप-रंग (Characters):\n1. दुर्गा देवी (30 वर्ष):\n * चेहरा और शरीर: दिव्य तेज वाली देवी, आठ भुजाओं वाली, हर हाथ में एक अस्त्र, शेर पर सवार।\n * पहनावा: लाल साड़ी, सोने का मुकुट।\n"
+                + "2. कार्तिकेय (20 वर्ष):\n * चेहरा: a six-armed god riding a peacock.\n * पहनावा: blue dhoti.\n3. रामू (10 वर्ष):\n * चेहरा: गोल चेहरा, हाथ में लाल पतंग।\n4. शेरू:\n * चेहरा और शरीर: एक बड़ा सुनहरा शेर, जंगल का राजा।\n"
+                + "\nदृश्य 1: पहाड़\n(स्थान: पहाड़ की चोटी। सुबह।)\nदुर्गा देवी: \"डरो मत।\"\nकार्तिकेय: \"जय!\"\nरामू: \"वाह!\"\nशेरू: \"गर्र!\"\n\nसमाप्त\n");
+        Story.CharacterDef durga = null, kartik = null, ramu = null, sheru = null;
+        for (Story.CharacterDef c : st.characters) {
+            if (c.displayName.contains("दुर्गा")) durga = c; else if (c.displayName.contains("कार्तिकेय")) kartik = c; else if (c.displayName.contains("रामू")) ramu = c; else if (c.displayName.contains("शेरू")) sheru = c;
+        }
+        assertNotNull(durga); assertNotNull(kartik); assertNotNull(ramu); assertNotNull(sheru);
+        assertTrue("Durga: eight arms, on a lion, a woman: " + durga.look.arms + "/" + durga.look.mount + "/" + durga.look.kind, durga.look.arms == 8 && durga.look.mount == Look.SP_LION && durga.look.female && durga.look.kind != Look.ANIMAL);
+        assertTrue("Kartikeya: six arms, on a peacock: " + kartik.look.arms + "/" + kartik.look.mount, kartik.look.arms == 6 && kartik.look.mount == Look.SP_PEACOCK);
+        assertTrue("Ramu: two arms, no mount (a kite in his hand is no third arm): " + ramu.look.arms + "/" + ramu.look.mount, ramu.look.arms == 2 && ramu.look.mount < 0);
+        assertTrue("Sheru is a lion, not a rider: " + sheru.look.kind + "/" + sheru.look.mount, sheru.look.kind == Look.ANIMAL && sheru.look.mount < 0);
+        assertTrue(com.tarun.kahani.core.LookDesigner.armsIn("चार हाथों वाला देवता") == 4 && com.tarun.kahani.core.LookDesigner.mountIn("चूहे की सवारी") == Look.SP_MOUSE
+                && com.tarun.kahani.core.LookDesigner.mountIn("mounted on a white bull") == Look.SP_COW && com.tarun.kahani.core.LookDesigner.mountIn("a girl who loves her dog") < 0);
+        // 2. the drawn puppet: eight arms are wider at the shoulders than two; a rider is wider than tall at the bottom (the lion)
+        int[] shoulderW = new int[2], baseW = new int[2];
+        for (int k = 0; k < 2; k++) {
+            Look lk = durga.look.copy();
+            if (k == 0) { lk.arms = 2; lk.mount = -1; }
+            Bitmap b = Bitmap.createBitmap(700, 420, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(b, 1);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 700, 420);
+            Pose p = new Pose(); p.time = 1;
+            g.save(); g.translate(350, 410);
+            com.tarun.kahani.core.Puppet.draw(g, lk, p, 380);
+            g.restore();
+            int[] px = new int[700 * 420];
+            b.getPixels(px, 0, 700, 0, 0, 700, 420);
+            int minS = 700, maxS = 0, minB = 700, maxB = 0;
+            for (int y = 0; y < 420; y++) for (int x = 0; x < 700; x++) {
+                if ((px[y * 700 + x] & 0xFFFFFF) == 0xFFFFFF) continue;
+                if (y > 120 && y < 220) { minS = Math.min(minS, x); maxS = Math.max(maxS, x); }
+                if (y > 330) { minB = Math.min(minB, x); maxB = Math.max(maxB, x); }
+            }
+            shoulderW[k] = maxS - minS; baseW[k] = maxB - minB;
+        }
+        assertTrue("eight arms fan wider than two: " + shoulderW[0] + " -> " + shoulderW[1], shoulderW[1] > shoulderW[0] * 1.3f);
+        assertTrue("the lion under her is wider than her own feet: " + baseW[0] + " -> " + baseW[1], baseW[1] > baseW[0] * 1.5f);
+        // 3. the doll: the lion under the goddess, her face high in the picture
+        com.tarun.kahani.core.Doll3D.Result r = com.tarun.kahani.core.Doll3D.make(durga.look, 900, 7, 0, com.tarun.kahani.core.Pose.NEUTRAL, null);
+        assertTrue("a wide doll (the lion): " + r.w + "x" + r.h, r.w > r.h * 0.8f && r.faceKnown);
+        assertTrue("her face in the upper part: " + r.mouthY, r.mouthY < 0.45f);
+        // 4. the rig of a rider's picture: arms still, legs off the walk cycle
+        int w = 900, h = 700;
+        int[] px = new int[w * h];
+        java.util.Arrays.fill(px, 0xFFFFFFFF);
+        for (int y = 420; y < 640; y++) for (int x = 120; x < 780; x++) { float dx = (x - 450) / 330f, dy = (y - 530) / 110f; if (dx * dx + dy * dy <= 1) px[y * w + x] = 0xFFC9963A; }   // the lion's body
+        for (int y = 600; y < 690; y++) for (int x : new int[]{200, 330, 560, 690}) for (int k = -22; k <= 22; k++) px[y * w + x + k] = 0xFFB8862E;                                      // its legs
+        for (int y = 250; y < 470; y++) for (int x = 370; x < 530; x++) px[y * w + x] = 0xFFC0282A;                                                                                   // her red sari
+        for (int y = 290; y < 330; y++) for (int x = 250; x < 650; x++) px[y * w + x] = 0xFFD9A074;                                                                                   // her arms out
+        for (int y = 110; y < 262; y++) for (int x = 380; x < 520; x++) { float dx = (x - 450) / 70f, dy = (y - 186) / 76f; if (dx * dx + dy * dy <= 1) px[y * w + x] = y < 140 ? 0xFF1E1410 : 0xFFD9A074; }   // her head
+        for (int e = -1; e <= 1; e += 2) { int ex = 450 + e * 24, ey = 176; for (int y = ey - 9; y <= ey + 9; y++) for (int x = ex - 12; x <= ex + 12; x++) if ((x - ex) * (x - ex) / 144f + (y - ey) * (y - ey) / 81f <= 1) px[y * w + x] = 0xFFFFFFFF;
+            for (int y = ey - 5; y <= ey + 5; y++) for (int x = ex - 5; x <= ex + 5; x++) if ((x - ex) * (x - ex) + (y - ey) * (y - ey) <= 25) px[y * w + x] = 0xFF1A1008; }
+        for (int y = 214; y <= 219; y++) for (int x = 432; x <= 468; x++) px[y * w + x] = 0xFF9C2A2A;
+        com.tarun.kahani.core.Cutout.Result cut = com.tarun.kahani.core.Cutout.process(px, w, h, false);
+        Art.Sprite sp = new Art.Sprite();
+        sp.faceKnown = cut.faceFound;
+        sp.eyeLX = cut.eyeLX; sp.eyeRX = cut.eyeRX; sp.eyeLY = cut.eyeY; sp.eyeRY = cut.eyeY; sp.eyeR = cut.eyeR; sp.mouthX = cut.mouthX; sp.mouthY = cut.mouthY; sp.mouthHW = cut.mouthW / 2;
+        Rig rig = Rig.build(cut, sp, durga.look, sampleProject().loader());
+        if (rig != null && !rig.animal) {
+            assertTrue("a rider's arms never swing", rig.armsFixed);
+            assertTrue("a rider's legs never walk", !rig.legs);
+        }
+        // 5. shorter shots: the cut is 2.2 s and the director's shots keep under it (an establishing shot may hold longer)
+        assertTrue("the cut is 2 s", Math.abs(TechnicalDirector.CUT_SECONDS_DEFAULT - 2.0f) < 0.01f);
+        TechnicalDirector.CUT_SECONDS = TechnicalDirector.CUT_SECONDS_DEFAULT;
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        Director d = new Director(story, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        int under = 0, over = 0; float longest = 0, total = 0;
+        for (Film.Shot sh : film.shots) { total += sh.dur; longest = Math.max(longest, sh.dur); if (sh.dur <= TechnicalDirector.CUT_SECONDS + 0.05f) under++; else over++; }
+        System.out.println("SHOTS: " + film.shots.size() + ", mean " + (total / Math.max(1, film.shots.size())) + " s, longest " + longest + " s, over the cut " + over);
+        assertTrue("most shots under the cut: " + under + " of " + film.shots.size(), under >= film.shots.size() * 0.85f);
+        assertTrue("no shot over the four-second cap: " + longest, longest <= TechnicalDirector.MAX_SHOT_SECONDS + 0.05f);
+        assertTrue("the mean shot is short: " + (total / film.shots.size()), total / film.shots.size() <= 2.0f);
+    }
+
+    /**
+     * v34: Durga on her lion, and the lion speaking: the lion is not staged on its own while she is there — its lines
+     * move the jaw of the lion in her picture (the rider's lips stay shut), framed wide enough to show it; her own
+     * lines move her lips. A character who turns away is drawn from the back. The best of the uploaded pictures
+     * (a standing, calm front with a face) becomes the main picture.
+     */
+    @Test
+    public void riderAndAnimalBothSpeakAndBacksAreUsed() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        // 1. the story: Durga rides the lion; the lion speaks; a boy turns away and leaves
+        Story st = ScriptParser.parse("पात्र और रूप-रंग (Characters):\n1. दुर्गा देवी (30 वर्ष):\n * चेहरा और शरीर: आठ भुजाओं वाली देवी, शेर पर सवार।\n * पहनावा: लाल साड़ी।\n"
+                + "2. शेर:\n * चेहरा और शरीर: एक बड़ा सुनहरा शेर, देवी का वाहन।\n3. रामू (10 वर्ष):\n * चेहरा: गोल चेहरा।\n"
+                + "\nदृश्य 1: पहाड़\n(स्थान: पहाड़ की चोटी। सुबह।)\nदुर्गा देवी: \"डरो मत, रामू।\"\nशेर: \"हम तुम्हारी रक्षा करेंगे।\"\nरामू: \"धन्यवाद माँ!\"\n(रामू पीठ फेरकर धीरे-धीरे चला जाता है।)\nदुर्गा देवी: \"जाओ, खुश रहो।\"\n\nसमाप्त\n");
+        Story.CharacterDef durga = null, lion = null, ramu = null;
+        for (Story.CharacterDef c : st.characters) { if (c.displayName.contains("दुर्गा")) durga = c; else if (c.displayName.equals("शेर")) lion = c; else if (c.displayName.contains("रामू")) ramu = c; }
+        assertNotNull(durga); assertNotNull(lion); assertNotNull(ramu);
+        assertTrue("the lion is Durga's mount: " + lion.rider + " / " + durga.mountChar, lion.rider == durga && durga.mountChar == lion);
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(Art.fromManifest("", st, sampleProject().loader()));
+        Film.Actor dA = null, lA = null, rA = null;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) { if (a.c == durga && dA == null) dA = a; if (a.c == lion) lA = a; if (a.c == ramu && rA == null) rA = a; }
+        assertNotNull("Durga is staged", dA);
+        assertTrue("the lion is not staged on its own beside her", lA == null);
+        int own = 0, mount = 0;
+        for (Film.Speak sk : dA.speaks) if (sk.mount) mount++; else own++;
+        assertTrue("Durga speaks with her lips twice and the lion with its jaw once: " + own + "/" + mount, own == 2 && mount == 1);
+        // the renderer: the lion's line moves the mount's mouth, never Durga's lips; her lines move her lips
+        Renderer rd = new Renderer(film, null);
+        Film.Speak lionLine = null, herLine = null;
+        for (Film.Speak sk : dA.speaks) { if (sk.mount) lionLine = sk; else if (herLine == null) herLine = sk; }
+        float maxMount = 0;
+        Method mouthAt = Renderer.class.getDeclaredMethod("mouthAt", Film.Actor.class, float.class);
+        mouthAt.setAccessible(true);
+        for (float t = lionLine.t0 + 0.05f; t < lionLine.t1; t += 0.05f) maxMount = Math.max(maxMount, (Float) mouthAt.invoke(rd, dA, t));
+        assertTrue("the lion's line has a mouth to move: " + maxMount, maxMount > 0.1f);
+        // the shot of the lion's line shows the whole picture (not her face alone)
+        Film.Shot ls = null;
+        for (Film.Shot sh : film.shots) if (sh.t <= lionLine.t0 + 0.1f && sh.t + sh.dur > lionLine.t0 + 0.1f) ls = sh;
+        assertNotNull("a shot for the lion's line", ls);
+        assertTrue("the lion's line is framed wide: size " + ls.size, ls.size <= com.tarun.kahani.core.ShotPlanner.MEDIUM);
+        // 2. the rig of a rider's picture finds the lion's jaw on the lion's side
+        int w = 900, h = 700;
+        int[] px = new int[w * h];
+        java.util.Arrays.fill(px, 0xFFFFFFFF);
+        for (int y = 420; y < 640; y++) for (int x = 120; x < 700; x++) { float dx = (x - 410) / 290f, dy = (y - 530) / 110f; if (dx * dx + dy * dy <= 1) px[y * w + x] = 0xFFC9963A; }   // the body
+        for (int y = 380; y < 560; y++) for (int x = 640; x < 860; x++) { float dx = (x - 750) / 110f, dy = (y - 470) / 90f; if (dx * dx + dy * dy <= 1) px[y * w + x] = 0xFFB8862E; }    // its head, right
+        for (int y = 600; y < 690; y++) for (int x : new int[]{200, 330, 500, 620}) for (int k = -22; k <= 22; k++) px[y * w + x + k] = 0xFFB8862E;
+        for (int y = 250; y < 470; y++) for (int x = 340; x < 480; x++) px[y * w + x] = 0xFFC0282A;
+        for (int y = 110; y < 262; y++) for (int x = 340; x < 480; x++) { float dx = (x - 410) / 70f, dy = (y - 186) / 76f; if (dx * dx + dy * dy <= 1) px[y * w + x] = y < 140 ? 0xFF1E1410 : 0xFFD9A074; }
+        for (int e = -1; e <= 1; e += 2) { int ex = 410 + e * 24, ey = 176; for (int y = ey - 9; y <= ey + 9; y++) for (int x = ex - 12; x <= ex + 12; x++) if ((x - ex) * (x - ex) / 144f + (y - ey) * (y - ey) / 81f <= 1) px[y * w + x] = 0xFFFFFFFF;
+            for (int y = ey - 5; y <= ey + 5; y++) for (int x = ex - 5; x <= ex + 5; x++) if ((x - ex) * (x - ex) + (y - ey) * (y - ey) <= 25) px[y * w + x] = 0xFF1A1008; }
+        for (int y = 214; y <= 219; y++) for (int x = 392; x <= 428; x++) px[y * w + x] = 0xFF9C2A2A;
+        com.tarun.kahani.core.Cutout.Result cut = com.tarun.kahani.core.Cutout.process(px, w, h, false);
+        Art.Sprite sp = new Art.Sprite();
+        sp.faceKnown = cut.faceFound;
+        sp.eyeLX = cut.eyeLX; sp.eyeRX = cut.eyeRX; sp.eyeLY = cut.eyeY; sp.eyeRY = cut.eyeY; sp.eyeR = cut.eyeR; sp.mouthX = cut.mouthX; sp.mouthY = cut.mouthY; sp.mouthHW = cut.mouthW / 2;
+        Rig rig = Rig.build(cut, sp, durga.look, sampleProject().loader());
+        assertNotNull("a rig for the rider's picture", rig);
+        if (!rig.animal) {
+            assertTrue("the lion's jaw is found", rig.mountJaw);
+            assertTrue("on the lion's side (right): " + rig.mjSide + " tip " + rig.mjTipX, rig.mjSide > 0 && rig.mjTipX > 0.85f);
+        }
+        // 3. the boy turns away and leaves: his back is to the camera, and the casting wants his back picture
+        float back = -1;
+        for (Film.Key k : rA.keys) if (k.backTurned) { back = k.t; break; }
+        assertTrue("Ramu turns his back", back >= 0);
+        Film.Seg seg = film.segAt(back + 0.3f);
+        Film.Shot bs = null;
+        for (Film.Shot sh : film.shots) if (sh.t <= back + 0.3f && sh.t + sh.dur > back + 0.3f) bs = sh;
+        if (bs != null) assertTrue("the casting wants his back", Math.abs(com.tarun.kahani.core.Casting.want(film, seg, bs, rA, back + 0.3f).angle - com.tarun.kahani.core.Angles.BACK) < 1);
+        // 4. the best of the uploads becomes the main picture: sheet 15 (the kurta girl: crying, laughing, angry, sitting…)
+        Project p = sampleProject();
+        Story sst = ScriptParser.parse(p.read("script.txt"));
+        Story.CharacterDef vr = null;
+        for (Story.CharacterDef c : sst.cast()) if (c.displayName.contains("वृंदा")) vr = c;
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        Field lf = MainActivity.class.getDeclaredField("library");
+        lf.setAccessible(true);
+        com.tarun.kahani.app.Library lib = (com.tarun.kahani.app.Library) lf.get(ac.get());
+        String key = (String) s3d("keyFor", p, sst, vr);
+        File sheet = new File(userSheets()[0].getParentFile(), "sheet15.jpg");
+        List<byte[]> one = new ArrayList<byte[]>(); one.add(Files.readAllBytes(sheet.toPath()));
+        call("com.tarun.kahani.app.SheetSaver", "save", p, lib, sst, "angles:char:" + key + ":" + vr.shown(), one, null);
+        String mainFile = p.manifestLine("char", key).split("\\|")[2];
+        byte[] mainBytes = Files.readAllBytes(p.file(mainFile).toPath());
+        String[] mainTag = null;
+        for (String l : p.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 6 && f[0].equals("pose") && f[1].equals(key) && p.has(f[2]) && java.util.Arrays.equals(Files.readAllBytes(p.file(f[2]).toPath()), mainBytes)) mainTag = f;
+        }
+        assertNotNull("the main picture is one of the sheet's figures", mainTag);
+        System.out.println("MAIN PICTURE of sheet 15: angle " + mainTag[3] + " pose " + mainTag[4] + " emotion " + mainTag[5] + "; lion line framed " + ls.size + ", back at " + back);
+        assertTrue("the main picture faces front: " + mainTag[3], Math.abs(Float.parseFloat(mainTag[3])) < 1);
+        assertTrue("the main picture stands: " + mainTag[4], Integer.parseInt(mainTag[4]) == com.tarun.kahani.core.PoseSense.STAND);
+        int em = Integer.parseInt(mainTag[5]);
+        assertTrue("the main picture is calm or happy: " + em, em == com.tarun.kahani.core.PoseSense.NEUTRAL || em == com.tarun.kahani.core.PoseSense.HAPPY);
+        ac.pause().stop().destroy();
+    }
+
+    /** Every visible view with a click action, in screen order. */
+    static List<View> clickables(View v, List<View> out) {
+        if (v.getVisibility() != View.VISIBLE) return out;
+        if (v.hasOnClickListeners()) out.add(v);
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) clickables(((ViewGroup) v).getChildAt(i), out);
+        return out;
+    }
+
+    static String labelOf(View v) {
+        if (v instanceof TextView) return ((TextView) v).getText().toString().replace('\n', ' ');
+        return v.getContentDescription() == null ? v.getClass().getSimpleName() : v.getContentDescription().toString();
+    }
+
+    /**
+     * v34: every button of every screen (Home, the story, the Studio, the lines, the library, settings), tapped one by
+     * one on a fresh screen, with the first choice of any list it opens tapped too: none may crash. Buttons that start
+     * a whole film, a 3D build, recording, or delete things are left out (other tests run those paths).
+     */
+    @Test
+    public void everyButtonOnEveryScreenWorks() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        Project p = sampleProject();
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        String[] screens = {"showHome", "showStory", "showStudio", "showLines", "showLibrary", "showSettings"};
+        String[] deny = {"Make the film", "🎬 Make", "Make film", "Delete", "Clear", "✖", "Log out", "Logout", "Sign out", "Exit", "🧊", "Build all", "Record", "🎙  Record",
+                "Remove", "Reset", "Forget", "Uninstall", "Make the views", "📐 Make", "Restore", "Approve", "■", "Stop"};
+        StringBuilder rep = new StringBuilder();
+        List<String> failures = new ArrayList<String>();
+        int clicked = 0, skipped = 0;
+        for (String screen : screens) {
+            set(a, "project", p);
+            call(a, screen, new Class<?>[0]);
+            idle();
+            int n = clickables(a.findViewById(android.R.id.content), new ArrayList<View>()).size();
+            int here = 0;
+            for (int i = 0; i < n; i++) {
+                try {
+                    for (android.app.Dialog dl : org.robolectric.shadows.ShadowDialog.getShownDialogs()) if (dl.isShowing()) dl.dismiss();
+                    set(a, "project", p);
+                    call(a, screen, new Class<?>[0]);
+                    idle();
+                } catch (Throwable e) { failures.add(screen + " could not be shown again: " + e); break; }
+                List<View> cl = clickables(a.findViewById(android.R.id.content), new ArrayList<View>());
+                if (i >= cl.size()) break;
+                View v = cl.get(i);
+                String label = labelOf(v);
+                boolean no = false;
+                for (String dny : deny) if (label.contains(dny)) no = true;
+                if (no) { skipped++; continue; }
+                android.app.Dialog before = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+                try {
+                    v.performClick();
+                    idle();
+                    while (shadowOf(a).getNextStartedActivity() != null) { /* a picker or a share sheet opened: fine */ }
+                    android.app.AlertDialog dl = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+                    if (dl != null && dl != before && dl.isShowing() && dl.getListView() != null && dl.getListView().getCount() > 0) {
+                        String first = String.valueOf(dl.getListView().getItemAtPosition(0));
+                        boolean bad = false;
+                        for (String dny : deny) if (first.contains(dny)) bad = true;
+                        if (!bad) { dl.getListView().performItemClick(dl.getListView(), 0, 0); idle(); while (shadowOf(a).getNextStartedActivity() != null) { } }
+                    }
+                    clicked++; here++;
+                } catch (Throwable e) {
+                    Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+                    failures.add(screen + " / \"" + label + "\": " + c);
+                }
+            }
+            rep.append(screen).append(": ").append(here).append(" of ").append(n).append(" tapped\n");
+        }
+        for (android.app.Dialog dl : org.robolectric.shadows.ShadowDialog.getShownDialogs()) if (dl.isShowing()) dl.dismiss();
+        System.out.println("BUTTONS: " + clicked + " tapped, " + skipped + " left out, " + failures.size() + " failed\n" + rep + (failures.isEmpty() ? "" : "FAILED:\n" + String.join("\n", failures)));
+        assertTrue("buttons that crashed:\n" + String.join("\n", failures), failures.isEmpty());
+        assertTrue("most buttons tapped: " + clicked, clicked >= 40);
+        ac.pause().stop().destroy();
+    }
 }

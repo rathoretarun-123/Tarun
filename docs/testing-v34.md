@@ -179,3 +179,35 @@ Test `injuriesUmbrellaWalkerAndHealing`, and the same story made as a film twice
 * Started from the app, a film now waits before the 3D maker: "Waiting for you: please add pictures of Zara, the surface of the moon", with two buttons on the progress screen (add pictures, or let the 3D maker make only these). Nothing is built in 3D while it waits. A switch in Settings ("Ask me for my pictures first") turns this off.
 * The 3D maker's style cue comes from the library's pictures when the story has fewer than four of its own: "Style cue from 2 reference picture(s): key light from the right, warmth +0.12, saturation 0.37, contrast 0.26, 2 skin tone(s)".
 * A doll made with a reference picture takes that picture's skin and hair colour, and the style cue never overrides that skin.
+
+## 11. Final check of lip-sync and movement
+
+A desktop check (`LipMotionQc`, in the session's scratch tools) makes each story's voices, mouth envelopes and film exactly as the film tool does, then reads the mouth of every speaking character 30 times a second through the renderer's own `mouthAt`, and every character's position frame by frame.
+
+What it measures for lip-sync: whether the mouth is open on loud frames, shut in pauses of 120 ms or more, and shut before and after each line; how closely the opening follows the voice's loudness; how many openings there are per second of speech; and the largest change of the opening between two frames.
+
+**Before the fix (situations and park stories):**
+
+| Story | Open while loud | Shut in pauses | Correlation with loudness | Largest change between two frames |
+|---|---|---|---|---|
+| Situations | 100 % | 100 % | 0.69 | 0.77 |
+| Park | 98.4 % | 100 % | 0.72 | 0.72 |
+
+The mouth snapped open and shut within a frame on many syllables — chatter, not speech.
+
+**The fix (`Mixer.envelope`):** a slightly slower opening, a gap fill that keeps half the opening through a dip shorter than about 90 ms (the animators' rule of not flapping on every syllable), a glide limit of 0.08 of a full opening per 10 ms applied after the 40 ms lead, and the envelope starting and ending closed; the renderer eases the first and last 60 ms of a line.
+
+**After:**
+
+| Story | Open while loud | Shut in pauses | Shut before and after | Correlation | Openings per second | Largest change between two frames |
+|---|---|---|---|---|---|---|
+| Situations (Hindi) | 99.4 % | 100 % | 100 % | 0.79 | 3.2 | 0.40 |
+| Park (English) | 100 % | 100 % | 100 % | 0.81 | 2.9 | 0.40 |
+| Durga (Hindi) | 99.6 % | 100 % | 100 % | 0.78 | 3.4 | 0.40 |
+| Ravana (Hindi) | 99.0 % | 100 % | 100 % | 0.72 | 4.0 | 0.40 |
+
+The only changes near 0.4 are the first opening of a line; within a line the opening changes by at most about 0.27 a frame.
+
+**Movement:** no character jumps while it is visible in any of the four stories. The large one-frame position changes the check first reported were characters placed off-screen just before they walk in.
+
+What this does not show: these numbers say the mouth follows the voice smoothly and rests when it should. They do not make the drawing itself studio quality: a picture's mouth is still warped from the user's picture or the doll's mesh, not animated shape by shape by an animator.

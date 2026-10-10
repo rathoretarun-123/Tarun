@@ -77,6 +77,7 @@ final class AutoLibrary {
      * Never filled from the library automatically: a picture of the character is not a picture of the new clothes.
      */
     static List<String[]> missingForUser(Project project, Story st) {
+        try { Studio3DArt.reframe(project); } catch (Throwable ignored) { }       // v39: earlier uploads read again (seated, half-length)
         List<String[]> t = missingTargets(project, st);
         String cast = project.read("cast.txt");
         for (Story.CharacterDef c : st.cast()) for (int i = 0; i < c.costumes.size(); i++) {

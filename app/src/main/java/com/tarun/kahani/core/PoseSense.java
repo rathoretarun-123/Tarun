@@ -23,6 +23,8 @@ public final class PoseSense {
         /** v34: how sure the reading is (0..1) and the figure's light level (Cutout.BRIGHT … SILHOUETTE): a dark or thin reading asks the user to confirm. */
         public float conf = 1f;
         public int light = Cutout.NORMAL;
+        /** v39: the figure is cut by the picture's frame at the bottom (half-length, face and shoulders): only for close shots. */
+        public boolean cut;
         public M m;
         public String toString() { return Angles.name(angle) + " " + poseName(pose) + " " + emotionName(emotion); }
         /** The reading as the guide's record: view, activity, emotion, light level, confidence. */
@@ -214,6 +216,66 @@ public final class PoseSense {
         return m;
     }
 
+    /**
+     * v39: a pose read from the legs means nothing when the picture has no legs: a figure cut by the frame at the
+     * bottom (a half-length or face-and-shoulders picture, often read as running from its wide flat bottom, or as
+     * lying when it is wider than tall) is standing for the director; a seated shape (legs spread wide at a curved
+     * bottom: cross-legged, on a chair) is sitting, whatever the height against the standing picture said.
+     */
+    public static int framedPose(int pose, boolean[] fr) {
+        if (fr == null) return pose;
+        if (fr[1] && pose != LIE) return SIT;
+        if (fr[0] && (pose == RUN || pose == WALK || pose == FIGHT || pose == CROUCH || pose == BEND || pose == LIE)) return STAND;
+        return pose;
+    }
+
+    /**
+     * v39: how a cut-out figure is framed, from its silhouette alone: [0] cut by the picture's frame at the bottom
+     * (a half-length or face-and-shoulders picture: the lowest rows are one solid band as wide as the body above),
+     * [1] a seated shape (legs spread wide at the bottom, the bottom curved: cross-legged, on a chair). Measured on 141
+     * pictures from users' character sheets (read at 320 px): 136 read right (the rest: half-length pictures showing both thighs,
+     * a laughing face over a cup at the frame). eyeY: the eyes' height in the picture (0..1), or -1 when not found.
+     */
+    public static boolean[] framing(int[] px, int w, int h, float eyeY) {
+        boolean[] out = new boolean[2];
+        if (px == null || w < 4 || h < 4 || px.length < w * h) return out;
+        int top = -1, bot = -1, l = w, r = -1;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            if (!on(px[y * w + x])) continue;
+            if (top < 0) top = y;
+            bot = y;
+            if (x < l) l = x;
+            if (x > r) r = x;
+        }
+        if (top < 0 || bot - top < 12 || r - l < 4) return out;
+        int hh = bot - top + 1;
+        int[] width = new int[hh], count = new int[hh];
+        int maxW = 1;
+        for (int y = top; y <= bot; y++) {
+            int a = -1, b = -1, c = 0;
+            for (int x = l; x <= r; x++) if (on(px[y * w + x])) { if (a < 0) a = x; b = x; c++; }
+            width[y - top] = a < 0 ? 0 : b - a + 1;
+            count[y - top] = c;
+            maxW = Math.max(maxW, width[y - top]);
+        }
+        // the lowest 6% of the rows: how many are one solid band (at least 85% filled between their ends)
+        int b0 = (int) (hh * 0.94f), rows = 0, solid = 0;
+        for (int i = b0; i < hh; i++) {
+            if (width[i] == 0) continue;
+            rows++;
+            if (count[i] > 0.85f * width[i]) solid++;
+        }
+        float solidF = solid / (float) Math.max(1, rows);
+        float w90 = Math.max(1, width[Math.min(hh - 1, (int) (hh * 0.9f))]);
+        int last = 0, k = Math.max(2, Math.round(hh * 0.01f));
+        for (int i = 0; i < k && i < hh; i++) last = Math.max(last, count[hh - 1 - i]);
+        float lastW = last / w90, w90m = w90 / maxW;
+        float eyes = eyeY < 0 ? -1 : (eyeY * h - top) / hh;            // the eyes' height in the figure
+        out[1] = (w90m >= 0.88f && lastW < 0.4f) || (w90m >= 0.8f && lastW < 0.15f);
+        out[0] = !out[1] && ((lastW >= 0.8f && solidF >= 0.85f && (w90m >= 0.6f || eyes >= 0.22f)) || (lastW >= 0.97f && solidF >= 0.95f));
+        return out;
+    }
+
     /** The dark inside of an open mouth (not a warm dark: that is skin or fur), or the red of lips and a tongue. */
     static boolean mouthPixel(int c) {
         if (!on(c)) return false;
@@ -242,6 +304,8 @@ public final class PoseSense {
             if (m.hairAbove > 1.3f && m.hairAbove < 1.9f) conf *= 0.85f;
         } else conf *= r.w / (float) Math.max(1, r.h) < 0.3f ? 0.8f : 0.9f;
         // ---- the pose, from the silhouette
+        boolean[] fr = framing(r.px, r.w, r.h, r.faceFound ? r.eyeY : -1);
+        t.cut = fr[0];
         boolean sideways = t.angle == Angles.SIDE || t.angle == Angles.THREE_QUARTER;
         boolean low = m.hRatio > 0 ? m.hRatio < 0.86f && m.lowMass >= 0.32f : m.lowMass > 0.5f;   // a low, bottom-heavy figure sits or crouches (crossed legs spread the "feet": still a seat)
         float reach = Math.max(m.reachL, m.reachR);
@@ -254,6 +318,7 @@ public final class PoseSense {
         else if (m.armsL >= 0.25f && m.armsR >= 0.25f) t.pose = ARMS_UP;
         else if (m.armsL >= 0.4f || m.armsR >= 0.4f) t.pose = WAVE;
         else if (reach >= 0.22f && Math.min(m.reachL, m.reachR) < 0.1f && !sideways) t.pose = POINT;
+        t.pose = framedPose(t.pose, fr);
         // ---- the emotion, from the face (front or three-quarter only); v34: the guide's gate — a back view or a
         // figure without a face is NO_FACE, never a feeling (no smile on the back of a head)
         if (!m.face || t.angle == Angles.BACK) { t.emotion = t.pose == LIE ? ASLEEP : NO_FACE; t.conf = conf; return t; }

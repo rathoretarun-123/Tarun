@@ -237,6 +237,9 @@ final class SheetSaver {
             float aspect = r.h / (float) r.w;
             s += aspect >= 1.8f ? 3 : aspect >= 1.45f ? 1 : aspect < 1.3f ? -5 : 0;
         }
+        // v39: nor a half-length picture (cut by the frame at the hips), nor a seated one
+        if (t != null && t.cut) s -= 6;
+        if (t != null && t.pose == com.tarun.kahani.core.PoseSense.SIT) s -= 3;
         return s;
     }
 

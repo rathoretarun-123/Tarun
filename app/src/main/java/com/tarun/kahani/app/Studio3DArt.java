@@ -208,7 +208,57 @@ final class Studio3DArt {
                 ? String.format(Locale.US, "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.4f", r.mouthX, r.mouthY, r.mouthW / 2f, r.eyeLX, r.eyeY, r.eyeRX, r.eyeY, r.eyeR)
                 : "0|0|0|0|0|0|0|0";
         return "pose|" + key + "|" + file + "|" + (int) t.angle + "|" + t.pose + "|" + t.emotion + "|" + String.format(Locale.US, "%.3f", hRatio) + "|" + face
-                + "|" + String.format(Locale.US, "%.2f", t.conf) + "|" + t.light;        // v34: confidence and light level (the guide's record)
+                + "|" + String.format(Locale.US, "%.2f", t.conf) + "|" + t.light        // v34: confidence and light level (the guide's record)
+                + "|" + (t.cut ? 1 : 0);                                                 // v39: cut by the frame at the bottom (half-length, face and shoulders)
+    }
+
+    /**
+     * v39: the pose lines written before the framing reader (PoseSense.framing) read again from their pictures: a
+     * seated picture read as running, a half-length or face-and-shoulders picture read as running or lying, get the
+     * right pose and the cut mark — so the director picks them right and asks only for what is really missing. Each
+     * line is read once (the mark makes it 18 fields). Returns how many lines changed.
+     */
+    static int reframe(Project project) {
+        String cast = project.read("cast.txt");
+        if (!cast.contains("pose|")) return 0;
+        com.tarun.kahani.core.Art.Loader L = null;
+        StringBuilder sb = new StringBuilder();
+        int changed = 0, read = 0;
+        for (String l : cast.split("\n")) {
+            String[] f = l.trim().split("\\|");
+            if (f.length >= 17 && f.length < 18 && f[0].equals("pose") && read < 120) {
+                try {
+                    if (L == null) L = project.loader();
+                    int[] d = L.decode(f[2], 320);
+                    if (d != null && d[0] > 4 && d[1] > 4) {
+                        read++;
+                        float eyeY = Float.parseFloat(f[7].trim()) > 0 ? (Float.parseFloat(f[11].trim()) + Float.parseFloat(f[13].trim())) / 2 : -1;
+                        boolean[] fr = com.tarun.kahani.core.Art.framingOf(d, eyeY);
+                        if (fr == null) {
+                            // a picture with its background: cut it out first (as the upload did)
+                            int[] px = new int[d[0] * d[1]];
+                            System.arraycopy(d, 2, px, 0, px.length);
+                            com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(px, d[0], d[1], false);
+                            if (r != null) fr = com.tarun.kahani.core.PoseSense.framing(r.px, r.w, r.h, r.faceFound ? r.eyeY : -1);
+                        }
+                        if (fr != null) {
+                            int pose = Integer.parseInt(f[4].trim());
+                            f[4] = String.valueOf(com.tarun.kahani.core.PoseSense.framedPose(pose, fr));
+                            StringBuilder nl = new StringBuilder();
+                            for (int i = 0; i < f.length; i++) nl.append(i > 0 ? "|" : "").append(f[i]);
+                            nl.append("|").append(fr[0] ? 1 : 0);
+                            l = nl.toString();
+                            changed++;
+                        }
+                    }
+                } catch (Throwable e) {
+                    // a picture that cannot be read keeps its line
+                }
+            }
+            if (l.trim().length() > 0) sb.append(l).append('\n');
+        }
+        if (changed > 0) project.write("cast.txt", sb.toString());
+        return changed;
     }
 
     /** Adds a pose line of a character; beyond 100 pictures the oldest give way (their files deleted). */

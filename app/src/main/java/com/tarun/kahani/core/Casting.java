@@ -150,6 +150,9 @@ public final class Casting {
         // (it lost to any standing picture of the right feeling while the character sat — and that one stood on the sofa)
         int mainPose = sp.rig != null && !sp.rig.animal && !sp.rig.still ? w.pose : PoseSense.STAND;
         float mainScore = score(Angles.FRONT, mainPose, PoseSense.NEUTRAL, sp.faceKnown, w) + (w.speaking && sp.faceKnown ? 0.3f : 0f);
+        // v39: but a standing front picture folded onto a seat reads as standing in front of it: the user's own
+        // seated picture of a fitting feeling plays the sitting (cross-legged, in a chair: the body is right)
+        if (mainPose != PoseSense.STAND && lowPose(w.pose)) mainScore -= 3;
         int best = MAIN; float bestScore = mainScore;
         for (int i = 0; i < ps.size(); i++) {
             Art.PoseSprite p = ps.get(i);
@@ -162,6 +165,9 @@ public final class Casting {
             // cannot move (a side or a back, no face found) is used only where it is needed — the back over the
             // shoulder — or where it fits clearly better; otherwise the picture that lives (lips, blinks, feelings) plays
             if (!live(p) && !w.ots && !sameAngle(w.angle, Angles.BACK)) sc -= 1.5f;
+            // v39: a seated picture as wide as it is tall has its own armchair in it: on the story's sofa it would be a
+            // chair on a sofa — a cross-legged or perched one fits better
+            if (p.pose == PoseSense.SIT && !p.closeUp && p.aspect > 0 && p.aspect < 1.02f) sc -= 2.5f;
             if (sc > bestScore) { bestScore = sc; best = i; }
         }
         return best;

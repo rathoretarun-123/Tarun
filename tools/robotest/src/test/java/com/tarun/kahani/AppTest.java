@@ -3086,7 +3086,71 @@ public class AppTest {
             rep.append(screen).append(": ").append(here).append(" of ").append(n).append(" tapped\n");
         }
         for (android.app.Dialog dl : org.robolectric.shadows.ShadowDialog.getShownDialogs()) if (dl.isShowing()) dl.dismiss();
-        System.out.println("BUTTONS: " + clicked + " tapped, " + skipped + " left out, " + failures.size() + " failed\n" + rep + (failures.isEmpty() ? "" : "FAILED:\n" + String.join("\n", failures)));
+        // second pass: the buttons that delete, remove, record or build in 3D — each on a fresh copy of the story,
+        // its confirmation accepted, its work waited for (the whole film and logging out stay out)
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(android.Manifest.permission.RECORD_AUDIO);
+        String[] never = {"Make the film", "🎬 Make", "Make film", "Log out", "Logout", "Sign out", "Exit", "Uninstall"};
+        int second = 0;
+        StringBuilder rep2 = new StringBuilder();
+        for (String screen : screens) {
+            Project fresh = sampleProject();
+            set(a, "project", fresh);
+            call(a, screen, new Class<?>[0]);
+            idle();
+            List<String> labels = new ArrayList<String>();
+            for (View v : clickables(a.findViewById(android.R.id.content), new ArrayList<View>())) labels.add(labelOf(v));
+            int here = 0;
+            for (int i = 0; i < labels.size(); i++) {
+                String label = labels.get(i);
+                boolean was = false, nev = false;
+                for (String dny : deny) if (label.contains(dny)) was = true;
+                for (String nv : never) if (label.contains(nv)) nev = true;
+                if (!was || nev) continue;
+                try {
+                    for (android.app.Dialog dl : org.robolectric.shadows.ShadowDialog.getShownDialogs()) if (dl.isShowing()) dl.dismiss();
+                    Project q = sampleProject();
+                    set(a, "project", q);
+                    call(a, screen, new Class<?>[0]);
+                    idle();
+                    List<View> cl = clickables(a.findViewById(android.R.id.content), new ArrayList<View>());
+                    if (i >= cl.size() || !labelOf(cl.get(i)).equals(label)) continue;
+                    android.app.Dialog before = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+                    cl.get(i).performClick();
+                    idle();
+                    // a confirmation: accept it
+                    android.app.AlertDialog dl = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+                    if (dl != null && dl != before && dl.isShowing() && dl.getButton(android.content.DialogInterface.BUTTON_POSITIVE) != null
+                            && dl.getButton(android.content.DialogInterface.BUTTON_POSITIVE).getVisibility() == View.VISIBLE) {
+                        dl.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+                        idle();
+                    }
+                    // a recording: stop it again
+                    if (label.contains("🎙")) {
+                        View stop = byText(a.findViewById(android.R.id.content), "⏹", new int[]{0});
+                        if (stop != null) { Thread.sleep(300); stop.performClick(); idle(); }
+                    }
+                    // work in the background (a 3D build): wait for it, up to two minutes
+                    long until = System.currentTimeMillis() + 120000;
+                    while (System.currentTimeMillis() < until) {
+                        boolean busy = false;
+                        for (android.app.Dialog d2 : org.robolectric.shadows.ShadowDialog.getShownDialogs())
+                            if (d2.isShowing() && d2.getWindow() != null && byTextClass(d2.getWindow().getDecorView(), android.widget.ProgressBar.class) != null) busy = true;
+                        if (!busy) break;
+                        Thread.sleep(150);
+                        idle();
+                    }
+                    while (shadowOf(a).getNextStartedActivity() != null) { }
+                    second++; here++;
+                } catch (Throwable e) {
+                    Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+                    failures.add("(second pass) " + screen + " / \"" + label + "\": " + c);
+                }
+            }
+            rep2.append(screen).append(": ").append(here).append('\n');
+        }
+        for (android.app.Dialog dl : org.robolectric.shadows.ShadowDialog.getShownDialogs()) if (dl.isShowing()) dl.dismiss();
+        System.out.println("BUTTONS: " + clicked + " tapped, " + skipped + " left out of the first pass, " + second + " of those tapped in the second pass, "
+                + failures.size() + " failed\n" + rep + "second pass:\n" + rep2 + (failures.isEmpty() ? "" : "FAILED:\n" + String.join("\n", failures)));
         assertTrue("buttons that crashed:\n" + String.join("\n", failures), failures.isEmpty());
         assertTrue("most buttons tapped: " + clicked, clicked >= 40);
         ac.pause().stop().destroy();

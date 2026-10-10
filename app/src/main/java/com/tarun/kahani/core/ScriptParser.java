@@ -126,6 +126,11 @@ public final class ScriptParser {
                 List<Story.CharacterDef> who = mentions(story, sent);
                 // v34: an umbrella carried in the action ("मीरा छाता लेकर निकलती है") opens over her head in the rain
                 if (who.size() == 1 && who.get(0).look != null && who.get(0).look.isHumanoid() && Txt.has(sent, "छाता", "छतरी", "umbrella")) who.get(0).look.umbrella = true;
+                // v35: a limp, a missing arm or leg, blindness or deafness told only by the action ("राजू लंगड़ाता हुआ आता है")
+                if (who.size() == 1 && who.get(0).look != null && who.get(0).look.isHumanoid()) {
+                    int cond = LookDesigner.conditionIn(sent) & (Look.C_LIMP | Look.C_NO_ARM | Look.C_RIGHT_ARM | Look.C_NO_LEG | Look.C_RIGHT_LEG | Look.C_ARTIFICIAL_LEG | Look.C_DEAF | Look.C_SIGNS);
+                    who.get(0).look.condition |= cond;
+                }
                 if (who.size() != 1 || who.get(0).look == null || who.get(0).look.aid != Look.AID_NONE) continue;
                 Look l = who.get(0).look;
                 if (l.kind == Look.ANIMAL || l.kind == Look.BIRD) continue;

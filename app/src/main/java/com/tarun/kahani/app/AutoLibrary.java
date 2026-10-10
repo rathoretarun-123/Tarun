@@ -85,8 +85,38 @@ final class AutoLibrary {
             Story.Costume co = c.costumes.get(i);
             t.add(new String[]{"costume:" + key, c.shown() + " — a new look (scene " + co.scene + "): " + co.label(), co.text});
         }
+        // v35: one who sits or lies down in the story is asked (optionally) for a picture of it — a standing photo can
+        // only be lowered onto the seat; the film never waits for these
+        for (com.tarun.kahani.core.Director.PoseNeed n : com.tarun.kahani.core.Director.poseNeeds(st)) {
+            if (!hasLine(cast, st, n.c, "char") || hasPose(cast, st, n.c, n.pose)) continue;
+            String key = SheetSaver.charKey(project, st, n.c, n.c.displayName);
+            t.add(new String[]{"pose:" + key + ":" + com.tarun.kahani.core.PoseSense.poseName(n.pose),
+                    n.c.shown() + " — " + (n.pose == com.tarun.kahani.core.PoseSense.SIT ? "a picture sitting" : "a picture lying down") + " (scene " + n.scene + ")", n.c.description});
+        }
         return t;
     }
+
+    /** v35: the manifest has a line of this kind (char, view, pose…) for the character, under whichever of its names. */
+    static boolean hasLine(String cast, Story st, Story.CharacterDef c, String kind) {
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 3 && f[0].equals(kind) && ScriptParser.resolve(st, f[1]) == c) return true;
+        }
+        return false;
+    }
+
+    /** v35: the manifest has a picture of the character in this pose (PoseSense) — the user's own or one they accepted. */
+    static boolean hasPose(String cast, Story st, Story.CharacterDef c, int pose) {
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length < 6 || !f[0].equals("pose") || ScriptParser.resolve(st, f[1]) != c) continue;
+            try { if (Integer.parseInt(f[4].trim()) == pose) return true; } catch (NumberFormatException ignored) { }
+        }
+        return false;
+    }
+
+    /** v35: an optional request (a picture sitting or lying down): asked for, never waited for. */
+    static boolean optional(String[] t) { return t[0].startsWith("pose:"); }
 
     /** v34: whether the manifest has a picture of this change of look, under whichever of the character's names. */
     static boolean hasCostume(String cast, Story st, Story.CharacterDef c, int n) {

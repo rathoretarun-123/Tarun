@@ -779,6 +779,7 @@ public class MainActivity extends Activity {
             String tgt = null;
             if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
             else if (t[0].startsWith("costume:")) tgt = "angles:costume:" + t[0].substring(8) + ":" + t[1];     // v34: a change of clothes
+            else if (t[0].startsWith("pose:")) { String[] pk = t[0].split(":", 3); if (pk.length == 3) tgt = "angles:char:" + pk[1] + ":" + t[1]; }   // v35: sitting, lying down
             else if (t[0].startsWith("place:")) {
                 String place = t[0].substring(6);
                 for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, place)) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; }
@@ -789,7 +790,7 @@ public class MainActivity extends Activity {
             if (tgt == null) continue;
             if (++n > 10) break;
             final String ft = tgt;
-            m.addView(Ui.small(this, "📷 " + t[1] + " — no picture yet: add angles", Ui.PRIMARY, new View.OnClickListener() {
+            m.addView(Ui.small(this, "📷 " + t[1] + (AutoLibrary.optional(t) ? " — optional, for a real seated or lying look: add" : " — no picture yet: add angles"), Ui.PRIMARY, new View.OnClickListener() {
                 public void onClick(View v) { anglesFor(ft, t[1]); }
             }));
         }
@@ -3597,16 +3598,19 @@ public class MainActivity extends Activity {
                 String tgt = null;
                 if (t[0].startsWith("char:")) tgt = "angles:char:" + t[0].substring(5) + ":" + t[1];
                 else if (t[0].startsWith("costume:")) tgt = "angles:costume:" + t[0].substring(8) + ":" + t[1];
+                else if (t[0].startsWith("pose:")) { String[] pk = t[0].split(":", 3); if (pk.length == 3) tgt = "angles:char:" + pk[1] + ":" + t[1]; }
                 else if (t[0].startsWith("place:")) { for (Story.Scene sc : st.scenes) if (AutoLibrary.placeOf(sc, t[0].substring(6))) { tgt = "angles:scene:" + sc.number + ":" + t[1]; break; } }
                 else if (t[0].startsWith("shot:")) { String[] sk = t[0].split(":", 3); if (sk.length == 3) tgt = "angles:obj:" + sk[2] + ":" + t[1]; }
                 if (tgt != null) uploadable.add(new String[]{tgt, t[1]});
             }
-            StringBuilder m = new StringBuilder();
+            StringBuilder m = new StringBuilder(), opt = new StringBuilder();
             int shown = 0;
             for (String[] t : miss) {
                 if (t[0].startsWith("shot:")) continue;
+                if (AutoLibrary.optional(t)) { opt.append(opt.length() > 0 ? ", " : "").append(t[1]); continue; }     // v35
                 if (shown++ < 10) m.append(m.length() > 0 ? ", " : "").append(t[1]);
             }
+            if (opt.length() > 0) body.addView(Ui.text(this, "\n🪑 Better with (optional): " + opt + ". Without them the director lowers the standing picture onto the seat or turns it to lie down.", 14, Ui.SUB, false));
             if (shown > 10) m.append(" and ").append(shown - 10).append(" more");
             List<com.tarun.kahani.core.ScenePlan.Extra> extras = com.tarun.kahani.core.ScenePlan.extras(st);
             StringBuilder xs = new StringBuilder();

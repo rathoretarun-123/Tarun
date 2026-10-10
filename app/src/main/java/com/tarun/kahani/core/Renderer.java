@@ -74,9 +74,9 @@ public final class Renderer {
                 g.rect(0, 0, vw, vh);
             } else {
                 switch (s.type) {
-                    case Film.S_TITLE: drawTitle(g, s, t); break;
-                    case Film.S_CARD: drawCard(g, s, t); break;
-                    case Film.S_END: drawEnd(g, s, t); break;
+                    case Film.S_TITLE: curSeg = null; drawTitle(g, s, t); break;
+                    case Film.S_CARD: curSeg = s; drawCard(g, s, t); break;
+                    case Film.S_END: curSeg = null; drawEnd(g, s, t); break;
                     default: drawScene(g, s, t);
                 }
             }
@@ -132,7 +132,9 @@ public final class Renderer {
         float wind = film == null ? 0 : film.wind(curT), sea = film == null ? 0 : film.weather(Film.W_SEA, curT);
         int[] ms = Nature.meshSize(sc, vw / Math.max(1e-3f, cr[2] - cr[0]) * zoom * g.width() / vw, b.w, b.h);
         float[] mesh = bdMesh(ms);
-        Nature.backdropMesh(sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT, wind, sea, mesh, ms[0], ms[1]);
+        // v35: the plants move only outdoors: the part's place when there is one, else a picture that shows the sky
+        boolean outdoors = curSeg != null && curSeg.set >= 0 ? Sets.outdoorSet(curSeg.set) : sc != null && sc.skyBottom > 0.03f;
+        Nature.backdropMesh(sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT, wind, sea, mesh, ms[0], ms[1], outdoors);
         g.imageMesh(b.img, ms[0], ms[1], mesh);
         if (sc != null) Nature.waterLife(g, sc, cr[0], cr[1], cr[2], cr[3], vw, vh, curT);
         g.restore();
@@ -199,6 +201,7 @@ public final class Renderer {
             g.save();
             stageView(g, 1.08f + 0.04f * u);
             g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
+            Sets.paintLive(g, set, tod, t, film == null ? 0 : film.wind(t));     // v35: its trees, swaying
             g.restore();
         }
         if (s.text1.length() == 0 && s.text2.length() == 0) return;     // an establishing bridge: the place alone
@@ -605,6 +608,9 @@ public final class Renderer {
         g.save();
         g.setAlpha(a * 0.8f);
         g.translate(-(camX - 640) * 0.45f, 0);
+        // v35: the leaves in front of the lens move in the same wind as the place behind them
+        float push = Nature.windPush(0.5f, 0.95f, t, film == null ? 0 : film.wind(t), 0.3f);
+        g.translate(push * 7, Math.abs(push) * 1.5f);
         g.layerLow("fg2:" + s.set + ":" + night + ":" + (int) W2, W2, H2, 0.12f, new Gfx.Painter() {
             public void paint(Gfx gg) {
                 int leaf = night ? 0xFF0E2416 : 0xFF2E6B2A, leaf2 = night ? 0xFF16301C : 0xFF4E8F34;
@@ -708,6 +714,8 @@ public final class Renderer {
 
     /** The part being drawn (for its light). */
     private Film.Seg curSeg;
+    /** v35: the feet line and scale of the character being drawn. */
+    private float actorY, actorScale = 1;
 
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         curSeg = s;
@@ -739,7 +747,7 @@ public final class Renderer {
                 float onScreen = W / Math.max(1e-3f, b.x1 - b.x0) * (1 + (camZ - 1) * 0.78f) * 1.1f * g.width() / vw;
                 int[] ms = Nature.meshSize(sc, onScreen, b.w, b.h);
                 float[] mesh = bdMesh(ms);
-                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), mesh, ms[0], ms[1]);
+                Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), mesh, ms[0], ms[1], Sets.outdoorSet(s.set));
                 g.imageMesh(b.img, ms[0], ms[1], mesh);
                 if (sc != null) Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
             }
@@ -753,8 +761,12 @@ public final class Renderer {
             waterNature(g, s, t, sc, b);
         } else {
             final int set = s.set, tod = s.tod;
-            g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
-            Sets.paintLive(g, set, tod, t);
+            // v35: a painted place is drawn as shapes when the camera is in on it (a cached picture of it, enlarged,
+            // went soft); a wide shot keeps the cached one
+            float farZoom = (1 + (camZ - 1) * 0.78f) * 1.1f;
+            if (farZoom > 1.2f) Sets.paintStatic(g, set, tod);
+            else g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
+            Sets.paintLive(g, set, tod, t, wind);
             skyNature(g, s, t, 0.38f);
             waterNature(g, s, t, null, null);
         }
@@ -830,6 +842,7 @@ public final class Renderer {
         grain(g, t);
         letterbox(g);
         if (film.subtitles) drawSubs(g, s, t);
+        else drawSubs(g, s, t, true);        // v35: a line in sign language is always subtitled
         if (safeZoneOverlay) safeZone(g);
     }
 
@@ -904,6 +917,7 @@ public final class Renderer {
         for (Film.Speak sp : a.speaks) {
             if (t >= sp.t0 && t < sp.t1) {
                 Film.Line l = film.lines.get(sp.line);
+                if (l.signed) return 0;          // v35: a line in sign language — the hands speak, the lips stay still
                 if (l.env == null || l.env.length == 0) {
                     // fallback: syllable-like motion
                     return 0.3f + 0.3f * (0.5f - 0.5f * (float) Math.cos((t - sp.t0) * 22));
@@ -1044,7 +1058,8 @@ public final class Renderer {
         p.eyesClosed = k.eyesShut;
         p.blink = blink(tp, a.order);
         // the eyes look (not behind dark glasses, a blindfold or an eye patch: nothing there to move)
-        if (look.glasses != 2 && look.glasses != 4 && look.glasses != 5) gaze(p, s, a, t);
+        // (v35: a blind character's eyes do not follow anyone: the head turns to a sound, the eyes stay where they are)
+        if (look.glasses != 2 && look.glasses != 4 && look.glasses != 5 && !look.cannotSee()) gaze(p, s, a, t);
         if (film != null && Sets.outdoorSet(s.set)) {
             p.wind = film.wind(t); p.wet = film.wetness(t);
             // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)
@@ -1055,11 +1070,24 @@ public final class Renderer {
         }
         float quakeNow = film == null ? 0 : film.weather(Film.W_QUAKE, t);
         p.sit = sitAmount(a, t);
-        if (p.sit > 0 && p.sit < 1 && k.body != Pose.SIT) p.body = Pose.STAND;        // getting up: still rising
+        p.lie = lieAmount(a, t);
         int seat = seatOf(a, t);
+        p.seat = seat;
+        // v35: lying back and sitting up move through it (the body turns by the lie amount); getting up: still rising
+        if (p.lie > 0.001f && a.look.isHumanoid()) p.body = Pose.LIE;
+        else if (p.sit > 0 && p.sit < 1 && k.body != Pose.SIT) p.body = Pose.STAND;
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
         for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; p.turbanOwner = o.c.id; }
+        if (p.sit > 0.02f && p.sit < 0.98f && p.lie < 0.01f && a.look.isHumanoid() && seat != Film.SEAT_WHEELCHAIR) {
+            // v35: sitting down and getting up — the weight goes forward over the feet (most at half way), from a low
+            // seat the hands push on the knees; the seat creaks (Director)
+            float bump = (float) Math.sin(Math.PI * p.sit);
+            boolean low = seat == Film.SEAT_FLOOR || seat == Film.SEAT_SOFA || seat == Film.SEAT_BED;
+            p.tilt += (low ? 15 : 10) * bump;
+            p.nod += 0.12f * bump;
+            if (low) { p.armL = Math.max(p.armL, 8 + 22 * bump); p.armR = Math.max(p.armR, 8 + 22 * bump); p.elbowL = Math.max(p.elbowL, 10 + 40 * bump); p.elbowR = Math.max(p.elbowR, 10 + 40 * bump); }
+        }
         Film.Speak spk = speakingAt(a, t);
         if (spk != null && spk.mount) {
             p.mountMouth = mouthAt(a, t);             // v34: the rider's animal speaks (its jaw), the rider listens
@@ -1091,7 +1119,7 @@ public final class Renderer {
                 if (look.aid == Look.AID_WALKER) { p.armL = p.armR = 16; p.elbowL = p.elbowR = 20; }
                 mo.dy *= 1.2f;
             }
-            if ((look.injury & Look.INJ_LEG) != 0 || look.aid == Look.AID_STICK || look.aid == Look.AID_CRUTCHES || look.aid == Look.AID_WALKER) {
+            if (look.limps()) {     // v35: also a limp told on its own, an artificial leg
                 // v34: a limp — the step onto the weaker leg sinks deeper and leans toward it; the other step is short
                 // and level (smooth: both pieces meet at the foot-fall, where the rise and fall is zero)
                 float half = (float) Math.sin(p.walk);
@@ -1238,8 +1266,22 @@ public final class Renderer {
         if (camStill && pixelStep > 0) { px = Math.round(px / pixelStep) * pixelStep; py = Math.round(py / pixelStep) * pixelStep; }
         g.translate(px, py);
         if (scale != 1f) g.scale(scale, scale);
+        actorY = py; actorScale = scale;                       // v35: where this character stands (is its hand in the frame?)
         if (k.netted) mo.sy *= 0.97f;
-        if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) { g.color(0x30000000); g.oval(0, -h * 0.02f, h * 0.45f, h * 0.035f); }
+        if (seat == Film.SEAT_FLOOR && p.sit > 0.05f) {
+            // v35: sitting on the floor — indoors on a woven mat (a durrie), outdoors on the ground; the lap is in
+            // front of the hips, so it rests a little lower on the screen than the feet line, on the mat
+            float mu = Math.min(1, p.sit / 0.6f), ms = h * seatScale(a);
+            if (!Sets.outdoorSet(s.set) && a.look.isHumanoid()) {
+                g.save(); g.setAlpha(mu);
+                g.color(0xFF8D3B2E); g.roundRect(-ms * 0.48f, -ms * 0.035f, ms * 0.96f, ms * 0.11f, ms * 0.012f);
+                g.color(0xFFC9A15B);
+                for (int i = 0; i < 4; i++) g.rect(-ms * 0.48f, -ms * 0.02f + i * ms * 0.026f, ms * 0.96f, ms * 0.008f);
+                g.color(0x55000000); g.rect(-ms * 0.48f, ms * 0.068f, ms * 0.96f, ms * 0.007f);
+                g.restore();
+            }
+            g.color(Puppet.alpha(0xFF000000, 0.19f * mu)); g.oval(0, ms * 0.01f, ms * 0.42f, ms * 0.05f);
+        }
         // v34: both hands stay on the walking frame (no gesture takes them off it)
         if (look.aid == Look.AID_WALKER && p.body != Pose.SIT && p.body != Pose.LIE && p.body != Pose.KNEEL) {
             p.armL = p.armR = 16; p.elbowL = p.elbowR = 20; p.holdL = p.holdR = Pose.I_NONE; p.wave = 0; p.twirl = false; p.carrying = false;
@@ -1323,13 +1365,15 @@ public final class Renderer {
             g.translate(wx * 0.9f, wy * 0.9f);
             Puppet.draw(g, look, p, h);
         }
+        // v35: asleep in a bed — a quilt over them from the chest to past the feet, rising and falling with the slow breath
+        if (p.body == Pose.LIE && p.seat == Film.SEAT_BED && k.eyesShut && p.lie > 0.5f) drawBlanket(g, h, p.facing, Math.min(1, (p.lie - 0.5f) * 2), tp);
         g.restore();
         if (chair) drawWheelchair(g, h, true, p.facing, Director.xAt(a, t) / (0.22f * h));
-        // seated on a throne or stool: its front (cushion edge, armrests) is in front of the sitter's legs
+        // seated on a throne or a sofa: its armrests are in front of the sitter (v35: the seat itself is under them)
         if (seat >= Film.SEAT_STOOL && seat != Film.SEAT_WHEELCHAIR && p.sit > 0.35f && p.body != Pose.LIE) {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
-            drawSeat(g, seat, h, true);
+            drawSeat(g, seat, h * seatScale(a), true, p.facing);
             g.restore();
         }
         g.restore();
@@ -1370,9 +1414,70 @@ public final class Renderer {
                     }
                     break;
                 case Film.G_CLAP:
+                    if (a.look != null && a.look.missingArm() != 0) {
+                        // v35: one arm — the hand claps on the thigh, in time
+                        p.armL = p.armR = 18; p.elbowL = p.elbowR = 30 + Math.max(0, s) * 25;
+                        mo.dy -= bump(u * 10) * 3;
+                        break;
+                    }
                     p.armL = 60; p.armR = 60; p.elbowL = 70 + s * 20; p.elbowR = 70 + s * 20;
                     mo.dy -= bump(u * 10) * 4;
                     break;
+                case Film.G_EAT: {
+                    // v35: eating — a plate in one hand; the other goes from the plate to the mouth every 2.2 s and back,
+                    // the head meeting it; between bites the jaw chews (a picture keeps its arms down: the plate at its hand)
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float ph = (u % 2.2f) / 2.2f;
+                    float up = ph < 0.35f ? Rig.smooth(0, 0.35f, ph) : ph < 0.48f ? 1 : 1 - Rig.smooth(0.48f, 0.8f, ph);
+                    if (picture) { p.holdR = Pose.I_PLATE; p.armR = 14 + up * 10; p.toMouth = up; p.toMouthItem = -1; }
+                    else {
+                        p.holdL = Pose.I_PLATE; p.armL = 28; p.elbowL = 75;
+                        p.armR = 26 + up * 46; p.elbowR = 30 + up * 112;
+                    }
+                    p.nod += 0.12f * up;
+                    if (ph > 0.42f && ph < 0.98f) p.mouth = Math.max(p.mouth, 0.06f + 0.1f * (0.5f + 0.5f * (float) Math.sin(u * 19)));
+                    break;
+                }
+                case Film.G_DRINK: {
+                    // v35: drinking — the cup, glass or bottle raised to the lips (0.5 s), held while the head tips back a
+                    // little (more for a bottle) and the throat swallows, then lowered (a picture holds it at its hand)
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float dur = act.t1 - act.t0;
+                    float up = Rig.smooth(0, 0.5f, u) * (1 - Rig.smooth(dur - 0.6f, dur, u));
+                    int item = act.item == Pose.I_NONE ? Pose.I_GLASS : act.item;
+                    p.holdR = item;
+                    if (picture) { p.armR = 12 + up * 12; p.toMouth = up; p.toMouthItem = item; }
+                    else { p.armR = 24 + up * 62; p.elbowR = 28 + up * 128; }
+                    p.nod -= up * (item == Pose.I_BOTTLE ? 0.42f : 0.22f);
+                    if (up > 0.9f) p.mouth = Math.max(p.mouth, 0.05f + 0.04f * (float) Math.max(0, Math.sin(u * 9)));
+                    break;
+                }
+                case Film.G_STRETCH: {
+                    // v35: waking — the arms stretch up and out, the back arches a little, a long yawn with the eyes shut
+                    float dur = act.t1 - act.t0;
+                    float k2 = Rig.smooth(0, 0.4f, u) * (1 - Rig.smooth(dur - 0.45f, dur, u));
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    if (picture) { p.armL = 8 + 18 * k2; p.armR = 8 + 18 * k2; }
+                    else { p.armL = 8 + 157 * k2; p.armR = 8 + 157 * k2; p.elbowL = 10 + 15 * k2; p.elbowR = 10 + 15 * k2; }
+                    p.nod -= 0.25f * k2;
+                    p.mouth = Math.max(p.mouth, 0.55f * Rig.smooth(0.2f, 0.6f, u) * (1 - Rig.smooth(dur - 0.6f, dur - 0.15f, u)));
+                    if (k2 > 0.6f) p.eyesClosed = true;
+                    mo.sy *= 1 + 0.02f * k2;
+                    break;
+                }
+                case Film.G_SIGN: {
+                    // v35: sign language — both hands shape the words in front of the chest, each on its own rhythm,
+                    // the hands now apart, now together; a picture's arms move as far as the picture allows
+                    boolean picture = art != null && art.sprites.containsKey(a.c.id);
+                    float a1 = (float) Math.sin(u * 5.3f), a2 = (float) Math.sin(u * 4.1f + 1.3f), a3 = (float) Math.sin(u * 7.7f + 0.4f);
+                    if (picture) { p.armL = 14 + a1 * 10; p.armR = 16 + a2 * 10; }
+                    else {
+                        p.armL = 58 + a1 * 18; p.armR = 62 + a2 * 20;
+                        p.elbowL = 100 + a3 * 22; p.elbowR = 96 - a3 * 18;
+                    }
+                    p.nod += 0.05f * a2;
+                    break;
+                }
                 case Film.G_LAUGH:
                     p.emotion = p.mouth > 0.05f ? p.emotion : Pose.LAUGH;
                     if (p.emotion == Pose.NEUTRAL) p.emotion = Pose.LAUGH;
@@ -1663,32 +1768,59 @@ public final class Renderer {
     private final Pose pose2 = new Pose();
     private final float[] hand = new float[2];
 
-    /** 0 standing .. 1 seated: sitting down and getting up each take about 0.7 s. */
+    /**
+     * 0 standing .. 1 seated: sitting down and getting up each take about 0.7 s — a second from a low seat (the
+     * floor, a sofa, a bed), where the body has further to go. v35: lying counts as seated (one sits down before
+     * lying back, and sits up before standing).
+     */
     static float sitAmount(Film.Actor a, float t) {
         Film.Key cur = null, prev = null;
         float runStart = 0;
         boolean sitting = false;
+        int seat = -1;
         for (Film.Key k : a.keys) {
             if (k.t > t) break;
-            boolean s2 = k.body == Pose.SIT;
+            boolean s2 = k.body == Pose.SIT || k.body == Pose.LIE;
             if (cur == null || s2 != sitting) runStart = k.t;
+            if (k.body == Pose.SIT) seat = k.seat;
             prev = cur;
             cur = k;
             sitting = s2;
         }
         if (cur == null) return 0;
-        float u = Math.min(1, (t - runStart) / 0.7f);
+        float dur = seat == Film.SEAT_FLOOR || seat == Film.SEAT_SOFA || seat == Film.SEAT_BED ? 1.0f : 0.7f;
+        float u = Math.min(1, (t - runStart) / dur);
         u = u * u * (3 - 2 * u);
         if (sitting) return runStart <= a.keys.get(0).t ? 1 : u;    // already seated when the scene starts
         boolean wasSitting = false;
-        for (Film.Key k : a.keys) { if (k.t >= runStart) break; wasSitting = k.body == Pose.SIT; }
+        for (Film.Key k : a.keys) { if (k.t >= runStart) break; wasSitting = k.body == Pose.SIT || k.body == Pose.LIE; }
         return wasSitting ? 1 - u : 0;
+    }
+
+    /** v35: 0 upright .. 1 lying: lying back and sitting up each take about 0.9 s, eased (never a fall). */
+    static float lieAmount(Film.Actor a, float t) {
+        float runStart = 0;
+        boolean lying = false, any = false;
+        for (Film.Key k : a.keys) {
+            if (k.t > t) break;
+            boolean l2 = k.body == Pose.LIE;
+            if (!any || l2 != lying) runStart = k.t;
+            any = true;
+            lying = l2;
+        }
+        if (!any) return 0;
+        float u = Math.min(1, (t - runStart) / 0.9f);
+        u = u * u * (3 - 2 * u);
+        if (lying) return runStart <= a.keys.get(0).t ? 1 : u;
+        boolean wasLying = false;
+        for (Film.Key k : a.keys) { if (k.t >= runStart) break; wasLying = k.body == Pose.LIE; }
+        return wasLying ? 1 - u : 0;
     }
 
     /** The seat of the last sitting key up to t. */
     static int seatOf(Film.Actor a, float t) {
         int seat = -1;
-        for (Film.Key k : a.keys) { if (k.t > t) break; if (k.body == Pose.SIT) seat = k.seat; }
+        for (Film.Key k : a.keys) { if (k.t > t) break; if (k.body == Pose.SIT || (k.body == Pose.LIE && k.seat == Film.SEAT_BED)) seat = k.seat; }
         return seat;
     }
 
@@ -1696,9 +1828,86 @@ public final class Renderer {
      * A seat (feet line at 0,0; h = the sitter's standing height). front = only the parts in front of a seated
      * person (cushion edge and armrests), drawn over them so the folded legs read as sitting.
      */
-    private void drawSeat(Gfx g, int seat, float h, boolean front) {
+    /** v35: a quilt over a sleeper in bed (feet at 0,0; the head toward -facing), its top lifting with each slow breath. */
+    private static void drawBlanket(Gfx g, float h, float facing, float a, float t) {
+        float yT = -h * BED_TOP, breath = h * 0.006f * (float) Math.sin(t * 2 * Math.PI * 0.22f);
+        float x1 = -facing * 0.12f * h, xm = facing * 0.2f * h, x2 = facing * 0.58f * h;
+        g.save();
+        g.setAlpha(a);
+        g.linear(0, yT - h * 0.17f, 0, yT, 0xFFA33B4E, 0xFF6E2232);
+        g.begin(); g.moveTo(x1, yT + h * 0.01f); g.lineTo(x1, yT - h * 0.12f);
+        g.quadTo(xm, yT - h * 0.19f - breath, x2, yT - h * 0.1f); g.lineTo(x2 + facing * h * 0.02f, yT + h * 0.03f); g.close(); g.fillPath();
+        // the quilt's stitched pattern and the white sheet turned down at the chest
+        g.color(0x40FFE0B2);
+        for (int i = 1; i < 4; i++) { float xx = x1 + (x2 - x1) * i / 4f; g.line(xx, yT - h * 0.005f, xx, yT - h * 0.14f + Math.abs(xx - xm) / h * 0.06f * h, h * 0.004f); }
+        g.color(0xFFF7F4EE);
+        g.roundRect(Math.min(x1, x1 + facing * h * 0.05f) - h * 0.005f, yT - h * 0.13f, h * 0.06f, h * 0.14f, h * 0.02f);
+        g.restore();
+    }
+
+    /** v35: the height of a bed's mattress top, in the sleeper's standing heights. */
+    static final float BED_TOP = 0.27f;
+
+    private void drawSeat(Gfx g, int seat, float h, boolean front) { drawSeat(g, seat, h, front, 1); }
+
+    /** v35: furniture fits the sitter's legs — a drawn child's chair is a child's chair (a picture keeps the grown-up size). */
+    private float seatScale(Film.Actor a) { return art.sprites.containsKey(a.c.id) ? 1f : Puppet.seatScale(a.look); }
+
+    /** facing (v35): the way the sitter faces — a bed's head end (its headboard and pillow) is behind them. */
+    private void drawSeat(Gfx g, int seat, float h, boolean front, float facing) {
         float top = -h * 0.3f, w = h * 0.62f;
         switch (seat) {
+            case Film.SEAT_CHAIR: {
+                // v35: a wooden chair — the back rises behind the sitter, four legs, a cane seat
+                if (!front) {
+                    float bx = -facing * w * 0.36f;
+                    g.color(0xFF5D4037);
+                    g.rect(bx - h * 0.02f, -h * 0.78f, h * 0.04f, h * 0.78f);
+                    g.rect(-w * 0.4f, top, h * 0.035f, -top); g.rect(w * 0.4f - h * 0.035f, top, h * 0.035f, -top);
+                    g.linear(0, -h * 0.76f, 0, -h * 0.6f, 0xFF8D6E63, 0xFF6D4C41);
+                    g.roundRect(bx - h * 0.05f, -h * 0.78f, h * 0.1f, h * 0.2f, h * 0.02f);
+                    g.color(0xFF4E342E); g.line(bx, -h * 0.58f, bx, top, h * 0.012f);
+                    // the seat is under the sitter (their thighs lie on it), never across their lap
+                    g.linear(0, top, 0, top + h * 0.05f, 0xFFD7B98E, 0xFFA1887F);
+                    g.roundRect(-w * 0.44f, top, w * 0.88f, h * 0.05f, h * 0.015f);
+                }
+                break;
+            }
+            case Film.SEAT_SOFA: {
+                // v35: a sofa — low and deep: a back cushion behind, armrests either side, a soft seat cushion
+                float sw = h * 1.05f, st = -h * 0.25f;
+                if (!front) {
+                    g.linear(0, -h * 0.62f, 0, st, 0xFF8E5A9A, 0xFF5E3A6A);
+                    g.roundRect(-sw / 2, -h * 0.62f, sw, h * 0.4f, h * 0.08f);
+                    g.color(0x22FFFFFF); g.line(-sw * 0.02f, -h * 0.58f, -sw * 0.02f, st - h * 0.04f, h * 0.008f);
+                    g.color(0xFF3E2723); g.rect(-sw * 0.46f, -h * 0.05f, h * 0.035f, h * 0.05f); g.rect(sw * 0.46f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
+                    g.linear(0, st, 0, -h * 0.05f, 0xFF7A4A86, 0xFF4E2E5A);
+                    g.roundRect(-sw / 2, st, sw, h * 0.2f, h * 0.04f);
+                    g.linear(0, st - h * 0.03f, 0, st + h * 0.05f, 0xFFA572B2, 0xFF7A4A86);
+                    g.roundRect(-sw * 0.45f, st - h * 0.03f, sw * 0.9f, h * 0.08f, h * 0.035f);
+                }
+                g.linear(0, -h * 0.42f, 0, -h * 0.05f, 0xFF9A64A8, 0xFF5E3A6A);
+                g.roundRect(-sw / 2 - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
+                g.roundRect(sw / 2 - h * 0.08f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
+                break;
+            }
+            case Film.SEAT_BED: {
+                // v35: a bed — the frame on short legs, the mattress, a headboard and a pillow at the head end
+                float bl = h * 1.25f, bt = -h * BED_TOP, head = -facing;
+                if (!front) {
+                    g.color(0xFF5D4037);
+                    g.rect(-bl / 2, bt + h * 0.06f, h * 0.04f, -bt - h * 0.06f); g.rect(bl / 2 - h * 0.04f, bt + h * 0.06f, h * 0.04f, -bt - h * 0.06f);
+                    float hx = head * bl / 2;
+                    g.linear(0, -h * 0.62f, 0, bt, 0xFF8D6E63, 0xFF5D4037);
+                    g.roundRect(hx - h * 0.04f, -h * 0.6f, h * 0.08f, h * 0.6f, h * 0.03f);
+                    g.color(0xFF6D4C41); g.rect(-bl / 2, bt + h * 0.04f, bl, h * 0.05f);
+                    g.linear(0, bt - h * 0.01f, 0, bt + h * 0.05f, 0xFFF5F0E6, 0xFFD9D0C0);
+                    g.roundRect(-bl / 2 + h * 0.02f, bt - h * 0.01f, bl - h * 0.04f, h * 0.06f, h * 0.025f);
+                    g.color(0xFFFFFFFF); g.roundRect(hx - head * h * 0.24f - h * 0.1f, bt - h * 0.06f, h * 0.2f, h * 0.07f, h * 0.035f);
+                    g.color(0x22000000); g.line(hx - head * h * 0.24f - h * 0.07f, bt - h * 0.02f, hx - head * h * 0.24f + h * 0.07f, bt - h * 0.02f, h * 0.006f);
+                }
+                break;
+            }
             case Film.SEAT_THRONE: {
                 if (!front) {
                     // carved golden back with red velvet, jewels and finials
@@ -1722,22 +1931,26 @@ public final class Renderer {
                 g.roundRect(-w * 0.6f, top - h * 0.14f, w * 0.14f, h * 0.2f, h * 0.025f);
                 g.roundRect(w * 0.46f, top - h * 0.14f, w * 0.14f, h * 0.2f, h * 0.025f);
                 g.color(0xFFFFE082); g.oval(-w * 0.53f, top - h * 0.15f, h * 0.025f, h * 0.025f); g.oval(w * 0.53f, top - h * 0.15f, h * 0.025f, h * 0.025f);
-                g.linear(0, top, 0, top + h * 0.08f, 0xFFC62828, 0xFF7F0000);
-                g.roundRect(-w * 0.46f, top + h * 0.0f, w * 0.92f, h * 0.075f, h * 0.02f);
-                g.color(0xFFE0B040); g.rect(-w * 0.46f, top + h * 0.065f, w * 0.92f, h * 0.012f);
+                if (!front) {
+                    g.linear(0, top, 0, top + h * 0.08f, 0xFFC62828, 0xFF7F0000);
+                    g.roundRect(-w * 0.46f, top + h * 0.0f, w * 0.92f, h * 0.075f, h * 0.02f);
+                    g.color(0xFFE0B040); g.rect(-w * 0.46f, top + h * 0.065f, w * 0.92f, h * 0.012f);
+                }
                 break;
             }
             case Film.SEAT_STOOL:
                 if (!front) {
                     g.color(0xFF6D4C41);
                     g.rect(-w * 0.36f, top, h * 0.035f, -top); g.rect(w * 0.36f - h * 0.035f, top, h * 0.035f, -top);
+                    g.linear(0, top, 0, top + h * 0.06f, 0xFFA1887F, 0xFF6D4C41);
+                    g.roundRect(-w * 0.42f, top, w * 0.84f, h * 0.055f, h * 0.02f);
                 }
-                g.linear(0, top, 0, top + h * 0.06f, 0xFFA1887F, 0xFF6D4C41);
-                g.roundRect(-w * 0.42f, top, w * 0.84f, h * 0.055f, h * 0.02f);
                 break;
             case Film.SEAT_ROCK:
-                if (!front) { g.color(0xFF7E7E74); g.oval(0, top * 0.45f, w * 0.55f, -top * 0.6f); }
-                g.color(0xFF9A9A8E); g.oval(0, top * 0.25f, w * 0.5f, -top * 0.3f);
+                if (!front) {
+                    g.color(0xFF7E7E74); g.oval(0, top * 0.45f, w * 0.55f, -top * 0.6f);
+                    g.color(0xFF9A9A8E); g.oval(0, top * 0.25f, w * 0.5f, -top * 0.3f);
+                }
                 break;
             default:
         }
@@ -1960,7 +2173,9 @@ public final class Renderer {
         if (p.wave > 0) st.armR = 20 + 7 * (float) Math.sin(t * 12);
         st.twirl = p.twirl;
         st.sit = p.sit;
+        st.floor = p.seat == Film.SEAT_FLOOR;                // v35: cross-legged on the floor
         if (p.sit > 0) st.lean -= 2 * p.sit;
+        if (p.sit > 0.02f && p.sit < 0.98f && p.lie < 0.01f) st.lean += 9 * (float) Math.sin(Math.PI * p.sit);     // v35: forward over the feet
         switch (p.body) {
             case Pose.SIT: break;
             case Pose.KNEEL: st.legScale = 0.7f; st.lean += 4; break;
@@ -2166,9 +2381,12 @@ public final class Renderer {
         if (rigged && beast) animalState(st, p);
         g.save();
         if (p.body == Pose.LIE && !beast) {
-            g.translate(0, -w * 0.32f);
-            g.rotate(p.facing > 0 ? -86 : 86);
-            g.translate(0, h * 0.5f);
+            // v35: by the lie amount (lying back, sitting up), onto the mattress of a bed
+            float L = p.lie > 0 ? p.lie : 1f;
+            if (p.seat == Film.SEAT_BED) g.translate(0, -h * BED_TOP * L);
+            g.translate(0, -w * 0.32f * L);
+            g.rotate((p.facing > 0 ? -86 : 86) * L);
+            g.translate(0, h * 0.5f * L);
         } else if (p.body == Pose.HANG) {
             g.rotate(180);
         }
@@ -2219,11 +2437,25 @@ public final class Renderer {
             float rise = rig.feetRise(st, h);
             if (rise > 0) g.translate(0, rise);
             rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
-            if (wetA > 0.01f) onGround(g, bare ? sp.bareImg : sp.img, rf.body, rf.cols, rf.rows, left, top, w, h, true, 0, 0, wetA);
+            // v35: the copy of the picture nearest its size on the screen (a large picture drawn small shimmers)
+            float shrink = sp.h / Math.max(1f, h * pxPerUnit);
+            Object bodyImg = bare ? sp.bareImg : Art.mip(sp.img, sp.imgHalf, sp.imgQuarter, shrink);
+            if (wetA > 0.01f) onGround(g, bodyImg, rf.body, rf.cols, rf.rows, left, top, w, h, true, 0, 0, wetA);
             if (sunA > 0) onGround(g, sp.shadowImg, rf.body, rf.cols, rf.rows, left, top, w, h, false, sunDx, sunSq, sunA);
-            g.imageMesh(bare ? sp.bareImg : sp.img, rf.cols, rf.rows, rf.body);
+            g.imageMesh(bodyImg, rf.cols, rf.rows, rf.body);
             if (p.wet > 0.02f && sp.wetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
-            Object faceLayer = bare ? rig.faceBareImg : rig.faceImg;
+            if (st.sit > 0.3f && !beast && p.body != Pose.LIE && p.seat >= 0 && p.seat != Film.SEAT_FLOOR) {
+                // v35: seated, the lap shades the shins just under the knees — the fold that says "sitting" in a
+                // front view; soft, over the picture's own width at the knees
+                float kv = rig.hipY + (rig.bottom - rig.hipY) * 0.5f, ky = top + kv * h, kw = Math.max(rig.shoulderHalf * 1.1f, 0.18f) * w;
+                float kx = left + rig.cx * w, a0 = 0.30f * Math.min(1, (st.sit - 0.3f) / 0.5f);
+                for (int i = 0; i < 4; i++) {
+                    float k = 1 - i * 0.2f;
+                    g.color(Puppet.alpha(0xFF000000, a0 * 0.3f));
+                    g.oval(kx, ky + h * 0.025f, kw * k, h * 0.03f * k);
+                }
+            }
+            Object faceLayer = bare ? rig.faceBareImg : Art.mip(rig.faceImg, rig.faceHalf, rig.faceQuarter, shrink * rig.faceScale);
             if (rig.face && faceLayer != null) {
                 rig.faceMesh(rf, st);
                 g.imageMesh(faceLayer, rf.fcols, rf.frows, rf.face);
@@ -2258,9 +2490,10 @@ public final class Renderer {
             // the eyes, mouth and tears below are drawn in the head's own position
             Rig.applyHead(rf, g);
         } else {
-            if (wetA > 0.01f) onGround(g, sp.img, null, 1, 1, left, top, w, h, true, 0, 0, wetA);
+            Object img = Art.mip(sp.img, sp.imgHalf, sp.imgQuarter, sp.h / Math.max(1f, h * pxPerUnit));
+            if (wetA > 0.01f) onGround(g, img, null, 1, 1, left, top, w, h, true, 0, 0, wetA);
             if (sunA > 0) onGround(g, sp.shadowImg, null, 1, 1, left, top, w, h, false, sunDx, sunSq, sunA);
-            g.image(sp.img, left, top, w, h);
+            g.image(img, left, top, w, h);
             if (p.wet > 0.02f && sp.wetImg != null) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.image(sp.wetImg, left, top, w, h); g.restore(); }
         }
         if (rigged && rig.animal && st.jaw > 0.12f) {
@@ -2347,6 +2580,19 @@ public final class Renderer {
                 hx = hand[0] * (p.facing < 0 ? -1 : 1) * mo.sx;
                 hy = hand[1] * mo.sy + rig.feetRise(st, h);
             }
+            // v35: eating or drinking in a close-up — the picture's hand is below the frame, so the cup, the glass,
+            // the bottle or a morsel comes up into the frame to the lips in a hand of the character's own skin
+            if (p.toMouth > 0.01f && sp.faceKnown && actorY + hy * actorScale > camY + vh / 2f / camZ - 2) {
+                float rise = rigged ? rig.feetRise(st, h) : 0;
+                float mx = (-w / 2 + sp.mouthX * w) * (p.facing < 0 ? -1 : 1) * mo.sx, my = (-h + sp.mouthY * h) * mo.sy + rise;
+                float mw = Math.max(sp.mouthHW * w, w * 0.02f);
+                float u = ease01(p.toMouth);
+                float tx = mx + p.facing * mw * 0.6f, ty = my + mw * (p.toMouthItem == -1 ? 0.5f : 2.6f);
+                float ix = hx + (tx - hx) * u, iy = hy + (ty - hy) * u;
+                drawToLips(g, p.toMouthItem, ix, iy, mw, p.facing, u, sp.skin, p.time);
+                if (p.toMouthItem == -1) { if (p.holdR == Pose.I_PLATE) drawItem(g, p.holdR, hx, hy, h, p); return; }
+                return;
+            }
             if (p.holdR == Pose.I_WOOD_SWORD || p.holdR == Pose.I_SWORD) {
                 g.save();
                 g.translate(hx, hy);
@@ -2385,6 +2631,37 @@ public final class Renderer {
         Puppet.drawTurbanShape(g, x, y, r, p.turbanColor, p.turbanBand, false);
     }
 
+    /**
+     * v35: a cup, glass or bottle (item) or a morsel of food (-1) at (x, y) in a hand of the given skin, sized from the
+     * mouth's half-width (mw), tipped towards the lips as it arrives (u 0..1).
+     */
+    private static void drawToLips(Gfx g, int item, float x, float y, float mw, float facing, float u, int skin, float time) {
+        g.save();
+        g.translate(x, y);
+        if (item == -1) {
+            // fingers pinching a piece of roti with a little dal
+            float k = mw / 7.5f;
+            g.color(Puppet.shade(skin, 0.9f)); g.roundRect(-facing * 9 * k - 7 * k, 2 * k, 14 * k, 20 * k, 6 * k);
+            g.color(0xFFD7A86E); g.oval(facing * 1.5f * k, -1 * k, 6.5f * k, 4.2f * k);
+            g.color(0xFFE8B230); g.oval(facing * 3 * k, -2.5f * k, 2.5f * k, 1.6f * k);
+            g.color(skin); g.oval(-facing * 3 * k, 2.5f * k, 4.5f * k, 3.6f * k); g.oval(-facing * 1 * k, 5.5f * k, 4.2f * k, 3.2f * k);
+            g.restore();
+            return;
+        }
+        float k = mw / 4.8f;
+        g.rotate(-facing * 32 * u * (item == Pose.I_BOTTLE ? 1.5f : 1f));       // tipped towards the lips
+        if (item == Pose.I_BOTTLE) {
+            g.color(0xFF6D4C41); g.roundRect(-7 * k, -16 * k, 14 * k, 24 * k, 5 * k);
+            g.color(0xFF90CAF9); g.rect(-4 * k, -20 * k, 8 * k, 5 * k);
+        } else Puppet.drawVessel(g, item, 0, 0, k, time);
+        // the hand round it: four fingers in front, the thumb on top
+        g.color(skin); g.roundRect(-8 * k, -10 * k, 16 * k, 9 * k, 4 * k);
+        g.color(Puppet.shade(skin, 0.86f));
+        for (int i = 0; i < 3; i++) g.line(-6 * k + i * 4.5f * k, -9 * k, -6 * k + i * 4.5f * k, -2 * k, 0.8f * k);
+        g.color(skin); g.oval(-facing * 7 * k, -11 * k, 3 * k, 2.2f * k);
+        g.restore();
+    }
+
     private void drawItem(Gfx g, int item, float x, float y, float h, Pose p) {
         float s = h / 400f;
         g.save();
@@ -2421,6 +2698,9 @@ public final class Renderer {
                 g.color(0xFF6D4C41); g.roundRect(-7, -16, 14, 24, 5);
                 g.color(0xFF90CAF9); g.rect(-4, -20, 8, 5);
                 break;
+            case Pose.I_CUP: case Pose.I_TEA: case Pose.I_GLASS: case Pose.I_PLATE:
+                Puppet.drawVessel(g, item, 0, 0, 1f, p.time);
+                break;
             default:
         }
         g.restore();
@@ -2450,8 +2730,9 @@ public final class Renderer {
                 } break;
                 case Film.FX_SPLASH: if (!behind) splash(g, f, u); break;
                 case Film.FX_SEAT: if (behind) {
-                    float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 400;
-                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, hh, false); drawSeat(g, f.kind, hh, true); g.restore();
+                    float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a) : 400;
+                    float fc = f.a != null ? f.a.stateAt(t).facing : 1;
+                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
                 } break;
                 case Film.FX_STONE: if (!behind) {
                     // the stone's arc from the hand, then the splash and the rings of waves (or a puff of dust)
@@ -2876,9 +3157,11 @@ public final class Renderer {
 
     private final List<String> wrapBuf = new ArrayList<String>();
 
-    private void drawSubs(Gfx g, Film.Seg s, float t) {
+    private void drawSubs(Gfx g, Film.Seg s, float t) { drawSubs(g, s, t, false); }
+
+    private void drawSubs(Gfx g, Film.Seg s, float t, boolean signedOnly) {
         for (Film.Sub sb : s.subs) {
-            if (t < sb.t0 || t >= sb.t1) continue;
+            if (t < sb.t0 || t >= sb.t1 || (signedOnly && !sb.signed)) continue;
             float size = 30;
             String who = sb.who.length() > 0 ? sb.who + ": " : "";
             List<String> lines = wrap(g, who + Txt.withoutParens(sb.text), size, vw - 70);

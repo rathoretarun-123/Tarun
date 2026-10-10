@@ -236,6 +236,24 @@ public final class Doll3D {
                 if (l.anklets) m.torus(lx * 1.05f, footY + 0.075f * H, kneeZ + 0.01f * H, legW * 0.5f, legW * 0.06f, 1, 8, gold);
                 continue;
             }
+            if (side == l.missingLeg()) {
+                // v35: a missing leg — the trouser leg folded at the knee (crutches carry the step); an artificial leg
+                // below the knee: a slim metal pylon down to the shoe (seen under shorts, hidden by trousers)
+                boolean art = (l.condition & Look.C_ARTIFICIAL_LEG) != 0;
+                if (!art) {
+                    if (!skirt) {
+                        m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.03f, hipY - 0.48f * L, 0.004f * H, legW * 0.52f, legW * 0.5f, seg, legMat);
+                        m.sphere(lx * 1.03f, hipY - 0.5f * L, 0.004f * H, legW * 0.52f, legW * 0.3f, legW * 0.5f, seg, legMat);
+                    }
+                    continue;
+                }
+                m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.03f, hipY - 0.5f * L, 0.004f * H, legW * 0.52f, legW * 0.46f, seg, legMat);
+                if (shorts) m.capsule(lx * 1.03f, hipY - 0.5f * L, 0.004f * H, lx * 1.05f, 0.06f * H, 0.01f * H, legW * 0.18f, legW * 0.16f, seg, m.mat(Studio3D.metal(0xFF9AA4AC)));
+                else m.capsule(lx * 1.03f, hipY - 0.5f * L, 0.004f * H, lx * 1.05f, 0.06f * H, 0.01f * H, legW * 0.46f, legW * 0.42f, seg, legMat);
+                int shoeMat2 = l.lightShoes ? m.mat(Studio3D.glowing(l.shoeColor, 0x8040C8FF)) : shoe;
+                m.sphere(lx * 1.05f, 0.035f * H, 0.035f * H, legW * 0.62f, 0.035f * H, legW * 1.05f, seg, shoeMat2);
+                continue;
+            }
             m.capsule(lx, hipY + 0.02f * H, 0, lx * 1.05f, 0.06f * H, 0.01f * H, legW * 0.52f, legW * 0.42f, seg, legMat);
             if (side > 0 && (l.injury & Look.INJ_LEG) != 0) {
                 // v34: a leg in plaster from below the knee to the toes, with a band of crepe at its top
@@ -307,6 +325,12 @@ public final class Doll3D {
         int plaster = m.mat(Studio3D.cloth(0xFFF4F3EE));
         for (int side = -1; side <= 1; side += 2) {
             float sx = side * sw * 0.95f, sy = shY - armW * 0.3f;
+            if (side == l.missingArm()) {
+                // v35: a missing arm — a short, empty sleeve folded up at the shoulder (a sleeveless outfit: the shoulder only)
+                if (!shortSleeves) m.capsule(sx, sy, 0, side * (sw + armLen * 0.06f), sy - armLen * 0.28f, 0.01f * H, armW * 0.55f, armW * 0.5f, seg, top);
+                else m.sphere(sx, sy, 0, armW * 0.62f, armW * 0.62f, armW * 0.55f, seg, skin);
+                continue;
+            }
             if (side < 0 && (l.injury & Look.INJ_ARM) != 0) {
                 // v34: the arm in a sling — the upper arm hangs, the forearm in white plaster lies across the waist in a
                 // pale blue sling whose strap goes round the neck
@@ -382,6 +406,14 @@ public final class Doll3D {
         if (monster) eyeRad = headR * 0.14f;
         for (int side = -1; side <= 1; side += 2) {
             float ex = side * eyeX;
+            if (side == -1 && (l.condition & Look.C_ONE_EYE) != 0 && l.glasses != 5) {
+                // v35: one eye lost: the lid closed over it and a faint scar across (the brow above stays)
+                m.sphere(ex, eyeY, eyeZ, eyeRad * 1.02f, eyeRad * 1.0f, eyeRad * 0.78f, 12, skin);
+                m.capsule(ex - eyeRad * 0.45f, eyeY + eyeRad * 1.1f, eyeZ + eyeRad * 0.5f, ex + eyeRad * 0.35f, eyeY - eyeRad * 0.9f, eyeZ + eyeRad * 0.55f,
+                        eyeRad * 0.07f, eyeRad * 0.06f, 6, m.mat(Studio3D.skin(Studio3D.shade(l.skin, 0.75f))));
+                m.capsule(ex - eyeRad * 0.95f, eyeY - eyeRad * 0.05f, eyeZ + eyeRad * 0.68f, ex + eyeRad * 0.95f, eyeY - eyeRad * 0.05f, eyeZ + eyeRad * 0.68f,
+                        eyeRad * 0.06f, eyeRad * 0.06f, 6, hair);
+            } else {
             m.sphere(ex, eyeY, eyeZ, eyeRad, eyeRad * 1.05f, eyeRad * 0.75f, 12, white);
             m.sphere(ex, eyeY, eyeZ + eyeRad * 0.62f, eyeRad * 0.5f, eyeRad * 0.5f, eyeRad * 0.22f, 10, iris);
             m.sphere(ex, eyeY, eyeZ + eyeRad * 0.8f, eyeRad * 0.24f, eyeRad * 0.24f, eyeRad * 0.1f, 8, pupil);
@@ -389,6 +421,7 @@ public final class Doll3D {
             m.sphere(ex + side * eyeRad * 0.16f, eyeY - eyeRad * 0.2f, eyeZ + eyeRad * 0.9f, eyeRad * 0.07f, eyeRad * 0.07f, eyeRad * 0.04f, 6, catchLight);
             // the eyelid (a half-closed eye for anger or sorrow)
             if (lidDown > 0) m.sphere(ex, eyeY + eyeRad * (1.05f - lidDown * 0.9f), eyeZ + eyeRad * 0.1f, eyeRad * 1.08f, eyeRad * 0.55f, eyeRad * 0.8f, 10, skin);
+            }
             // eyebrow: tilted by the expression (a lowered one for anger-prone looks: villains)
             float browY = eyeY + eyeRad * (1.45f + browUp * 2) + (l.hero ? 0 : -eyeRad * 0.15f);
             float inner = ex - side * eyeRad * 1.1f, outer = ex + side * eyeRad * 1.0f;

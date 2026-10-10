@@ -81,6 +81,28 @@ public final class Look {
     public static final int INJ_ARM = 1, INJ_LEG = 2, INJ_HEAD = 4;
     /** v34: carries an umbrella — opened over the head when it rains outdoors. */
     public boolean umbrella;
+    /**
+     * v35: the body as the story tells it (C_* bits) — a limp; an arm or a leg missing (which side; an artificial leg);
+     * fingers missing; one eye; blind; deaf; unable to speak (signs); a hearing aid. Drawn plainly, as part of the
+     * character, and acted by the director (SituationsGuide); never a joke.
+     */
+    public int condition;
+    public static final int C_LIMP = 1, C_NO_ARM = 2, C_RIGHT_ARM = 4, C_NO_LEG = 8, C_RIGHT_LEG = 16, C_ARTIFICIAL_LEG = 32, C_FINGERS = 64,
+            C_ONE_EYE = 128, C_BLIND = 256, C_DEAF = 512, C_MUTE = 1024, C_HEARING_AID = 2048, C_SIGNS = 4096;
+    /** v35: blind or blindfolded: the character cannot see (no point-of-view shot, feels the way, listens). */
+    public boolean cannotSee() { return glasses == 4 || (condition & C_BLIND) != 0; }
+    /** v35: deaf: no startle at a sound, watches faces, does not turn to a call from behind. */
+    public boolean cannotHear() { return (condition & C_DEAF) != 0; }
+    /** v35: speaks in sign language (cannot speak, or the story says so): the hands sign, the lips stay still. */
+    public boolean signs() { return (condition & (C_MUTE | C_SIGNS)) != 0; }
+    /** v35: one arm: -1 the left is missing, 1 the right, 0 both are there. */
+    public int missingArm() { return (condition & C_NO_ARM) == 0 ? 0 : (condition & C_RIGHT_ARM) != 0 ? 1 : -1; }
+    /** v35: one leg: -1 the left is missing (or artificial), 1 the right, 0 both are there. */
+    public int missingLeg() { return (condition & C_NO_LEG) == 0 ? 0 : (condition & C_RIGHT_LEG) != 0 ? 1 : -1; }
+    /** v35: walks with a limp: told so, an artificial leg, a leg in plaster or a walking aid (not a wheelchair). */
+    public boolean limps() {
+        return (condition & (C_LIMP | C_ARTIFICIAL_LEG)) != 0 || (injury & INJ_LEG) != 0 || aid == AID_STICK || aid == AID_CRUTCHES || aid == AID_WALKER;
+    }
     /** v34: the skin was read from the user's own reference picture: the style cue never replaces it. */
     public boolean skinFixed;
 
@@ -125,7 +147,7 @@ public final class Look {
         l.energy = energy; l.poise = poise; l.heads = heads; l.arms = arms; l.mount = mount;
         l.glasses = glasses; l.glowGlasses = glowGlasses; l.gadget = gadget; l.techWand = techWand; l.robot = robot;
         l.ledClip = ledClip; l.earphones = earphones; l.lightShoes = lightShoes;
-        l.aid = aid; l.skinFixed = skinFixed; l.injury = injury; l.umbrella = umbrella;
+        l.aid = aid; l.skinFixed = skinFixed; l.injury = injury; l.umbrella = umbrella; l.condition = condition;
         return l;
     }
 

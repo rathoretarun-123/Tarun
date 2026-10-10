@@ -146,16 +146,23 @@ public final class Film {
             G_SHIELD_EYES = 49,   // an arm up against a blinding light, the head turned away
             G_COVER_HEAD = 52,    // v34: caught in the rain without an umbrella — shoulders up, head down, hands over the head
             G_SHIVER = 53,        // v34: cold (snow): a small fast shiver, the arms held in to the body
+            G_SIGN = 54,          // v35: sign language — both hands shape the words in front of the chest, the face goes with them
+            G_EAT = 55,           // v35: eating — the hand goes from the plate to the mouth, then chewing
+            G_DRINK = 56,         // v35: drinking from a cup, a glass or a bottle (Act.item) — raised to the lips, a sip or gulps, lowered
+            G_STRETCH = 57,       // v35: waking — the arms stretch up, a yawn
             G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
     /** Seats under a sitting character. */
-    public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3, SEAT_WHEELCHAIR = 4;   // v34: a wheelchair goes where its sitter goes
+    public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3, SEAT_WHEELCHAIR = 4,   // v34: a wheelchair goes where its sitter goes
+            SEAT_CHAIR = 5, SEAT_SOFA = 6, SEAT_BED = 7;     // v35: a chair with a back, a cushioned sofa, a bed (sat on, lain and slept in)
 
     public static final class Act {
         public float t0, t1;
         public int type;
         public Actor target;
+        /** v35: what the hands hold for it (Pose.I_*: the cup, the glass, the bottle, the plate). */
+        public int item;
         public Act(float t0, float t1, int type) { this.t0 = t0; this.t1 = t1; this.type = type; }
     }
 
@@ -246,6 +253,8 @@ public final class Film {
     public static final class Sub {
         public float t0, t1;
         public String who, text;
+        /** v35: a line said in sign language: shown even when subtitles are off. */
+        public boolean signed;
     }
 
     // -------------------------------------------------------------- audio
@@ -263,6 +272,8 @@ public final class Film {
         public float[] shape;            // mouth shape, 100 Hz: 0 round ("oo") .. 1 wide ("ee", "s")
         public float start;              // placed on timeline
         public float gain = 1f;
+        /** v35: said in sign language (the speaker cannot speak, or signs): the hands sign, the lips stay still, the words are subtitled and voiced over. */
+        public boolean signed;
     }
 
     public static final int SFX_STREAM = 0, SFX_BIRDS = 1, SFX_WIND = 2, SFX_CLACK = 3, SFX_POP = 4, SFX_CHIME = 5, SFX_MONKEY = 6,
@@ -295,7 +306,17 @@ public final class Film {
             SFX_CRUTCH = 51,      // crutches: the two rubber tips, then the step
             SFX_WHEELCHAIR = 52,  // a wheelchair rolling: tyres on the floor, the hand-rims ticking
             SFX_UMBRELLA_RAIN = 53, // rain drumming on an umbrella over the head
-            SFX_DOOR = 54;          // v34: a door — the latch, the hinge, the door closing (an entrance or an exit indoors)
+            SFX_DOOR = 54,          // v34: a door — the latch, the hinge, the door closing (an entrance or an exit indoors)
+            // v35: a limp's uneven steps, and the sounds of everyday actions
+            SFX_STEPS_LIMP = 55,    // a firm step, then a lighter one that drags
+            SFX_CHAIR = 56,         // a chair: its legs scrape, the wood creaks as someone sits or gets up
+            SFX_SOFA = 57,          // a sofa: the cushion gives with a soft thump, a spring sighs
+            SFX_BED = 58,           // a bed: the frame creaks, the covers rustle
+            SFX_EAT = 59,           // eating: a spoon on the plate, then quiet chewing
+            SFX_SIP = 60,           // a sip from a cup or a glass, a swallow, the cup set down
+            SFX_GULP = 61,          // drinking from a bottle: gulps
+            SFX_CUP = 62,           // a cup or a glass set down on the table
+            SFX_SLEEP = 63;         // a sleeper's slow, soft breathing
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

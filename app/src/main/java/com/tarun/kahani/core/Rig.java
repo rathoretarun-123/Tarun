@@ -33,6 +33,8 @@ public final class Rig {
     public float eLX, eLY, eRX, eRY, eR, mX, mY, mHW;
     // the face drawn a second time: a crop of the picture with soft edges
     public Object faceImg, faceWetImg;
+    /** v35: the face layer at half and a quarter of its size (Art.mips), for when the face is small on the screen. */
+    public Object faceHalf, faceQuarter;
     /** The face crop with the headwear taken off (null when the character has none). */
     public Object faceBareImg;
     public float fu0, fv0, fu1, fv1;
@@ -64,6 +66,8 @@ public final class Rig {
         public float legLAng, legRAng, legLLift, legRLift;
         public float legScale = 1;           // < 1 when kneeling / crouching
         public float sit;                    // 0 standing .. 1 seated: thighs fold towards the viewer, shins stay
+        /** v35: seated on the floor, cross-legged: the shins fold under too and the knees spread. */
+        public boolean floor;
         public boolean twirl;                // the raised hand fidgets (twirling a moustache)
         public float breathe;                // -1..1
         // face, 0..1
@@ -86,7 +90,7 @@ public final class Rig {
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
             lipWide = lipRound = 0;
-            legScale = 1; sit = 0; twirl = false;
+            legScale = 1; sit = 0; twirl = false; floor = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
         /** Moves the face part of this state towards target (k = 0..1 per frame). */
@@ -254,6 +258,12 @@ public final class Rig {
             g.armUp[0] = g.armUp[1] = false;
             if (look.aid == Look.AID_WHEELCHAIR) g.legs = false;
         }
+        // v35: a picture of someone with one arm or one leg: nothing on the missing side is moved as a limb (an empty
+        // sleeve is not swung like an arm; one leg does not "walk" as two — the picture glides with a limp instead)
+        if (look != null && (look.missingArm() != 0 || look.missingLeg() != 0)) {
+            if (look.missingArm() != 0) { g.armsFixed = true; g.armUp[0] = g.armUp[1] = false; }
+            if (look.missingLeg() != 0) g.legs = false;
+        }
         g.gapX = g.legs ? gapSum / two / w : g.cx;
         g.legHalf = g.legs ? halfSum / two / w : 0.1f;
         g.hairW = new float[(BW + 1) * (BH + 1)];
@@ -383,6 +393,8 @@ public final class Rig {
         fv0 = y0 / (float) r.h; fv1 = (y0 + ch) / (float) r.h;
         faceImg = L.create(px, cw, ch);
         faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+        Object[] mm = Art.mips(L, px, cw, ch);
+        faceHalf = mm[0]; faceQuarter = mm[1];
     }
 
     /** How many times sharper the face layer is than the body picture (the face is cut from the full picture). */
@@ -413,6 +425,8 @@ public final class Rig {
         }
         faceImg = L.create(px, cw, ch);
         faceWetImg = L.create(Art.wetPixels(px), cw, ch);
+        Object[] mm = Art.mips(L, px, cw, ch);
+        faceHalf = mm[0]; faceQuarter = mm[1];
         faceW = cw; faceH = ch;
         faceScale = k;
     }
@@ -629,14 +643,24 @@ public final class Rig {
         float sx2 = x, sy2 = y;
         if (s.sit > 0) {
             float knee = hipY + (bottom - hipY) * 0.5f;
+            // v35: on the floor the shins fold under as well (three quarters) and the knees part wider
+            float shin = s.floor ? 0.75f * s.sit : 0, ky = f.T0 + knee * f.H0;
             if (legs) {
                 if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
-                else sy2 = y - (knee - hipY) * f.H0 * 0.8f * s.sit;
-                sx2 = x + (u < gapX ? -1 : 1) * 0.035f * f.W0 * s.sit * smooth(hipY, knee, v);
+                else sy2 = ky - (knee - hipY) * f.H0 * 0.8f * s.sit + (y - ky) * (1 - shin);
+                sx2 = x + (u < gapX ? -1 : 1) * (s.floor ? 0.09f : 0.035f) * f.W0 * s.sit * smooth(hipY, knee, v);
+            } else if (s.floor) {
+                // a skirt or a saree on the floor: the lap and the folded legs make a wide, low mound
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = ky - (knee - hipY) * f.H0 * 0.8f * s.sit + (y - ky) * (1 - shin);
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.32f * s.sit * smooth(hipY, knee, v))) * f.W0;
             } else {
-                // a skirt or robe settles and spreads over the seat
-                sy2 = hy + (y - hy) * (1 - 0.38f * s.sit);
-                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.12f * s.sit * smooth(hipY, bottom, v))) * f.W0;
+                // v35: a skirt, a saree or a robe folds like a lap: from the hips to the knees it comes towards the
+                // camera and shortens as a pair of thighs would; from the knees it falls to the feet as before, spread
+                // a little over the knees (it used to shrink evenly, which read as a shorter person standing)
+                if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
+                else sy2 = y - (knee - hipY) * f.H0 * 0.8f * s.sit;
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.14f * s.sit * smooth(hipY, knee, v))) * f.W0;
             }
         }
         if (legs) {
@@ -881,7 +905,8 @@ public final class Rig {
     public float feetRise(State s, float h) {
         if (animal) return 0.8f * s.sit * (bottom - legTop) * h;
         float rise = (1 - s.legScale) * (bottom - hipY) * h;
-        if (s.sit > 0) rise += (legs ? 0.8f * 0.5f : 0.38f) * s.sit * (bottom - hipY) * h;
+        if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
+        if (s.sit > 0 && s.floor) rise += 0.75f * 0.5f * s.sit * (bottom - hipY) * h;     // v35: and on the floor the shins fold under
         return rise;
     }
 

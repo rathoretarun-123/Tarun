@@ -383,6 +383,9 @@ public final class DirectorsManual {
             case Film.SFX_STICK: return "steps with a walking stick"; case Film.SFX_CRUTCH: return "crutches"; case Film.SFX_WHEELCHAIR: return "a wheelchair rolling";
             case Film.SFX_UMBRELLA_RAIN: return "rain on an umbrella";
             case Film.SFX_DOOR: return "a door";
+            case Film.SFX_STEPS_LIMP: return "uneven steps (a limp)"; case Film.SFX_CHAIR: return "a chair"; case Film.SFX_SOFA: return "a sofa";
+            case Film.SFX_BED: return "a bed"; case Film.SFX_EAT: return "eating"; case Film.SFX_SIP: return "a sip"; case Film.SFX_GULP: return "gulps";
+            case Film.SFX_CUP: return "a cup set down"; case Film.SFX_SLEEP: return "a sleeper's breathing";
             default: return "effect " + type;
         }
     }

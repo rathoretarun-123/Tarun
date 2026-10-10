@@ -34,9 +34,12 @@ public final class Puppet {
         g.save();
         g.translate(0, p.bob);
         if (p.body == Pose.LIE) {
-            g.translate(0, -H * 0.09f);
-            g.rotate(p.facing > 0 ? -88 : 88);
-            g.translate(0, H * 0.5f);
+            // v35: by the lie amount (lying back, sitting up), onto the mattress of a bed
+            float L = p.lie > 0 ? p.lie : 1f;
+            if (p.seat == Film.SEAT_BED) g.translate(0, -H * 0.27f * L);
+            g.translate(0, -H * 0.09f * L);
+            g.rotate((p.facing > 0 ? -88 : 88) * L);
+            g.translate(0, H * 0.5f * L);
         } else if (p.body == Pose.HANG) {
             g.rotate(180);
         }
@@ -70,6 +73,44 @@ public final class Puppet {
 
     static final class Body {
         float H, headR, L, T, neck, sw, hw, hipY, shY, headY, armLen, armW, legW;
+        /** v35: where the floor is in the body's own frame (0 standing; above 0 for one seated on a seat). */
+        float floorY;
+        /** v35: seated on a known seat (hips on its top, feet on the floor): its height above the floor, else -1. */
+        float seatH = -1;
+        /** v35: how far down onto the seat (0 standing .. 1 seated): sitting down and getting up move through it. */
+        float sitU;
+    }
+
+    /** v35: furniture is drawn for the sitter's legs — a child's chair is smaller than a grown-up's (legs 0.29 of the height, not 0.40). */
+    public static float seatScale(Look l) {
+        if (l == null) return 1;
+        float L = l.isChild() ? 0.29f : l.kind == Look.MONSTER ? 0.33f : l.kind == Look.WITCH ? 0.37f : 0.40f;
+        return L / 0.40f;
+    }
+
+    /** v35: how far down onto a known seat the pose is — sitting down and getting up pass through it (0 = not seated). */
+    static float sitShare(Pose p) {
+        if (seatHeight(p.seat) < 0) return 0;
+        if (p.body == Pose.SIT) return p.sit > 0 ? Math.min(1, p.sit) : 1;
+        if (p.body == Pose.STAND && p.sit > 0) return Math.min(1, p.sit);
+        return 0;
+    }
+
+    /**
+     * v35: the height of a seat's top as a share of the sitter's height — where the hips rest. A chair, a stool and a
+     * wheelchair 0.30, a throne's cushion 0.335, a bed's mattress 0.28, a sofa's cushion 0.27 (it gives a little), a
+     * rock 0.28, the floor 0.15 (cross-legged, the folded legs under the hips); -1 for no seat (a rider's legs hang
+     * down the animal's sides). A child's are smaller in proportion (seatScale).
+     */
+    static float seatHeight(int seat) {
+        switch (seat) {
+            case Film.SEAT_FLOOR: return 0.15f;
+            case Film.SEAT_CHAIR: case Film.SEAT_STOOL: case Film.SEAT_WHEELCHAIR: return 0.30f;
+            case Film.SEAT_THRONE: return 0.335f;
+            case Film.SEAT_SOFA: return 0.27f;
+            case Film.SEAT_BED: case Film.SEAT_ROCK: return 0.28f;
+            default: return -1;
+        }
     }
 
     static Body body(Look l, float H) {
@@ -133,6 +174,7 @@ public final class Puppet {
         float back = (m.species == Look.SP_RABBIT || m.species == Look.SP_MOUSE) ? Hm * 0.72f : m.kind == Look.BIRD ? Hm * 0.6f : Hm * 0.85f;
         Pose pr = pr0.copyFor(Pose.SIT);
         pr.mountMouth = 0;
+        pr.seat = -1;                                    // v35: astride, the legs hang down the animal's sides
         g.save();
         g.translate(0, -back);
         drawHuman(g, l, pr, H * 0.78f);
@@ -146,7 +188,10 @@ public final class Puppet {
         boolean witch = l.kind == Look.WITCH;
         boolean monster = l.kind == Look.MONSTER;
         float lift = 0;
-        if (p.body == Pose.SIT) lift = b.L * 0.55f;
+        // v35: seated on a known seat the hips rest on its top and the feet on the floor (they used to sink below it)
+        float su = sitShare(p);
+        if (su > 0) { b.seatH = seatHeight(p.seat) * H * seatScale(l); b.sitU = su; lift = (b.L - b.seatH) * su; b.floorY = -lift; }
+        else if (p.body == Pose.SIT) lift = b.L * 0.55f;
         else if (p.body == Pose.KNEEL) lift = b.L * 0.48f;
         else if (p.body == Pose.CROUCH) lift = b.L * 0.22f;
         g.save();
@@ -208,14 +253,40 @@ public final class Puppet {
         g.restore();
 
         // Arms in front (v34: an arm in a sling stays across the waist; an open umbrella is held up over the head)
-        if ((l.injury & Look.INJ_ARM) != 0 && p.body != Pose.LIE && p.body != Pose.HANG) drawSlingArm(g, l, p, b);
-        else drawArm(g, l, p, b, -1, p.armL, p.elbowL, p.holdL);
-        if (p.umbrellaOpen) drawUmbrellaArm(g, l, p, b);
-        else drawArm(g, l, p, b, 1, p.armR, p.elbowR, p.holdR);
+        int noArm = l.missingArm();
+        if (noArm == -1) drawEmptySleeve(g, l, p, b, -1);
+        else if ((l.injury & Look.INJ_ARM) != 0 && p.body != Pose.LIE && p.body != Pose.HANG) drawSlingArm(g, l, p, b);
+        else drawArm(g, l, p, b, -1, p.armL, p.elbowL, noArm == 1 && p.holdL == Pose.I_NONE ? p.holdR : p.holdL);
+        if (noArm == 1) drawEmptySleeve(g, l, p, b, 1);
+        else if (p.umbrellaOpen) drawUmbrellaArm(g, l, p, b);
+        else drawArm(g, l, p, b, 1, p.armR, p.elbowR, noArm == -1 && p.holdR == Pose.I_NONE ? p.holdL : p.holdR);
         if (l.aid == Look.AID_WALKER && (p.body == Pose.STAND || p.body == Pose.CROUCH)) drawWalker(g, l, p, b);
 
         // Spear or wand held at the side when not gesturing
         g.restore();
+    }
+
+    /**
+     * v35: a missing arm — the sleeve is there, short and empty, its end folded up and pinned at the shoulder (a
+     * sleeveless outfit shows the rounded shoulder only). It sways a little as the body walks.
+     */
+    static void drawEmptySleeve(Gfx g, Look l, Pose p, Body b, int side) {
+        float sx = side * b.sw * 0.92f, sy = b.shY + b.armW * 0.6f;
+        boolean sleeveless = l.outfit == Look.O_LEHENGA || l.outfit == Look.O_SAREE || l.outfit == Look.O_TSHIRT;
+        int sleeve = l.outfit == Look.O_ARMOR ? l.furColor : l.primary;
+        float sway = (float) Math.sin(p.walk) * p.walkAmt * b.armW * 0.4f;
+        float ex = sx + side * b.armW * 0.15f + sway, ey = sy + b.armLen * (sleeveless ? 0.12f : 0.3f);
+        g.color(shade(sleeve, 0.7f));
+        g.line(sx, sy, ex, ey, b.armW * 2.1f);
+        g.color(sleeve);
+        g.line(sx, sy, ex, ey, b.armW * 1.8f);
+        if (!sleeveless) {
+            // the fold and the pin
+            g.color(shade(sleeve, 0.8f));
+            g.line(ex - b.armW * 0.75f, ey, ex + b.armW * 0.75f, ey - b.armW * 0.3f, b.armW * 0.45f);
+            g.color(0xFFB0BEC5);
+            g.oval(ex, ey - b.armW * 0.35f, b.armW * 0.18f, b.armW * 0.18f);
+        }
     }
 
     /** v34: the left arm in a sling — the upper arm hangs, the forearm in white plaster lies across the waist in a pale blue sling tied round the neck. */
@@ -339,10 +410,49 @@ public final class Puppet {
         }
         if (l.kind == Look.MONSTER) legColor = l.furColor;
         if (l.kind == Look.MONSTER && p.body != Pose.SIT && p.body != Pose.KNEEL) { monsterLegs(g, l, p, b, stride); return; }
+        int noLeg = l.missingLeg();
+        boolean artificial = (l.condition & Look.C_ARTIFICIAL_LEG) != 0;
         for (int side = -1; side <= 1; side += 2) {
             float hx = side * b.hw * 0.45f;
-            float fx, fy;
-            if (p.body == Pose.SIT) {
+            float fx, fy, kneeX = Float.NaN, kneeY = 0;
+            if (side == noLeg && !artificial && l.kind != Look.MONSTER) {
+                // v35: a leg missing above the knee: the trouser leg folded under and pinned, no foot (crutches carry the step)
+                if (!longSkirt || p.body == Pose.SIT || p.body == Pose.LIE) {
+                    float kx = p.body == Pose.SIT ? hx + p.facing * b.L * 0.32f : hx + side * stride * b.L * 0.06f;
+                    float ky = p.body == Pose.SIT ? b.hipY + b.legW * 0.2f : b.hipY * 0.52f;
+                    g.color(legColor);
+                    g.line(hx, b.hipY, kx, ky, b.legW * 2f);
+                    g.color(shade(legColor, 0.8f));
+                    g.oval(kx, ky, b.legW * 1.05f, b.legW * 0.7f);
+                    g.color(0xFFB0BEC5);
+                    g.oval(kx + b.legW * 0.4f, ky - b.legW * 0.5f, b.legW * 0.16f, b.legW * 0.16f);
+                }
+                continue;
+            }
+            if (b.seatH >= 0) {
+                // v35: seated (or on the way down or up, by sitU) — on a chair, a sofa, a bed, a stool: the thigh along
+                // the seat to the knee, the shin straight down to the floor (to the footrest in a wheelchair); on the
+                // floor cross-legged: the knees out to both sides near the floor, the feet tucked in under them
+                float u = b.sitU, kx, ky, sfx, sfy;
+                if (p.seat == Film.SEAT_FLOOR) {
+                    kx = side * (b.hw * 0.9f + b.L * 0.42f) + p.facing * b.L * 0.08f; ky = b.floorY - b.legW * 1.15f;
+                    sfx = -side * b.hw * 0.35f + p.facing * b.L * 0.06f; sfy = b.floorY - b.legW * 0.1f;
+                } else {
+                    boolean wc = p.seat == Film.SEAT_WHEELCHAIR;
+                    kx = hx * 0.7f + p.facing * b.L * 0.55f; ky = b.hipY + b.legW * 0.25f;
+                    sfx = wc ? p.facing * b.H * 0.27f + hx * 0.3f : kx + p.facing * b.L * 0.05f;
+                    sfy = wc ? b.floorY - b.H * 0.065f : b.floorY;
+                }
+                // standing: the knee half way down the straight leg, the foot under the hip, on the floor
+                kx = hx + (kx - hx) * u; ky = b.hipY * 0.5f + b.floorY * 0.5f + (ky - (b.hipY * 0.5f + b.floorY * 0.5f)) * u;
+                fx = hx + (sfx - hx) * u; fy = b.floorY + (sfy - b.floorY) * u;
+                kneeX = kx; kneeY = ky;
+                if (!longSkirt || u > 0.25f) {
+                    g.color(legColor);
+                    g.line(hx, b.hipY, kx, ky, b.legW * (p.seat == Film.SEAT_FLOOR ? 2.1f : 2f));
+                    g.line(kx, ky, fx, fy - b.legW * 0.6f, b.legW * 1.8f);
+                }
+            } else if (p.body == Pose.SIT) {
                 fx = hx * 0.6f + p.facing * b.L * 0.75f; fy = -b.L * 0.45f + b.L * 0.5f;
                 g.color(legColor);
                 g.line(hx, b.hipY, fx - p.facing * b.L * 0.15f, b.hipY + b.legW * 0.2f, b.legW * 2f);
@@ -364,7 +474,8 @@ public final class Puppet {
             if (side > 0 && (l.injury & Look.INJ_LEG) != 0 && p.body != Pose.KNEEL && (!longSkirt || p.walkAmt > 0.01f)) {
                 // v34: the plaster from below the knee to the toes
                 float kx, ky;
-                if (p.body == Pose.SIT) { kx = fx - p.facing * b.L * 0.15f; ky = b.hipY + b.legW * 0.2f; }
+                if (!Float.isNaN(kneeX)) { kx = kneeX; ky = kneeY; }
+                else if (p.body == Pose.SIT) { kx = fx - p.facing * b.L * 0.15f; ky = b.hipY + b.legW * 0.2f; }
                 else { kx = hx + (fx - hx) * 0.5f; ky = b.hipY * 0.5f; }
                 g.color(0xFFC9C7C0);
                 g.line(kx, ky, fx, fy - b.legW * 0.5f, b.legW * 2.55f);
@@ -372,6 +483,16 @@ public final class Puppet {
                 g.line(kx, ky, fx, fy - b.legW * 0.5f, b.legW * 2.3f);
                 g.color(0xFFE0D2B4);
                 g.line(kx - b.legW * 1.1f, ky, kx + b.legW * 1.1f, ky, b.legW * 0.35f);
+            }
+            if (side == noLeg && artificial && l.outfit == Look.O_TSHIRT && p.body != Pose.SIT && p.body != Pose.KNEEL) {
+                // v35: an artificial leg below the knee shows under shorts: a slim metal pylon down to the shoe
+                float kx = hx + (fx - hx) * 0.5f, ky = b.hipY * 0.5f;
+                g.color(0xFF78909C);
+                g.line(kx, ky, fx, fy - b.legW * 0.6f, b.legW * 0.9f);
+                g.color(0xFFB0BEC5);
+                g.line(kx, ky, fx, fy - b.legW * 0.6f, b.legW * 0.5f);
+                g.color(0xFF455A64);
+                g.oval(kx, ky, b.legW * 1.0f, b.legW * 0.55f);
             }
             if (l.outfit == Look.O_TSHIRT && p.body != Pose.SIT && p.body != Pose.KNEEL) {
                 // shorts: the upper half of the leg in the shorts' colour
@@ -451,6 +572,9 @@ public final class Puppet {
                 // flared skirt to the floor
                 float skirtW = hw * (l.isChild() ? 2.5f : 2.2f);
                 float topY = waistY;
+                // v35: seated, the skirt spans the waist to the floor (squeezed into the shorter drop)
+                boolean seated = b.seatH >= 0 && topY < b.floorY;
+                if (seated) { g.save(); g.translate(0, topY); g.scale(1, (b.floorY - topY) / -topY); g.translate(0, -topY); }
                 g.begin();
                 g.moveTo(-hw * 0.95f, topY);
                 g.lineTo(hw * 0.95f, topY);
@@ -482,6 +606,7 @@ public final class Puppet {
                     g.color(0xFFD9A93A);
                     for (int i = -4; i <= 4; i++) g.oval(i * skirtW * 0.22f, -1, 3.2f, 3.2f);
                 }
+                if (seated) g.restore();
                 // choli + dupatta: full coverage top
                 drawTop(g, l, p, b, waistY + b.T * 0.06f, l.secondary, true);
                 break;
@@ -496,23 +621,24 @@ public final class Puppet {
                 break;
             }
             case Look.O_SAREE: {
-                float skirtW = hw * 1.45f;
+                // v35: seated, the saree falls from the waist over the knees to the floor (fl), not below it
+                float skirtW = hw * 1.45f * (1 + 0.25f * b.sitU), fl = b.floorY, mid = -b.L * 0.5f + ((waistY + fl) / 2 + b.L * 0.5f) * b.sitU;
                 g.begin();
                 g.moveTo(-hw, waistY); g.lineTo(hw, waistY);
-                g.quadTo(skirtW, -b.L * 0.5f, skirtW * (1 + sway), -2);
-                g.lineTo(-skirtW * (1 - sway), -2);
-                g.quadTo(-skirtW, -b.L * 0.5f, -hw, waistY);
+                g.quadTo(skirtW, mid, skirtW * (1 + sway), fl - 2);
+                g.lineTo(-skirtW * (1 - sway), fl - 2);
+                g.quadTo(-skirtW, mid, -hw, waistY);
                 g.close();
                 g.color(shade(l.primary, 0.55f)); g.strokePath(3);
-                g.linear(0, waistY, 0, 0, l.primary, shade(l.primary, 0.8f)); g.fillPath();
+                g.linear(0, waistY, 0, fl, l.primary, shade(l.primary, 0.8f)); g.fillPath();
                 // pleats
                 g.color(alpha(shade(l.primary, 0.55f), 0.5f));
-                for (int i = 0; i < 4; i++) g.line(-hw * 0.2f + i * 6, waistY + b.T * 0.3f, -skirtW * 0.3f + i * 9, -6, 2);
+                for (int i = 0; i < 4; i++) g.line(-hw * 0.2f + i * 6, waistY + b.T * 0.3f, -skirtW * 0.3f + i * 9, fl - 6, 2);
                 // gold border
                 g.color(l.secondary);
-                g.rect(-skirtW * (1 - sway), -b.L * 0.12f, skirtW * 2 * (1 + sway * 0.5f), b.L * 0.1f);
+                g.rect(-skirtW * (1 - sway), fl - b.L * 0.12f, skirtW * 2 * (1 + sway * 0.5f), b.L * 0.1f);
                 g.color(alpha(0xFFFFE9A0, 0.8f));
-                for (int i = -5; i <= 5; i++) g.oval(i * skirtW * 0.18f, -b.L * 0.07f, 2.5f, 2.5f);
+                for (int i = -5; i <= 5; i++) g.oval(i * skirtW * 0.18f, fl - b.L * 0.07f, 2.5f, 2.5f);
                 drawTop(g, l, p, b, waistY, shade(l.primary, 0.9f), false);
                 // pallu: diagonal drape from left hip over right shoulder
                 g.begin();
@@ -588,6 +714,9 @@ public final class Puppet {
             }
             case Look.O_CLOAK: {
                 float cw = sw * 1.5f;
+                // v35: seated, the cloak spans the shoulders to the floor (squeezed into the shorter drop)
+                boolean seated = b.seatH >= 0 && shY < b.floorY;
+                if (seated) { g.save(); g.translate(0, shY); g.scale(1, (b.floorY - shY) / -shY); g.translate(0, -shY); }
                 g.begin();
                 g.moveTo(-sw * 0.9f, shY - b.headR * 0.1f);
                 g.lineTo(sw * 0.9f, shY - b.headR * 0.1f);
@@ -603,6 +732,7 @@ public final class Puppet {
                 g.close();
                 g.color(0xFF141216); g.strokePath(3);
                 g.linear(0, shY, 0, 0, l.primary, shade(l.primary, 0.75f)); g.fillPath();
+                if (seated) g.restore();
                 // second layer (dark green rag)
                 g.begin();
                 g.moveTo(-sw * 0.95f, shY);
@@ -1002,10 +1132,12 @@ public final class Puppet {
             g.color(0xFF3E2716);
             g.line(h[2], h[3], h[2] + (h[4] - h[2]) * 0.3f, h[3] + (h[5] - h[3]) * 0.3f, b.armW * 1.9f);
         }
-        // hand
+        // hand (v35: fingers missing — the left hand narrower, the stumps' line across it)
         float hr = b.armW * (p.fist ? 0.95f : 1.05f);
         g.color(skin);
-        g.oval(h[4], h[5], hr, hr);
+        boolean fewer = side == -1 && (l.condition & Look.C_FINGERS) != 0;
+        g.oval(h[4], h[5], fewer ? hr * 0.72f : hr, hr);
+        if (fewer) { g.color(shade(skin, 0.8f)); g.line(h[4] - hr * 0.5f, h[5] + hr * 0.45f, h[4] + hr * 0.5f, h[5] + hr * 0.45f, Math.max(1.2f, hr * 0.12f)); }
         if (l.longNails) {
             g.color(0xFF3B3B2E);
             for (int i = -1; i <= 1; i++) g.line(h[4] + i * 3, h[5] + hr * 0.6f, h[4] + i * 4, h[5] + hr * 1.5f, 2);
@@ -1026,7 +1158,7 @@ public final class Puppet {
         float hx = h[4], hy = h[5];
         // v34: a walking stick from the right hand to the ground (its crook over the hand); crutches under both arms
         boolean onFeet = p.body != Pose.SIT && p.body != Pose.LIE && p.body != Pose.HANG && p.body != Pose.KNEEL;
-        if (onFeet && hold == Pose.I_NONE && side == 1 && l.aid == Look.AID_STICK) {
+        if (onFeet && hold == Pose.I_NONE && side == (l.missingArm() == 1 ? -1 : 1) && l.aid == Look.AID_STICK) {
             float sw = Math.max(3, b.armW * 0.5f), gx = hx + p.facing * b.headR * 0.22f;
             g.color(0xFF5D4037);
             g.line(hx, hy, gx, -1, sw);
@@ -1137,9 +1269,54 @@ public final class Puppet {
                 g.color(0xFF6D4C41); g.roundRect(hx - 7, hy - 16, 14, 24, 5);
                 g.color(0xFF90CAF9); g.rect(hx - 4, hy - 20, 8, 5);
                 break;
+            case Pose.I_CUP: case Pose.I_TEA: case Pose.I_GLASS: case Pose.I_PLATE:
+                drawVessel(g, hold, hx, hy, b.headR / 34f, p.time);
+                break;
             case Pose.I_TURBAN:
                 drawTurbanShape(g, hx, hy - 6, b.headR * 1.0f, p.turbanColor, p.turbanBand, false);
                 break;
+            default:
+        }
+    }
+
+    /**
+     * v35: what a hand holds to eat or drink, at (x, y) (the hand), k = size: a cup (tea steams in thin rising wisps),
+     * a glass of water (clear, the water line catching the light), a steel plate of food (a thali: a roti, rice, dal).
+     */
+    static void drawVessel(Gfx g, int item, float x, float y, float k, float t) {
+        switch (item) {
+            case Pose.I_CUP: case Pose.I_TEA: {
+                g.color(0xFFF5F2EA); g.roundRect(x - 7 * k, y - 15 * k, 14 * k, 15 * k, 3 * k);
+                g.color(0xFFD9D2C4); g.strokeOval(x + 9 * k, y - 8 * k, 3.5f * k, 4.5f * k, 2 * k);
+                g.color(item == Pose.I_TEA ? 0xFFB07A4A : 0xFF6D4C41); g.oval(x, y - 14 * k, 6 * k, 1.8f * k);
+                if (item == Pose.I_TEA) {
+                    // steam: two thin wisps drifting up and fading
+                    for (int i = 0; i < 2; i++) {
+                        float ph = (t * 0.6f + i * 0.5f) % 1f;
+                        g.color(alpha(0xFFFFFFFF, 0.35f * (1 - ph)));
+                        float sx = x + (i == 0 ? -2.5f : 2.5f) * k, sy = y - 17 * k - ph * 16 * k;
+                        g.begin(); g.moveTo(sx, sy + 6 * k); g.quadTo(sx + 3 * k * (float) Math.sin(t * 3 + i), sy + 3 * k, sx, sy); g.strokePath(1.3f * k);
+                    }
+                }
+                break;
+            }
+            case Pose.I_GLASS: {
+                g.color(0x66D6EEF8);
+                g.begin(); g.moveTo(x - 6 * k, y - 18 * k); g.lineTo(x + 6 * k, y - 18 * k); g.lineTo(x + 4.6f * k, y); g.lineTo(x - 4.6f * k, y); g.close(); g.fillPath();
+                g.color(0x8890CAF9);
+                g.begin(); g.moveTo(x - 5.5f * k, y - 12 * k); g.lineTo(x + 5.5f * k, y - 12 * k); g.lineTo(x + 4.6f * k, y); g.lineTo(x - 4.6f * k, y); g.close(); g.fillPath();
+                g.color(0xCCFFFFFF); g.line(x - 4 * k, y - 16 * k, x - 3.4f * k, y - 3 * k, 1.1f * k);
+                g.color(0x99B0BEC5); g.strokeOval(x, y - 18 * k, 6 * k, 1.2f * k, 0.9f * k);
+                break;
+            }
+            case Pose.I_PLATE: {
+                g.color(0xFFB0BEC5); g.oval(x, y - 2 * k, 17 * k, 4.5f * k);
+                g.color(0xFFD5DBDF); g.oval(x, y - 2.6f * k, 14 * k, 3.5f * k);
+                g.color(0xFFD7A86E); g.oval(x - 6 * k, y - 3.2f * k, 5.5f * k, 2 * k);         // a roti
+                g.color(0xFFFAFAF5); g.oval(x + 2 * k, y - 3.6f * k, 4.5f * k, 1.8f * k);      // rice
+                g.color(0xFFE8B230); g.oval(x + 8 * k, y - 3.2f * k, 3 * k, 1.4f * k);         // dal
+                break;
+            }
             default:
         }
     }
@@ -1263,6 +1440,15 @@ public final class Puppet {
         g.color(shade(skin, 0.9f));
         g.oval(-r * 0.93f, r * 0.08f, r * 0.15f, r * 0.2f);
         g.oval(r * 0.93f, r * 0.08f, r * 0.15f, r * 0.2f);
+        if ((l.condition & Look.C_HEARING_AID) != 0) {
+            // v35: a hearing aid: a small beige case curved behind each ear, its clear tube into the ear
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                g.color(0xFFD8C3A5);
+                g.begin(); g.moveTo(s2 * r * 0.98f, -r * 0.08f); g.quadTo(s2 * r * 1.13f, r * 0.06f, s2 * r * 1.0f, r * 0.24f); g.strokePath(Math.max(2f, r * 0.07f));
+                g.color(0x99E0F2F1);
+                g.line(s2 * r * 0.98f, -r * 0.08f, s2 * r * 0.9f, r * 0.06f, Math.max(1.2f, r * 0.025f));
+            }
+        }
         if (l.earrings) {
             g.color(0xFFE5B530);
             if (l.kind == Look.WOMAN) {
@@ -1505,7 +1691,13 @@ public final class Puppet {
         boolean witch = l.kind == Look.WITCH && !p.disguised;
         for (int s = -1; s <= 1; s += 2) {
             float cx = s * sep + ex;
-            if (closed > 0.85f) {
+            if (s == -1 && (l.condition & Look.C_ONE_EYE) != 0 && l.glasses != 5) {
+                // v35: one eye lost (no patch told): that eye stays closed, the lid a gentle line, a faint scar across it
+                g.color(INK);
+                g.begin(); g.moveTo(cx - ew, ey); g.quadTo(cx, ey + eh * 0.45f, cx + ew, ey); g.strokePath(3);
+                g.color(shade(faceSkin(l, p), 0.72f));
+                g.line(cx - ew * 0.45f, ey - eh * 1.15f, cx + ew * 0.35f, ey + eh * 0.95f, Math.max(1.5f, ew * 0.16f));
+            } else if (closed > 0.85f) {
                 g.color(INK);
                 g.begin();
                 if (em == Pose.LAUGH || em == Pose.HAPPY) { g.moveTo(cx - ew, ey + 2); g.quadTo(cx, ey - eh, cx + ew, ey + 2); }

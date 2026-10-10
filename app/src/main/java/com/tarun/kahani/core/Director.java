@@ -32,6 +32,11 @@ public final class Director {
         public SoundLib sounds;
         /** Spider-Verse: characters animated on twos / threes by skill (experts 24, learners 12, rebels 8 fps); off = every frame. */
         public boolean onTwos;
+        /**
+         * v35: the height of the film in pixels (1080 for a 1080p film): a close-up never enlarges a picture more than
+         * 1.5 times its own pixels at this size. 720 = the stage itself (the rule as it was before v35).
+         */
+        public int outHeight = 720;
     }
 
     private final Map<String, Float> userSoundAt = new HashMap<String, Float>();
@@ -63,6 +68,69 @@ public final class Director {
 
     // flags that persist from scene to scene (a stolen turban stays stolen...)
     private final Map<Story.CharacterDef, Boolean> pNoHead = new HashMap<Story.CharacterDef, Boolean>();
+    /** v35: who was asleep (lying, eyes shut) at the end of the last part. */
+    private final Map<Story.CharacterDef, Boolean> pAsleep = new HashMap<Story.CharacterDef, Boolean>();
+
+    /** v35: does this part wake the character (or take them out of bed) before they say anything? */
+    private boolean wakesIn(Story.Scene sc, int b0, int b1, Story.CharacterDef c) {
+        for (int bi = b0; bi < b1 && bi < sc.beats.size(); bi++) {
+            Story.Beat b = sc.beats.get(bi);
+            if (b.type == Story.Beat.DIALOGUE) { if (b.speaker == c) return false; continue; }
+            for (String sent : sentences(b.text)) {
+                if (!ScriptParser.mentions(story, sent).contains(c)) continue;
+                if (Txt.has(sent, WAKE) || (Txt.has(sent, STAND_UP) && Txt.has(sent, BED))) return true;
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** v35: a picture the story would be better with — a character seen sitting or lying down. */
+    public static final class PoseNeed {
+        public Story.CharacterDef c;
+        /** PoseSense.SIT or PoseSense.LIE. */
+        public int pose;
+        public int scene;
+    }
+
+    /**
+     * v35: who sits or lies down in the story (the first named in the stage direction), once per pose. A user's
+     * standing photo can only be lowered onto a seat (the thighs shortened as if coming towards the camera) or turned
+     * to lie down, so the director asks for a picture of them sitting or lying — and uses it, as it uses every
+     * picture of the user's, whenever the character sits or lies (Casting).
+     */
+    public static List<PoseNeed> poseNeeds(Story story) {
+        List<PoseNeed> out = new ArrayList<PoseNeed>();
+        for (Story.Scene sc : story.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type != Story.Beat.DIRECTION) continue;
+            for (String sent : sentences(b.text)) {
+                int pose = Txt.has(sent, LIE_DOWN) || Txt.has(sent, WAKE) ? PoseSense.LIE
+                        : Txt.has(sent, SIT_DOWN) && !Txt.has(sent, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") ? PoseSense.SIT : -1;
+                if (pose < 0) continue;
+                List<Story.CharacterDef> m = ScriptParser.mentions(story, sent);
+                if (m.isEmpty()) continue;
+                Story.CharacterDef c = m.get(0);
+                if (c.look == null || !c.look.isHumanoid() || c.look.aid == Look.AID_WHEELCHAIR) continue;
+                boolean dup = false;
+                for (PoseNeed n : out) if (n.c == c && n.pose == pose) dup = true;
+                if (dup) continue;
+                PoseNeed n = new PoseNeed();
+                n.c = c; n.pose = pose; n.scene = sc.number;
+                out.add(n);
+            }
+        }
+        return out;
+    }
+
+    /** v35: does the character speak in this part before any action names them? */
+    private boolean speaksFirst(Story.Scene sc, int b0, int b1, Story.CharacterDef c) {
+        for (int bi = b0; bi < b1 && bi < sc.beats.size(); bi++) {
+            Story.Beat b = sc.beats.get(bi);
+            if (b.type == Story.Beat.DIALOGUE) { if (b.speaker == c) return true; continue; }
+            if (ScriptParser.mentions(story, b.text).contains(c)) return false;
+        }
+        return false;
+    }
     private final Map<Story.CharacterDef, Boolean> pTurban = new HashMap<Story.CharacterDef, Boolean>();
     private final Map<Story.CharacterDef, Boolean> pDisguise = new HashMap<Story.CharacterDef, Boolean>();
     private final Map<Story.CharacterDef, Integer> pTurbanColor = new HashMap<Story.CharacterDef, Integer>();
@@ -590,10 +658,18 @@ public final class Director {
             b.append(String.format(java.util.Locale.US, "• Shots longer than 4 s: %d%n", longest));
             b.append(String.format(java.util.Locale.US, "• Lip-sync shots (front close-ups, face filling the frame, at most 6 words): %d; with more than 6 words: %d%n", speech, over6));
             b.append(String.format(java.util.Locale.US, "• Runs slowed to walking pace: %d; characters who stop walking to speak: %d%n", calmed, stillToSpeak));
-            b.append(String.format(java.util.Locale.US, "• Moves read from the story's directions (v34): %d leaving, %d coming back, %d across or around, %d up to someone%n", exits, returns, crossings, approaches));
+            b.append(String.format(java.util.Locale.US, "• Moves read from the story's directions (v34): %d leaving, %d coming back, %d across or around, %d up to someone; "
+                    + "%d lines waited until their speaker had walked onto the stage (v35)%n", exits, returns, crossings, approaches, waitedToEnter));
             b.append(String.format(java.util.Locale.US, "• Realism (v34): %d looks held on an entrance, an exit, a return, a reveal or someone hurt (%d turned round to watch); "
                     + "%d reactions to rain or snow beginning; %d hurried out of the rain; %d felt their way blindfolded; %d doors heard; %d footsteps moved across the stereo%n",
                     watchCount, watchTurns, skyReactions, hurried, feltWay, doorsHeard, stepsPlaced));
+            b.append(bodiesReport());
+            if (sittings + risings + sleepers + wakings + meals + drinks > 0)
+                b.append(String.format(java.util.Locale.US, "• Everyday actions (v35): %d sat down (a chair, a sofa, a bed, the floor — each its own furniture and sound), %d got up "
+                        + "(leaning forward, slower from a low seat; from lying, sitting up first), %d lay down to sleep (sat, then lay back; eyes shut, slow breath, a blanket in bed), "
+                        + "%d woke (sat up, stretched and yawned), %d ate (hand to mouth, chewing, heard), %d drank (raised to the lips, a sip or gulps, the cup set down); "
+                        + "%d shots of a seated speaker from a standing photo kept from the waist up, %d close-ups of a photo eating or drinking (the cup or morsel comes up to the lips)%n",
+                        sittings, risings, sleepers, wakings, meals, drinks, waistUp, mealCloseUps));
             b.append(String.format(java.util.Locale.US, "• Cuts made so no character moves 15%% of the frame in one shot: %d; shots still over the limit (very fast moves the story's timing leaves no room to slow): %d%n", motionCuts, overMotion));
             b.append(String.format(java.util.Locale.US, "• Cuts made so each shot holds one action: %d; shots with more than one: %d%n", actionCuts, multi));
             b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
@@ -921,7 +997,13 @@ public final class Director {
             // part is planned for a seated figure (eye-level framing, the face where it is); mobility() keeps it so
             Look lk0 = k.costume > 0 && k.costume <= c.costumes.size() ? c.costumes.get(k.costume - 1).look : c.look;
             if (lk0 != null && lk0.aid == Look.AID_WHEELCHAIR && (art == null || !art.sprites.containsKey(c.id))) { k.body = Pose.SIT; k.seat = Film.SEAT_WHEELCHAIR; }
+            // v35: one who wakes (or gets out of bed) in this part begins it asleep in bed — and one asleep at the end of
+            // the last part is still asleep when the next part in a room begins
+            boolean asleepNow = c.look != null && c.look.isHumanoid() && k.body == Pose.STAND
+                    && (wakesIn(sc, b0, b1, c) || (bool(pAsleep.get(c)) && !Sets.outdoorSet(seg.set) && !speaksFirst(sc, b0, b1, c)));
+            if (asleepNow) { k.body = Pose.LIE; k.seat = Film.SEAT_BED; k.eyesShut = true; k.visible = true; }
             a.keys.add(k);
+            if (asleepNow) { Film.Fx bf = fx(Film.FX_SEAT, seg.t0, 1e6f, k.x, ground, a, null); bf.kind = Film.SEAT_BED; }
             // Spider-Verse: the frame rate this character's poses step on (only when the user asks for it)
             a.stepFps = opt.onTwos ? PixarLead.stepFps(c) : 0;
             seg.actors.add(a);
@@ -1038,6 +1120,7 @@ public final class Director {
             pNoHead.put(a.c, k.noHeadwear);
             pTurban.put(a.c, k.wearsTurban);
             pDisguise.put(a.c, k.disguised);
+            pAsleep.put(a.c, k.body == Pose.LIE && k.eyesShut);          // v35: still asleep for the next part
         }
         return seg.t1;
     }
@@ -1157,16 +1240,17 @@ public final class Director {
         }
         // v34 (realism): coming through the rain without an umbrella, one hurries in; a blindfolded one feels the way in
         boolean aided = a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0;
-        if (!run && !aided && !a.look.umbrella && a.look.isHumanoid() && a.look.glasses != 4 && Sets.outdoorSet(seg.set)
+        if (!run && !aided && !a.look.umbrella && a.look.isHumanoid() && !a.look.cannotSee() && Sets.outdoorSet(seg.set)
                 && (wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0)) { run = true; hurried++; }
-        boolean blindIn = a.look.glasses == 4;
+        boolean blindIn = a.look.cannotSee();         // v35: blind as well as blindfolded
         if (blindIn) run = false;
         Film.Key k = a.at(tc + 0.01f);
         k.x = dest;
         k.moveDur = run ? 0.9f : blindIn ? 2.0f : 1.3f;
         k.run = run;
         k.facing = dest > startX ? 1 : -1;
-        if (blindIn) { a.acts.add(new Film.Act(tc + 0.01f, tc + 2.0f, Film.G_REACH)); feltWay++; }
+        // (v35: a hand out in front without a cane; with one, the cane finds the way and taps)
+        if (blindIn) { if (a.look.aid != Look.AID_STICK) a.acts.add(new Film.Act(tc + 0.01f, tc + 2.0f, Film.G_REACH)); feltWay++; }
         if (a.look.kind == Look.MONSTER || a.look.height > 1.25f) {
             // reveal (§15): first only the ground shaking under the steps, then the camera pulls back and up
             float h = heightOf(a);
@@ -1197,6 +1281,7 @@ public final class Director {
                     : a.look.aid == Look.AID_STICK || a.look.aid == Look.AID_WALKER ? Film.SFX_STICK : stepsSound(false);
             film.sfx.add(new Film.Sfx(aidSound, tc, k.moveDur * 1.35f, a.look.aid == Look.AID_WHEELCHAIR ? 0.45f : 0.38f));
         }
+        else if (careful(a.look)) film.sfx.add(new Film.Sfx(Film.SFX_STEPS_LIMP, tc, k.moveDur * 1.2f, 0.36f));     // v35: a limp is heard, uneven
         else film.sfx.add(new Film.Sfx(stepsSound(run), tc, k.moveDur, 0.35f));
         if (a.look.anklets) film.sfx.add(new Film.Sfx(Film.SFX_ANKLET, tc, k.moveDur, 0.4f));
         // v34 (realism): coming into a room, a door is heard on their side; everyone already there looks up and
@@ -1246,6 +1331,14 @@ public final class Director {
             }
         }
         float start = tc + 0.12f;
+        // v35: a speaker still walking in from beyond the edge of the picture is let in first — the line begins once
+        // they are on the stage (nobody speaks from outside the frame, nobody jumps in to speak)
+        Film.Key ek = sp.stateAt(start);
+        if (ek.moveDur > 0 && ek.anchor == Film.A_GROUND && start < ek.t + ek.moveDur) {
+            float in = start;
+            while (in < ek.t + ek.moveDur) { float xs = xAt(sp, in); if (xs >= 80 && xs <= 1200) break; in += 0.05f; }
+            if (in > start + 0.01f) { start = Math.min(in, ek.t + ek.moveDur); waitedToEnter++; }
+        }
         float end = start + line.dur;
         line.start = start;
         // face each other
@@ -1259,8 +1352,12 @@ public final class Director {
         Film.Speak s = new Film.Speak();
         s.t0 = start; s.t1 = end; s.line = line.index; s.emotion = line.emotion; s.mount = mountLine;
         sp.speaks.add(s);
+        // v35: a character who cannot speak (or signs) says the line in sign language: the hands sign, the lips stay still
+        boolean signs = !mountLine && sp.look != null && sp.look.signs();
+        line.signed = signs;
+        if (signs) signedLines++;
         if (!mountLine) {
-            sp.acts.add(new Film.Act(start, end, Film.G_TALK));
+            sp.acts.add(new Film.Act(start, end, signs ? Film.G_SIGN : Film.G_TALK));
             // gestures from the manner, e.g. (तलवार घुमाते हुए) (घुटनों के बल गिरकर रोते हुए)
             mannerActions(sp, to, b.manner, start, end, line.emotion);
         }
@@ -1271,6 +1368,7 @@ public final class Director {
             // the little princess' laugh makes flowers bloom (story magic) – only if the script says so later
         }
         sub(start, end, b.speaker.shown(), line.shown);
+        if (signs) seg.subs.get(seg.subs.size() - 1).signed = true;
         ShotPlanner.Plan plan = partPlan.get(bi);
         if (opt.technical && plan != null) {
             // no long dialogue in a far shot: more than six words go to a front-facing close-up (lip-sync protocol)
@@ -1572,6 +1670,18 @@ public final class Director {
                 sh.action = to.c.shown() + " listens, subtle breathing, one small change of expression";
                 sh.face = faceOf(empathy(line.emotion, sp, to));
                 sh.speech = false;
+            } else if (line.signed) {
+                // v35: a line in sign language: the hands and the face in one frame (a medium close-up of the upper
+                // body), never a close-up that would cut the hands off; no lip-sync — the words are in the subtitle
+                camOn(sp, tk, ShotPlanner.zoomFor(ShotPlanner.MCU, heightOf(sp)) * 0.85f);
+                seg.cams.get(seg.cams.size() - 1).keep = true;
+                sh = shot(tk, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, sp, to, stage);
+                sh.line = line.index;
+                sh.speech = false;
+                sh.purpose = "Signed" + (n > 1 ? " (part " + (k + 1) + " of " + n + ")" : "") + ": " + sp.c.shown() + " signs — hands and face in the frame, the words in the subtitle";
+                sh.action = sp.c.shown() + " signs: \"" + words + "\"";
+                sh.face = faceOf(line.emotion);
+                done++;
             } else {
                 // v22: never an extreme close-up for lip-sync (it cuts the hair); the second group of words is framed a
                 // little wider instead, so the two shots still differ
@@ -1663,7 +1773,7 @@ public final class Director {
         if (mood == Film.M_SAD) return;
         Film.Actor who = null;
         for (Film.Actor a : seg.actors) if (PixarLead.comic(a.c) && a.stateAt(tc - 0.5f).visible && a.stateAt(tc - 0.5f).anchor == Film.A_GROUND
-                && a.look.aid == Look.AID_NONE && a.look.injury == 0) { who = a; break; }      // v34: a walking aid or an injury is never a joke
+                && a.look.aid == Look.AID_NONE && a.look.injury == 0 && a.look.condition == 0) { who = a; break; }      // v34/v35: a walking aid, an injury or a body's difference is never a joke
         if (who == null) return;
         // at a quiet moment near the end of the part: nobody speaking, this character not acting
         float t0 = Math.max(seg.t0 + 1f, tc - 1.6f);
@@ -1805,7 +1915,7 @@ public final class Director {
         float h = heightOf(a), x = finalX(a, t);
         Film.Key k = a.stateAt(t);
         float top = ground - h;
-        if (k.body == Pose.SIT) top += h * 0.17f;
+        if (k.body == Pose.SIT) top = ground - h * Math.min(1f, seatedFace(a, t) + 0.115f);     // v35: by the seat's height
         else if (k.body == Pose.KNEEL || k.body == Pose.CROUCH) top += h * 0.25f;
         if (k.anchor == Film.A_BRANCH) top = ground - 450 - h * 0.1f;
         else if (k.anchor == Film.A_SHOULDER || k.anchor == Film.A_ON_FACE) top = ground - 320 - h * 0.1f;
@@ -1818,7 +1928,11 @@ public final class Director {
             float fx = x + ((sp.eyeLX + sp.eyeRX) / 2 - 0.5f) * w * (k.facing < 0 ? -1 : 1);
             float scale = sp.rig != null ? sp.rig.faceScale : 1f;
             float srcPx = 3.2f * d * sp.h * scale;
-            float zmax = Math.max(ShotPlanner.MAX_ZOOM, srcPx * 1.25f / fh);
+            // v35: sharp at the film's own size — the face on the screen (zoom x face height x pixels per stage unit)
+            // is at most 1.5 times the face's pixels in the picture; a small picture gets a medium close-up (62% of
+            // the character's height in the frame) rather than an enlarged, soft one
+            float px = Math.max(1f, opt.outHeight / 720f);
+            float zmax = Math.max(Math.min(ShotPlanner.MAX_ZOOM, 720f / (0.62f * h)), srcPx * 1.5f / (fh * px));
             // the top of the head: the top of the picture (hair, turban), higher when wearing someone's turban
             float headTop = top;
             if (k.wearsTurban) {
@@ -2246,11 +2360,38 @@ public final class Director {
      * jumps; a drawn character sits in it, a picture is drawn as it is, since it shows the chair); a walking stick
      * or crutches walk a third slower and never run or jump.
      */
+    /** v35: a body that walks with care: a walking aid, a leg in plaster, a limp, an artificial or a missing leg. */
+    static boolean careful(Look lk) {
+        return lk != null && (lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0 || (lk.condition & (Look.C_LIMP | Look.C_ARTIFICIAL_LEG | Look.C_NO_LEG)) != 0);
+    }
+
+    /** v35: the shot list's line on the bodies of the story: what the director did for each. */
+    private String bodiesReport() {
+        int limp = 0, arm = 0, leg = 0, fingers = 0, eye = 0, blind = 0, deaf = 0, signs = 0;
+        for (Story.CharacterDef c : story.characters) {
+            Look l = c.look;
+            if (l == null) continue;
+            if ((l.condition & (Look.C_LIMP | Look.C_ARTIFICIAL_LEG)) != 0) limp++;
+            if (l.missingArm() != 0) arm++;
+            if (l.missingLeg() != 0) leg++;
+            if ((l.condition & Look.C_FINGERS) != 0) fingers++;
+            if ((l.condition & Look.C_ONE_EYE) != 0 || l.glasses == 5) eye++;
+            if ((l.condition & Look.C_BLIND) != 0) blind++;
+            if (l.cannotHear()) deaf++;
+            if (l.signs()) signs++;
+        }
+        if (limp + arm + leg + fingers + eye + blind + deaf + signs == 0) return "";
+        return String.format(java.util.Locale.US, "• Bodies (v35): %d limping (uneven steps, never running), %d with one arm (an empty sleeve; one hand does the work), %d with one leg "
+                + "(crutches, or an artificial leg and a limp), %d with fingers missing, %d with one eye, %d blind (feels the way or follows the cane, listens, no point-of-view shot), "
+                + "%d deaf (%d sounds or calls not heard — no startle, no turn), %d who sign (%d lines in sign language: hands and face framed together, the words in the subtitle)%n",
+                limp, arm, leg, fingers, eye, blind, deaf, deafUnheard, signs, signs, signedLines);
+    }
+
     private void mobility() {
         for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
             if (a.look == null) continue;
-            boolean any = a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0;
-            for (Story.Costume co : a.c.costumes) any |= co.look.aid != Look.AID_NONE || (co.look.injury & Look.INJ_LEG) != 0;
+            boolean any = careful(a.look);
+            for (Story.Costume co : a.c.costumes) any |= careful(co.look);
             if (!any) continue;
             boolean picture = art != null && art.sprites.containsKey(a.c.id);
             for (int i = 0; i < a.keys.size(); i++) {
@@ -2258,21 +2399,23 @@ public final class Director {
                 // v34: the look at this moment (a plaster cut off mid-story lets the character run again)
                 Look lk = k.costume > 0 && k.costume <= a.c.costumes.size() ? a.c.costumes.get(k.costume - 1).look : a.look;
                 int aid = lk.aid;
-                if (aid == Look.AID_NONE && (lk.injury & Look.INJ_LEG) == 0) continue;
+                if (!careful(lk)) continue;
                 k.run = false;
                 if (aid == Look.AID_WHEELCHAIR) {
                     if (k.body != Pose.LIE) { k.body = picture ? Pose.STAND : Pose.SIT; k.seat = picture ? -1 : Film.SEAT_WHEELCHAIR; }
                 } else if (k.moveDur > 0) {
-                    float room = i + 1 < a.keys.size() ? a.keys.get(i + 1).t - k.t : k.moveDur * 1.35f;
-                    k.moveDur = Math.max(k.moveDur, Math.min(k.moveDur * 1.35f, room));
+                    // a walking aid or a plaster: a third slower; a limp on its own: a fifth
+                    float slow = aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0 ? 1.35f : 1.2f;
+                    float room = i + 1 < a.keys.size() ? a.keys.get(i + 1).t - k.t : k.moveDur * slow;
+                    k.moveDur = Math.max(k.moveDur, Math.min(k.moveDur * slow, room));
                 }
             }
             for (java.util.Iterator<Film.Act> it = a.acts.iterator(); it.hasNext(); ) {
                 Film.Act act = it.next();
                 int ty = act.type;
-                Film.Key at = a.keys.isEmpty() ? null : a.at(act.t0);
+                Film.Key at = a.keys.isEmpty() ? null : a.stateAt(act.t0);     // v35: read the state (at() would add a key out of time order)
                 Look lk = at != null && at.costume > 0 && at.costume <= a.c.costumes.size() ? a.c.costumes.get(at.costume - 1).look : a.look;
-                boolean hurt = lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0;
+                boolean hurt = careful(lk);
                 if (!hurt) continue;
                 if (ty == Film.G_JUMP || ty == Film.G_BOUNCE || (lk.aid == Look.AID_WHEELCHAIR && (ty == Film.G_DANCE || ty == Film.G_WALK_PLACE))) it.remove();
             }
@@ -2292,13 +2435,14 @@ public final class Director {
                 boolean heard = false;
                 for (Film.Sfx x : film.sfx) {
                     boolean step = x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN || x.type == Film.SFX_THUD
-                            || x.type == Film.SFX_STICK || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR;
+                            || x.type == Film.SFX_STICK || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR || x.type == Film.SFX_STEPS_LIMP;
                     if (step && x.t < t1 && x.t + x.dur > t0) { heard = true; break; }
                 }
                 if (heard) continue;
                 Look lk = k.costume > 0 && k.costume <= a.c.costumes.size() ? a.c.costumes.get(k.costume - 1).look : a.look;
                 int type = lk.kind == Look.MONSTER ? Film.SFX_THUD : lk.aid == Look.AID_WHEELCHAIR ? Film.SFX_WHEELCHAIR : lk.aid == Look.AID_CRUTCHES ? Film.SFX_CRUTCH
-                        : lk.aid == Look.AID_STICK || lk.aid == Look.AID_WALKER ? Film.SFX_STICK : floorSteps(sg.set, k.run);
+                        : lk.aid == Look.AID_STICK || lk.aid == Look.AID_WALKER ? Film.SFX_STICK
+                        : careful(lk) ? Film.SFX_STEPS_LIMP : floorSteps(sg.set, k.run);       // v35: a limp is heard, uneven
                 film.sfx.add(new Film.Sfx(type, t0, k.moveDur, lk.kind == Look.MONSTER ? 0.6f : 0.3f));
             }
         }
@@ -2527,6 +2671,7 @@ public final class Director {
         List<Film.Actor> me = new ArrayList<Film.Actor>();
         me.add(a);
         postureFrom(m, t0, a, me);
+        mealCU = null;                                // a manner ("sipping tea") stays in the dialogue's own framing
         userEffect(m, t0);
         natureFrom(m, t0, a);
         if (Txt.has(m, "तलवार")) {
@@ -2706,7 +2851,8 @@ public final class Director {
         boolean focusSet = false;
         // thought before action (handbook ch. 6): a sound or a sudden sight is perceived first — a pause, the head
         // turns toward it, the body holds still — and only then comes the action of the sentence
-        if (subj != null && subj.stateAt(t).visible && Handbook.stimulus(s)) {
+        // (v35: a deaf character does not perceive a sound — the deaf one notices it in the others' faces, loudReaction)
+        if (subj != null && subj.stateAt(t).visible && Handbook.stimulus(s) && !(subj.look != null && subj.look.cannotHear() && DirectorsManual.loud(s))) {
             subj.acts.add(new Film.Act(t, t + 0.6f, Film.G_LISTEN));
             t += 0.55f;
             d += 0.55f;
@@ -2814,6 +2960,7 @@ public final class Director {
             d = Math.max(d, 2.5f);
         }
         d = Math.max(d, postureFrom(s, t, subj, group));
+        if (mealCU != null) { camOn(mealCU, mealCUt, 2.4f); focusSet = true; mealCU = null; mealCloseUps++; }
         if (Txt.has(s, "मसल") && subj != null) { Film.Key k = subj.at(t); k.holdR = Pose.I_FLOWER; subj.acts.add(new Film.Act(t + 0.5f, t + 2f, Film.G_CRUSH)); Film.Key k2 = subj.at(t + 2f); k2.holdR = Pose.I_NONE; d = Math.max(d, 2.2f); }
         if (Txt.has(s, "आँखें") && Txt.has(s, "धधक", "दहक", "चमक") && subj != null && !subj.look.hero) {
             camOn(subj, t, 1.9f); focusSet = true; film.sfx.add(new Film.Sfx(Film.SFX_ROAR, t, 1.2f, 0.25f));
@@ -3114,6 +3261,14 @@ public final class Director {
         for (Film.Actor a : seg.actors) {
             Film.Key k = a.stateAt(t + 0.4f);
             if (!k.visible || k.anchor == Film.A_HIDDEN) continue;
+            // v35: a deaf character hears nothing: no startle — they notice the others' faces a beat later and turn to look
+            if (a.look != null && a.look.cannotHear()) {
+                a.acts.add(new Film.Act(t + 0.9f, t + 1.4f, Film.G_TURN));
+                Film.Key kk = a.at(t + 1.0f);
+                if (kk.emotion == Pose.NEUTRAL || kk.emotion == Pose.HAPPY) { kk.emotion = Pose.CURIOUS; a.at(t + 2.8f).emotion = Pose.NEUTRAL; }
+                deafUnheard++;
+                continue;
+            }
             // the subject of a "hears a sound" sentence already has its thought beat; the others react now
             if (a != subj || !Handbook.stimulus(s)) {
                 a.acts.add(new Film.Act(t + 0.3f, t + 1.1f, Film.G_LISTEN));
@@ -3149,12 +3304,12 @@ public final class Director {
      */
     private float pointOfView(String s, float t, Film.Actor subj, Film.Actor target) {
         Look sl = lookAt(subj, t);
-        if (sl != null && sl.glasses == 4) {
+        if (sl != null && sl.cannotSee()) {
             // v34 (the situations guide): a blindfolded character cannot look — no point-of-view shot; she turns her
             // head toward the sound and listens
             camOn(subj, t, 1.7f);
             Film.Shot a = shot(t, ShotPlanner.MCU, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, subj, target, ShotPlanner.DEVELOP);
-            a.purpose = "Blindfolded: " + subj.c.shown() + " cannot see — she turns toward the sound and listens (no point-of-view shot)";
+            a.purpose = (sl.glasses == 4 ? "Blindfolded: " : "Blind: ") + subj.c.shown() + " cannot see — turns toward the sound and listens (no point-of-view shot)";
             a.action = subj.c.shown() + " listens" + (target != null ? " toward " + target.c.shown() : "");
             a.face = "The head turned a little toward the sound, the face still";
             a.body = "Still";
@@ -3505,7 +3660,8 @@ public final class Director {
             boolean aided = lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0;
             // v34 (realism): a blindfolded character feels the way, slowly, a hand out in front; one without an umbrella
             // hurries through the rain (not one on a walking aid)
-            boolean blind = lk.glasses == 4;
+            boolean blind = lk.cannotSee();             // v35: blind as well as blindfolded
+            boolean cane = lk.aid == Look.AID_STICK;
             boolean run = runWords && !blind;
             if (!run && !blind && !slow && wet && !lk.umbrella && !aided && lk.isHumanoid()) { run = true; hurried++; }
             // a blindfolded walk is careful but not "slowly" on top of it; no walk on the stage lasts more than 4.5 s
@@ -3521,7 +3677,7 @@ public final class Director {
                 frameAround(t + 0.05f, x, dest);
                 Film.Key k = a.at(t + 0.15f);
                 k.x = dest; k.moveDur = dur; k.run = run; k.facing = tx > dest ? 1 : -1;
-                if (blind) { a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
+                if (blind) { if (!cane) a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
                 watch(a, t + 0.15f, t + 0.45f + dur, false);
                 approaches++;
                 // the whole walk before the story goes on (a listener turned mid-walk would walk backwards)
@@ -3535,7 +3691,7 @@ public final class Director {
                 frameAround(t + 0.05f);
                 Film.Key k = a.at(start);
                 k.x = edge; k.moveDur = dur; k.run = run; k.facing = edge > x ? 1 : -1; k.backTurned = false;
-                if (blind) { a.acts.add(new Film.Act(start, start + dur, Film.G_REACH)); feltWay++; }
+                if (blind) { if (!cane) a.acts.add(new Film.Act(start, start + dur, Film.G_REACH)); feltWay++; }
                 if (!back) {
                     // gone once off the stage; a door indoors; the others watch them go and look after them a moment
                     // (the story goes on when they have gone: no key may come before these)
@@ -3572,7 +3728,7 @@ public final class Director {
                     frameAround(t + 0.05f, x, dest);
                     k = a.at(t + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
                 }
-                if (blind) { a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
+                if (blind) { if (!cane) a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
                 watch(a, t + 0.15f, t + 0.15f + dur, false);
                 crossings++;
                 d = Math.max(d, dur + 0.3f);
@@ -3585,6 +3741,10 @@ public final class Director {
 
     private boolean travelFramed;
     private int watchCount, watchTurns, skyReactions, hurried, feltWay, doorsHeard, stepsPlaced;
+    /** v35: lines said in sign language; moments a deaf character did not hear (no startle, no turn to a sound behind them). */
+    private int signedLines, deafUnheard;
+    /** v35: lines that waited until their speaker had walked onto the stage. */
+    private int waitedToEnter;
 
     /**
      * v34 (realism): everyone on the stage looks at what matters now — someone walking in, walking off, coming back,
@@ -3599,11 +3759,13 @@ public final class Director {
             Film.Key k = w.stateAt(t0);
             if (!k.visible || k.anchor == Film.A_HIDDEN || w.look == null) continue;
             Look lk = lookAt(w, t0);
-            if (lk != null && lk.glasses == 4) { w.acts.add(new Film.Act(t0, Math.min(t1, t0 + 1.2f), Film.G_LISTEN)); continue; }
+            if (lk != null && lk.cannotSee()) { w.acts.add(new Film.Act(t0, Math.min(t1, t0 + 1.2f), Film.G_LISTEN)); continue; }
+            float side = Math.signum(xAt(at, (t0 + t1) / 2) - xAt(w, t0));
+            // v35: a deaf character does not hear what happens behind them: no look, no turn (they see it when it comes in front)
+            if (lk != null && lk.cannotHear() && side != 0 && (side != k.facing || k.backTurned)) { deafUnheard++; continue; }
             film.watches.add(new Film.Watch(w, at, t0, t1));
             watchCount++;
             if (!turn || k.anchor != Film.A_GROUND || k.body == Pose.LIE || k.body == Pose.SIT || k.backTurned || !w.look.isHumanoid()) continue;
-            float side = Math.signum(xAt(at, (t0 + t1) / 2) - xAt(w, t0));
             if (side == 0 || side == k.facing) continue;
             if (w.last().t > t0 + 0.01f || movingIn(w, t0, t1) || speakingIn(w, t0, t1)) continue;
             w.acts.add(new Film.Act(t0, t0 + 0.4f, Film.G_TURN));
@@ -3686,7 +3848,7 @@ public final class Director {
     private void placeSteps() {
         for (Film.Sfx x : film.sfx) {
             boolean step = x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN || x.type == Film.SFX_STICK
-                    || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR || x.type == Film.SFX_ANKLET;
+                    || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR || x.type == Film.SFX_ANKLET || x.type == Film.SFX_STEPS_LIMP;
             if (!step || !Float.isNaN(x.pan1)) continue;
             Film.Seg sg = film.segAt(x.t + 0.01f);
             if (sg == null) continue;
@@ -3776,9 +3938,20 @@ public final class Director {
 
     static final String[] STAND_UP = {"उठ खड़", "उठकर खड़", "खड़ा हो गया", "खड़ी हो गई", "खड़े हो गए", "खड़ी हो गयी", "उठ गया", "उठ गई", "उठ गए",
             "stood up", "stands up", "got up", "gets up", "rose to", "uth khada"};
-    static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "सो गया", "सो गई", "सो गए", "lay down", "lies down", "fell asleep"};
+    static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "लेट जाता", "लेट जाती", "लेटता", "लेटती", "सो गया", "सो गई", "सो गए", "सो जाता", "सो जाती",
+            "सो रहा", "सो रही", "सो रहे", "सोता है", "सोती है", "सोने चल", "lay down", "lies down", "lie down", "fell asleep", "falls asleep", "goes to sleep",
+            "went to sleep", "is asleep", "sleeping", "goes to bed", "went to bed", "gets into bed"};
+    /** v35: sleep (eyes shut, slow breathing, under a blanket in a bed) rather than only lying down. */
+    static final String[] SLEEP = {"सो ", "सोता", "सोती", "सोने", "नींद", "asleep", "sleep", "goes to bed", "went to bed", "gets into bed"};
+    /** v35: waking up — the eyes open, they sit up and stretch (and get up when the story says so). */
+    static final String[] WAKE = {"जाग गया", "जाग गई", "जाग गए", "जाग जाता", "जाग जाती", "जागता", "जागती", "जाग उठ", "नींद खुल", "आँख खुल", "आंख खुल", "wakes up",
+            "woke up", "awakens", "awoke", "wakes"};
     static final String[] THRONE = {"सिंहासन", "राजगद्दी", "गद्दी पर", "throne"};
-    static final String[] STOOL = {"कुर्सी", "मूढ़ा", "मूढ़े", "चौकी", "बेंच", "चारपाई", "खाट", "chair", "stool", "bench", "cot"};
+    /** v35: a chair (with a back), a sofa, a bed (a charpai is a bed) — each its own furniture. */
+    static final String[] CHAIR = {"कुर्सी", "chair", "armchair"};
+    static final String[] SOFA = {"सोफ़", "सोफा", "सोफे", "दीवान", "sofa", "couch", "settee"};
+    static final String[] BED = {"बिस्तर", "पलंग", "चारपाई", "खाट", "bed", "cot", "mattress"};
+    static final String[] STOOL = {"मूढ़ा", "मूढ़े", "चौकी", "बेंच", "stool", "bench"};
     static final String[] ROCK = {"चट्टान", "पत्थर पर", "rock", "boulder"};
     static final String[] FLOOR = {"ज़मीन पर", "जमीन पर", "धरती पर", "फर्श पर", "दरी", "चटाई", "floor", "ground", "on the grass", "घास पर"};
     static final String[] BOW = {"प्रणाम", "नमस्ते", "नमस्कार", "झुककर", "सिर झुका", "bow", "bowed", "namaste", "pranam"};
@@ -3803,12 +3976,42 @@ public final class Director {
             }
             d = Math.max(d, 0.8f);
         }
+        // v35: waking — the eyes open; one lying sits up (0.9 s) and stretches with a yawn
+        if (Txt.has(s, WAKE) && !birdLike) {
+            for (Film.Actor a : who) {
+                Film.Key k0 = a.stateAt(t);
+                Film.Key k = a.at(t + 0.1f); k.eyesShut = false;
+                if (k0.body == Pose.LIE) {
+                    Film.Key up = a.at(t + 0.5f); up.body = Pose.SIT; up.eyesShut = false;
+                    a.acts.add(new Film.Act(t + 1.5f, t + 3.0f, Film.G_STRETCH));
+                    film.sfx.add(sfxAt(Film.SFX_BED, t + 0.5f, 1.0f, 0.35f, a));
+                    wakings++;
+                    d = Math.max(d, 3.1f);
+                } else d = Math.max(d, 0.8f);
+            }
+        }
         if (Txt.has(s, STAND_UP)) {
-            for (Film.Actor a : who) { Film.Key k = a.at(t + 0.1f); if (k.body == Pose.SIT || k.body == Pose.KNEEL || k.body == Pose.LIE) { k.body = Pose.STAND; } }
+            for (Film.Actor a : who) {
+                // v35: one lying sits up first (0.9 s), then stands; from the floor, a sofa or a bed the rise takes a second.
+                // When the same sentence woke them, they stand after sitting up and stretching on the bed
+                float tt = t + 0.1f;
+                if (a.last().t > t) tt = Math.max(tt, a.last().t + 0.4f);
+                for (Film.Act x : a.acts) if (x.type == Film.G_STRETCH && x.t1 > tt && x.t0 < tt + 1f) tt = Math.max(tt, x.t1);
+                Film.Key k0 = a.stateAt(tt);
+                if (k0.body == Pose.LIE) { Film.Key up = a.at(tt); up.body = Pose.SIT; up.eyesShut = false; tt += 1.0f; }
+                int was = k0.body == Pose.SIT || k0.body == Pose.LIE ? Renderer.seatOf(a, tt - 0.01f) : -1;
+                Film.Key k = a.at(tt);
+                if (k.body == Pose.SIT || k.body == Pose.KNEEL || k.body == Pose.LIE) { k.body = Pose.STAND; k.eyesShut = false; }
+                if (was == Film.SEAT_CHAIR || was == Film.SEAT_SOFA || was == Film.SEAT_BED || was == Film.SEAT_STOOL) {
+                    film.sfx.add(sfxAt(was == Film.SEAT_SOFA ? Film.SFX_SOFA : was == Film.SEAT_BED ? Film.SFX_BED : Film.SFX_CHAIR, tt, 0.7f, 0.3f, a));
+                }
+                if (was >= 0) risings++;
+                d = Math.max(d, tt - t + 1.0f);
+            }
             d = Math.max(d, 1.0f);
         } else if (Txt.has(s, SIT_DOWN) && !birdLike && !Txt.has(s, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder")) {
-            int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK
-                    : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
+            int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, SOFA) ? Film.SEAT_SOFA : Txt.has(s, BED) ? Film.SEAT_BED : Txt.has(s, CHAIR) ? Film.SEAT_CHAIR
+                    : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
             for (Film.Actor a : who) {
                 Film.Key k = a.at(ts(t));
                 k.body = Pose.SIT;
@@ -3816,9 +4019,14 @@ public final class Director {
                 if (st == -2) {
                     // a king or queen in their hall sits on the throne; others on a stool, or on the ground outdoors
                     boolean royal = Txt.has(a.c.displayName + " " + a.c.fullName + " " + a.c.description, "राजा", "रानी", "महाराज", "king", "queen");
-                    st = royal && (seg.set == Sets.HALL || seg.set == Sets.COURTYARD) ? Film.SEAT_THRONE : Sets.outdoorSet(seg.set) ? Film.SEAT_FLOOR : Film.SEAT_STOOL;
+                    st = royal && (seg.set == Sets.HALL || seg.set == Sets.COURTYARD) ? Film.SEAT_THRONE : Sets.outdoorSet(seg.set) ? Film.SEAT_FLOOR
+                            : seg.set == Sets.ROOM ? Film.SEAT_CHAIR : Film.SEAT_STOOL;          // v35: a room of today has chairs
                 }
                 k.seat = st;
+                // v35: the furniture is heard as they sit (a chair's creak, a sofa's soft thump, a bed's frame)
+                if (st == Film.SEAT_CHAIR || st == Film.SEAT_SOFA || st == Film.SEAT_BED || st == Film.SEAT_STOOL)
+                    film.sfx.add(sfxAt(st == Film.SEAT_SOFA ? Film.SFX_SOFA : st == Film.SEAT_BED ? Film.SFX_BED : Film.SFX_CHAIR, ts(t) + 0.45f, 0.7f, 0.3f, a));
+                sittings++;
                 // the seat is furniture: it stays in the place after they get up
                 if (st >= Film.SEAT_STOOL) {
                     boolean have = false;
@@ -3827,10 +4035,40 @@ public final class Director {
                 }
             }
             d = Math.max(d, estab ? 0 : 1.0f);
-        } else if (Txt.has(s, LIE_DOWN)) {
-            for (Film.Actor a : who) { Film.Key k = a.at(t + 0.2f); k.body = Pose.LIE; }
+        } else if (Txt.has(s, LIE_DOWN) && !birdLike) {
+            // v35: lying down is a movement, not a fall: they sit down first (on the bed, on the ground), then lie back
+            // (0.9 s); asleep, the eyes close, the breath slows and in a bed a blanket covers them
+            boolean sleep = Txt.has(" " + s, SLEEP);
+            boolean bed = Txt.has(s, BED) || (sleep && !Sets.outdoorSet(seg.set));
+            for (Film.Actor a : who) {
+                if (!a.look.isHumanoid()) { Film.Key k = a.at(t + 0.2f); k.body = Pose.LIE; continue; }
+                Film.Key k0 = a.stateAt(t);
+                float tl = t + 0.2f;
+                if (k0.body != Pose.SIT && k0.body != Pose.LIE) {
+                    Film.Key sk = a.at(tl);
+                    sk.body = Pose.SIT; sk.seat = bed ? Film.SEAT_BED : Film.SEAT_FLOOR;
+                    tl += 1.0f;
+                }
+                if (bed) {
+                    boolean have = false;
+                    for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && f.a == a) have = true;
+                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, t), ground, a, null); f.kind = Film.SEAT_BED; }
+                    film.sfx.add(sfxAt(Film.SFX_BED, tl - 0.2f, 1.0f, 0.3f, a));
+                }
+                Film.Key k = a.at(tl);
+                k.body = Pose.LIE;
+                if (bed) k.seat = Film.SEAT_BED;
+                if (sleep) {
+                    Film.Key ks = a.at(tl + 0.9f);
+                    ks.eyesShut = true;
+                    film.sfx.add(sfxAt(Film.SFX_SLEEP, tl + 1.2f, 8f, 0.25f, a));
+                    sleepers++;
+                }
+                d = Math.max(d, tl - t + (sleep ? 1.6f : 1.0f));
+            }
             d = Math.max(d, 1.2f);
         }
+        d = Math.max(d, mealFrom(s, t, who));
         if (Txt.has(s, BOW)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
         if (Txt.has(s, WAVE)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.8f, Film.G_WAVE)); d = Math.max(d, 1.6f); }
         if (Txt.has(s, NOD)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.2f, Film.G_NOD)); d = Math.max(d, 1.2f); }
@@ -3841,6 +4079,90 @@ public final class Director {
                 k.facing = -a.stateAt(t).facing;
             }
             d = Math.max(d, 0.8f);
+        }
+        return d;
+    }
+
+    /** v35: what the everyday-action passes did (the shot list's line). */
+    private int sittings, risings, sleepers, wakings, meals, drinks, waistUp, mealCloseUps;
+    /**
+     * v35: one drawn from the user's photo who eats or drinks: its arm cannot bend to the mouth, so the action is shown
+     * in a close-up, the cup or the morsel coming up into the frame to the lips (Renderer.drawToLips).
+     */
+    private Film.Actor mealCU;
+    private float mealCUt;
+
+    /** v35: drawn from the user's picture (not a drawn character). */
+    private boolean photo(Film.Actor a) { return art != null && a.look != null && a.look.isHumanoid() && art.sprites.containsKey(a.c.id); }
+
+    /**
+     * v35: how high a seated face is, as a share of the standing height — the seat's top plus the body above the hips
+     * for a drawn character (Puppet: a chair or a wheelchair 0.30, a sofa 0.27, the floor 0.15…), about 0.72 for a photo
+     * lowered onto a seat (Rig.feetRise).
+     */
+    private float seatedFace(Film.Actor a, float t) {
+        int seat = Renderer.seatOf(a, t);
+        if (photo(a)) return seat == Film.SEAT_FLOOR ? 0.55f : 0.72f;
+        if (a.look != null && a.look.aid == Look.AID_WHEELCHAIR) seat = Film.SEAT_WHEELCHAIR;
+        float sh = Puppet.seatHeight(seat);
+        if (sh < 0 || a.look == null) return 0.64f;
+        return sh * Puppet.seatScale(a.look) + (a.look.isChild() ? 0.44f : 0.45f);
+    }
+
+    /** v35: a character drawn from the user's standing photo with no picture of them sitting (it is lowered onto the seat). */
+    private boolean seatedPhoto(Film.Actor a) {
+        if (art == null || a.look == null || !a.look.isHumanoid()) return false;
+        Art.Sprite sp = art.sprites.get(a.c.id);
+        if (sp == null) return false;
+        if (sp.poses != null) for (Art.PoseSprite ps : sp.poses) if (ps.pose == PoseSense.SIT) return false;
+        return true;
+    }
+
+    /** v35: a sound at a character (it pans with where they stand). */
+    private Film.Sfx sfxAt(int type, float t, float dur, float gain, Film.Actor a) {
+        Film.Sfx x = new Film.Sfx(type, t, dur, gain);
+        x.pan = Math.max(-0.6f, Math.min(0.6f, (xAt(a, t) - 640) / 640f));
+        return x;
+    }
+
+    static final String[] EAT = {" खा रहा", " खा रही", " खा रहे", " खाता है", " खाती है", " खाते हैं", " खाना खा", " खाने लग", " खा लिया", " खा ली", " खा गया", " खा गई", " खाकर",
+            " खाते हुए", "रोटी खा", "लड्डू खा", "भोजन कर", "नाश्ता कर", "खाना खाते", " eats", " eating", " ate ", "has breakfast", "has lunch", "has dinner", "having lunch",
+            "having dinner", "having breakfast"};
+    static final String[] DRINK = {" पी रहा", " पी रही", " पी रहे", " पीता है", " पीती है", " पीते हैं", " पी लिया", " पी ली", " पीकर", " पीते हुए", "पानी पी", "चाय पी",
+            "दूध पी", "शरबत पी", "लस्सी पी", "घूँट", "घूंट", " drinks", " drinking", " drank", " sips", " sipping", " gulps"};
+
+    /**
+     * v35: eating and drinking, as the story tells it — the hand goes from the plate to the mouth and they chew (two
+     * bites, heard: the spoon on the plate, quiet chewing); a drink is raised to the lips from a cup, a glass or a
+     * bottle (tea steams), a sip or gulps are heard, a cup is set down with a clink.
+     */
+    private float mealFrom(String s, float t, List<Film.Actor> who) {
+        String sp = " " + s + " ";
+        float d = 0;
+        if (Txt.has(sp, DRINK)) {
+            int item = Txt.has(s, "बोतल", "bottle") ? Pose.I_BOTTLE : Txt.has(s, "चाय", "tea", "coffee", "कॉफ़ी", "कॉफी") ? Pose.I_TEA
+                    : Txt.has(s, "कप", "प्याला", "प्याली", "cup", "mug") ? Pose.I_CUP : Pose.I_GLASS;
+            for (Film.Actor a : who) {
+                if (!a.look.isHumanoid()) continue;
+                Film.Act act = new Film.Act(t + 0.2f, t + 2.8f, Film.G_DRINK);
+                act.item = item;
+                a.acts.add(act);
+                film.sfx.add(sfxAt(item == Pose.I_BOTTLE ? Film.SFX_GULP : Film.SFX_SIP, t + 0.75f, item == Pose.I_BOTTLE ? 1.3f : 1.1f, 0.4f, a));
+                if (item != Pose.I_BOTTLE) film.sfx.add(sfxAt(Film.SFX_CUP, t + 2.6f, 0.3f, 0.3f, a));
+                drinks++;
+                if (who.size() == 1 && photo(a)) { mealCU = a; mealCUt = t + 0.1f; }
+            }
+            d = Math.max(d, 2.9f);
+        }
+        if (Txt.has(sp, EAT)) {
+            for (Film.Actor a : who) {
+                if (!a.look.isHumanoid()) continue;
+                a.acts.add(new Film.Act(t + 0.2f, t + 4.6f, Film.G_EAT));
+                film.sfx.add(sfxAt(Film.SFX_EAT, t + 0.3f, 4.2f, 0.35f, a));
+                meals++;
+                if (who.size() == 1 && photo(a)) { mealCU = a; mealCUt = t + 0.1f; }
+            }
+            d = Math.max(d, 4.7f);
         }
         return d;
     }
@@ -4056,7 +4378,7 @@ public final class Director {
         float y = ground - h * (zoom > 1.6f ? 0.8f : 0.62f);
         // v34 (the situations guide): a seated character — in a wheelchair, on a chair — is framed at their own eye
         // level, not at a standing person's (the camera never looks down on them)
-        if (k.body == Pose.SIT) { y = ground - h * (zoom > 1.6f ? 0.64f : 0.48f); eyeLevelShots++; }
+        if (k.body == Pose.SIT) { float fy = seatedFace(a, t + 0.5f); y = ground - h * (zoom > 1.6f ? fy : fy * 0.75f); eyeLevelShots++; }
         if (k.anchor == Film.A_BRANCH) y = ground - 450;
         if (k.body == Pose.LIE) y = ground - 60;
         cam(t, x, y, zoom, 0);
@@ -4088,7 +4410,7 @@ public final class Director {
         if (st.body == Pose.LIE) faceY = ground - h * 0.35f;
         // v34: a seated face (a chair, a throne, a wheelchair) is about two thirds of the standing height up, not a third:
         // the close shot is at the sitter's own eye level and the face is never cut
-        else if (st.body == Pose.SIT) { faceY = ground - h * 0.64f; eyeLevelShots++; }
+        else if (st.body == Pose.SIT) { faceY = ground - h * seatedFace(sp, t); eyeLevelShots++; }
         int visible = 0;
         float nearest = 1e9f;
         for (Film.Actor a : seg.actors) {
@@ -4107,6 +4429,9 @@ public final class Director {
             lastDlgShot.action += " • " + sp.c.shown() + ": \"" + clip(line.shown, 36) + "\"";
             return;
         }
+        // v35: a user's standing photo lowered onto a seat reads best from the waist up: a seated speaker with no picture
+        // of their own sitting is not framed wider than a medium shot (the shortened legs stay out of the frame)
+        if (st.body == Pose.SIT && seatedPhoto(sp) && size < ShotPlanner.MEDIUM && !isolated) { size = ShotPlanner.MEDIUM; waistUp++; }
         float zoom = ShotPlanner.zoomFor(size, h);
         // a Dutch angle for menace, used sparingly (handbook ch. 5): at most once per scene
         float roll = menace && dutchUsed == 0 ? (dlgCount % 2 == 0 ? 1 : -1) * 2.4f : 0;

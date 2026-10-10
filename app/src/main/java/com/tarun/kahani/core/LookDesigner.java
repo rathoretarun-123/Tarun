@@ -173,6 +173,51 @@ public final class LookDesigner {
         return inj;
     }
 
+    /**
+     * v35: the body as a description (or an action) tells it, as Look.C_* bits: a limp; an arm or a leg missing (the
+     * right one when the sentence says so, else the left); an artificial leg; fingers missing; one eye; blind; deaf;
+     * unable to speak, or speaking in signs; a hearing aid. Phrases that only describe a moment ("closes one eye",
+     * "holds up four fingers", "in the dark he cannot see") are not read as the body.
+     */
+    public static int conditionIn(String t) {
+        int c = 0;
+        if (Txt.has(t, "लंगड़ा", "लंगड़ी", "लँगड़ा", "लँगड़ी", "लंगड़ाता", "लंगड़ाती", "लंगड़ाकर", "लँगड़ाकर", "लंगड़ाते", "लँगड़ाते", "लंगड़ाहट", "limps", "limping",
+                "with a limp", "lame leg", "bad leg", "one leg shorter", "polio")) c |= Look.C_LIMP;
+        String arm = sentenceWith(t, "one-armed", "one armed", "only one arm", "has one arm", "lost an arm", "lost his arm", "lost her arm", "lost his left arm",
+                "lost his right arm", "lost her left arm", "lost her right arm", "missing an arm", "missing arm", "missing his arm", "missing her arm", "without an arm",
+                "no left arm", "no right arm", "empty sleeve", "एक हाथ नहीं", "एक ही हाथ", "एक हाथ वाला", "एक हाथ वाली", "एक बाँह नहीं", "एक बांह नहीं", "हाथ कटा", "हाथ कट गया",
+                "कटा हुआ हाथ", "बाँह कटी", "बांह कटी");
+        if (arm.length() > 0) {
+            c |= Look.C_NO_ARM;
+            if (Txt.has(arm, "right", "दायाँ", "दायां", "दाएँ", "दाएं", "दाहिना", "दाहिने", "दायें")) c |= Look.C_RIGHT_ARM;
+        }
+        String leg = sentenceWith(t, "one-legged", "one legged", "only one leg", "has one leg", "lost a leg", "lost his leg", "lost her leg", "missing a leg", "missing leg",
+                "without a leg", "wooden leg", "peg leg", "peg-leg", "prosthetic leg", "prosthetic foot", "artificial leg", "metal leg", "jaipur foot", "जयपुर फुट", "एक पैर नहीं",
+                "एक ही पैर", "एक पैर वाला", "एक पैर वाली", "एक टांग नहीं", "एक टाँग नहीं", "एक टांग वाला", "एक टाँग वाला", "लकड़ी का पैर", "लकड़ी की टांग", "लकड़ी की टाँग",
+                "नकली पैर", "कृत्रिम पैर", "पैर कटा", "पैर कट गया", "टांग कटी", "टाँग कटी");
+        if (leg.length() > 0) {
+            c |= Look.C_NO_LEG;
+            if (Txt.has(leg, "right", "दायाँ", "दायां", "दाएँ", "दाएं", "दाहिना", "दाहिने", "दायें")) c |= Look.C_RIGHT_LEG;
+            if (Txt.has(leg, "wooden", "peg", "prosthetic", "artificial", "metal leg", "jaipur", "जयपुर", "लकड़ी", "नकली", "कृत्रिम")) c |= Look.C_ARTIFICIAL_LEG;
+        }
+        if (Txt.has(t, "missing finger", "lost a finger", "lost two fingers", "lost fingers", "lost his finger", "lost her finger", "fingers missing", "a finger missing",
+                "only three fingers", "only four fingers", "has three fingers", "has four fingers", "उंगली कटी", "उँगली कटी", "उंगलियाँ कटी", "उंगलियां कटी", "कटी हुई उंगली",
+                "कटी हुई उँगली", "सिर्फ़ तीन उंगलियाँ", "सिर्फ तीन उंगलियाँ", "सिर्फ़ चार उंगलियाँ", "सिर्फ चार उंगलियाँ", "चार ही उंगलियाँ", "तीन ही उंगलियाँ")) c |= Look.C_FINGERS;
+        if (wordIn(t, "काना") || wordIn(t, "कानी") || Txt.has(t, "एक आँख वाला", "एक आँख वाली", "एक आंख वाला", "एक आंख वाली", "एक ही आँख", "एक ही आंख", "एक आँख नहीं",
+                "एक आंख नहीं", "एक आँख से अंधा", "एक आंख से अंधा", "एक आँख से अंधी", "एक आंख से अंधी", "one-eyed", "one eyed", "only one eye", "has one eye", "lost an eye",
+                "lost his eye", "lost her eye", "blind in one eye", "glass eye", "missing eye")) c |= Look.C_ONE_EYE;
+        else if (Txt.has(t, "अंधा", "अंधी", "अन्धा", "अन्धी", "नेत्रहीन", "दृष्टिहीन", "blind man", "blind woman", "blind boy", "blind girl", "blind old", "is blind", "who is blind",
+                "visually impaired", "born blind", "जन्म से अंध")
+                && !Txt.has(t, "अँधेरे में", "अंधेरे में", "in the dark", "blindfold")) c |= Look.C_BLIND;
+        if (Txt.has(t, "बहरा", "बहरी", "बधिर", "सुन नहीं सकता", "सुन नहीं सकती", "hard of hearing", "cannot hear", "can't hear", "hearing aid", "कान की मशीन",
+                "सुनने की मशीन", "हियरिंग एड") || wordIn(t, "deaf")) c |= Look.C_DEAF;
+        if (Txt.has(t, "hearing aid", "कान की मशीन", "सुनने की मशीन", "हियरिंग एड")) c |= Look.C_HEARING_AID;
+        if ((Txt.has(t, "गूंगा", "गूँगा", "गूंगी", "गूँगी", "बोल नहीं सकता", "बोल नहीं सकती", "बोल नहीं पाता", "बोल नहीं पाती", "cannot speak", "can't speak", "speechless from birth")
+                || wordIn(t, "मूक") || wordIn(t, "mute")) && !Txt.has(t, "मूकदर्शक")) c |= Look.C_MUTE;
+        if (Txt.has(t, "sign language", "signs to", "in signs", "सांकेतिक भाषा", "साइन लैंग्वेज", "इशारों में बात", "इशारों से बात", "इशारों की भाषा")) c |= Look.C_SIGNS;
+        return c;
+    }
+
     /** v34: a sentence that puts on or takes off a bandage, a plaster, a sling, a blindfold or an eye patch. */
     static boolean bodyChange(String s) {
         return injuryIn(s) != 0 || coverIn(s) > 0 || Txt.has(s, "प्लास्टर कट", "प्लास्टर उतर", "प्लास्टर खुल", "पट्टी खुल", "पट्टी खोल", "पट्टी हटा", "पट्टी उतार", "plaster comes off",
@@ -663,11 +708,16 @@ public final class LookDesigner {
         l.umbrella = Txt.has(all, "छाता", "छतरी", "umbrella");
         // v34: what helps the character walk
         l.aid = aidIn(all, l.kind == Look.OLD_MAN || Txt.has(all, "बूढ़", "बुज़ुर्ग", "बुजुर्ग", "दादा", "दादी", "नाना", "नानी", "old ", "elderly", "grandpa", "grandma"));
+        // v35: the body as the description tells it (a limp, an arm or a leg missing, fingers, one eye, blind, deaf, mute)
+        l.condition = l.isHumanoid() ? conditionIn(all) : 0;
         // v34: a blind character: dark glasses and a white cane
-        if (Txt.has(all, "अंधा", "अंधी", "नेत्रहीन", "दृष्टिहीन", "blind man", "blind woman", "blind boy", "blind girl", "blind old", "is blind", "who is blind", "visually impaired")) {
+        if ((l.condition & Look.C_BLIND) != 0) {
             if (l.glasses == 0) l.glasses = 2;
             if (l.aid == Look.AID_NONE) l.aid = Look.AID_STICK;
         }
+        // v35: a leg missing and no artificial one: crutches (an artificial leg walks with a limp, on its own)
+        if (l.missingLeg() != 0 && (l.condition & Look.C_ARTIFICIAL_LEG) == 0 && l.aid == Look.AID_NONE) l.aid = Look.AID_CRUTCHES;
+        // (v35: one eye with nothing said about a patch is drawn closed, a small scar over it — Puppet.drawEyes)
         if (Txt.has(all, "controller", "कंट्रोलर", "joystick", "जॉयस्टिक", "gamepad")) l.gadget = Look.GD_CONTROLLER;
         else if (wordIn(all, "iphone") || wordIn(all, "phone") || wordIn(all, "फ़ोन") || wordIn(all, "फोन") || wordIn(all, "मोबाइल") || wordIn(all, "mobile") || wordIn(all, "smartphone")) l.gadget = Look.GD_PHONE;
         else if (Txt.has(all, "laptop", "लैपटॉप", "tablet", "टैबलेट")) l.gadget = Look.GD_LAPTOP;

@@ -25,6 +25,8 @@ public final class Art {
 
     public static final class Sprite {
         public Object img;
+        /** v35: the picture at half and a quarter of its size (null when too small): drawn far smaller than its pixels, a picture shimmers. */
+        public Object imgHalf, imgQuarter;
         public int w, h;
         public float mouthX, mouthY, mouthHW;
         public float eyeLX, eyeLY, eyeRX, eyeRY, eyeR;
@@ -185,6 +187,8 @@ public final class Art {
         Sprite s = new Sprite();
         s.w = r.w; s.h = r.h;
         s.img = L.create(r.px, r.w, r.h);
+        Object[] mm = mips(L, r.px, r.w, r.h);
+        s.imgHalf = mm[0]; s.imgQuarter = mm[1];
         s.mouthX = r.mouthX; s.mouthY = r.mouthY; s.mouthHW = r.mouthW;
         s.eyeLX = r.eyeLX; s.eyeRX = r.eyeRX; s.eyeLY = r.eyeY; s.eyeRY = r.eyeY; s.eyeR = r.eyeR;
         s.faceKnown = r.faceFound;
@@ -205,6 +209,8 @@ public final class Art {
         Sprite v = new Sprite();
         v.w = base.w; v.h = base.h;
         v.img = L.create(px, cr.w, cr.h);
+        Object[] mm = mips(L, px, cr.w, cr.h);
+        v.imgHalf = mm[0]; v.imgQuarter = mm[1];
         v.mouthX = base.mouthX; v.mouthY = base.mouthY; v.mouthHW = base.mouthHW;
         v.eyeLX = base.eyeLX; v.eyeRX = base.eyeRX; v.eyeLY = base.eyeLY; v.eyeRY = base.eyeRY; v.eyeR = base.eyeR;
         v.faceKnown = base.faceKnown; v.skin = base.skin; v.lip = base.lip; v.lid = base.lid; v.turbanY = base.turbanY;
@@ -213,6 +219,55 @@ public final class Art {
         try { v.rig = Rig.build(cr, v, look, L); } catch (RuntimeException e) { v.rig = null; } finally { cr.px = keep; }
         v.rimL = base.rimL; v.rimR = base.rimR; v.shadowImg = base.shadowImg;
         return v;
+    }
+
+    /**
+     * v35: a picture's smaller copies — {half, quarter} — each made from the one above by averaging 2 x 2 pixels (the
+     * colour weighted by its alpha, so the outline gets no dark fringe). A picture drawn much smaller than its own
+     * pixels shimmers as it moves (every screen pixel picks one of many); the copy nearest its size on the screen does
+     * not. null where the copy would be under 48 pixels.
+     */
+    public static Object[] mips(Loader L, int[] px, int w, int h) {
+        Object[] out = new Object[2];
+        if (L == null || px == null) return out;
+        int[] cur = px;
+        int cw = w, ch = h;
+        try {
+            for (int lv = 0; lv < 2; lv++) {
+                int nw = (cw + 1) / 2, nh = (ch + 1) / 2;
+                if (nw < 48 || nh < 48) break;
+                int[] n = new int[nw * nh];
+                for (int y = 0; y < nh; y++) {
+                    int y0 = 2 * y, y1 = Math.min(ch - 1, y0 + 1);
+                    for (int x = 0; x < nw; x++) {
+                        int x0 = 2 * x, x1 = Math.min(cw - 1, x0 + 1);
+                        int c0 = cur[y0 * cw + x0], c1 = cur[y0 * cw + x1], c2 = cur[y1 * cw + x0], c3 = cur[y1 * cw + x1];
+                        int a0 = c0 >>> 24, a1 = c1 >>> 24, a2 = c2 >>> 24, a3 = c3 >>> 24, as = a0 + a1 + a2 + a3;
+                        if (as == 0) continue;
+                        int r = (((c0 >> 16) & 255) * a0 + ((c1 >> 16) & 255) * a1 + ((c2 >> 16) & 255) * a2 + ((c3 >> 16) & 255) * a3 + as / 2) / as;
+                        int g = (((c0 >> 8) & 255) * a0 + ((c1 >> 8) & 255) * a1 + ((c2 >> 8) & 255) * a2 + ((c3 >> 8) & 255) * a3 + as / 2) / as;
+                        int b = ((c0 & 255) * a0 + (c1 & 255) * a1 + (c2 & 255) * a2 + (c3 & 255) * a3 + as / 2) / as;
+                        n[y * nw + x] = (((as + 2) / 4) << 24) | (r << 16) | (g << 8) | b;
+                    }
+                }
+                out[lv] = L.create(n, nw, nh);
+                cur = n; cw = nw; ch = nh;
+            }
+        } catch (Throwable e) {
+            // out of memory: the picture is drawn from its full size, as before
+        }
+        return out;
+    }
+
+    /**
+     * v35: of a picture and its smaller copies, the one to draw at this size on the screen (shrink = its pixels per
+     * screen pixel): the full picture down to two and a half times smaller (sampled between four pixels, a picture up
+     * to that small stays smooth and is the sharpest), then the half, then the quarter.
+     */
+    public static Object mip(Object full, Object half, Object quarter, float shrink) {
+        if (shrink >= 5f && quarter != null) return quarter;
+        if (shrink >= 2.5f && half != null) return half;
+        return full;
     }
 
     /** v34: a soft, small silhouette of a cut-out (at most 64 px on its long side, blurred once) for the sun's cast shadow. */
@@ -444,6 +499,45 @@ public final class Art {
     /** v26: the size pictures are read at follows the film's output (set by the job before loading): a 1080p film reads sharper pictures than a 480p one. */
     public static int spriteSide = 1100, backdropSide = 1600;
 
+    /**
+     * v35: the sizes the pictures of a film are read at, for an output this tall — {character side, place side}. A
+     * character at twice the output's height (a close-up enlarges a face; read larger, it stays sharp), a place at
+     * 1.6 times the output's width (the camera comes in on it too); never more than the phone's free memory allows
+     * for this many pictures (their pixels live outside the app's heap since Android 8: all of them together take at
+     * most two fifths of the memory free now), never less than the sizes of v26-v34 (1.25 times the height, 1.15
+     * times the width). heapMax (what Android gives the app) caps the size one picture is read at.
+     */
+    public static int[] sizesFor(int outHeight, long heapMax, long freeMemory, int figures, int places) {
+        boolean big = heapMax >= (512L << 20);
+        int capS = big ? 2600 : 2000, capB = big ? 3200 : 2600;
+        int floorS = Math.max(900, Math.min(capS, Math.round(outHeight * 1.25f)));
+        int floorB = Math.max(1280, Math.min(capB, Math.round(outHeight * 16f / 9f * 1.15f)));
+        int s = Math.max(floorS, Math.min(capS, outHeight * 2));
+        int b = Math.max(floorB, Math.min(capB, Math.round(outHeight * 16f / 9f * 1.6f)));
+        // a cut-out figure is about half as wide as it is tall; with its smaller copies, rim lights and face layer about
+        // 1.9 pictures of it; its meshes take some 6 MB whatever its size. A place picture is 16:9.
+        double fixed = figures * 6e6;
+        double need = fixed + figures * (s * (double) s * 0.5 * 4 * 1.9) + places * (b * (double) b * 9 / 16 * 4);
+        double budget = freeMemory * 0.4;
+        if (need > budget) {
+            double k = Math.sqrt(Math.max(0.05, (budget - fixed) / Math.max(1, need - fixed)));
+            s = Math.max(floorS, (int) (s * k));
+            b = Math.max(floorB, (int) (b * k));
+        }
+        return new int[]{s, b};
+    }
+
+    /** v35: how many character pictures (characters, views, poses, changes of clothes) and place pictures a cast manifest loads. */
+    public static int[] pictureCounts(String manifest) {
+        int figures = 0, places = 0;
+        if (manifest != null) for (String raw : manifest.split("\n")) {
+            String l = raw.trim();
+            if (l.startsWith("char|") || l.startsWith("view|") || l.startsWith("pose|") || l.startsWith("costume|")) figures++;
+            else if (l.startsWith("scene|") || l.startsWith("shot|") || l.startsWith("title|") || l.startsWith("end|")) places++;
+        }
+        return new int[]{figures, places};
+    }
+
     public static Art fromManifest(String text, Story story, Loader L) {
         Art art = new Art();
         boolean rainy = mentions(story, "बारिश", "वर्षा", "बरसात", "बूँदाबाँदी", "तूफ़ान", "तूफान", "rain", "storm", "drizzl", "monsoon");
@@ -484,7 +578,8 @@ public final class Art {
                     if (s.rig != null && s.rig.face && !beast) {
                         // the face again from the full picture, for sharp close-ups
                         try {
-                            int[] hi = L.decode(f[2], 2400);
+                            // (v35: up to 1.6 times the body's size, at least 2400 px as before, at most 3600)
+                            int[] hi = L.decode(f[2], Math.max(2400, Math.min(3600, Math.round(spriteSide * 1.6f))));
                             if (hi != null) {
                                 int[] px = new int[hi[0] * hi[1]];
                                 System.arraycopy(hi, 2, px, 0, px.length);

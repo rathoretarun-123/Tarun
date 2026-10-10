@@ -214,6 +214,16 @@ public final class Mixer {
         return out;
     }
 
+    /**
+     * v35: how loud the wind is at a moment: it swells as a gust passes the middle of the frame — the same travelling
+     * gusts that bend the plants in the picture (Nature.gustField), so what is heard is what is seen.
+     */
+    static float gustLevel(Film film, float t) {
+        float w = film == null ? 0 : film.wind(t);
+        float g = Nature.gustField(0.5f, t, w >= 0 ? 1 : -1);
+        return 0.55f + 0.45f * (0.5f + 0.5f * g) * (1f + 0.3f * Math.min(1f, Math.abs(w)));
+    }
+
     /** A sound placed on the timeline. Samples are produced lazily so only sounds playing "now" use memory. */
     static abstract class Clip {
         int start, len;      // in samples
@@ -223,6 +233,10 @@ public final class Mixer {
         /** v34: a sound that moves (steps with the walker): the pan at its end and the loudness at its start and end. */
         boolean moves;
         float panTo, gainFrom = 1f, gainTo = 1f;
+        /** v35: the wind: it swells with the gusts the picture shows (Mixer.gustLevel), looked up every 256 samples. */
+        boolean gusts;
+        int gustNext = -1;
+        float gustGain = 1f;
         float send;          // how much goes into the room (echo of the place)
         Film.Music music;    // loudness curve and softness of a music cue
         float lpA, lp;       // one-pole low-pass (soft moods)
@@ -363,6 +377,7 @@ public final class Mixer {
                 c.gainFrom = s.gain0; c.gainTo = s.gain1;
                 c.moves = c.panTo != c.pan || c.gainFrom != 1f || c.gainTo != 1f;
             }
+            if (clips.size() > before && s.type == Film.SFX_WIND) clips.get(clips.size() - 1).gusts = true;
         }
         // ---- voices (loaded from the source only when they start), each from where its speaker stands, every
         // line brought to the same loudness, with a soft breath before long or emotional lines
@@ -438,6 +453,10 @@ public final class Mixer {
                     float v = c.at(i), vr = c.atR(i);
                     if (c.lpA > 0) { c.lp += c.lpA * (v - c.lp); v = c.lp * 1.25f; vr = v; }
                     float lv = c.music == null ? 1f : c.music.level(t / (float) Synth.SR);
+                    if (c.gusts) {
+                        if (t >= c.gustNext) { c.gustGain = gustLevel(film, t / (float) Synth.SR); c.gustNext = t + 256; }
+                        lv *= c.gustGain;
+                    }
                     dl[t - a] += v * gl * lv;
                     dr[t - a] += vr * gr * lv;
                     if (c.send > 0) send[t - a] += (v + vr) * 0.5f * c.gain * c.send;

@@ -7,7 +7,9 @@ package com.tarun.kahani.core;
  *  - richer colour where it is dull (vibrance) without over-saturating what is already colourful,
  *  - split toning: shadows a touch cool, highlights a touch warm,
  *  - and a colour script: warmth, saturation and contrast follow the mood of each part of the story (warm and
- *    bright for happy moments, cooler and quieter for sad ones, harder for danger), blended across cuts.
+ *    bright for happy moments, cooler and quieter for sad ones, harder for danger), blended across cuts,
+ *  - v35: output sharpening (an unsharp mask on the light only): the fine detail that enlarged pictures and the
+ *    video encoder soften is lifted back; noise and smooth skin are left alone and hard edges get no halo.
  * Works on finished ARGB pixels; one instance per drawing thread (it keeps its own buffers).
  */
 public final class FilmLook {
@@ -24,6 +26,10 @@ public final class FilmLook {
 
     private final int w, h, sw, sh;
     private final int[] small;
+    /** v35: the light of five rows of the frame, as it was, and the same rows blurred across (a ring, for the unsharp mask). */
+    private final int[] lumRing, blurRing;
+    /** v35: how strongly the detail is lifted (x256): 0.6 at 1080p, less at smaller sizes, where pictures are not enlarged. */
+    private final int sharpen;
     private final int[] lutR = new int[256], lutG = new int[256], lutB = new int[256];
     private final Params last = new Params();
     private boolean built;
@@ -32,6 +38,24 @@ public final class FilmLook {
         this.w = w; this.h = h;
         this.sw = Math.max(4, w / 4); this.sh = Math.max(4, h / 4);
         this.small = new int[sw * sh];
+        this.lumRing = new int[w * 5];
+        this.blurRing = new int[w * 5];
+        this.sharpen = Math.round(256 * Math.max(0.25f, Math.min(0.6f, 0.25f + h / 1080f * 0.35f)));
+    }
+
+    /** Row y of the frame as it is now (before it is finished): its light, and its light blurred across (1 4 6 4 1). */
+    private void readRow(int[] px, int y) {
+        int o = (y % 5) * w, row = y * w;
+        for (int x = 0; x < w; x++) {
+            int c = px[row + x];
+            lumRing[o + x] = (((c >> 16) & 255) * 77 + ((c >> 8) & 255) * 150 + (c & 255) * 29) >> 8;
+        }
+        int last = w - 1;
+        for (int x = 0; x < w; x++) {
+            int a = lumRing[o + Math.max(0, x - 2)], b = lumRing[o + Math.max(0, x - 1)], c = lumRing[o + x],
+                    d = lumRing[o + Math.min(last, x + 1)], e = lumRing[o + Math.min(last, x + 2)];
+            blurRing[o + x] = a + 4 * b + 6 * c + 4 * d + e;            // x16
+        }
     }
 
     /** The look for a moment of the film: the colour script, from the place, the time of day, the mood and the act of the part. */
@@ -110,21 +134,41 @@ public final class FilmLook {
                 }
                 r >>= 4; g >>= 4; b >>= 4;
                 int l = (r * 77 + g * 150 + b * 29) >> 8;
-                int k = l <= 170 ? 0 : (l - 170) * 3;             // only what is bright glows
+                // only what is really bright glows (v35: from 200, not 170 — a sky or a white wall made a haze
+                // over the whole frame that read as blur)
+                int k = l <= 200 ? 0 : (l - 200) * 5;
                 if (k > 255) k = 255;
                 small[y * sw + x] = 0xFF000000 | ((r * k >> 8) << 16) | ((g * k >> 8) << 8) | (b * k >> 8);
             }
             Blur.gauss(small, sw, sh, Math.max(2, sw / 70));
         }
-        int bl = Math.round(p.bloom * 256);
+        int bl = Math.round(p.bloom * 0.6f * 256);       // v35: a gentler glow (the same colour script, 60% of its strength)
         float vib = 0.16f * p.saturation, satK = p.saturation;
+        // v35: the rows the unsharp mask needs, read before they are finished (row y + 2 is read when row y is done)
+        readRow(px, 0);
+        if (h > 1) readRow(px, 1);
         for (int y = 0; y < h; y++) {
+            if (y + 2 < h) readRow(px, y + 2);
+            int r0 = (Math.max(0, y - 2) % 5) * w, r1 = (Math.max(0, y - 1) % 5) * w, r2 = (y % 5) * w,
+                    r3 = (Math.min(h - 1, y + 1) % 5) * w, r4 = (Math.min(h - 1, y + 2) % 5) * w;
             float fy = (y + 0.5f) / 4 - 0.5f;
             int sy0 = Math.max(0, Math.min(sh - 1, (int) Math.floor(fy))), sy1 = Math.min(sh - 1, sy0 + 1);
             float wy = Math.max(0, Math.min(1, fy - sy0));
             for (int x = 0; x < w; x++) {
                 int i = y * w + x, c = px[i];
-                int R = lutR[(c >> 16) & 255], G = lutG[(c >> 8) & 255], B = lutB[c & 255];
+                int cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
+                // the unsharp mask: the light minus its 5x5 blur is the fine detail; above two levels (grain, noise and
+                // smooth skin stay as they are) it is lifted, never by more than 20 levels (no halo at a hard edge)
+                int blur = blurRing[r0 + x] + 4 * blurRing[r1 + x] + 6 * blurRing[r2 + x] + 4 * blurRing[r3 + x] + blurRing[r4 + x];   // x256
+                int detail = (lumRing[r2 + x] << 8) - blur, mag = Math.abs(detail) - 512;
+                if (mag > 0) {
+                    int lift = (Math.min(mag, 20 << 8) * sharpen) >> 16;
+                    if (detail < 0) lift = -lift;
+                    cr = cr + lift < 0 ? 0 : cr + lift > 255 ? 255 : cr + lift;
+                    cg = cg + lift < 0 ? 0 : cg + lift > 255 ? 255 : cg + lift;
+                    cb = cb + lift < 0 ? 0 : cb + lift > 255 ? 255 : cb + lift;
+                }
+                int R = lutR[cr], G = lutG[cg], B = lutB[cb];
                 // vibrance: dull colours get richer, already rich ones much less
                 int mx = Math.max(R, Math.max(G, B)), mn = Math.min(R, Math.min(G, B));
                 float chroma = (mx - mn) / 255f;

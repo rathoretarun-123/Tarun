@@ -25,6 +25,18 @@ public class MakeFilm {
 
         long t0 = System.currentTimeMillis();
         Story story = ScriptParser.parse(script);
+        // the sizes the pictures are read at (SPRITE_SIDE / BACKDROP_SIDE to compare sizes)
+        if (System.getenv("SPRITE_SIDE") == null && !assets.equals("-")) {
+            // v35: the sizes the phone reads the pictures at for this output (Art.sizesFor): a phone with a 512 MB heap
+            // and FREE_MB of free memory (2048 unless given)
+            int[] counts = Art.pictureCounts(new String(Files.readAllBytes(Paths.get(assets, "cast.txt")), "UTF-8"));
+            long free = Long.parseLong(System.getenv().getOrDefault("FREE_MB", "2048")) << 20;
+            int[] sides = Art.sizesFor(height, 512L << 20, free, counts[0], counts[1]);
+            Art.spriteSide = sides[0]; Art.backdropSide = sides[1];
+            System.out.println("pictures read at: characters " + sides[0] + " px, places " + sides[1] + " px");
+        }
+        if (System.getenv("SPRITE_SIDE") != null) Art.spriteSide = Integer.parseInt(System.getenv("SPRITE_SIDE"));
+        if (System.getenv("BACKDROP_SIDE") != null) Art.backdropSide = Integer.parseInt(System.getenv("BACKDROP_SIDE"));
         Art art = new Art();
         if (!assets.equals("-")) {
             Art.Loader L = new AwtLoader(assets);
@@ -39,6 +51,7 @@ public class MakeFilm {
         opt.subtitles = System.getenv("SUBS") != null;
         opt.onTwos = System.getenv("TWOS") != null;
         opt.pace = Float.parseFloat(System.getenv().getOrDefault("PACE", "1"));
+        opt.outHeight = height;      // v35: the close-up's sharpness limit at the film's own size (as on the phone)
         Director dir = new Director(story, opt);
         Film film = dir.prepare();
         float[][] voices = new float[film.lines.size()][];
@@ -71,6 +84,12 @@ public class MakeFilm {
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
         if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));
+        // KEYS=1: every character's keys (time, body, seat, eyes shut, visible) — to check staging against the frames
+        if (System.getenv("KEYS") != null) for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) {
+            StringBuilder kb = new StringBuilder();
+            for (Film.Key k : ac.keys) kb.append(String.format(java.util.Locale.US, " [%.2f b%d s%d%s%s]", k.t, k.body, k.seat, k.eyesShut ? " shut" : "", k.visible ? "" : " hidden"));
+            System.out.printf("  keys seg %.1f-%.1f %s:%s%n", sg.t0, sg.t1, ac.c.displayName, kb);
+        }
         if (System.getenv("LINES") != null) {
             for (Film.Weather w : film.weather) System.out.printf("  weather %d %.1f-%.1f x%.2f%n", w.type, w.t0, w.t1, w.strength);
             for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx) if (f.type >= Film.FX_LIGHTNING) System.out.printf("  fx %d @%.1f-%.1f (%.0f,%.0f)%n", f.type, f.t0, f.t1, f.x, f.y);
@@ -151,7 +170,8 @@ public class MakeFilm {
                 float t = Float.parseFloat(ts);
                 r.render(g, t);
                 if (look != null) finish(img, look, com.tarun.kahani.core.FilmLook.at(film, t, lp), lookPx);
-                ImageIO.write(img, "jpg", new File(stills, String.format("t_%08.3f.jpg", t)));
+                boolean png = System.getenv("PNG") != null;
+                ImageIO.write(img, png ? "png" : "jpg", new File(stills, String.format(png ? "t_%08.3f.png" : "t_%08.3f.jpg", t)));
             }
             System.out.println("frames written");
             return;

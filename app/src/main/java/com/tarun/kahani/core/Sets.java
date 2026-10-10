@@ -131,7 +131,37 @@ public final class Sets {
 
     // ------------------------------------------------------------------ static layer
 
+    /**
+     * v35: the trees of a painted place sway in the wind, so they are drawn live, every frame (paintLive), and left out
+     * of the cached still layer: true while the still layer of such a place is painted (per drawing thread).
+     */
+    private static final ThreadLocal<boolean[]> STILL_LAYER = new ThreadLocal<boolean[]>() {
+        protected boolean[] initialValue() { return new boolean[1]; }
+    };
+
+    /** v35: the trees of each painted place: {x, foot y, size}, or null for a place without trees. */
+    static float[][] trees(int set) {
+        switch (set) {
+            case GARDEN: case CELEBRATION: return new float[][]{{70, 560, 1.25f}, {1210, 560, 1.15f}};
+            case GATE: return new float[][]{{130, 560, 1.3f}, {1160, 560, 1.2f}};
+            case VILLAGE: case GENERIC_OUT: return new float[][]{{140, 560, 1.1f}, {1120, 560, 1.0f}};
+            case CAVE_MOUTH: return new float[][]{{140, 600, 1.1f}};
+            default: return null;
+        }
+    }
+
     public static void paintStatic(Gfx g, int set, int tod) {
+        boolean[] still = STILL_LAYER.get();
+        boolean was = still[0];
+        still[0] = trees(set) != null && set >= GARDEN && set <= STREET;
+        try {
+            paintStill(g, set, tod);
+        } finally {
+            still[0] = was;
+        }
+    }
+
+    private static void paintStill(Gfx g, int set, int tod) {
         switch (set) {
             case CAVE_IN: caveInside(g); return;
             case CAVE_MOUTH: caveMouth(g, tod); return;
@@ -296,19 +326,38 @@ public final class Sets {
     }
 
     static void tree(Gfx g, float x, float y, float s, int tod) {
+        if (STILL_LAYER.get()[0]) return;          // v35: drawn live, swaying (paintLive)
+        tree(g, x, y, s, tod, 0, 0, false);
+    }
+
+    /**
+     * A painted tree. live (v35): it sways in the wind like the plants of a picture (Nature.windPush: a lean with
+     * real wind, the gusts travelling across the place, its own slow rocking) — the whole tree turns a little about
+     * its foot and its top goes furthest — and its clumps of leaves tremble, each on its own.
+     */
+    static void tree(Gfx g, float x, float y, float s, int tod, float t, float wind, boolean live) {
         int leaf = tod == NIGHT ? 0xFF1E3A24 : tod == EVENING ? 0xFF4C6B34 : 0xFF3F8F3A;
+        float lean = 0, f = 0;
+        if (live) {
+            lean = Nature.windPush(x / W, 0.4f, t, wind, 0.3f) * 2.2f;       // degrees: a quarter of a degree in still air, 2-4 in a strong wind
+            f = (0.6f + 1.6f * Math.min(1.5f, Math.abs(wind))) * s;           // how far the clumps of leaves tremble
+            g.save();
+            g.translate(x, y); g.rotate(lean); g.translate(-x, -y);
+        }
         g.color(tod == NIGHT ? 0xFF2B1E16 : 0xFF6D4C41);
         g.begin(); g.moveTo(x - 18 * s, y); g.lineTo(x - 10 * s, y - 230 * s); g.lineTo(x + 10 * s, y - 230 * s); g.lineTo(x + 18 * s, y); g.close(); g.fillPath();
         g.line(x, y - 160 * s, x + 70 * s, y - 230 * s, 9 * s);
         g.line(x, y - 140 * s, x - 70 * s, y - 210 * s, 9 * s);
+        float u = x / W;
         g.color(Puppet.shade(leaf, 0.8f));
-        g.oval(x, y - 270 * s, 120 * s, 85 * s);
+        g.oval(x + f * Nature.flutter(u, 0.1f, t), y - 270 * s, 120 * s, 85 * s);
         g.color(leaf);
-        g.oval(x - 50 * s, y - 250 * s, 70 * s, 55 * s);
-        g.oval(x + 55 * s, y - 255 * s, 70 * s, 55 * s);
-        g.oval(x, y - 300 * s, 80 * s, 55 * s);
+        g.oval(x - 50 * s + f * Nature.flutter(u, 0.3f, t), y - 250 * s + f * 0.5f * Nature.flutter(0.3f, u, t), 70 * s, 55 * s);
+        g.oval(x + 55 * s + f * Nature.flutter(u, 0.5f, t), y - 255 * s + f * 0.5f * Nature.flutter(0.5f, u, t), 70 * s, 55 * s);
+        g.oval(x + f * 1.3f * Nature.flutter(u, 0.7f, t), y - 300 * s + f * 0.5f * Nature.flutter(0.7f, u, t), 80 * s, 55 * s);
         g.color(Puppet.lighten(leaf, 0.15f));
-        g.oval(x - 25 * s, y - 310 * s, 30 * s, 18 * s);
+        g.oval(x - 25 * s + f * 1.4f * Nature.flutter(u, 0.9f, t), y - 310 * s, 30 * s, 18 * s);
+        if (live) g.restore();
     }
 
     static void courtyard(Gfx g, int tod) {
@@ -647,7 +696,16 @@ public final class Sets {
         return f;
     }
 
-    public static void paintLive(Gfx g, int set, int tod, float t) {
+    public static void paintLive(Gfx g, int set, int tod, float t) { paintLive(g, set, tod, t, 0); }
+
+    /** wind (v35): the film's wind now (+ towards the right): the place's trees sway in it. */
+    public static void paintLive(Gfx g, int set, int tod, float t, float wind) {
+        float[][] tr = trees(set);
+        if (tr != null) for (float[] q : tr) tree(g, q[0], q[1], q[2], tod, t, wind, true);
+        if (set == CAVE_MOUTH && tr != null) {
+            // the cave mouth's ground runs in front of its tree's foot
+            g.linear(0, 600, 0, H, 0xFF3D5E36, 0xFF263D22); g.rect(0, 600, W, H - 600);
+        }
         switch (set) {
             case ROOFTOP: {
                 // drones hum across the sky, their lights blinking; the solar flowers pulse at night

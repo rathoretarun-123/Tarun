@@ -96,7 +96,9 @@ public final class Cutout {
 
     /** holes: also clear background seen through closed gaps (between an animal's legs, under its belly). */
     public static Result process(int[] src, int w, int h, boolean holes) {
-        int[] px = hasAlpha(src) ? src.clone() : cutFull(src, w, h, holes);
+        boolean given = hasAlpha(src);
+        int[] px = given ? src.clone() : cutFull(src, w, h, holes);
+        if (!given) defringe(px, src, w, h);
         // crop to opaque bounds
         int minX = w, minY = h, maxX = -1, maxY = -1;
         for (int y = 0; y < h; y++) {
@@ -410,6 +412,152 @@ public final class Cutout {
             px = src.clone();
         }
         return segmentBusy(px, w, h);
+    }
+
+    /**
+     * v35: the outline cleaned of the old background. A cut-out's edge pixels are a mix of the character and what was
+     * behind it — a white wall leaves a light halo round the hair (and pockets of it between fine strands), which a
+     * film enlarges and sharpens. Every pixel of the outline (part-transparent, or opaque within three pixels of the
+     * cut) is unmixed: the background's colour there (the removed pixels nearby, as they were) and the character's own
+     * colour nearby (its opaque pixels further in, the least background-like counting most) tell how much of the pixel
+     * is the character. The first ring takes the character's colour with that share as its alpha (a soft, clean edge);
+     * further in, a pixel that is almost the background's own colour (a pocket between strands of hair) fades out the
+     * same way, and any other loses the background's share of its colour. Where the character and the background are
+     * alike in colour nothing is changed.
+     */
+    static void defringe(int[] px, int[] src, int w, int h) {
+        int n = w * h;
+        if (w < 8 || h < 8) return;
+        byte[] gone = new byte[n];
+        for (int i = 0; i < n; i++) gone[i] = (byte) ((px[i] >>> 24) < 128 ? 1 : 0);
+        byte[] d1 = dilate3(gone, w, h), d2 = dilate3(d1, w, h), d3 = dilate3(d2, w, h);
+        int[] out = px.clone();
+        final int R = 5;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int i = y * w + x, c = px[i], al = c >>> 24;
+                if (al == 0 || gone[i] == 1) continue;
+                int ring = d1[i] == 1 ? 1 : d2[i] == 1 ? 2 : d3[i] == 1 ? 3 : 0;
+                if (ring == 0 && al >= 250) continue;
+                // the background here, as it was
+                long br = 0, bg = 0, bb = 0; int bn = 0;
+                int y0 = Math.max(0, y - R), y1 = Math.min(h - 1, y + R), x0 = Math.max(0, x - R), x1 = Math.min(w - 1, x + R);
+                for (int yy = y0; yy <= y1; yy++) for (int xx = x0; xx <= x1; xx++) {
+                    int j = yy * w + xx;
+                    if (gone[j] == 0) continue;
+                    int o = src[j];
+                    br += (o >> 16) & 255; bg += (o >> 8) & 255; bb += o & 255; bn++;
+                }
+                if (bn == 0) continue;
+                float Br = br / (float) bn, Bg = bg / (float) bn, Bb = bb / (float) bn;
+                // the character's own colour nearby: opaque pixels past the first ring, weighted by how unlike the background they are
+                float fr = 0, fg = 0, fb = 0, fw = 0;
+                for (int pass = 0; pass < 2 && fw == 0; pass++) {
+                    for (int yy = y0; yy <= y1; yy++) for (int xx = x0; xx <= x1; xx++) {
+                        int j = yy * w + xx, o = px[j];
+                        if ((o >>> 24) < 250 || (pass == 0 && d1[j] == 1)) continue;
+                        float r = (o >> 16) & 255, g = (o >> 8) & 255, b = o & 255;
+                        float wgt = (r - Br) * (r - Br) + (g - Bg) * (g - Bg) + (b - Bb) * (b - Bb) + 1;
+                        fr += r * wgt; fg += g * wgt; fb += b * wgt; fw += wgt;
+                    }
+                }
+                if (fw == 0) continue;
+                fr /= fw; fg /= fw; fb /= fw;
+                float dr = fr - Br, dg = fg - Bg, db = fb - Bb, l2 = dr * dr + dg * dg + db * db;
+                if (l2 < 600) continue;                     // the character and the background are alike here
+                float cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
+                float a = ((cr - Br) * dr + (cg - Bg) * dg + (cb - Bb) * db) / l2;
+                a = Math.max(0, Math.min(1, a));
+                float nearB = (cr - Br) * (cr - Br) + (cg - Bg) * (cg - Bg) + (cb - Bb) * (cb - Bb);
+                int nr, ng, nb, na = al;
+                if (ring == 1 || al < 250) {
+                    nr = Math.round(fr); ng = Math.round(fg); nb = Math.round(fb);
+                    na = Math.min(al, Math.round(255 * Math.min(1f, a * 1.15f)));
+                } else if (a < 0.4f && nearB < 40 * 40) {
+                    // a pocket of the old background between strands: it fades out
+                    nr = Math.round(fr); ng = Math.round(fg); nb = Math.round(fb);
+                    na = Math.min(al, Math.round(255 * a / 0.4f));
+                } else {
+                    float k = (1 - a) * (ring == 2 ? 1f : 0.6f);
+                    nr = Math.round(cr + (fr - cr) * k); ng = Math.round(cg + (fg - cg) * k); nb = Math.round(cb + (fb - cb) * k);
+                }
+                out[i] = (Math.max(0, Math.min(255, na)) << 24) | (Math.max(0, Math.min(255, nr)) << 16) | (Math.max(0, Math.min(255, ng)) << 8) | Math.max(0, Math.min(255, nb));
+            }
+        }
+        pockets(out, src, w, h, d3);
+        System.arraycopy(out, 0, px, 0, n);
+    }
+
+    /**
+     * v35: on a plain background, the small pockets of it caught inside the outline — inside the loop of a curl, between
+     * strands of hair, under an arm — are let through: an opaque patch of the background's own colour that reaches
+     * within four pixels of the cut and is small (at most 0.6% of the figure) fades out with its likeness to the
+     * background. A patch far from the outline (the white of an eye, teeth, a white shirt) is never touched.
+     */
+    static void pockets(int[] px, int[] src, int w, int h, byte[] d3) {
+        int n = w * h;
+        // the background's colour: the picture's border, when it is plain
+        long br = 0, bg = 0, bb = 0; int bn = 0;
+        for (int x = 0; x < w; x++) for (int y : new int[]{0, 1, h - 2, h - 1}) { int c = src[y * w + x]; br += (c >> 16) & 255; bg += (c >> 8) & 255; bb += c & 255; bn++; }
+        for (int y = 0; y < h; y++) for (int x : new int[]{0, 1, w - 2, w - 1}) { int c = src[y * w + x]; br += (c >> 16) & 255; bg += (c >> 8) & 255; bb += c & 255; bn++; }
+        float Br = br / (float) bn, Bg = bg / (float) bn, Bb = bb / (float) bn;
+        float spread = 0;
+        for (int x = 0; x < w; x += 3) { int c = src[x]; spread += Math.abs(((c >> 16) & 255) - Br) + Math.abs(((c >> 8) & 255) - Bg) + Math.abs((c & 255) - Bb); }
+        if (spread / Math.max(1, (w + 2) / 3) > 24) return;          // not a plain background
+        byte[] d4 = dilate3(d3, w, h);
+        int opaque = 0;
+        byte[] like = new byte[n];
+        for (int i = 0; i < n; i++) {
+            int c = px[i];
+            if ((c >>> 24) < 128) continue;
+            opaque++;
+            float dr = ((c >> 16) & 255) - Br, dg = ((c >> 8) & 255) - Bg, db = (c & 255) - Bb;
+            if (dr * dr + dg * dg + db * db < 34 * 34) like[i] = 1;
+        }
+        int maxArea = Math.max(400, Math.round(opaque * 0.006f));
+        int[] stack = new int[n];
+        int[] comp = new int[maxArea + 1];
+        byte[] seen = new byte[n];
+        for (int i0 = 0; i0 < n; i0++) {
+            if (like[i0] == 0 || seen[i0] == 1) continue;
+            int sp = 0, area = 0;
+            boolean nearCut = false, tooBig = false;
+            stack[sp++] = i0; seen[i0] = 1;
+            while (sp > 0) {
+                int i = stack[--sp];
+                if (area < comp.length) comp[area] = i;
+                area++;
+                if (area > maxArea) tooBig = true;
+                if (d4[i] == 1) nearCut = true;
+                int x = i % w, y = i / w;
+                if (x > 0 && like[i - 1] == 1 && seen[i - 1] == 0) { seen[i - 1] = 1; stack[sp++] = i - 1; }
+                if (x < w - 1 && like[i + 1] == 1 && seen[i + 1] == 0) { seen[i + 1] = 1; stack[sp++] = i + 1; }
+                if (y > 0 && like[i - w] == 1 && seen[i - w] == 0) { seen[i - w] = 1; stack[sp++] = i - w; }
+                if (y < h - 1 && like[i + w] == 1 && seen[i + w] == 0) { seen[i + w] = 1; stack[sp++] = i + w; }
+            }
+            if (tooBig || !nearCut) continue;
+            for (int k = 0; k < area; k++) {
+                int i = comp[k], c = px[i];
+                float dr = ((c >> 16) & 255) - Br, dg = ((c >> 8) & 255) - Bg, db = (c & 255) - Bb;
+                float d = (float) Math.sqrt(dr * dr + dg * dg + db * db);
+                float keep = Math.max(0, Math.min(1, (d - 16) / 18f));
+                px[i] = (Math.round((c >>> 24) * keep) << 24) | (c & 0xFFFFFF);
+            }
+        }
+    }
+
+    /** A mask grown by one pixel in every direction (3 x 3). */
+    static byte[] dilate3(byte[] m, int w, int h) {
+        byte[] t = new byte[m.length], o = new byte[m.length];
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int i = y * w + x;
+            t[i] = (byte) (m[i] == 1 || (x > 0 && m[i - 1] == 1) || (x < w - 1 && m[i + 1] == 1) ? 1 : 0);
+        }
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int i = y * w + x;
+            o[i] = (byte) (t[i] == 1 || (y > 0 && t[i - w] == 1) || (y < h - 1 && t[i + w] == 1) ? 1 : 0);
+        }
+        return o;
     }
 
     /** Colour key with 5 bits per channel. */

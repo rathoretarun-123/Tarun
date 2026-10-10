@@ -10,7 +10,8 @@ public final class Pose {
             SUSPICIOUS = 14, RELIEVED = 15;   // the director's manual (2.6): suspicion and relief
     // held items
     public static final int I_NONE = 0, I_RIBBON = 1, I_BANANA = 2, I_MIRROR = 3, I_WOOD_SWORD = 4, I_BASKET = 5,
-            I_FLOWER = 6, I_SWORD = 7, I_BOTTLE = 8, I_TURBAN = 9;
+            I_FLOWER = 6, I_SWORD = 7, I_BOTTLE = 8, I_TURBAN = 9,
+            I_CUP = 10, I_GLASS = 11, I_PLATE = 12, I_TEA = 13;     // v35: a cup, a glass of water, a plate of food, a cup of hot tea (it steams)
 
     public int body = STAND;
     public int emotion = NEUTRAL;
@@ -28,6 +29,13 @@ public final class Pose {
     public float bob;                  // vertical offset px
     public float squash = 1f;
     public int holdR = I_NONE, holdL = I_NONE;
+    /**
+     * v35: a picture character eating or drinking (its arm cannot bend): how far the cup, glass, bottle or morsel has
+     * come up to the lips (0..1) and what it is (-1 = a morsel of food) — drawn at the lips in a close-up, where the
+     * hand at the hip is below the frame.
+     */
+    public float toMouth;
+    public int toMouthItem;
     public int holdColor = 0xFFC62828;
     public boolean disguised, noHeadwear, wearsTurban, redFace, tears, sweat, eyesClosed, fist, glowWand;
     public int turbanColor = 0xFF2F5DB5, turbanBand = 0;
@@ -36,6 +44,9 @@ public final class Pose {
     public float wind;                 // wind on hair and clothes (+ blows to the right)
     public float wet;                  // 0 dry .. 1 soaked
     public float sit;                  // 0 standing .. 1 seated (sitting down and getting up move through it)
+    /** v35: 0 sitting up .. 1 lying down (lying back and sitting up move through it); the seat (a bed) under them. */
+    public float lie;
+    public int seat = -1;
     public float nod;                  // + head down, - head up
     public float wave;                 // > 0 while waving: the arm swings out and back
     public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
@@ -55,7 +66,7 @@ public final class Pose {
         q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
         q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
-        q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen;
+        q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld;
         return q;
     }
@@ -65,7 +76,7 @@ public final class Pose {
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
-        sit = 0; nod = 0; wave = 0; twirl = false; umbrellaOpen = false;
+        sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; toMouth = 0; toMouthItem = 0;
         gazeX = 0; gazeY = 0; gazeHeld = 0;
     }
 }

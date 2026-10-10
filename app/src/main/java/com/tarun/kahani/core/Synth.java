@@ -23,7 +23,7 @@ public final class Synth {
         float[] o = new float[n];
         switch (type) {
             case Film.SFX_STREAM: noiseBed(o, 0.06f, 0.35f, 2.5f, 0.5f); break;
-            case Film.SFX_WIND: noiseBed(o, 0.015f, 0.4f, 0.25f, 0.6f); break;
+            case Film.SFX_WIND: noiseBed(o, 0.015f, 0.4f, 0.25f, 0.6f); leaves(o, 0.05f); break;     // v35: with the leaves rustling
             case Film.SFX_HISS: { noiseBed(o, 0.5f, 0.25f, 6f, 0.7f); fadeEnds(o, 0.3f); break; }
             case Film.SFX_RUSTLE: { for (int i = 0; i < 6; i++) burst(o, i * 0.18f + rnd() * 0.05f, 0.18f, 0.35f, 0.45f); break; }
             case Film.SFX_BIRDS: { float t = 0.1f; while (t < dur - 0.3f) { chirp(o, t, 2200 + rnd() * 1500, 0.08f + Math.abs(rnd()) * 0.08f, 0.25f); t += 0.15f + Math.abs(rnd()) * 0.6f; } break; }
@@ -74,6 +74,39 @@ public final class Synth {
                 thump(o, ts, 90, 0.42f); knock(o, ts, 260, 0.22f); burst(o, ts, 0.04f, 0.4f, 0.1f);
                 break;
             }
+            // v35: a limp — a firm step, then a lighter one that drags a little, the rhythm uneven
+            case Film.SFX_STEPS_LIMP: { float t = 0; while (t < dur) { thump(o, t, 120, 0.25f); burst(o, t, 0.05f, 0.4f, 0.12f); thump(o, t + 0.3f, 100, 0.12f); burst(o, t + 0.3f, 0.2f, 0.25f, 0.05f); t += 0.78f; } break; }
+            // v35: a chair — the legs scrape on the floor, the wood creaks, the weight settles
+            case Film.SFX_CHAIR: {
+                burst(o, 0.02f, 0.22f, 0.55f, 0.07f);
+                for (float t = 0.12f; t < Math.min(dur, 0.5f); t += 0.04f) tone(o, t, 0.04f, 190 + rnd() * 30, 240 + rnd() * 30, 0.035f, 1);
+                thump(o, Math.min(dur - 0.1f, 0.45f), 110, 0.14f);
+                break;
+            }
+            // v35: a sofa — the cushion gives with a soft, dull thump and a spring sighs
+            case Film.SFX_SOFA: { thump(o, 0.02f, 70, 0.32f); burst(o, 0.02f, 0.22f, 0.12f, 0.1f); tone(o, 0.08f, 0.14f, 620, 520, 0.025f, 0); break; }
+            // v35: a bed — the frame creaks low, the covers rustle
+            case Film.SFX_BED: {
+                for (float t = 0.05f; t < Math.min(dur, 0.6f); t += 0.05f) tone(o, t, 0.05f, 130 + rnd() * 20, 170 + rnd() * 20, 0.03f, 1);
+                noiseBedRange(o, 0.1f, Math.min(dur, 1.1f), 0.35f, 0.05f);
+                break;
+            }
+            // v35: eating — the spoon on the plate, then quiet, muffled chewing
+            case Film.SFX_EAT: { knock(o, 0.03f, 2600, 0.12f); knock(o, 0.035f, 3400, 0.05f); for (float t = 0.4f; t < dur - 0.1f; t += 0.3f + Math.abs(rnd()) * 0.08f) burst(o, t, 0.07f, 0.15f, 0.045f); fadeEnds(o, 0.1f); break; }
+            // v35: a sip from a cup or a glass — a soft slurp, a swallow, the cup set down
+            case Film.SFX_SIP: {
+                sweepNoise(o, 0.05f, Math.min(0.45f, dur * 0.4f), 0.3f, 0.7f, 0.05f);
+                float sw = Math.min(dur - 0.3f, 0.65f);
+                thump(o, sw, 160, 0.1f); tone(o, sw, 0.06f, 300, 200, 0.04f, 0);
+                if (dur > 1.2f) { knock(o, dur - 0.18f, 2300, 0.12f); knock(o, dur - 0.178f, 3100, 0.05f); }
+                break;
+            }
+            // v35: gulps from a bottle
+            case Film.SFX_GULP: { for (float t = 0.15f; t < dur - 0.15f; t += 0.42f) { thump(o, t, 150, 0.13f); tone(o, t, 0.06f, 320, 220, 0.05f, 0); } break; }
+            // v35: a cup or a glass set down on the table
+            case Film.SFX_CUP: { knock(o, 0.01f, 2300, 0.2f); knock(o, 0.012f, 3100, 0.08f); break; }
+            // v35: a sleeper's slow breathing — a soft breath in, a longer breath out
+            case Film.SFX_SLEEP: { for (float t = 0.1f; t < dur - 1f; t += 4f) { noiseBedRange(o, t, Math.min(dur, t + 1.5f), 0.3f, 0.022f); noiseBedRange(o, t + 1.7f, Math.min(dur, t + 3.7f), 0.18f, 0.028f); } break; }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }
@@ -116,6 +149,23 @@ public final class Synth {
             y += lp * (rnd() - y);
             float m = 1 - depth + depth * (0.5f + 0.5f * (float) Math.sin(t * lfoHz * 6.283f + Math.sin(t * 0.7f)));
             o[i] += y * amp * m * 4;
+        }
+        fadeEnds(o, 0.4f);
+    }
+
+    /**
+     * v35: leaves rustling in the wind: the bright part of a noise, in quick uneven flurries (a new level forty times a
+     * second, glided into). The Mixer swells the whole wind with the gusts the picture shows.
+     */
+    private void leaves(float[] o, float amp) {
+        float lo = 0, m = 0, target = 0;
+        int step = SR / 40;
+        for (int i = 0; i < o.length; i++) {
+            float n = rnd();
+            lo += 0.25f * (n - lo);
+            if (i % step == 0) target = (float) Math.pow(Math.abs(rnd()), 2.5);
+            m += 0.004f * (target - m);
+            o[i] += (n - lo) * amp * (0.25f + 1.2f * m);
         }
         fadeEnds(o, 0.4f);
     }

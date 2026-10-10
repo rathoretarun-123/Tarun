@@ -3768,4 +3768,190 @@ public class AppTest {
         assertTrue("most buttons tapped: " + clicked, clicked >= 40);
         ac.pause().stop().destroy();
     }
+
+    // ------------------------------------------------------------------ v35
+
+    static final String EVERYDAY = "पात्र और रूप-रंग (Characters):\n1. दादी (65 वर्ष):\n * चेहरा: सफ़ेद बाल, जूड़ा।\n * पहनावा: हरी साड़ी।\n"
+            + "2. अनु (9 वर्ष):\n * चेहरा: दो चोटियाँ।\n * पहनावा: पीली फ्रॉक।\n3. पापा (40 वर्ष):\n * चेहरा: छोटी मूँछें।\n * पहनावा: नीली कमीज़ और पतलून।\n\n"
+            + "दृश्य 1: घर का कमरा\n(स्थान: घर का कमरा। रात का समय।)\n(अनु बिस्तर पर लेटकर सो जाती है।)\nदादी (धीरे से): \"सो जा मेरी बच्ची।\"\n(दादी सोफ़े पर बैठ जाती है।)\n\n"
+            + "दृश्य 2: घर का कमरा\n(स्थान: घर का कमरा। सुबह का समय।)\n(अनु जाग जाती है और बिस्तर से उठ खड़ी होती है।)\nअनु (खुशी से): \"सुप्रभात दादी!\"\n"
+            + "(पापा कुर्सी पर बैठकर चाय पीते हैं।)\nपापा (मुस्कुराकर): \"आओ बेटा, नाश्ता करो।\"\n(अनु ज़मीन पर बैठकर खाना खाती है।)\n(अनु गिलास से पानी पीती है।)\n"
+            + "(पापा कुर्सी से उठ खड़े होते हैं।)\nपापा: \"चलो, स्कूल का समय हो गया।\"\n\nसमाप्त\n";
+
+    private static Film directed(Story st) {
+        Director d = new Director(st, new Director.Options());
+        Film f = d.prepare();
+        for (Film.Line l : f.lines) l.dur = Math.max(1.2f, l.text.length() * 0.07f);
+        return d.direct(new Art());
+    }
+
+    private static void keysInOrder(Film film) {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors)
+            for (int i = 1; i < a.keys.size(); i++)
+                assertTrue(a.c.displayName + ": a key at " + a.keys.get(i).t + " after one at " + a.keys.get(i - 1).t, a.keys.get(i).t >= a.keys.get(i - 1).t - 0.001f);
+    }
+
+    /**
+     * v35 (the user: "grass movement, leaves, trees etc. movements, wind effects — all should be realistic and smooth"):
+     * in a picture of a place outdoors the grass sways with the gusts, a wall and the sky never move, each frame is a
+     * small step; indoors nothing sways.
+     */
+    @Test
+    public void v35WindMovesWhatGrowsOnlyOutdoors() {
+        int w = 320, h = 180; int[] px = new int[w * h];
+        java.util.Random r = new java.util.Random(7);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            if (y < h * 0.45) px[y * w + x] = 0xFF87CEEB;
+            else if (x < w / 2) { int g = 90 + r.nextInt(80); px[y * w + x] = 0xFF000000 | ((g / 3) << 16) | (g << 8) | (g / 4); }
+            else px[y * w + x] = 0xFF9E9E9E;
+        }
+        Nature.Scan sc = Nature.scan(px, w, h);
+        assertTrue("grass found in the picture", sc.anyPlants);
+        int MW = 32, MH = 18;
+        float[] a0 = new float[(MW + 1) * (MH + 1) * 2], a1 = a0.clone(), a2 = a0.clone(), i1 = a0.clone(), i2 = a0.clone();
+        Nature.backdropMesh(sc, 0, 0, 1, 1, 1280, 720, 1f, 0.6f, 0, a1, MW, MH, true);
+        Nature.backdropMesh(sc, 0, 0, 1, 1, 1280, 720, 1f + 1 / 24f, 0.6f, 0, a2, MW, MH, true);
+        Nature.backdropMesh(sc, 0, 0, 1, 1, 1280, 720, 3.3f, 0.6f, 0, a0, MW, MH, true);
+        Nature.backdropMesh(sc, 0, 0, 1, 1, 1280, 720, 1f, 0.6f, 0, i1, MW, MH, false);
+        Nature.backdropMesh(sc, 0, 0, 1, 1, 1280, 720, 3.3f, 0.6f, 0, i2, MW, MH, false);
+        float grass = 0, wall = 0, sky = 0, step = 0, indoor = 0;
+        for (int j = 0; j <= MH; j++) for (int i = 0; i <= MW; i++) {
+            int k = (j * (MW + 1) + i) * 2;
+            float d = Math.abs(a1[k] - a0[k]) + Math.abs(a1[k + 1] - a0[k + 1]);
+            float v = j / (float) MH, u = i / (float) MW;
+            if (v > 0.6 && u < 0.45 && u > 0.05) grass = Math.max(grass, d);
+            if (v > 0.6 && u > 0.55 && u < 0.95) wall = Math.max(wall, d);
+            if (v < 0.35) sky = Math.max(sky, d);
+            step = Math.max(step, Math.abs(a2[k] - a1[k]) + Math.abs(a2[k + 1] - a1[k + 1]));
+            indoor = Math.max(indoor, Math.abs(i1[k] - i2[k]) + Math.abs(i1[k + 1] - i2[k + 1]));
+        }
+        System.out.printf("WIND v35: grass moves %.2f, wall %.2f, sky %.2f, largest step between frames %.2f, indoors %.2f%n", grass, wall, sky, step, indoor);
+        assertTrue("the grass sways: " + grass, grass > 1.5f);
+        assertTrue("the wall and the sky stay still", wall < 0.01f && sky < 0.01f);
+        assertTrue("one frame is a small step: " + step, step < 3f);
+        assertTrue("indoors nothing sways", indoor < 0.001f);
+    }
+
+    /** v35 ("make the picture less blurry"): pictures read larger with more free memory, and the nearest copy is drawn. */
+    @Test
+    public void v35SharperPictures() {
+        int[] lo = Art.sizesFor(720, 256L << 20, 600L << 20, 3, 2), hi = Art.sizesFor(1080, 512L << 20, 3000L << 20, 3, 2);
+        System.out.println("SIZES v35: low phone " + lo[0] + "/" + lo[1] + ", big phone at 1080p " + hi[0] + "/" + hi[1]);
+        assertTrue("never below the old sizes", lo[0] >= 1280 && lo[1] >= 1600);
+        assertTrue("larger with the memory for it", hi[0] > lo[0] && hi[1] > lo[1]);
+        Object f = "full", hf = "half", q = "quarter";
+        assertTrue("near its size: the full picture", Art.mip(f, hf, q, 1.5f) == f);
+        assertTrue("drawn at a third: the half copy", Art.mip(f, hf, q, 3f) == hf);
+        assertTrue("drawn at a sixth: the quarter copy", Art.mip(f, hf, q, 6f) == q);
+        assertTrue("no copies: the full picture", Art.mip(f, null, null, 6f) == f);
+    }
+
+    /** v35 ("limping, fewer limbs or fingers, only one eye, blind, deaf"): read from the words and staged. */
+    @Test
+    public void v35BodiesFromTheWords() {
+        assertTrue((com.tarun.kahani.core.LookDesigner.conditionIn("वह थोड़ा लंगड़ाकर चलता है।") & Look.C_LIMP) != 0);
+        assertTrue((com.tarun.kahani.core.LookDesigner.conditionIn("उसका एक हाथ नहीं है") & Look.C_NO_ARM) != 0);
+        assertTrue((com.tarun.kahani.core.LookDesigner.conditionIn("उसका बायाँ पैर नकली पैर (जयपुर फुट) है") & Look.C_ARTIFICIAL_LEG) != 0);
+        assertTrue((com.tarun.kahani.core.LookDesigner.conditionIn("वह जन्म से नेत्रहीन हैं") & Look.C_BLIND) != 0);
+        int deaf = com.tarun.kahani.core.LookDesigner.conditionIn("वह मूक-बधिर है और इशारों में बात करता है");
+        assertTrue((deaf & Look.C_DEAF) != 0 && (deaf & Look.C_SIGNS) != 0);
+        assertTrue((com.tarun.kahani.core.LookDesigner.conditionIn("काना, एक आँख वाला") & Look.C_ONE_EYE) != 0);
+        assertTrue("no condition from plain words", com.tarun.kahani.core.LookDesigner.conditionIn("नीली टी-शर्ट और शॉर्ट्स") == 0);
+    }
+
+    /**
+     * v35 ("sitting and getting up from a chair or sofa, sleeping and getting up, sitting on the floor and getting up,
+     * eating food, drinking water or tea from a cup or glass or straight from a bottle").
+     */
+    @Test
+    public void v35EverydayActions() {
+        Story st = ScriptParser.parse(EVERYDAY);
+        Film film = directed(st);
+        keysInOrder(film);
+        Film.Actor anu = null, papa = null;
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c.displayName.equals("पापा")) { papa = a; for (Film.Actor b : sg.actors) if (b.c.displayName.equals("अनु")) anu = b; }
+        assertNotNull(anu); assertNotNull(papa);
+        Film.Key k0 = anu.keys.get(0);
+        assertTrue("she begins the morning asleep in her bed", k0.body == Pose.LIE && k0.seat == Film.SEAT_BED && k0.eyesShut);
+        boolean satUp = false, stood = false, floor = false, stretch = false, ate = false, glass = false, tea = false, papaChair = false, papaUp = false;
+        for (Film.Key k : anu.keys) {
+            if (k.body == Pose.SIT && k.seat == Film.SEAT_BED) satUp = true;
+            if (satUp && k.body == Pose.STAND) stood = true;
+            if (stood && k.body == Pose.SIT && k.seat == Film.SEAT_FLOOR) floor = true;
+        }
+        for (Film.Act a : anu.acts) { if (a.type == Film.G_STRETCH) stretch = true; if (a.type == Film.G_EAT) ate = true; if (a.type == Film.G_DRINK && a.item == Pose.I_GLASS) glass = true; }
+        for (Film.Act a : papa.acts) if (a.type == Film.G_DRINK && a.item == Pose.I_TEA) tea = true;
+        for (Film.Key k : papa.keys) { if (k.body == Pose.SIT && k.seat == Film.SEAT_CHAIR) papaChair = true; if (papaChair && k.body == Pose.STAND) papaUp = true; }
+        assertTrue("wakes, sits up on the bed, stretches, stands, then sits on the floor", satUp && stretch && stood && floor);
+        assertTrue("eats, and drinks water from a glass", ate && glass);
+        assertTrue("father sits on a chair with his tea and gets up", papaChair && tea && papaUp);
+        int bed = 0, chair = 0, sofa = 0, sip = 0, eat = 0;
+        for (Film.Sfx x : film.sfx) { if (x.type == Film.SFX_BED) bed++; if (x.type == Film.SFX_CHAIR) chair++; if (x.type == Film.SFX_SOFA) sofa++; if (x.type == Film.SFX_SIP) sip++; if (x.type == Film.SFX_EAT) eat++; }
+        assertTrue("the furniture, the sips and the eating are heard: bed " + bed + " chair " + chair + " sofa " + sofa + " sip " + sip + " eat " + eat, bed >= 2 && chair >= 2 && sofa >= 1 && sip >= 2 && eat >= 1);
+        assertTrue("the shot list reports it", film.shotList.contains("Everyday actions (v35)"));
+        // the order of keys holds in other stories too (v35: mobility() read a state by adding a key out of order)
+        keysInOrder(directed(ScriptParser.parse("पात्र:\n1. दादी (70 वर्ष):\n * पहनावा: नीली साड़ी। वह व्हीलचेयर पर रहती हैं।\n2. रोहन (10 वर्ष):\n * पहनावा: लाल टी-शर्ट।\n\n"
+                + "दृश्य 1: आँगन\n(स्थान: घर का आँगन। सुबह।)\n(दादी व्हीलचेयर चलाकर रोहन के पास आती हैं।)\nदादी: \"आओ बेटा।\"\n(रोहन ताली बजाता है और कूदता है।)\nरोहन: \"दादी!\"\n(दादी ताली बजाती हैं।)\n\nसमाप्त\n")));
+    }
+
+    /** v35: a drawn character sits on the seat — the hips on its top, the feet on the floor, never through it. */
+    @Test
+    public void v35SeatedOnTheSeat() {
+        Story st = ScriptParser.parse(EVERYDAY);
+        Look man = null;
+        for (Story.CharacterDef c : st.characters) if (c.displayName.equals("पापा")) man = c.look;
+        assertNotNull(man);
+        int[] seats = {Film.SEAT_CHAIR, Film.SEAT_SOFA, Film.SEAT_BED, Film.SEAT_FLOOR};
+        for (int seat : seats) {
+            Bitmap bmp = Bitmap.createBitmap(400, 420, Bitmap.Config.ARGB_8888);
+            AndroidGfx g = new AndroidGfx(bmp, 4);
+            g.color(0xFFFFFFFF); g.rect(0, 0, 400, 420);
+            g.save(); g.translate(200, 350);
+            Pose p = new Pose(); p.reset(); p.facing = 1; p.body = Pose.SIT; p.sit = 1; p.seat = seat;
+            Puppet.draw(g, man, p, 240);
+            g.restore();
+            int low = -1, high = 1000;
+            for (int y = 0; y < 420; y++) for (int x = 60; x < 340; x++) {
+                int c = bmp.getPixel(x, y), l = ((c >> 16 & 255) + (c >> 8 & 255) + (c & 255)) / 3;
+                if (l < 170) { low = Math.max(low, y); high = Math.min(high, y); }
+            }
+            System.out.println("SEATED v35 on seat " + seat + ": head top " + (350 - high) + " px, lowest point " + (low - 350) + " px from the floor (height 240)");
+            assertTrue("seat " + seat + ": the feet on the floor, not through it (" + (low - 350) + ")", low <= 352 + (seat == Film.SEAT_FLOOR ? 14 : 2));
+            assertTrue("seat " + seat + ": the feet reach the floor (" + (low - 350) + ")", low >= 330);
+            float top = 350 - high;
+            assertTrue("seat " + seat + ": seated lower than standing (" + top + ")", top < 228 && top > (seat == Film.SEAT_FLOOR ? 130 : 175));
+        }
+    }
+
+    /** v35: one who sits or sleeps in the story and has only a standing photo is asked (optionally) for a picture of it. */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void v35AsksForSittingAndLyingPictures() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        Project p = Project.create(ctx);
+        p.write("script.txt", EVERYDAY);
+        Story st = ScriptParser.parse(EVERYDAY);
+        p.write("cast.txt", "char|अनु|char_anu.jpg|0.5|0.3|0.05|0.4|0.2|0.6|0.2|0.04|0\nchar|पापा|char_papa.jpg|0.5|0.3|0.05|0.4|0.2|0.6|0.2|0.04|0\n");
+        List<String[]> asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingForUser", p, st);
+        StringBuilder all = new StringBuilder();
+        boolean anuLie = false, anuSit = false, papaSit = false, dadi = false;
+        for (String[] t : asked) {
+            all.append(t[0]).append(" = ").append(t[1]).append('\n');
+            if (!t[0].startsWith("pose:")) continue;
+            assertTrue("optional", (Boolean) call("com.tarun.kahani.app.AutoLibrary", "optional", (Object) t));
+            if (t[0].startsWith("pose:अनु:") && t[0].endsWith("lying")) anuLie = true;
+            if (t[0].startsWith("pose:अनु:") && t[0].endsWith("sitting")) anuSit = true;
+            if (t[0].startsWith("pose:पापा:") && t[0].endsWith("sitting")) papaSit = true;
+            if (t[0].contains("दादी")) dadi = true;
+        }
+        System.out.println("ASKED v35:\n" + all);
+        assertTrue("a picture of Anu lying, of Anu and Papa sitting is asked for:\n" + all, anuLie && anuSit && papaSit);
+        assertTrue("not for Dadi, who has no picture at all yet (her own picture is asked for first)", !dadi);
+        // once a sitting picture of Papa is given, it is no longer asked for
+        p.write("cast.txt", p.read("cast.txt") + "pose|पापा|pose_1.jpg|0|" + com.tarun.kahani.core.PoseSense.SIT + "|0|0.7|0.5|0.3|0.05|0.4|0.2|0.6|0.2|0.04\n");
+        asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingForUser", p, st);
+        for (String[] t : asked) assertTrue("no longer asked: " + t[0], !(t[0].startsWith("pose:पापा:") && t[0].endsWith("sitting")));
+        // the film never waits for these (the make-film check lists characters and places only)
+        for (String[] t : (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingTargets", p, st)) assertTrue(!t[0].startsWith("pose:"));
+    }
 }

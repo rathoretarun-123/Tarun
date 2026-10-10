@@ -79,10 +79,25 @@ public final class Bible {
         if (c.look != null && c.look.heads > 1) b.append(" with ").append(c.look.heads).append(" heads side by side on one body (the central head is the main face)");
         if (c.look != null && c.look.arms > 2) b.append(" with ").append(c.look.arms).append(" arms (the front pair holds things, the other pairs fan out behind)");
         if (c.look != null && c.look.mount >= 0) b.append(", seated on a ").append(Look.speciesWord(c.look.mount, false)).append(" (the animal is part of the picture, under the character)");
+        if (c.look != null) b.append(bodyWords(c.look));
         b.append(". Description: ").append(oneLine(c.description));
         String action = "standing straight and facing the camera, arms a little away from the body (A-pose), both hands visible, nothing held in front of the body, "
                 + "feet a little apart, mouth closed, eyes open, a gentle friendly expression, fully and modestly dressed, isolated on a plain pure-white background, no other people";
         return StillPrompt.build(b.toString(), action, false);
+    }
+
+    /** v35: the body as the story tells it, in the picture's prompt — shown plainly and with dignity, as part of who the character is. */
+    static String bodyWords(Look l) {
+        StringBuilder w = new StringBuilder();
+        if (l.missingArm() != 0) w.append(", with only one arm (the ").append(l.missingArm() < 0 ? "left" : "right").append(" sleeve empty and folded)");
+        if (l.missingLeg() != 0) w.append((l.condition & Look.C_ARTIFICIAL_LEG) != 0 ? ", with an artificial lower " + (l.missingLeg() < 0 ? "left" : "right") + " leg"
+                : ", with one leg (the " + (l.missingLeg() < 0 ? "left" : "right") + " trouser leg folded at the knee), standing on crutches");
+        if ((l.condition & Look.C_FINGERS) != 0) w.append(", with some fingers missing on the left hand");
+        if ((l.condition & Look.C_ONE_EYE) != 0 && l.glasses != 5) w.append(", with one eye (the left eye closed, a faint scar)");
+        if ((l.condition & Look.C_HEARING_AID) != 0) w.append(", wearing small hearing aids behind the ears");
+        if ((l.condition & Look.C_LIMP) != 0 && l.aid == Look.AID_NONE) w.append(", standing with the weight a little on one leg");
+        if (w.length() > 0) w.append(" — shown plainly and with dignity, as part of who they are");
+        return w.toString();
     }
 
     public static String placePrompt(String name, String description, String aspect) {

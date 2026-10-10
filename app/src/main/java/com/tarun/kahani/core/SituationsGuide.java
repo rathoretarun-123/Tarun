@@ -12,7 +12,7 @@ import java.util.Locale;
 public final class SituationsGuide {
     private SituationsGuide() {}
 
-    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34)";
+    public static final String TITLE = "SITUATIONS AND REALISM — the director's training for everyday stories (v34–v35)";
 
     /** {the rule, where the studio applies it}. */
     public static final String[][] RULES = {
@@ -36,6 +36,14 @@ public final class SituationsGuide {
             {"Every movement is heard", "Director: footsteps for every walk on the floor of the place (stone rings, earth thuds), running steps, a stick's tap, crutches, a wheelchair rolling — for entrances and for every move across the stage (walkSounds)"},
             {"The user's pictures come first", "FilmJob: the film waits for the user's pictures before the 3D maker makes any; Studio3DArt.referencePicture: a character with no picture is drawn from the closest uploaded figure of the same kind, recoloured, its face details painted on (FaceProps); the 3D doll only for what an uploaded figure cannot show (a wheelchair, crutches, a sling, a mount, more heads or arms) or when the user rejects the borrowed figure"},
             {"Lips glide, they do not flap", "Mixer.envelope: the mouth keeps half its opening through a dip shorter than 90 ms, changes at most a quarter of a full opening per frame, opens from closed at the start of a line and closes at its end; shut in every pause"},
+            // v35
+            {"Wind moves what grows, never what is built", "Nature.backdropMesh, gustField: in a picture of a place outdoors the grass, leaves and tree crowns (read from their colour and texture, also above the skyline) sway with the wind in slow gusts that travel across the picture, the tips more than the roots, every frame a small smooth step; walls, roads, people and the sky stay still; indoors nothing sways; Sets.paintLive: painted trees and grass sway the same way; Synth, Mixer: the wind carries a rustle of leaves and swells with each gust the picture shows"},
+            {"A sharp picture", "Art.sizesFor: the pictures are read as large as the phone's free memory allows for the film's size (with half and quarter copies for small figures, Art.mip); Cutout.defringe: the halo of the old background is taken off a photo's edge; FilmLook: a light unsharp mask before the grade; VideoWriter: the High profile and variable bitrate where the phone has them; Director.faceBox: a close-up is never enlarged past one and a half times the picture's own pixels"},
+            {"Bodies as the story tells them", "LookDesigner.conditionIn, Puppet, Rig, Doll3D: a limp (an uneven step, never running), one arm (an empty sleeve; one hand does the work and claps on the thigh), one leg (crutches, or an artificial leg), fewer fingers, one eye (a closed lid or a patch), blind (a cane, the hand out, no point-of-view shot, listening), deaf (a hearing aid; no startle at a sound they cannot hear — they notice the others' faces and turn; signed lines framed with the hands, the words in the subtitle)"},
+            {"Everyday actions are movements, not cuts", "Director.postureFrom: sitting down on a chair, a sofa, a bed, a stool or the floor — the weight forward over the feet, slower from a low seat, the furniture creaks; getting up leans forward first; lying down sits first, then lies back; asleep the eyes shut, the breath slows and a blanket covers them in bed; waking opens the eyes, sits up, stretches and yawns, and gets up when the story says so; one asleep at the end of a part is still asleep when the next part in a room begins"},
+            {"Seated means on the seat", "Puppet.seatHeight: a drawn character's hips rest on the seat's top (a chair 0.30 of their height, a sofa 0.27, a bed 0.28, a throne 0.335), the knees forward and the shins down to the floor; on the floor cross-legged, on a mat indoors; a child's furniture is a child's size; the seat is under the sitter, only armrests come in front; Rig: a photo's thighs (or a saree's lap) fold towards the camera, on the floor the shins fold under too"},
+            {"Eating and drinking", "Director.mealFrom: a plate in one hand, the other to the mouth and back with chewing; a cup, a glass or a bottle raised to the lips (tea steams; a bottle tips back further), a sip or gulps heard, the cup set down with a clink; a photo cannot bend its arm, so the director shows it in a close-up where the cup or a morsel comes up into the frame to the lips in a hand of the character's own skin (Renderer.drawToLips)"},
+            {"Ask for the picture that shows it", "Director.poseNeeds, AutoLibrary: one who sits or lies down in the story and has only a standing photo is asked (optionally — the film never waits for it) for a picture of them sitting or lying; the user's own pictures are always used first (Casting); meanwhile a seated speaker from a standing photo is framed from the waist up"},
     };
 
     /** What these rules cannot do on a phone, said plainly. */
@@ -43,6 +51,11 @@ public final class SituationsGuide {
             {"A picture the user gave does not show a wheelchair, a stick or a sling", "the director cannot draw them onto a photograph convincingly: it asks for a picture that shows them, or the 3D doll shows them"},
             {"Shadows are a soft silhouette on the ground", "not a ray-traced shadow; it follows the body's bend but not the exact shape of a hand"},
             {"Studio quality", "these rules make the staging, light and sound more natural; they do not make a phone's 2.5D film the equal of a studio's hand-animated, ray-traced one"},
+            // v35
+            {"A standing photo sitting down", "it can only be lowered and folded at the knees; in a saree or a long skirt it reads less clearly as seated than a drawn character or the user's own sitting picture — the director asks for that picture and frames from the waist up"},
+            {"A photo's arm to the mouth", "a photo's arm does not bend: the cup or the morsel reaches the lips only in a close-up, where the hand at the hip is out of the frame; when the picture is too small for a close-up, the cup stays in the hand"},
+            {"Wind in a photo of a place", "the plants are found by their colour and texture, so a green wall or a painted tree may sway a little and a dry brown bush may not"},
+            {"Fingers and missing limbs on a photo", "fewer fingers are drawn only on drawn characters (and asked of an AI picture maker in words); a photo is never cut — a missing arm or leg on a photo shows as the photo shows it"},
     };
 
     public static final String SUMMARY;
@@ -69,7 +82,7 @@ public final class SituationsGuide {
         for (Film.Sfx x : film.sfx) {
             if (x.type == Film.SFX_STICK || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR) aidSounds++;
             else if (x.type == Film.SFX_UMBRELLA_RAIN) umbrellaRain++;
-            else if (x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN) steps++;
+            else if (x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN || x.type == Film.SFX_STEPS_LIMP) steps++;
         }
         return String.format(Locale.US, "• Situations (v34 training): %d with a walking aid, %d with glasses, goggles, a blindfold or a patch, %d hurt, %d with an umbrella, "
                 + "%d changes of look — %d reveals, %d moments of concern, %d of relief; %d shots framed at a seated character's eye level; %d point-of-view shots "

@@ -145,6 +145,20 @@ public final class FilmJob implements Runnable {
         return Math.max(48L * 1024 * 1024, Math.min((heapFree - reserve) * 3 / 4, sysFree));
     }
 
+    /** v35: the memory the film's pictures may use: their pixels live outside the app's heap (Android 8+), in the phone's free memory. */
+    private long pictureMemory() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            if (am != null) {
+                am.getMemoryInfo(mi);
+                long free = mi.availMem - mi.threshold;
+                if (free > 0) return free;
+            }
+        } catch (Throwable ignored) { /* no activity manager here */ }
+        return Runtime.getRuntime().maxMemory();
+    }
+
     static String hash(String s) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
@@ -295,10 +309,14 @@ public final class FilmJob implements Runnable {
             step("Preparing pictures (removing backgrounds)…", 0.03f);
             // v26: pictures are read at a size that fits the output (sharper at 1080p, lighter at 480p), within the memory left
             // v30: a phone with a large heap reads the pictures larger (sharper close-ups); a small one stays light
-            int big = Project.bigSide();
-            Art.spriteSide = Math.max(900, Math.min(big >= 3000 ? 2600 : 2000, Math.round(ed.height * 1.25f)));
-            Art.backdropSide = Math.max(1280, Math.min(big >= 3000 ? 3200 : 2600, Math.round(ed.height * 16f / 9f * 1.15f)));
-            Art art = Art.fromManifest(project.read("cast.txt"), story, project.loader());
+            // v35: characters at twice the output's height and places at 1.6 times its width (sharper close-ups and
+            // push-ins), as far as the phone's memory allows for this film's number of pictures (Art.sizesFor)
+            String castText = project.read("cast.txt");
+            int[] counts = Art.pictureCounts(castText);
+            int[] sides = Art.sizesFor(ed.height, Runtime.getRuntime().maxMemory(), pictureMemory(), counts[0], counts[1]);
+            Art.spriteSide = sides[0];
+            Art.backdropSide = sides[1];
+            Art art = Art.fromManifest(castText, story, project.loader());
             check();
 
             Director.Options opt = new Director.Options();
@@ -309,6 +327,7 @@ public final class FilmJob implements Runnable {
             opt.pace = ed.speed;
             opt.sounds = Library.get(ctx).soundLib();   // the user's own effects play where the story mentions them
             opt.onTwos = Prefs.onTwos(ctx);              // Spider-Verse stepping, only when the user asks for it
+            opt.outHeight = ed.height;                   // v35: close-ups never enlarge a picture past 1.5x at this size
             Director dir = new Director(story, opt);
             Film film = dir.prepare();
             // v33: "scene 2 brighter", "the cave darker": the instruction's light on that part alone

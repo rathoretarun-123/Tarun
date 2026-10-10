@@ -17,6 +17,11 @@ public final class Nature {
     public static final class Scan {
         public static final int GW = 64, GH = 36;
         public final float[] water = new float[GW * GH], fall = new float[GW * GH], plants = new float[GW * GH];
+        /**
+         * v35: how far up its plant each point of foliage is, as the wind moves it (0.3 near the root .. 1 at the top
+         * of a tree; on a field of grass the near grass, larger on the screen, more than the far).
+         */
+        public final float[] reach = new float[GW * GH];
         public float skyBottom;              // fraction of the picture height
         public float waterTop = -1, waterBottom = -1;   // fractions of the height where the water lies
         public boolean anyWater, anyFall, anyPlants;
@@ -53,7 +58,7 @@ public final class Nature {
         }
         s.skyBottom = skyRow / (float) h;
         int GW = Scan.GW, GH = Scan.GH, N = GW * GH;
-        float[] cnt = new float[N], wat = new float[N], foam = new float[N], grn = new float[N], gx = new float[N], gy = new float[N], blue = new float[N];
+        float[] cnt = new float[N], wat = new float[N], foam = new float[N], grn = new float[N], gx = new float[N], gy = new float[N], blue = new float[N], gtex = new float[N];
         float minWaterY = Math.max(s.skyBottom + 0.03f, 0.3f) * h;
         for (int y = 0; y + 2 < h; y += 2) {
             int by = Math.min(GH - 1, y * GH / h);
@@ -66,10 +71,12 @@ public final class Nature {
                 hsv(c, hsv);
                 float hh = hsv[0], ss = hsv[1], vv = hsv[2];
                 if (hh >= 175 && hh <= 240 && ss > 0.2f) blue[g]++;
-                if (y <= skyRow + h / 40) continue;
+                // v35: the crowns of trees stand against the sky: foliage is read in the sky's rows too
+                boolean leafy = hh >= 60 && hh <= 168 && ss > 0.18f && vv > 0.12f;
+                if (y <= skyRow + h / 40) { if (leafy) { grn[g]++; gtex[g] += dxl + dyl; } continue; }
                 if (hh >= 175 && hh <= 235 && ss > 0.12f && ss < 0.7f && vv > 0.25f && vv < 0.96f && y > minWaterY && dxl + dyl < 0.12f) wat[g]++;
                 else if (ss < 0.2f && vv > 0.8f) { foam[g]++; gx[g] += dxl; gy[g] += dyl; }
-                else if (hh >= 65 && hh <= 165 && ss > 0.18f && vv > 0.12f) grn[g]++;
+                else if (leafy) { grn[g]++; gtex[g] += dxl + dyl; }
             }
         }
         float blueAll = 0, cntAll = 0;
@@ -78,6 +85,9 @@ public final class Nature {
             if (cnt[i] == 0) continue;
             s.water[i] = wat[i] / cnt[i] > 0.45f ? Math.min(1, wat[i] / cnt[i] * 1.4f) : 0;
             s.plants[i] = Math.min(1, grn[i] / cnt[i] * 1.5f);
+            // v35: leaves and grass have texture; a flat green wall, door or sofa does not, and stays still
+            float tex = grn[i] > 0 ? gtex[i] / grn[i] : 0;
+            s.plants[i] *= Math.max(0, Math.min(1, (tex - 0.012f) / 0.025f));
             // falling water: bright white with vertical streaks (changes more across than down)
             boolean streaks = foam[i] / cnt[i] > 0.4f && gx[i] > gy[i] * 1.35f;
             float yb = (i / GW + 0.5f) / GH;
@@ -85,6 +95,7 @@ public final class Nature {
         }
         keepBig(s.water, 10);
         keepBig(s.fall, 4);
+        reach(s);
         // a picture that is blue all over is blue light (night, magic), not water
         if (blueAll > cntAll * 0.45f) java.util.Arrays.fill(s.water, 0);
         blur(s.water); blur(s.plants); blur(s.fall);
@@ -101,6 +112,30 @@ public final class Nature {
     }
 
     static float lum(int c) { return (((c >> 16) & 255) * 0.3f + ((c >> 8) & 255) * 0.59f + (c & 255) * 0.11f) / 255f; }
+
+    /**
+     * v35: how much the wind moves each point of foliage. Each column's runs of foliage are read from the bottom up: a
+     * run standing on the bottom of the picture is ground cover (grass, a hedge) — its near part, larger on the screen,
+     * moves more than its far part; a run above the ground (a tree's crown, a bush) moves more the higher up it is.
+     */
+    static void reach(Scan s) {
+        int GW = Scan.GW, GH = Scan.GH;
+        for (int x = 0; x < GW; x++) {
+            int y = GH - 1;
+            while (y >= 0) {
+                if (s.plants[y * GW + x] < 0.25f) { y--; continue; }
+                int bottom = y;
+                while (y >= 0 && s.plants[y * GW + x] >= 0.25f) y--;
+                int top = y + 1, len = bottom - top + 1;
+                boolean ground = bottom >= GH - 2 - GH / 10;
+                for (int k = top; k <= bottom; k++) {
+                    float up = len <= 1 ? 1f : (bottom - k) / (float) (len - 1);       // 0 at the run's foot, 1 at its top
+                    s.reach[k * GW + x] = ground ? 0.3f + 0.5f * (1 - up) : 0.2f + 0.8f * up;
+                }
+            }
+        }
+        blur(s.reach);
+    }
 
     /** Removes patches of a mask smaller than min cells (a blue flower is not a pond). */
     static void keepBig(float[] m, int min) {
@@ -179,18 +214,63 @@ public final class Nature {
     }
 
     /**
-     * Mesh points for drawing a background picture with its plants swaying in the wind (a gentle breeze always)
-     * and its water rippling along the flow (a waterfall streams down). The picture's crop window (x0..x1,
+     * v35: the gusts of the wind over a place (-1..1) at a point across it (u, 0..1) and a moment: three waves of
+     * different length running across the place in the wind's direction (dir), so a gust is seen to travel — a wave
+     * running over a field of grass, one tree after the next bending — and never repeats in an obvious beat.
+     */
+    public static float gustField(float u, float t, float dir) {
+        double a = t * 0.23 * dir, b = t * 0.31 * dir, c = t * 0.47 * dir;
+        return (float) (0.55 * Math.sin(2 * Math.PI * (u * 0.7 - a) + 0.4)
+                + 0.30 * Math.sin(2 * Math.PI * (u * 1.6 - b) + 2.1)
+                + 0.15 * Math.sin(2 * Math.PI * (u * 3.1 - c) + 4.7));
+    }
+
+    /**
+     * v35: how far (in units of the plant's reach) the wind pushes foliage at a point and moment: + towards the right.
+     * In real wind (|wind| above the breeze) plants lean with it and the travelling gusts push them further — always
+     * with the wind, never against it; in still air (the breeze that always moves outdoors) they rock gently back and
+     * forth; and every plant also rocks at its own slow pace (a tree's crown about every two seconds).
+     */
+    public static float windPush(float u, float v, float t, float wind, float breeze) {
+        float w = Math.abs(wind), dir = wind >= 0 ? 1 : -1;
+        float strength = breeze + w;
+        float g = gustField(u, t, dir);
+        float push = dir * w * (0.8f + 0.6f * (0.5f + 0.5f * g));
+        push += 0.35f * strength * g * (1 - Math.min(1f, w));
+        push += 0.18f * strength * (float) Math.sin(t * 2 * Math.PI * 0.47 + u * 7 + v * 3);
+        return push;
+    }
+
+    /** v35: the quick trembling of leaves (-1..1, three to four times a second, clump by clump: a few dozen across the picture). */
+    public static float flutter(float u, float v, float t) {
+        return (float) (0.6 * Math.sin(t * 2 * Math.PI * 2.7 + u * 120 + v * 70) + 0.4 * Math.sin(t * 2 * Math.PI * 4.1 + u * 190 - v * 110));
+    }
+
+    /**
+     * Mesh points for drawing a background picture with its plants swaying in the wind (a gentle breeze always
+     * outdoors) and its water rippling along the flow (a waterfall streams down). The picture's crop window (x0..x1,
      * y0..y1 of the picture) fills the stage (0..W, 0..H).
      */
     public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out) {
-        backdropMesh(s, x0, y0, x1, y1, W, H, t, wind, sea, out, MW, MH);
+        backdropMesh(s, x0, y0, x1, y1, W, H, t, wind, sea, out, MW, MH, true);
     }
 
     public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out, int MW, int MH) {
+        backdropMesh(s, x0, y0, x1, y1, W, H, t, wind, sea, out, MW, MH, true);
+    }
+
+    /**
+     * outdoors: the plants move in the wind (v35: the realistic wind — Nature.windPush, a lean with real wind,
+     * travelling gusts, the plant's own rocking, the tops of trees moving more than the crown's foot, near grass more
+     * than far, leaves trembling); indoors a plant stays still.
+     */
+    public static void backdropMesh(Scan s, float x0, float y0, float x1, float y1, float W, float H, float t, float wind, float sea, float[] out, int MW, int MH, boolean outdoors) {
         int k = 0;
-        float sway = 0.25f + Math.abs(wind);
-        float dir = wind >= 0 ? 1 : -1;
+        float w = Math.abs(wind);
+        boolean plantsMove = s != null && s.anyPlants && outdoors;
+        float breeze = 0.3f;
+        // the reach of the sway at the top of a plant (stage units), and of the leaves' trembling
+        float amp = 14f * W / 1280f, ampF = (0.6f + 1.4f * Math.min(1.5f, w)) * W / 1280f;
         for (int j = 0; j <= MH; j++) {
             float v = j / (float) MH;
             for (int i = 0; i <= MW; i++) {
@@ -198,21 +278,22 @@ public final class Nature {
                 float X = (u - x0) / (x1 - x0) * W, Y = (v - y0) / (y1 - y0) * H;
                 float edge = Math.min(Math.min(i, MW - i), Math.min(j, MH - j)) >= 1 ? 1 : 0;
                 float dx = 0, dy = 0;
-                if (s != null && s.anyPlants) {
+                if (plantsMove) {
                     float p = s.at(s.plants, u, v);
                     if (p > 0.02f) {
-                        // tops of plants move more than their roots; gusts travel across the picture
-                        float gust = (float) (Math.sin(t * 1.7 + u * 9 + v * 3) * 0.6 + Math.sin(t * 3.1 + u * 17) * 0.25);
-                        float lean = Math.abs(wind) * 0.8f;
-                        dx += p * (2.2f + 9f * sway) * (gust * 0.6f + lean * dir) * (0.4f + 0.6f * (1 - v));
-                        dy += p * 1.2f * sway * (float) Math.sin(t * 2.3 + u * 13);
+                        float reach = s.at(s.reach, u, v);
+                        float push = windPush(u, v, t, wind, breeze) * amp * reach * p;
+                        float fl = flutter(u, v, t) * ampF * p * (0.5f + 0.5f * reach);
+                        dx += push + fl;
+                        // a bending stem lowers its tip a little; leaves tremble up and down too
+                        dy += Math.abs(push) * 0.12f + flutter(v, u, t + 0.37f) * ampF * 0.6f * p;
                     }
                 }
                 if (s != null && s.anyWater) {
                     float wv = s.at(s.water, u, v);
                     if (wv > 0.02f) {
                         // waves travelling along the river
-                        float big = 1 + 2.2f * sea + Math.abs(wind);
+                        float big = 1 + 2.2f * sea + w;
                         dx += wv * 2.0f * big * (float) Math.sin(u * 70 - t * 2.4 + v * 20);
                         dy += wv * 1.4f * big * (float) Math.sin(u * 45 + v * 60 - t * 3.3) + wv * sea * 4 * (float) Math.sin(v * 25 - t * 1.6);
                     }

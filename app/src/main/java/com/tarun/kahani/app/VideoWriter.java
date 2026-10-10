@@ -58,16 +58,53 @@ public final class VideoWriter {
 
     public void start(File out, PcmSource pcm, int sr, float bitsPerPixel) throws IOException {
         encodeAudio(pcm, sr);
-        MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h);
-        f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
-        f.setInteger(MediaFormat.KEY_BIT_RATE, Math.max(2000000, (int) (w * (long) h * fps * bitsPerPixel)));     // v33: dark frames need the bits
-        f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        int bitrate = Math.max(2000000, (int) (w * (long) h * fps * bitsPerPixel));     // v33: dark frames need the bits
         video = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-        video.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        // v35: the High profile where the phone's encoder has it (finer detail for the same bits than the Baseline most
+        // encoders choose by themselves), at a variable bit rate, from Android 10 (before it some encoders' High profile
+        // is broken) and without B-frames (the muxer wants the frames in order); any encoder that refuses it gets the
+        // plain settings
+        int[] high = android.os.Build.VERSION.SDK_INT >= 29 ? highProfile(video) : null;
+        boolean configured = false;
+        if (high != null) {
+            try {
+                MediaFormat f = videoFormat(bitrate);
+                f.setInteger(MediaFormat.KEY_PROFILE, high[0]);
+                f.setInteger(MediaFormat.KEY_LEVEL, high[1]);
+                f.setInteger("max-bframes", 0);                // MediaFormat.KEY_MAX_B_FRAMES (Android 10)
+                f.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+                video.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                configured = true;
+            } catch (Exception e) {
+                try { video.release(); } catch (Exception ignored) {}
+                video = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            }
+        }
+        if (!configured) video.configure(videoFormat(bitrate), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         video.start();
         muxer = new MediaMuxer(out.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         yRow = new byte[w];
+    }
+
+    private MediaFormat videoFormat(int bitrate) {
+        MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h);
+        f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
+        f.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+        f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        return f;
+    }
+
+    /** {profile, level} of the encoder's H.264 High profile at its highest level, or null when it has none. */
+    static int[] highProfile(MediaCodec c) {
+        try {
+            int best = -1;
+            for (MediaCodecInfo.CodecProfileLevel pl : c.getCodecInfo().getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).profileLevels)
+                if (pl.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh) best = Math.max(best, pl.level);
+            return best > 0 ? new int[]{MediaCodecInfo.CodecProfileLevel.AVCProfileHigh, best} : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void encodeAudio(PcmSource src, int sr) throws IOException {

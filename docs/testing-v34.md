@@ -278,3 +278,30 @@ Every sheet split as the app does it (`Angles.figures(Angles.split(…))`) and l
 * All 60 sheets give the same number of figures as before: 10, 11 or 12.
 * Only three pieces were thrown away in all 60 sheets: a 29×21 speck beside one figure's feet (sheet 4), and on sheet 12 the leaping girl's raised sword with the tip of her braid (134×167 px) and one of her feet (54×84 px) — both touching her outline, cut loose by the split and dropped as crumbs.
 * **Fixed (`Angles.rejoin`):** a dropped part that touches a kept figure (an opaque pixel within half a percent of the sheet's smaller side) is joined back to it; crumbs under 0.05 % of the sheet stay dropped, and a place sheet's panels (whole crops) are never joined. Sheet 12's girl now has her sword (4 549 px back in place) and her foot (1 866 px); the strips of the other 59 sheets are unchanged pixel for pixel.
+
+## 16. The director trained for realism
+
+The director's own staging, checked on a story written for it (rain beginning in a park, a blindfolded grandmother, a girl who leaves a room to change and comes back, the grandmother coming into the room) and on the earlier test stories. Test `directorStagesTheSituationsRealistically`; the shot list's new line on the stories:
+
+| Story | Looks held (turned round) | Rain or snow reactions | Hurried in the rain | Felt the way | Doors | Footsteps moved in stereo |
+|---|---|---|---|---|---|---|
+| Realism (written for this) | 8 (1) | 3 | 0 | 2 | 3 | 5 |
+| Park and room (the moves story) | 6 (0) | 0 | 0 | 0 | 2 | 5 |
+| Situations | 11 (1) | 0 (it rains from the start) | 0 (umbrella, crutches, walking frame) | 0 | 0 | 3 |
+| Aids | 6 (1) | 0 | 0 | 0 | 0 | 4 |
+| Costume | 3 (0) | 0 | 0 | 0 | 2 | 2 |
+| Sample (Hindi) | 56 (15) | 0 | 0 | 0 | 0 | 33 |
+
+What the frames showed (3D dolls, looked at one by one):
+
+* Rain begins at 18.8 s: all three look up at 19.0 s and hunch from 19.8 s for 1.75 s; the grandmother, blindfolded, listens toward Aman's run instead of looking.
+* The grandmother walks to Riya carefully (4.5 s, the longest a walk may take) with a hand out; she comes into the room the same way, and a door is heard on her side.
+* Riya walks out of the room: Aman's eyes follow her, the shot holds while she walks out of it, then it cuts to Aman alone; a second later she comes back in the red frock, the door heard on her side, and Aman's eyes go to her; the reveal follows.
+
+**Found and fixed while looking at the frames:**
+
+* The rain reaction first used the "hands on the head" gesture made for a stolen turban: on a picture it read as hands on the hips (a picture's arms cannot reach its head) and it made every face frightened. A gesture of its own now hunches the shoulders and lowers the head (the hands go over the head only on a drawn character), with no fear on the face; the snow shiver keeps a picture's arms in.
+* "Looking up" only rolled the head: it now tips the head back and turns the eyes up.
+* A blindfold and "slowly" together made the grandmother's walk last 9.3 s: no walk now lasts more than 4.5 s.
+* The Technical Director's 15 % motion rule cut four times to chase Riya off the stage, ending on an empty room: a walk to beyond the stage's edge is let go (the shot holds and she walks out of it), then a cut to Aman.
+* Some reactions planned a key a little after the moment the story moved on (the relief and reveal beats), which can delay the next line's turn by a fraction of a second: those beats now last until their last reaction ends.

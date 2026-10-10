@@ -220,6 +220,9 @@ public final class Mixer {
         float gain;
         boolean voice;
         float pan;           // -1 left .. +1 right (where the speaker stands)
+        /** v34: a sound that moves (steps with the walker): the pan at its end and the loudness at its start and end. */
+        boolean moves;
+        float panTo, gainFrom = 1f, gainTo = 1f;
         float send;          // how much goes into the room (echo of the place)
         Film.Music music;    // loudness curve and softness of a music cue
         float lpA, lp;       // one-pole low-pass (soft moods)
@@ -332,6 +335,7 @@ public final class Mixer {
             final float[] src = lib == null ? null : s.file != null ? lib.pcm(lib.byPath(s.file)) : f == null ? null : lib.pcm(lib.byFile(f));
             if (s.type == Film.SFX_USER && src == null) continue;     // the user's sound is gone: nothing else fits
             int st = (int) (s.t * Synth.SR);
+            int before = clips.size();
             if (src != null && src.length >= Synth.SR / 4 && (ambient || s.dur > src.length / (float) Synth.SR)) {
                 LoopClip lc = new LoopClip(src, st, s.dur, ambient ? 1f : 0.05f, g);
                 if (ambient) lc.wide = Math.max(1, (int) (src.length * 0.41f));
@@ -350,6 +354,14 @@ public final class Mixer {
                     }
                 }));
                 clips.get(clips.size() - 1).send = ambient ? 0 : 0.5f;   // a door, a bell, thunder ring in the room
+            }
+            // v34: where it is heard and how it moves (steps follow the walker across the stereo, fade as they leave)
+            if (clips.size() > before && !ambient) {
+                Clip c = clips.get(clips.size() - 1);
+                c.pan = Math.max(-0.6f, Math.min(0.6f, s.pan));
+                c.panTo = Float.isNaN(s.pan1) ? c.pan : Math.max(-0.6f, Math.min(0.6f, s.pan1));
+                c.gainFrom = s.gain0; c.gainTo = s.gain1;
+                c.moves = c.panTo != c.pan || c.gainFrom != 1f || c.gainTo != 1f;
             }
         }
         // ---- voices (loaded from the source only when they start), each from where its speaker stands, every
@@ -418,6 +430,11 @@ public final class Mixer {
                 float gl = c.gain * Math.min(1f, 1f - c.pan), gr = c.gain * Math.min(1f, 1f + c.pan);
                 for (int t = from; t < to; t++) {
                     int i = t - c.start;
+                    if (c.moves) {
+                        // v34: a moving sound — the pan and the loudness glide from its start to its end
+                        float u = i / (float) Math.max(1, c.len), p = c.pan + (c.panTo - c.pan) * u, gg = c.gain * (c.gainFrom + (c.gainTo - c.gainFrom) * u);
+                        gl = gg * Math.min(1f, 1f - p); gr = gg * Math.min(1f, 1f + p);
+                    }
                     float v = c.at(i), vr = c.atR(i);
                     if (c.lpA > 0) { c.lp += c.lpA * (v - c.lp); v = c.lp * 1.25f; vr = v; }
                     float lv = c.music == null ? 1f : c.music.level(t / (float) Synth.SR);

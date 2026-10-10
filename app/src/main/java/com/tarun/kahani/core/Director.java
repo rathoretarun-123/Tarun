@@ -279,6 +279,7 @@ public final class Director {
         mobility();
         umbrellaRain();
         walkSounds();
+        placeSteps();
         scoreMusic();
         if (opt.technical) {
             // the Technical Director protocol, in its own order: lock the camera, then no shot may move a character
@@ -590,6 +591,9 @@ public final class Director {
             b.append(String.format(java.util.Locale.US, "• Lip-sync shots (front close-ups, face filling the frame, at most 6 words): %d; with more than 6 words: %d%n", speech, over6));
             b.append(String.format(java.util.Locale.US, "• Runs slowed to walking pace: %d; characters who stop walking to speak: %d%n", calmed, stillToSpeak));
             b.append(String.format(java.util.Locale.US, "• Moves read from the story's directions (v34): %d leaving, %d coming back, %d across or around, %d up to someone%n", exits, returns, crossings, approaches));
+            b.append(String.format(java.util.Locale.US, "• Realism (v34): %d looks held on an entrance, an exit, a return, a reveal or someone hurt (%d turned round to watch); "
+                    + "%d reactions to rain or snow beginning; %d hurried out of the rain; %d felt their way blindfolded; %d doors heard; %d footsteps moved across the stereo%n",
+                    watchCount, watchTurns, skyReactions, hurried, feltWay, doorsHeard, stepsPlaced));
             b.append(String.format(java.util.Locale.US, "• Cuts made so no character moves 15%% of the frame in one shot: %d; shots still over the limit (very fast moves the story's timing leaves no room to slow): %d%n", motionCuts, overMotion));
             b.append(String.format(java.util.Locale.US, "• Cuts made so each shot holds one action: %d; shots with more than one: %d%n", actionCuts, multi));
             b.append(String.format(java.util.Locale.US, "• Shots reframed for the %s frame (whole characters, 15%% side margins, headroom): %d%n", opt.aspect, framed));
@@ -1151,11 +1155,18 @@ public final class Director {
             film.sfx.add(new Film.Sfx(Film.SFX_MAGIC, tc, 1.5f, 0.6f));
             return tc;
         }
+        // v34 (realism): coming through the rain without an umbrella, one hurries in; a blindfolded one feels the way in
+        boolean aided = a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0;
+        if (!run && !aided && !a.look.umbrella && a.look.isHumanoid() && a.look.glasses != 4 && Sets.outdoorSet(seg.set)
+                && (wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0)) { run = true; hurried++; }
+        boolean blindIn = a.look.glasses == 4;
+        if (blindIn) run = false;
         Film.Key k = a.at(tc + 0.01f);
         k.x = dest;
-        k.moveDur = run ? 0.9f : 1.3f;
+        k.moveDur = run ? 0.9f : blindIn ? 2.0f : 1.3f;
         k.run = run;
         k.facing = dest > startX ? 1 : -1;
+        if (blindIn) { a.acts.add(new Film.Act(tc + 0.01f, tc + 2.0f, Film.G_REACH)); feltWay++; }
         if (a.look.kind == Look.MONSTER || a.look.height > 1.25f) {
             // reveal (§15): first only the ground shaking under the steps, then the camera pulls back and up
             float h = heightOf(a);
@@ -1188,6 +1199,10 @@ public final class Director {
         }
         else film.sfx.add(new Film.Sfx(stepsSound(run), tc, k.moveDur, 0.35f));
         if (a.look.anklets) film.sfx.add(new Film.Sfx(Film.SFX_ANKLET, tc, k.moveDur, 0.4f));
+        // v34 (realism): coming into a room, a door is heard on their side; everyone already there looks up and
+        // watches them come in (one with their back to them turns round)
+        if (!far && indoors(seg.set)) door(tc - 0.15f, fromRight ? 0.6f : -0.6f);
+        watch(a, tc, tc + k.moveDur + 0.5f, true);
         return tc + (far ? 0.2f : 0.4f);
     }
 
@@ -1873,7 +1888,12 @@ public final class Director {
                 for (Film.Actor a : sg.actors) {
                     float ref = Float.NaN;
                     for (float t = t0 + 0.01f; t < t1 - 0.3f; t += 0.05f) {
-                        if (!a.stateAt(t).visible) { ref = Float.NaN; continue; }
+                        Film.Key st = a.stateAt(t);
+                        if (!st.visible) { ref = Float.NaN; continue; }
+                        // v34 (realism): a character walking off the stage is let go — the shot holds and they walk out
+                        // of it (the camera never chases anyone off the stage); the rule still counts every move that
+                        // stays in the picture
+                        if (st.moveDur > 0 && t < st.t + st.moveDur && (st.x < 0 || st.x > 1280)) { ref = Float.NaN; continue; }
                         float x = xAt(a, t);
                         boolean in = Math.abs(x - c.cx) < fw * 0.55f;
                         if (Float.isNaN(ref)) { if (in) ref = x; continue; }
@@ -2350,6 +2370,7 @@ public final class Director {
         if (hurt) {
             feel(a, tc, 1.4f, Pose.PAIN);
             for (Film.Actor o : others) feel(o, tc + 0.2f, 1.6f, Pose.SAD);
+            watch(a, tc, tc + 1.8f, false);
             camOn(a, tc, 1.5f);
             Film.Shot sh = shot(tc, ShotPlanner.MEDIUM, ShotPlanner.SINGLE, 0, ShotPlanner.STATIC, a, others.isEmpty() ? null : others.get(0), ShotPlanner.ESCALATE);
             sh.purpose = "Hurt: " + a.c.shown() + " — " + clip(co.text, 50);
@@ -2359,13 +2380,14 @@ public final class Director {
             sh.cutWhen = "the wince has passed";
             sh.emotionalPurpose = "Concern: the others look on, worried";
             concernBeats++;
-            return tc + 1.5f;
+            return tc + 1.85f;
         }
         if (healed) {
             feel(a, tc, 1.6f, Pose.RELIEVED);
             for (Film.Actor o : others) feel(o, tc + 0.3f, 1.4f, Pose.HAPPY);
+            watch(a, tc, tc + 1.6f, false);
             reliefBeats++;
-            return tc + 0.8f;
+            return tc + 1.75f;
         }
         if (clothes) {
             // the reveal: the whole new look, held a moment, a slow push-in, a sparkle; the others react
@@ -2381,13 +2403,14 @@ public final class Director {
             sh.emotionalPurpose = "Delight: the change is an event";
             feel(a, tc, 1.8f, Pose.PROUD);
             for (Film.Actor o : others) { feel(o, tc + 0.4f, 0.6f, Pose.SURPRISED); feel(o, tc + 1.0f, 1.0f, Pose.HAPPY); }
+            watch(a, tc, tc + 2.0f, false);
             Film.Fx fx = new Film.Fx(Film.FX_SPARKLE, tc + 0.2f, tc + 1.4f);
             fx.x = x; fx.y = ground - h * 0.6f;
             seg.fx.add(fx);
             film.sfx.add(new Film.Sfx(Film.SFX_TWINKLE, tc + 0.2f, 1.0f, 0.3f));
             if (k.body != Pose.SIT && k.body != Pose.LIE && now.aid == Look.AID_NONE) a.acts.add(new Film.Act(tc + 0.3f, tc + 1.5f, Film.G_PROUD));
             reveals++;
-            return tc + 1.8f;
+            return tc + 2.05f;
         }
         return tc;
     }
@@ -3063,7 +3086,9 @@ public final class Director {
             focusSet = true;
         }
         // v34: walking off, across or up to someone (last: its keys must come after every other key of the sentence)
+        travelFramed = false;
         d = Math.max(d, travelFrom(s, t, subj, target, group));
+        if (travelFramed) focusSet = true;
 
         if (!focusSet && !establishing) {
             List<Film.Actor> vis = new ArrayList<Film.Actor>();
@@ -3421,9 +3446,11 @@ public final class Director {
             for (Film.Actor a : seg.actors) if (a.stateAt(t).visible) on.add(a);
             if (on.size() > 1) group = on;
         }
+        // v34 (realism): out in the rain without an umbrella, people hurry
+        boolean wet = (wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0) && Sets.outdoorSet(seg.set);
         if (Txt.has(s, RETURN)) {
             // back after walking off: in from the side they left by, to where they stood (a change of clothes on the
-            // way is already on them: the reveal follows)
+            // way is already on them: the reveal follows); a door indoors; the others look up and watch them come in
             float d = 0;
             List<Film.Actor> back = new ArrayList<Film.Actor>(group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे ")) ? group : java.util.Collections.singletonList(subj));
             for (Film.Actor a : back) {
@@ -3433,13 +3460,16 @@ public final class Director {
                 Float gone = goneAt.get(a);
                 // a moment off the stage first (the camera stays on the others: time passes)
                 float tr = Math.max(Math.max(t + 0.1f, a.last().t + 0.01f), gone == null ? 0 : gone + 1.0f);
-                float from = now.x;
+                float from = Math.max(-120, Math.min(1400, now.x));      // just beyond the edge they left by
+                if (indoors(seg.set)) door(tr - 0.2f, from < 640 ? -0.6f : 0.6f);
+                frameAround(tr - 0.25f, to);
                 Film.Key in = a.at(tr);
                 in.visible = true; in.x = from; in.moveDur = 0; in.facing = to > from ? 1 : -1; in.backTurned = false;
                 boolean run = running(s);
-                float dur = Math.max(0.8f, Math.abs(to - from) / ((run ? 240f : 170f) * weightSpeed(a)));
+                float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(to - from) / ((run ? 240f : 170f) * weightSpeed(a))));
                 Film.Key k = a.at(tr + 0.05f);
                 k.x = to; k.moveDur = dur; k.run = run; k.facing = to > from ? 1 : -1;
+                watch(a, tr, tr + 0.05f + dur + 0.4f, true);
                 leftFrom.remove(a);
                 goneAt.remove(a);
                 returns++;
@@ -3462,7 +3492,7 @@ public final class Director {
         boolean all = group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे "));
         List<Film.Actor> who = new ArrayList<Film.Actor>();
         if (all) who.addAll(group); else who.add(subj);
-        boolean run = running(s);
+        boolean runWords = running(s);
         boolean slow = Txt.has(s, "slowly", "sadly", "धीरे", "उदास");
         boolean turning = Txt.has(s, TURN_AWAY);
         float d = 0;
@@ -3471,28 +3501,57 @@ public final class Director {
             if (!now.visible || now.anchor != Film.A_GROUND || a.look.kind == Look.BIRD || a.look.mount >= 0 || movedFrom(a, t)) continue;
             if (a.last().t > t + 0.149f) continue;          // keys are kept in time order: nothing may come after one already planned
             float x = xAt(a, t);
-            float speed = (run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
+            Look lk = lookAt(a, t);
+            boolean aided = lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0;
+            // v34 (realism): a blindfolded character feels the way, slowly, a hand out in front; one without an umbrella
+            // hurries through the rain (not one on a walking aid)
+            boolean blind = lk.glasses == 4;
+            boolean run = runWords && !blind;
+            if (!run && !blind && !slow && wet && !lk.umbrella && !aided && lk.isHumanoid()) { run = true; hurried++; }
+            // a blindfolded walk is careful but not "slowly" on top of it; no walk on the stage lasts more than 4.5 s
+            // (a film shortens a long walk; a story that waits ten seconds for one loses its audience)
+            float speed = (blind ? 120f : run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
             if (goTo && target != null && target != a && !all) {
                 float tx = xAt(target, t);
                 // an arm's length apart, as people stand to talk (not shoulder to shoulder)
                 float gap = 155 + (a.look.kind == Look.MONSTER || target.look.kind == Look.MONSTER ? 80 : 0);
                 float dest = x < tx ? tx - gap : tx + gap;
                 if (Math.abs(dest - x) < 30) continue;
-                float dur = Math.max(0.6f, Math.abs(dest - x) / speed);
+                float dur = Math.min(4.5f, Math.max(0.6f, Math.abs(dest - x) / speed));
+                frameAround(t + 0.05f, x, dest);
                 Film.Key k = a.at(t + 0.15f);
                 k.x = dest; k.moveDur = dur; k.run = run; k.facing = tx > dest ? 1 : -1;
+                if (blind) { a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
+                watch(a, t + 0.15f, t + 0.45f + dur, false);
                 approaches++;
-                d = Math.max(d, Math.min(dur + 0.3f, 2.6f));
+                // the whole walk before the story goes on (a listener turned mid-walk would walk backwards)
+                d = Math.max(d, dur + 0.3f);
             } else if (leave) {
                 boolean back = speaksLater(a.c);
                 float edge = x < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
                 float start = t + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
-                float dur = Math.max(0.8f, Math.abs(edge - x) / ((run ? 245f : slow ? 150f : 200f) * weightSpeed(a)));
+                float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(edge - x) / ((blind ? 120f : run ? 245f : slow ? 150f : 200f) * weightSpeed(a))));
+                // a still frame they walk out of (the camera does not chase them off the stage)
+                frameAround(t + 0.05f);
                 Film.Key k = a.at(start);
                 k.x = edge; k.moveDur = dur; k.run = run; k.facing = edge > x ? 1 : -1; k.backTurned = false;
-                // gone once off the stage; the story goes on when they have gone (no key may come before this one)
-                if (!back) { Film.Key gone = a.at(start + dur + 0.05f); gone.visible = false; d = Math.max(d, start - t + dur + 0.1f); leftFrom.put(a, x); goneAt.put(a, gone.t); }
-                else d = Math.max(d, Math.min(start - t + dur, 2.4f));
+                if (blind) { a.acts.add(new Film.Act(start, start + dur, Film.G_REACH)); feltWay++; }
+                if (!back) {
+                    // gone once off the stage; a door indoors; the others watch them go and look after them a moment
+                    // (the story goes on when they have gone: no key may come before these)
+                    Film.Key gone = a.at(start + dur + 0.05f);
+                    gone.visible = false;
+                    if (indoors(seg.set)) door(start + dur - 0.3f, edge < 640 ? -0.6f : 0.6f);
+                    watch(a, start, start + dur + 0.6f, true);
+                    // once they have gone: a cut to those left behind, still looking after them
+                    frameCut(start + dur + 0.1f);
+                    d = Math.max(d, start - t + dur + 0.6f);
+                    leftFrom.put(a, x);
+                    goneAt.put(a, gone.t);
+                } else {
+                    watch(a, start, start + dur + 0.3f, false);
+                    d = Math.max(d, start - t + dur);
+                }
                 exits++;
             } else {
                 Film.Key k;
@@ -3500,22 +3559,157 @@ public final class Director {
                 if (Txt.has(s, "around", "about", "round", "इधर-उधर", "इधर उधर", "चक्कर")) {
                     // round the place: out to one side and back
                     float far = x < 640 ? Math.min(1100, x + 360) : Math.max(180, x - 360);
-                    dur = Math.max(0.7f, Math.abs(far - x) / speed);
+                    dur = Math.min(2.2f, Math.max(0.7f, Math.abs(far - x) / speed));
+                    frameAround(t + 0.05f, x, far);
                     k = a.at(t + 0.15f); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
                     Film.Key k2 = a.at(t + 0.2f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
-                    d = Math.max(d, 0.25f + dur);                     // the way back is planned: nothing before it
                     dur = dur * 2 + 0.05f;
                 } else {
-                    float dest = x < 640 ? Math.min(1100, x + 520) : Math.max(180, x - 520);
-                    dur = Math.max(0.8f, Math.abs(dest - x) / speed);
+                    // across: to the other side (a slow walk goes less far)
+                    float reach = slow || blind ? 360 : 520;
+                    float dest = x < 640 ? Math.min(1100, x + reach) : Math.max(180, x - reach);
+                    dur = Math.min(4.5f, Math.max(0.8f, Math.abs(dest - x) / speed));
+                    frameAround(t + 0.05f, x, dest);
                     k = a.at(t + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
                 }
+                if (blind) { a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
+                watch(a, t + 0.15f, t + 0.15f + dur, false);
                 crossings++;
-                d = Math.max(d, Math.min(dur + 0.3f, 2.6f));
+                d = Math.max(d, dur + 0.3f);
             }
         }
         return d;
     }
+
+    // ------------------------------------------------------------------ v34: realism — where everyone looks, doors, steps, the sky
+
+    private boolean travelFramed;
+    private int watchCount, watchTurns, skyReactions, hurried, feltWay, doorsHeard, stepsPlaced;
+
+    /**
+     * v34 (realism): everyone on the stage looks at what matters now — someone walking in, walking off, coming back,
+     * revealed in new clothes, hurt or healed. Their eyes go there (Renderer.gaze reads film.watches); one who stands
+     * with their back to it and is free (not speaking, not walking, nothing planned after) turns round to watch, a
+     * quick turn. A blindfolded character listens toward it instead.
+     */
+    private void watch(Film.Actor at, float t0, float t1, boolean turn) {
+        if (at == null || seg == null) return;
+        for (Film.Actor w : seg.actors) {
+            if (w == at) continue;
+            Film.Key k = w.stateAt(t0);
+            if (!k.visible || k.anchor == Film.A_HIDDEN || w.look == null) continue;
+            Look lk = lookAt(w, t0);
+            if (lk != null && lk.glasses == 4) { w.acts.add(new Film.Act(t0, Math.min(t1, t0 + 1.2f), Film.G_LISTEN)); continue; }
+            film.watches.add(new Film.Watch(w, at, t0, t1));
+            watchCount++;
+            if (!turn || k.anchor != Film.A_GROUND || k.body == Pose.LIE || k.body == Pose.SIT || k.backTurned || !w.look.isHumanoid()) continue;
+            float side = Math.signum(xAt(at, (t0 + t1) / 2) - xAt(w, t0));
+            if (side == 0 || side == k.facing) continue;
+            if (w.last().t > t0 + 0.01f || movingIn(w, t0, t1) || speakingIn(w, t0, t1)) continue;
+            w.acts.add(new Film.Act(t0, t0 + 0.4f, Film.G_TURN));
+            Film.Key kt = w.at(t0 + 0.2f);
+            kt.facing = side;
+            watchTurns++;
+        }
+    }
+
+    private static boolean movingIn(Film.Actor a, float t0, float t1) {
+        for (Film.Key k : a.keys) if (k.moveDur > 0 && k.t < t1 && k.t + k.moveDur > t0) return true;
+        return false;
+    }
+
+    private static boolean speakingIn(Film.Actor a, float t0, float t1) {
+        for (Film.Speak sp : a.speaks) if (sp.t0 < t1 && sp.t1 > t0) return true;
+        return false;
+    }
+
+    /**
+     * v34 (realism): a wide, still frame holding everyone on the stage now and the given points (where a walk starts
+     * and ends): someone walking off leaves it, a run across crosses it, someone coming back walks into it.
+     */
+    private void frameAround(float t, float... xs) { frame(t, 0.5f, xs); }
+
+    /** The same frame as a cut (no glide): the reaction of those left behind once someone has gone. */
+    private void frameCut(float t, float... xs) { frame(t, 0f, xs); }
+
+    private void frame(float t, float ease, float[] xs) {
+        float minX = 1e9f, maxX = -1e9f, maxH = 0;
+        for (Film.Actor o : seg.actors) {
+            if (!o.stateAt(t).visible) continue;
+            float ox = xAt(o, t);
+            if (ox < -100 || ox > 1380) continue;
+            minX = Math.min(minX, ox); maxX = Math.max(maxX, ox); maxH = Math.max(maxH, heightOf(o));
+        }
+        for (float x : xs) { float cx = Math.max(60, Math.min(1220, x)); minX = Math.min(minX, cx); maxX = Math.max(maxX, cx); }
+        if (minX > maxX) return;
+        float span = maxX - minX + 420;
+        float zoom = Math.max(1.0f, Math.min(1.35f, 1280f / span));
+        cam(Math.max(seg.t0, t), (minX + maxX) / 2, ground - Math.max(maxH, 200) * 0.55f, zoom, ease);
+        travelFramed = true;
+    }
+
+    /** v34 (realism): places with doors — a room, a hall, a basement (not a cave, not under the sky). */
+    static boolean indoors(int set) { return !Sets.outdoorSet(set) && set != Sets.CAVE_IN && set != Sets.CAVE_MOUTH; }
+
+    /** v34 (realism): a door heard on that side of the stage (-0.6 left .. +0.6 right). */
+    private void door(float t, float pan) {
+        Film.Sfx x = new Film.Sfx(Film.SFX_DOOR, Math.max(0, t), 1.1f, 0.42f);
+        x.pan = pan;
+        film.sfx.add(x);
+        doorsHeard++;
+    }
+
+    /**
+     * v34 (realism): rain (or snow) begins while they are out in it — everyone looks up at the sky; then whoever has
+     * no umbrella covers the head with the hands (in snow: a shiver). Returns the time it takes.
+     */
+    private float skyReaction(float t, boolean snow) {
+        int n = 0;
+        for (Film.Actor a : seg.actors) {
+            Film.Key k = a.stateAt(t);
+            if (!k.visible || k.anchor != Film.A_GROUND || k.body == Pose.LIE || a.look == null || !a.look.isHumanoid()) continue;
+            Look lk = lookAt(a, t);
+            a.acts.add(new Film.Act(t + 0.25f, t + 1.05f, Film.G_LOOK_UP));
+            if (snow) a.acts.add(new Film.Act(t + 1.05f, t + 2.6f, Film.G_SHIVER));
+            else if (lk == null || !lk.umbrella) a.acts.add(new Film.Act(t + 1.05f, t + 2.8f, Film.G_COVER_HEAD));
+            n++;
+        }
+        skyReactions += n;
+        return n > 0 ? 2.0f : 0;
+    }
+
+    /**
+     * v34 (realism): footsteps are heard where the walker is — from the side the walk starts on to the side it ends on
+     * — fading as they walk off the stage and growing as they come on; a walking stick, crutches, a wheelchair and
+     * anklets the same.
+     */
+    private void placeSteps() {
+        for (Film.Sfx x : film.sfx) {
+            boolean step = x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD || x.type == Film.SFX_STEPS_RUN || x.type == Film.SFX_STICK
+                    || x.type == Film.SFX_CRUTCH || x.type == Film.SFX_WHEELCHAIR || x.type == Film.SFX_ANKLET;
+            if (!step || !Float.isNaN(x.pan1)) continue;
+            Film.Seg sg = film.segAt(x.t + 0.01f);
+            if (sg == null) continue;
+            Film.Actor best = null;
+            Film.Key bk = null;
+            float bestO = 0.05f;
+            for (Film.Actor a : sg.actors) for (Film.Key k : a.keys) {
+                if (k.moveDur <= 0) continue;
+                float o = Math.min(k.t + k.moveDur, x.t + x.dur) - Math.max(k.t, x.t);
+                if (o > bestO) { bestO = o; best = a; bk = k; }
+            }
+            if (best == null) continue;
+            float x0 = xAt(best, Math.max(bk.t, x.t) + 0.02f), x1 = bk.x;
+            x.pan = panAt(x0);
+            x.pan1 = panAt(x1);
+            if (x1 < 0 || x1 > 1280) x.gain1 = 0.25f;
+            if (x0 < 0 || x0 > 1280) x.gain0 = 0.3f;
+            stepsPlaced++;
+        }
+    }
+
+    /** Where a stage position is heard: -0.6 (left) .. +0.6 (right), as Mixer.panOf places a voice. */
+    static float panAt(float x) { return Math.max(-0.6f, Math.min(0.6f, (x - 640f) / 640f * 0.5f)); }
 
     /** v34: the sentence has someone leave ("walks slowly home", "runs off", "घर चला जाता है"); "off" only right after the verb ("takes off her hat" is not leaving). */
     static boolean leaving(String s) {
@@ -3683,6 +3877,7 @@ public final class Director {
     /** Weather named in a place description or an action line. Returns time the action needs. */
     private float weatherFrom(String s, float t, boolean place) {
         float d = 0;
+        boolean rainBefore = wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0, snowBefore = wOpen[Film.W_SNOW] >= 0;
         if (Txt.has(s, RAIN_STOP)) { closeWeather(Film.W_RAIN, t); closeWeather(Film.W_STORM, t); }
         else if (Txt.has(s, RAIN) && !negated(s)) {
             float st = Txt.has(s, "तेज़ बारिश", "तेज बारिश", "मूसलाधार", "heavy rain", "pouring", "downpour") ? 1.35f
@@ -3698,6 +3893,12 @@ public final class Director {
             d = Math.max(d, 1.6f);
         }
         if (Txt.has(s, SNOW) && !negated(s)) { open(Film.W_SNOW, t, 1f); d = Math.max(d, 2f); }
+        // v34 (realism): rain or snow beginning while the characters are out in it — they look up, then cover their heads
+        // (no umbrella) or shiver
+        if (!place && seg != null && Sets.outdoorSet(seg.set)) {
+            if (!rainBefore && (wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0)) d = Math.max(d, skyReaction(t, false));
+            if (!snowBefore && wOpen[Film.W_SNOW] >= 0) d = Math.max(d, skyReaction(t, true));
+        }
         if (Txt.has(s, FOG_STOP)) closeWeather(Film.W_FOG, t);
         else if (Txt.has(s, FOG) && !negated(s)) open(Film.W_FOG, t, Txt.has(s, "घना", "घने", "thick", "dense") ? 1f : 0.7f);
         if (Txt.has(s, FIRE) && !Txt.has(s, "आग बबूला", "आग-बबूला")) {

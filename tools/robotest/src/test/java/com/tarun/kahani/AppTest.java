@@ -3485,6 +3485,97 @@ public class AppTest {
         System.out.println("MOVES: " + rep);
     }
 
+    /**
+     * v34: the director's realism, trained in — everyone looks at an entrance, an exit, a return and a reveal (their
+     * eyes on the one who moves; one with their back to it turns round); rain beginning outdoors: everyone looks up,
+     * then hunches or covers the head; a blindfolded grandmother feels her way (a hand out, careful steps, no run)
+     * and listens instead of looking; a door is heard when someone leaves or comes into a room; footsteps move across
+     * the stereo and fade as a walker leaves; the camera cuts to those left behind once someone has gone; the shot
+     * list reports it all; the guide carries the rules.
+     */
+    @Test
+    public void directorStagesTheSituationsRealistically() throws Exception {
+        String script = "Characters:\n1. Riya (10 years):\n * Face: two plaits with red ribbons.\n * Clothes: a yellow frock.\n2. Aman (11 years):\n * Face: short black hair.\n * Clothes: a blue shirt and shorts.\n"
+                + "3. Grandma (70 years):\n * Face: white hair in a bun, a blindfold over her eyes for the game.\n * Clothes: a green saree.\n\n"
+                + "Scene 1: The Park\n(Place: a green park with trees. Evening.)\nRiya: \"Aman, look at the dark clouds!\"\nAman: \"It will rain soon.\"\n(Suddenly it starts to rain.)\n"
+                + "Riya: \"Oh no, we will get wet!\"\n(Aman runs across the grass.)\nGrandma: \"Riya, where are you?\"\n(Grandma walks slowly to Riya.)\nRiya: \"Here, Grandma! I am here.\"\n\n"
+                + "Scene 2: The Room\n(Place: a cosy living room. Night.)\nAman: \"Let us play a game, Riya.\"\nRiya: \"Wait, I will change first.\"\n(Riya walks out of the room.)\n"
+                + "(Riya comes back wearing a red frock.)\nAman: \"You look lovely!\"\n(Grandma enters the room.)\nGrandma: \"Time for dinner, children.\"\n\nThe End\n";
+        Story st = ScriptParser.parse(script);
+        Story.CharacterDef grandma = null;
+        for (Story.CharacterDef c : st.characters) if (c.displayName.equals("Grandma")) grandma = c;
+        assertNotNull(grandma);
+        assertTrue("Grandma is blindfolded: " + grandma.look.glasses, grandma.look.glasses == 4);
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(new Art());
+        List<Film.Seg> scenes = new ArrayList<Film.Seg>();
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) scenes.add(sg);
+        assertTrue(scenes.size() == 2);
+        Film.Actor riya1 = null, aman1 = null, gran1 = null, riya2 = null, aman2 = null, gran2 = null;
+        for (Film.Actor a : scenes.get(0).actors) { if (a.c.displayName.equals("Riya")) riya1 = a; if (a.c.displayName.equals("Aman")) aman1 = a; if (a.c == grandma) gran1 = a; }
+        for (Film.Actor a : scenes.get(1).actors) { if (a.c.displayName.equals("Riya")) riya2 = a; if (a.c.displayName.equals("Aman")) aman2 = a; if (a.c == grandma) gran2 = a; }
+        assertNotNull(riya1); assertNotNull(aman1); assertNotNull(gran1); assertNotNull(riya2); assertNotNull(aman2); assertNotNull(gran2);
+        StringBuilder rep = new StringBuilder();
+        // 1. rain begins: everyone looks up, then hunches or covers the head (no umbrella among them)
+        float rain = -1;
+        for (Film.Weather w : film.weather) if (w.type == Film.W_RAIN) rain = w.t0;
+        assertTrue("it rains", rain > 0);
+        for (Film.Actor a : new Film.Actor[]{riya1, aman1, gran1}) {
+            boolean up = false, cover = false;
+            for (Film.Act x : a.acts) { if (x.type == Film.G_LOOK_UP && x.t0 >= rain && x.t0 < rain + 1) up = true; if (x.type == Film.G_COVER_HEAD && x.t0 >= rain && x.t0 < rain + 2) cover = true; }
+            assertTrue(a.c.displayName + " looks up at the rain", up);
+            assertTrue(a.c.displayName + " covers the head", cover);
+        }
+        rep.append(String.format(java.util.Locale.US, "rain at %.1f: all three look up and cover their heads; ", rain));
+        // 2. Grandma, blindfolded, feels her way to Riya: a hand out, never a run, and listens instead of watching
+        Film.Key walk = null;
+        for (Film.Key k : gran1.keys) if (k.moveDur > 0.5f) walk = k;
+        assertNotNull("Grandma walks to Riya", walk);
+        assertTrue("carefully, never running: " + walk.moveDur, !walk.run && walk.moveDur <= 4.5f + 1e-3f);
+        boolean reach = false, listens = false;
+        for (Film.Act x : gran1.acts) { if (x.type == Film.G_REACH && Math.abs(x.t0 - walk.t) < 0.05f) reach = true; if (x.type == Film.G_LISTEN) listens = true; }
+        assertTrue("a hand out in front as she walks", reach);
+        assertTrue("she listens toward Aman's run", listens);
+        for (Film.Watch w : film.watches) assertTrue("a blindfold never watches", w.who != gran1 && w.who != gran2);
+        // 3. watches: Aman's run is watched by Riya; Riya's exit and return by Aman; Grandma's entrance by both
+        boolean runWatched = false, exitWatched = false, returnWatched = false, entranceRiya = false, entranceAman = false;
+        Film.Key run = null, out = null, back = null;
+        for (Film.Key k : aman1.keys) if (k.moveDur > 0.5f && k.run) run = k;
+        for (Film.Key k : riya2.keys) { if (k.moveDur > 0.5f && (k.x < 0 || k.x > 1280) && out == null) out = k; if (out != null && k.t > out.t + 0.5f && k.visible && k.moveDur > 0.5f && back == null) back = k; }
+        assertNotNull(run); assertNotNull(out); assertNotNull(back);
+        for (Film.Watch w : film.watches) {
+            if (w.who == riya1 && w.at == aman1 && w.t0 <= run.t + 0.2f && w.t1 >= run.t + run.moveDur - 0.1f) runWatched = true;
+            if (w.who == aman2 && w.at == riya2 && w.t0 <= out.t + 0.05f && w.t1 > out.t + out.moveDur) exitWatched = true;
+            if (w.who == aman2 && w.at == riya2 && w.t0 > out.t + out.moveDur && w.t0 <= back.t + 0.1f) returnWatched = true;
+            if (w.at == gran2 && w.who == riya2) entranceRiya = true;
+            if (w.at == gran2 && w.who == aman2) entranceAman = true;
+        }
+        assertTrue("Riya watches Aman run", runWatched);
+        assertTrue("Aman watches Riya go and looks after her", exitWatched);
+        assertTrue("Aman watches Riya come back", returnWatched);
+        assertTrue("both watch Grandma come in", entranceRiya && entranceAman);
+        // 4. doors in the room: Riya out, Riya back, Grandma in; none in the park
+        int doors = 0;
+        for (Film.Sfx x : film.sfx) if (x.type == Film.SFX_DOOR) { doors++; assertTrue("doors only indoors", x.t > scenes.get(1).t0); }
+        assertTrue("three doors: " + doors, doors == 3);
+        // 5. steps move across the stereo with the walker and fade as she leaves
+        boolean fades = false;
+        for (Film.Sfx x : film.sfx)
+            if ((x.type == Film.SFX_STEPS || x.type == Film.SFX_STEPS_HARD) && Math.abs(x.t - out.t) < 0.05f && !Float.isNaN(x.pan1) && Math.abs(x.pan1) > Math.abs(x.pan) && x.gain1 < 0.5f) fades = true;
+        assertTrue("Riya's steps move off to the side and fade", fades);
+        // 6. once she has gone: a cut to Aman
+        boolean cut = false;
+        for (Film.Cam c : scenes.get(1).cams) if (c.ease == 0 && c.t > out.t + out.moveDur && c.t < out.t + out.moveDur + 0.3f) cut = true;
+        assertTrue("a cut to the one left behind", cut);
+        // 7. the shot list and the guide
+        assertTrue(film.shotList, film.shotList.contains("• Realism (v34):") && film.shotList.contains("3 doors heard"));
+        assertTrue(com.tarun.kahani.core.SituationsGuide.SUMMARY.contains("Everyone looks at what matters") && com.tarun.kahani.core.SituationsGuide.SUMMARY.contains("Rooms have doors"));
+        assertTrue(com.tarun.kahani.core.DirectorTraining.SUMMARY.contains("Director.watch"));
+        for (String l : film.shotList.split("\n")) if (l.contains("Realism (v34)")) rep.append(l.trim());
+        System.out.println("REALISM: " + rep);
+    }
+
     @Test
     public void madeCharactersFollowTheUploadedPictures() throws Exception {
         android.content.Context ctx = RuntimeEnvironment.getApplication();

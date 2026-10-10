@@ -22,14 +22,14 @@ public final class DirectorTraining {
     /** The twelve principles (2.1) and where the studio applies each one. */
     public static final String[][] TWELVE_MAP = {
             {"Squash and stretch", "Rig: impact poses squash and stretch the mesh with the volume kept (jumps, landings, the belly on a laugh); never on a real picture of a pose (v27)"},
-            {"Anticipation", "Director: a wind-up before every move and gesture (the anticipation key, Rig.smooth 0.2 s); thought before action (a pause and a look before a reaction)"},
-            {"Staging", "ShotPlanner: one idea per shot, the subject in the centre 60%, look room, the silhouette readable; the Technical Director's one action per shot"},
+            {"Anticipation", "Director: a wind-up before every move and gesture (the anticipation key, Rig.smooth 0.2 s); thought before action (a pause and a look before a reaction); v34: a turned back reads for a moment before someone walks off, and the eyes go first, a quick turn after, when someone else comes in (Director.watch)"},
+            {"Staging", "ShotPlanner: one idea per shot, the subject in the centre 60%, look room, the silhouette readable; the Technical Director's one action per shot; v34: everyone on the stage looks at an entrance, an exit, a reveal or someone hurt, which points the audience there too (Director.watch, Renderer.gaze); a still frame a character walks out of, a wide frame a run crosses (Director.frameAround)"},
             {"Straight ahead and pose to pose", "Film.Key: the key poses first (stateAt interpolates between them); the user's own pose pictures are the extremes (Casting, v27)"},
             {"Follow through and overlapping action", "Renderer: hair, cloth, ears and tails lag behind the body (secondary motion per picture part); the stop after a walk settles over a fifth of a second"},
             {"Slow in and slow out", "Rig.smooth / ease curves on every move, gesture and camera move; no linear timing anywhere"},
             {"Arcs", "Limb and head paths through the rig follow arcs (rotation about joints, never a straight slide); camera moves ease along a curve"},
-            {"Secondary action", "Breathing (mo.sy), blinks, idle weight shift (halved in v27), hand gestures with the manner of the line"},
-            {"Timing", "Director: heavy characters (monsters) get fewer, slower frames; light ones quick; cuts at 2.6 s; a ma pause after two fast beats"},
+            {"Secondary action", "Breathing (mo.sy), blinks, idle weight shift (halved in v27), hand gestures with the manner of the line; v34: eyes that follow whoever speaks, looking up when rain begins and covering the head, a shiver in snow, a hand out in front for a blindfolded walk (Renderer.gaze, Director.skyReaction, travelFrom)"},
+            {"Timing", "Director: heavy characters (monsters) get fewer, slower frames; light ones quick; cuts at 2.6 s; a ma pause after two fast beats; v34: a walk is timed by its distance and the walker (a run, a slow walk, a stick, a blindfold; never over 4.5 s), the story waits for it, and those left behind look after someone who has gone for a moment"},
             {"Exaggeration", "Pose emotions pushed (eyes, brows, mouth) but never past the identity: the face points stay the picture's own"},
             {"Solid drawing", "Figure3D views from the picture keep its proportions; the feet on the floor line with a contact shadow; one height per character all film"},
             {"Appeal", "The user's own pictures first (v26–v29), readable silhouettes, expressive eyes and mouth through the mesh, design harmony from the style cue"},

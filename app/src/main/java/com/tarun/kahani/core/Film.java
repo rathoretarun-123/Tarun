@@ -10,6 +10,8 @@ public final class Film {
     public final List<Seg> segs = new ArrayList<Seg>();
     public final List<Line> lines = new ArrayList<Line>();
     public final List<Sfx> sfx = new ArrayList<Sfx>();
+    /** v34: who looks at whom, and when — an entrance, an exit, a return, a reveal, someone hurt (the eyes go there). */
+    public final List<Watch> watches = new ArrayList<Watch>();
     public final List<Music> music = new ArrayList<Music>();
     public final List<Amb> ambience = new ArrayList<Amb>();
     public final List<Weather> weather = new ArrayList<Weather>();
@@ -142,6 +144,8 @@ public final class Film {
             G_HEAD_SCRATCH = 47,  // the comic beat (Russo / Gunn): a puzzled scratch of the head, a shrug
             G_WEIGHT_SHIFT = 48,  // secondary action while idle: the weight moves from one foot to the other, a glance aside
             G_SHIELD_EYES = 49,   // an arm up against a blinding light, the head turned away
+            G_COVER_HEAD = 52,    // v34: caught in the rain without an umbrella — shoulders up, head down, hands over the head
+            G_SHIVER = 53,        // v34: cold (snow): a small fast shiver, the arms held in to the body
             G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
@@ -290,7 +294,8 @@ public final class Film {
             SFX_STICK = 50,       // slow steps with a walking stick's wooden tap (or a walking frame's)
             SFX_CRUTCH = 51,      // crutches: the two rubber tips, then the step
             SFX_WHEELCHAIR = 52,  // a wheelchair rolling: tyres on the floor, the hand-rims ticking
-            SFX_UMBRELLA_RAIN = 53; // rain drumming on an umbrella over the head
+            SFX_UMBRELLA_RAIN = 53, // rain drumming on an umbrella over the head
+            SFX_DOOR = 54;          // v34: a door — the latch, the hinge, the door closing (an entrance or an exit indoors)
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,
@@ -342,7 +347,17 @@ public final class Film {
         public float t, dur, gain;
         public int type;
         public String file;      // SFX_USER: the user's own sound (library path)
+        /** v34: where it is heard (-0.6 left .. +0.6 right) at its start and its end — steps move with the walker — and how loud at
+         *  each end (a character walking off fades away, one walking in fades up). pan1 NaN: it stays where it starts. */
+        public float pan, pan1 = Float.NaN, gain0 = 1f, gain1 = 1f;
         public Sfx(int type, float t, float dur, float gain) { this.type = type; this.t = t; this.dur = dur; this.gain = gain; }
+    }
+
+    /** v34: an actor's eyes held on another actor from t0 to t1 (null who: everyone else on the stage). */
+    public static final class Watch {
+        public Actor who, at;
+        public float t0, t1;
+        public Watch(Actor who, Actor at, float t0, float t1) { this.who = who; this.at = at; this.t0 = t0; this.t1 = t1; }
     }
 
     public static final int M_TITLE = 0, M_HAPPY = 1, M_TENSE = 2, M_VILLAIN = 3, M_SAD = 4, M_ACTION = 5, M_CELEBRATE = 6,

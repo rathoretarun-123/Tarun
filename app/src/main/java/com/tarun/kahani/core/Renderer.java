@@ -964,9 +964,15 @@ public final class Renderer {
         p.gazeY = sy * calm;
     }
 
-    /** Which way (-0.9 left, +0.9 right on screen) this actor looks now: at the one speaking, or — speaking — at the nearest; NaN for nobody. */
+    /** Which way (-0.9 left, +0.9 right on screen) this actor looks now: at whom the director says to watch, at the one speaking, or — speaking — at the nearest; NaN for nobody. */
     private float gazeTarget(Film.Seg s, Film.Actor a, float t) {
         float x = Director.xAt(a, t);
+        // v34: what the director says to watch comes first — someone walking in or off, coming back, revealed, hurt
+        if (film != null) for (Film.Watch w : film.watches) {
+            if (w.who != a || t < w.t0 || t > w.t1) continue;
+            float d = Director.xAt(w.at, t) - x;
+            if (Math.abs(d) >= 1) return Math.signum(d) * 0.9f;
+        }
         boolean speaking = speakingAt(a, t) != null;
         Film.Actor best = null;
         float bestD = Float.MAX_VALUE;
@@ -1591,7 +1597,38 @@ public final class Renderer {
                 case Film.G_LOOK_UP:
                     p.headTilt = -12;
                     mo.rot -= 3 * p.facing;
+                    // v34: the head goes back and the eyes go up (at the sky, at someone tall)
+                    p.nod -= 0.45f;
+                    p.gazeY = -0.9f; p.gazeHeld = 1;
                     break;
+                case Film.G_COVER_HEAD: {
+                    // v34: caught in the rain — the shoulders come up and the head goes down (a picture hunches), the
+                    // hands go over the head (a drawn character), a quick small shake off the drops
+                    float k2 = Rig.smooth(0, 0.25f, u) * Rig.smooth(0, 0.3f, act.t1 - act.t0 - u);
+                    p.nod += 0.55f * k2;
+                    mo.sy *= 1f - 0.03f * k2;
+                    mo.dy += 3 * k2;
+                    if (art == null || !art.sprites.containsKey(a.c.id)) {
+                        // a drawn character's hands go over the head (a picture's arms cannot reach it: it only hunches)
+                        p.armL = p.armL + (155 - p.armL) * k2; p.armR = p.armR + (155 - p.armR) * k2;
+                        p.elbowL = p.elbowL + (115 - p.elbowL) * k2; p.elbowR = p.elbowR + (115 - p.elbowR) * k2;
+                    }
+                    mo.dx += (float) Math.sin(t * 24) * 0.8f * k2;
+                    break;
+                }
+                case Film.G_SHIVER: {
+                    // v34: cold — a small fast shiver with the arms held in (no fear on the face)
+                    float k2 = Rig.smooth(0, 0.2f, u) * Rig.smooth(0, 0.3f, act.t1 - act.t0 - u);
+                    mo.dx += (float) Math.sin(t * 55) * 1.2f * k2;
+                    if (art == null || !art.sprites.containsKey(a.c.id)) {
+                        p.armL = p.armL + (22 - p.armL) * k2; p.armR = p.armR + (22 - p.armR) * k2;
+                        p.elbowL = p.elbowL + (95 - p.elbowL) * k2; p.elbowR = p.elbowR + (95 - p.elbowR) * k2;
+                    } else {
+                        p.armL = 8; p.armR = 8;          // a picture keeps its arms in to the body
+                    }
+                    p.nod += 0.2f * k2;
+                    break;
+                }
                 case Film.G_WHISPER:
                     mo.rot += 6 * p.facing;
                     p.armR = 130; p.elbowR = 120;

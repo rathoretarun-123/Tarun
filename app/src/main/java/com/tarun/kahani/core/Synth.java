@@ -62,6 +62,18 @@ public final class Synth {
             case Film.SFX_WHEELCHAIR: { noiseBed(o, 0.02f, 0.14f, 1.6f, 0.4f); lowpass(o, 0.12f); float t = 0.1f; while (t < dur - 0.1f) { knock(o, t, 1500, 0.06f); burst(o, t + 0.02f, 0.03f, 0.3f, 0.04f); t += 0.7f; } fadeEnds(o, 0.25f); break; }
             // rain on an umbrella — many soft, dull drops on taut fabric over a light hiss
             case Film.SFX_UMBRELLA_RAIN: { float t = 0.02f; while (t < dur - 0.05f) { knock(o, t, 520 + Math.abs(rnd()) * 380, 0.05f + Math.abs(rnd()) * 0.05f); t += 0.012f + Math.abs(rnd()) * 0.045f; } noiseBedRange(o, 0, dur, 0.25f, 0.04f); fadeEnds(o, 0.4f); break; }
+            // v34: a door — the latch clicks, the hinge creaks as it swings, then the door shuts with a soft wooden thump
+            case Film.SFX_DOOR: {
+                knock(o, 0.02f, 2400, 0.22f); burst(o, 0.02f, 0.015f, 0.95f, 0.15f);
+                float cd = Math.min(0.55f, Math.max(0.2f, dur * 0.45f));
+                for (float t = 0.09f; t < 0.09f + cd; t += 0.03f) {
+                    float u = (t - 0.09f) / cd;
+                    tone(o, t, 0.035f, 250 + 150 * (float) Math.sin(u * Math.PI) + rnd() * 25, 262 + 150 * (float) Math.sin(Math.min(1f, u + 0.05f) * Math.PI), 0.05f, 1);
+                }
+                float ts = Math.max(0.35f, dur - 0.4f);
+                thump(o, ts, 90, 0.42f); knock(o, ts, 260, 0.22f); burst(o, ts, 0.04f, 0.4f, 0.1f);
+                break;
+            }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

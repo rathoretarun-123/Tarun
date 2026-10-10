@@ -382,6 +382,7 @@ public final class DirectorsManual {
             case Film.SFX_THUNDER: return "thunder"; case Film.SFX_STEPS_HARD: return "steps on stone"; case Film.SFX_STEPS_RUN: return "running steps";
             case Film.SFX_STICK: return "steps with a walking stick"; case Film.SFX_CRUTCH: return "crutches"; case Film.SFX_WHEELCHAIR: return "a wheelchair rolling";
             case Film.SFX_UMBRELLA_RAIN: return "rain on an umbrella";
+            case Film.SFX_DOOR: return "a door";
             default: return "effect " + type;
         }
     }

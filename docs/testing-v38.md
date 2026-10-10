@@ -80,6 +80,19 @@ Cause: `Library.cameraPhoto` (v37) counted the make or the model as camera data.
 the focal length count. Library pictures v37 marked as photos for that reason are read once again and offered again (tested).
 The v37 test's "camera photo" carried only a make; it now carries a real exposure and aperture.
 
+### Then: "The library keeps just the last one of 60 pictures; the picker opens a pop-up telling to upload pictures with no option to upload"
+
+* **The pop-up.** `anglesFor` built its `AlertDialog` with both `setMessage` and `setItems`; Android shows only the message when both
+  are set, so the four choices (Gallery, Files, the tarunkahani library, the internet / AI) never appeared on a phone — only
+  "Cancel". It is the Studio's upload for characters, places and things, the missing-pictures card's and the make-film dialog's.
+  Now one view: the explanation and a button per choice. A scan of every dialog in the app found no other with both.
+* **The library.** `addMany` (Home → add to the library) saved each picture with no kind; v37's camera check (the make and the
+  model) refused every drawn picture a phone had saved, and the refusal was counted as "could not be opened" — only a picture
+  without them was kept. With the camera fix all are kept; a real refused photo is now named as such in the message.
+* Test `v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices`: ten such pictures handed over as the phone hands them over
+  (`onActivityResult`, ten addresses at once) — 0 → 10 in the library; the angles pop-up for a character, a place and a thing
+  shows the Gallery, Files and library buttons.
+
 ## 4. Thorough checks
 
 * 64 frames across the whole 12-minute sample film (every 11.3 s), plus frames around every fix, checked by eye.
@@ -91,7 +104,7 @@ The v37 test's "camera photo" carried only a make; it now carries a real exposur
 ## 5. Tests
 
 New: `v38CraftGuideTrainedAndReported`, `v38EditListAndSubtitlesByInstruction`, `v38BeatLookAndFlush`,
-`v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
+`v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio`, `v38LibraryKeepsEveryPictureAndTheAnglesPopUpHasChoices` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
 `directorUsesTheRightPictureForEachShot` and `framesRenderThroughAndroidCanvas` (7 of 7).
 
 Full suite: see below.

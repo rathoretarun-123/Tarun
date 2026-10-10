@@ -70,4 +70,15 @@ cheek or the forehead; these rules are hardcoded (`SituationsGuide`: "What is ne
 
 ## 7. Full suite
 
-(filled in after the run)
+Robolectric, all tests, on the v37 code: **57 tests — 52 passed, 1 skipped (the soak), 4 failed (41 minutes).** All four were looked
+at and dealt with:
+
+| Test | Cause | Outcome |
+|---|---|---|
+| `freeGithubSourcesGuidesAndDescriptionDetails` | a real bug since v35: the 3D figure no longer read a character's hair colour (the cleaner cut-out outline) | **fixed** — Vanusha's hair reads dark brown |
+| `v37ActivitiesFromTheWords` | a real bug: the slide and the peck on the forehead added a feeling key out of time order (a character could jump) | **fixed** — every test story checked: no key out of order |
+| `loginDashboardStoryStudioLibrarySettingsOpenWithoutCrashing` | the test expected a camera in the character picture chooser, removed on purpose | test now checks that no camera is offered |
+| `v37MakeupAndTheFamilyWay` | the test read the dressing screen's pink flowers as skin | test now compares the screen drawn with and without the character: **0** body pixels below the curtain (of 26 730) and the screen (of 30 294) |
+
+Re-run of the four and every v36 and v37 test: **11 tests, 11 passed.** (25 activity frames drawn; make-up changes 436 pixels.)
+The final APK is built from this code.

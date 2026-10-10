@@ -59,7 +59,28 @@ frame (a witch's wide hat crossed the middle). 12 of the sample's 48 such shots 
 **Subtitles.** They were already off unless asked for ("add subtitles" in the box under the film); the separate `.srt` file the
 first build saved is dropped. The edit list with scene markers stays.
 
-## 3. Thorough checks
+## 3. The user: "Not able to upload any picture for any character, object or place in the studio"
+
+Reproduced with pictures handed over exactly as the phone does (`onActivityResult` with a content address), drawn pictures
+saved by a phone's gallery (which writes the phone's make and model into them) and a real camera photo (exposure and aperture
+in its Exif directory):
+
+| Upload | Before | After |
+|---|---|---|
+| angles · character · drawn, saved by a phone | **refused** ("looks like a photo of a real person") | taken |
+| angles · character · drawn PNG | taken | taken |
+| angles · thing · drawn, saved by a phone | taken | taken |
+| angles · place · drawn, saved by a phone | taken | taken |
+| angles · place · camera photo | taken | taken |
+| angles · character · camera photo | refused | refused |
+| one picture · character · drawn, saved by a phone | **refused** | taken |
+| one picture · place · drawn, saved by a phone | taken, but turned into the "animated style" as a photo | taken as artwork |
+
+Cause: `Library.cameraPhoto` (v37) counted the make or the model as camera data. Now only the exposure, the aperture, the ISO or
+the focal length count. Library pictures v37 marked as photos for that reason are read once again and offered again (tested).
+The v37 test's "camera photo" carried only a make; it now carries a real exposure and aperture.
+
+## 4. Thorough checks
 
 * 64 frames across the whole 12-minute sample film (every 11.3 s), plus frames around every fix, checked by eye.
 * The butterfly line: "(तितली उड़कर एक सूखी, मुरझाई हुई कली पर बैठ जाती है।)" no longer makes वानुषा sit (`Director.creatureSits`); checked
@@ -67,10 +88,10 @@ first build saved is dropped. The edit list with scene markers stays.
 * Sample checklist: readable speakers 36 of 36; breathing room after 23 of 23 peak lines; ten scene markers named after the scenes.
 * Known and unchanged: खान राक्षस has only a back picture in the sample, so the studio draws him; the shot list asks for his picture.
 
-## 4. Tests
+## 5. Tests
 
 New: `v38CraftGuideTrainedAndReported`, `v38EditListAndSubtitlesByInstruction`, `v38BeatLookAndFlush`,
-`v38PicturesKeepTheirOwnMouthAndFace` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
+`v38PicturesKeepTheirOwnMouthAndFace`, `v38UploadsFromThePhoneReachTheStudio` — all pass, with `manyHeadedCharactersKeepTheirHeads`,
 `directorUsesTheRightPictureForEachShot` and `framesRenderThroughAndroidCanvas` (7 of 7).
 
 Full suite: see below.

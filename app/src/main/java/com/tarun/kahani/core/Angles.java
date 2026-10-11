@@ -818,9 +818,9 @@ public final class Angles {
         // (v40: a profile has half the face box empty and an eye no darker than its shadowed cheek: not a back —
         // अर्जुन's and कबीर's profiles, a girl's profile and सिया's turned view were read as backs)
         // (and the forehead: a face found with skin right above its eyes is a face, whatever its "eyes" landed on — a
-        // raised hand, an ear; the back of a head has hair there)
+        // raised hand, an ear; the back of a head has hair there — brown hair passes for skin, but far more coloured)
         else if (skin < 0.42f || (faceW > 1.0f && skin < 0.6f) || hairAbove > 1.6f
-                || (dark > 0.42f && skin < 0.55f && !profile && !(foreheadSkin(r) >= 0.6f && Math.abs(side0) < 0.1f))) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
+                || (dark > 0.42f && skin < 0.55f && !profile && !(foreheadSkin(r) >= 0.6f && Math.abs(side0) < 0.1f && PicSense.hsv(skinRead(r))[1] < 0.62f))) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
         // v40: brown hair passes for skin (the boy's back of the head read as a front): "eyes" no darker than the
         // "skin" round them, and that "skin" far darker than the figure's own arms and legs, are hair — a back
         if (!beast && dark >= 0.85f) {

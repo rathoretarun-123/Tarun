@@ -633,8 +633,11 @@ public class AppTest {
         // the sleeping bull (sheet 9, third) lies; the monkey's sixth figure runs; sheet 15's tenth runs sideways
         com.tarun.kahani.core.PoseSense.Tag t = read.get("sheet02.jpg").get(1);
         assertTrue("sheet02 #2: " + t, t.angle == com.tarun.kahani.core.Angles.SIDE && t.pose == com.tarun.kahani.core.PoseSense.STAND);
-        t = read.get("sheet04.jpg").get(8);
-        assertTrue("sheet04 #9: " + t, t.pose == com.tarun.kahani.core.PoseSense.SIT);
+        // (v40: the thinking figure's "?" is joined to it, which moves that figure up the reading order: the sitting
+        // figure is found among the sheet's figures, not by its place in the order)
+        int sits4 = 0;
+        for (com.tarun.kahani.core.PoseSense.Tag t4 : read.get("sheet04.jpg")) if (t4.pose == com.tarun.kahani.core.PoseSense.SIT) sits4++;
+        assertTrue("sheet04: the sitting figure sits", sits4 >= 1);
         t = read.get("sheet09.jpg").get(2);
         assertTrue("sheet09 #3: " + t, t.pose == com.tarun.kahani.core.PoseSense.LIE);
         t = read.get("sheet01.jpg").get(5);
@@ -5464,7 +5467,7 @@ public class AppTest {
         d.prepare();
         Film film = d.direct(art);
         int playActs = 0;
-        for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) for (Film.Act act : ac2.acts) if (act.type == Film.G_PLAY) playActs++;
+        for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) for (Film.Act act : ac2.acts) if (act.type == Film.G_PLAYGROUND) playActs++;
         rep.append("play acts (swing, slide): ").append(playActs).append(", pose pictures used for the rig: ").append(posePictures(film, art));
         System.out.println("V40 PARK:\n" + rep);
         assertTrue("the boy's two sheets give his twelve pictures: " + boyPics, boyPics >= 10);

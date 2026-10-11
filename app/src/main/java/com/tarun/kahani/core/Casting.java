@@ -166,7 +166,12 @@ public final class Casting {
         // through its mesh; the uploaded pictures are only what it is made from (and its back view, turned away).
         // The one exception the film draws: the back of the head and shoulder in the foreground of an over-the-shoulder
         // shot is the user's own back picture (Renderer.otsBack) — the record names that picture, as it is drawn
-        if (rigged(sp) && !w.shoulder) return MAIN;
+        if (rigged(sp)) {
+            if (!w.shoulder) return MAIN;
+            // the shoulder: the user's own back picture standing (as Renderer.otsBack draws it), else the rig (its view)
+            for (int i = 0; i < ps.size(); i++) if (Math.abs(Math.abs(ps.get(i).angle) - 180) < 1 && ps.get(i).pose == PoseSense.STAND) return i;
+            return MAIN;
+        }
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
         // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the

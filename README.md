@@ -46,6 +46,29 @@ finely meshed skeleton to do every movement, ignoring the pictures you uploaded.
   one sofa (one back, armrests at its two ends).
 * **Names joined, all move** — "वृंदा और वनुशा कमरे से बाहर जाती हैं" moved only वृंदा; everyone named with a plural
   verb now goes ("Asha and Raju walk up to the cave" too).
+* **Your park pictures** (the red swing and slide, the wooden swing, the slide, the swing seat, the boy) — a thin frame
+  round each panel no longer joins a swing's chain to it (all six swing seats come out), a chain cut at an edge-on link
+  is joined again, and the boy's back, three-quarter and side views read right. In "झूला और फिसलपट्टी" आरव runs to the
+  swing and swings, वनुशा walks to the slide and slides down, and both leave at the end.
+* **"अलाव के पास" with your five pictures** —
+  * *The script as you wrote it*: a title with a dash, "समय - रात 11 बजे…", the cast as "नाम - description", the place
+    as a paragraph, the list of things, and every line written as `नाम [what they do] - "…"` with no scene heading
+    (it starts after "पटकथा -"). A night film in the open field; "चुनाव" no longer calls up a boat and the sea.
+  * *Your pictures*: the three men's sheets split into their six views each, with fronts, profiles and backs read
+    right (a cream shirt on white paper is now cut whole); the fire sheet splits by its thin white gutters (its panels
+    run to the edge) and the view from straight above is kept in the library, never behind a standing character; the
+    things sheet keeps all seven things (the lighter beside the matchbox was dropped before).
+  * *The fire*: your picture's own flames are cut out and made to flicker and lick upward, with small sparks — no
+    drawn cartoon fire over your photo — and the place is drawn at the people's own depth, so the fire stays where they
+    sit in every shot.
+  * *The staging*: अर्जुन and समीर sit on logs on either side of the fire from the first frame (the lists say "दो पर
+    अर्जुन और समीर बैठे हैं"); कबीर, who "cannot keep still", walks round the fire on a path — smaller behind it, larger in
+    front of it, its flames over him as he passes behind — now quicker, now slower, stopping now and then; he comes
+    round from behind the fire to the front at his first line, goes the other way round at his second, sits on the far
+    log for two seconds and gets up again at his third, and stops for "पीछे कदम रखते हुए". "कुल्हड़ को दोनों हाथों से
+    पकड़ कर" no longer makes समीर walk over and hold someone's hand.
+  * *Not done*: the iron rod poking the fire, the kettle pouring, the blanket pulled and the jiggling leg are not
+    animated (the rod and the kulhad are in your pictures and stay in the hands).
 * Details and measurements: [`docs/testing-v40.md`](docs/testing-v40.md).
 * **Said plainly:** the rig is a flat picture turned and bent on a fine mesh, not a 3D model: it turns convincingly to
   about a three-quarter view, not to a full profile, and a picture never shows a side it does not have. It is not

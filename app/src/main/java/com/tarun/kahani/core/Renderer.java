@@ -2645,6 +2645,23 @@ public final class Renderer {
         }
     }
 
+    /**
+     * v41: the drawn sofa's cloth at a shade (1 = its own colour): the colour the script gives it; in front of the
+     * user's own room picture, a soft beige-grey from the room's own tones (a purple sofa clashed with every photo);
+     * the studio's plum on a painted set.
+     */
+    private int sofaShade(float k) {
+        Film.Seg s = curSeg;
+        int base = 0xFF7A4A86;
+        if (s != null && s.sofaColor != 0) base = s.sofaColor;
+        else if (s != null) {
+            Art.Backdrop b = bd(s);
+            if (b != null && b.picture && b.avgLow != 0) base = Props.mix(b.avgLow, 0xFFB8ADA2, 0.65f);
+        }
+        if (k >= 1) return Props.mix(base, 0xFFFFFFFF, Math.min(0.6f, (k - 1) * 1.1f));
+        return Props.mix(base, 0xFF000000, Math.min(0.8f, (1 - k) * 1.1f));
+    }
+
     /** v35: the height of a bed's mattress top, in the sleeper's standing heights. */
     static final float BED_TOP = 0.27f;
 
@@ -2725,15 +2742,15 @@ public final class Renderer {
                 float in = h * 0.025f;          // the cushions stop short of an end with an armrest
                 float cl = armL ? sl + in : sl, cr = armR ? sr - in : sr;
                 if (!front) {
-                    g.linear(0, -h * 0.62f, 0, st, 0xFF8E5A9A, 0xFF5E3A6A);
+                    g.linear(0, -h * 0.62f, 0, st, sofaShade(1.12f), sofaShade(0.72f));
                     g.roundRect(sl, -h * 0.62f, sr - sl, h * 0.4f, armL && armR ? h * 0.08f : h * 0.02f);
                     g.color(0x22FFFFFF); g.line((sl + sr) / 2 - sw * 0.02f, -h * 0.58f, (sl + sr) / 2 - sw * 0.02f, st - h * 0.04f, h * 0.008f);
                     g.color(0xFF3E2723);
                     if (armL) g.rect(sl + sw * 0.04f, -h * 0.05f, h * 0.035f, h * 0.05f);
                     if (armR) g.rect(sr - sw * 0.04f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
-                    g.linear(0, st, 0, -h * 0.05f, 0xFF7A4A86, 0xFF4E2E5A);
+                    g.linear(0, st, 0, -h * 0.05f, sofaShade(1f), sofaShade(0.62f));
                     g.roundRect(sl, st, sr - sl, h * 0.2f, armL && armR ? h * 0.04f : h * 0.01f);
-                    g.linear(0, st - h * 0.03f, 0, st + h * 0.05f, 0xFFA572B2, 0xFF7A4A86);
+                    g.linear(0, st - h * 0.03f, 0, st + h * 0.05f, sofaShade(1.3f), sofaShade(1f));
                     g.roundRect(cl + sw * 0.03f, st - h * 0.03f, cr - cl - sw * 0.06f, h * 0.08f, h * 0.035f);
                 }
                 if (front && legsIn) {
@@ -2742,12 +2759,12 @@ public final class Renderer {
                     // (with the legs standing in front of the seat it read as one standing before the sofa)
                     // down to the floor (a skirted base): the shoes never show under it
                     float fl = armL ? sl + sw * 0.03f : sl, fr = armR ? sr - sw * 0.03f : sr;
-                    g.linear(0, st + h * 0.015f, 0, h * 0.005f, 0xFF7A4A86, 0xFF4E2E5A);
+                    g.linear(0, st + h * 0.015f, 0, h * 0.005f, sofaShade(1f), sofaShade(0.62f));
                     g.roundRect(fl, st + h * 0.015f, fr - fl, -st - h * 0.01f, armL && armR ? h * 0.035f : h * 0.008f);
                     g.color(0x33FFFFFF); g.line(fl + sw * 0.03f, st + h * 0.03f, fr - sw * 0.03f, st + h * 0.03f, h * 0.006f);
                     g.color(0x22000000); g.line(fl + sw * 0.02f, -h * 0.045f, fr - sw * 0.02f, -h * 0.045f, h * 0.006f);
                 }
-                g.linear(0, -h * 0.42f, 0, -h * 0.05f, 0xFF9A64A8, 0xFF5E3A6A);
+                g.linear(0, -h * 0.42f, 0, -h * 0.05f, sofaShade(1.2f), sofaShade(0.72f));
                 if (armL) g.roundRect(sl - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
                 if (armR) g.roundRect(sr - h * 0.08f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
                 break;

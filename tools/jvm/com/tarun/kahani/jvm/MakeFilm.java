@@ -94,7 +94,7 @@ public class MakeFilm {
             for (Film.Key k : ac.keys) System.out.printf(java.util.Locale.US, "KEY %.2f x=%.0f body=%d seat=%d move=%.2f face=%.0f emo=%d%n", k.t, k.x, k.body, k.seat, k.moveDur, k.facing, k.emotion);
         // ACTS=1: every playground act of the film as made (the swing and the slide, v41)
         if (System.getenv("ACTS") != null) for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) for (Film.Act x : ac.acts)
-            if (x.type == Film.G_PLAYGROUND) System.out.printf(java.util.Locale.US, "ACT %s item=%d %.2f-%.2f how=%d a0=%.0f a1=%.0f%n", ac.c.displayName, x.item, x.t0, x.t1, x.how, x.a0, x.a1);
+            if (x.type == Film.G_PLAYGROUND || "all".equals(System.getenv("ACTS"))) System.out.printf(java.util.Locale.US, "ACT %s type=%d item=%d %.2f-%.2f how=%d a0=%.0f a1=%.0f%n", ac.c.displayName, x.type, x.item, x.t0, x.t1, x.how, x.a0, x.a1);
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
         if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));

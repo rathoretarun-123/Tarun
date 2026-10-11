@@ -106,6 +106,8 @@ public final class Film {
          * without the far background's slower drift, so the fire stays where they sit in every shot.
          */
         public boolean midground;
+        /** v41: the colour of a sofa drawn in this part (the script's own "नीला सोफा"; 0: from the place's picture, else the studio's). */
+        public int sofaColor;
         public Actor find(Story.CharacterDef c) {
             for (Actor a : actors) if (a.c == c) return a;
             return null;

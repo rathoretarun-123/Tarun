@@ -5595,6 +5595,107 @@ public class AppTest {
     }
 
     /** v40: how many shot appearances of a rigged character use one of the uploaded pose pictures instead of the rig. */
+    /**
+     * v41: the user's story "राहुल का पार्क" (numbered section headings, "वस्तु 1 - झूला:", "फिल्म का नाम:") with their
+     * pictures: the boy's two turnaround sheets for राहुल, the park's six views, the swing seat and the slide, uploaded as
+     * on the phone. The swing and the slide are the user's own side views; राहुल gets on the swing and swings on it
+     * (slow, fast, faster with no hands), stops and hops off; climbs the slide twice, slides down sitting and then on his
+     * belly; the empty swing sways in its own shot; every character's keys stay in time order.
+     */
+    @Test
+    public void v41RahulKaParkSwingAndSlideSessions() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets40");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/v40stories/rahul_ka_park.txt").toPath()), "UTF-8");
+        Story st = ScriptParser.parse(script);
+        assertEquals("राहुल का पार्क", st.title);
+        assertEquals("one character", 1, st.cast().size());
+        assertEquals("राहुल", st.cast().get(0).fullName);
+        assertEquals("two things", 2, st.things.size());
+        assertEquals("one place", 1, st.places.size());
+        assertTrue(st.places.get(0).name, st.places.get(0).name.contains("सोसाइटी का पार्क"));
+        assertEquals(2, st.scenes.size());
+        for (Story.Scene sc : st.scenes) assertTrue("both scenes in the park: " + sc.setting, sc.setting.contains("पार्क"));
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        Story.CharacterDef boy = st.cast().get(0);
+        String boyKey = (String) keyFor.invoke(a, boy);
+        StringBuilder rep = new StringBuilder();
+        rep.append("boy: ").append(upload(a, onResult, tf, "angles:char:" + boyKey + ":" + boy.shown(), dir, new String[]{"05_boy_turnaround_a.jpg", "06_boy_turnaround_b.jpg"})).append('\n');
+        rep.append("park 1: ").append(upload(a, onResult, tf, "angles:scene:1:सोसाइटी का पार्क", dir, new String[]{"01_park_swing_slide_6views.jpg"})).append('\n');
+        rep.append("park 2: ").append(upload(a, onResult, tf, "angles:scene:2:सोसाइटी का पार्क", dir, new String[]{"01_park_swing_slide_6views.jpg"})).append('\n');
+        rep.append("swing: ").append(upload(a, onResult, tf, "angles:obj:झूला:झूला", dir, new String[]{"04_swing_seat_6views.jpg"})).append('\n');
+        rep.append("slide: ").append(upload(a, onResult, tf, "angles:obj:स्लाइड:स्लाइड", dir, new String[]{"03_slide_6views.jpg"})).append('\n');
+        String cast = p.read("cast.txt");
+        Art art = Art.fromManifest(cast, st, p.loader());
+        assertNotNull("राहुल has his picture", art.sprites.get(boy.id));
+        assertNotNull("the slide is the user's side view of it", art.slideGeo);
+        assertNotNull("the swing's seat is the user's side view of it", art.swingSeat);
+        // the six slide pictures all cut out (three of them kept a grey card before: their frame shut it in)
+        int greyCards = 0, slides = 0;
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            String file = f.length >= 4 && f[0].equals("shot") && f[2].equals("स्लाइड") ? f[3] : f.length >= 3 && f[0].equals("objview") && f[1].equals("स्लाइड") ? f[2] : null;
+            if (file == null) continue;
+            int[] d = p.loader().decode(file, 400);
+            int opaque = 0;
+            for (int i = 2; i < d.length; i++) if ((d[i] >>> 24) > 100) opaque++;
+            slides++;
+            if (opaque > (d.length - 2) * 0.8f) greyCards++;
+        }
+        rep.append("slide pictures ").append(slides).append(", still on a card ").append(greyCards).append('\n');
+        assertEquals("all six slide pictures", 6, slides);
+        assertEquals("none kept its studio card", 0, greyCards);
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        int swingActs = 0, swingStops = 0, climbs = 0, downs = 0, bellies = 0, swingProps = 0, slideProps = 0, bags = 0, outOfOrder = 0;
+        float maxAmp = 0;
+        for (Film.Seg sg : film.segs) {
+            for (Film.Fx f : sg.fx) { if (f.type == Film.FX_SWING) swingProps++; if (f.type == Film.FX_SLIDE) slideProps++; if (f.type == Film.FX_THING) bags++; }
+            for (Film.Actor ac2 : sg.actors) {
+                for (int i = 1; i < ac2.keys.size(); i++) if (ac2.keys.get(i).t < ac2.keys.get(i - 1).t - 1e-3f) outOfOrder++;
+                for (Film.Act act : ac2.acts) {
+                    if (act.type != Film.G_PLAYGROUND || act.prop == null) continue;
+                    if (act.item == Film.PG_SWING) { swingActs++; maxAmp = Math.max(maxAmp, act.a1); if ((act.how & Film.PL_STOP) != 0) swingStops++; }
+                    if ((act.how & Film.PL_CLIMB) != 0) climbs++;
+                    if ((act.how & Film.PL_DOWN) != 0) { downs++; if ((act.how & Film.PL_BELLY) != 0) bellies++; }
+                }
+            }
+        }
+        rep.append(String.format("swing acts %d (reach up to %.0f°, stops %d), climbs %d, slides down %d (on the belly %d), props %d swings %d slides, bags %d, keys out of order %d%n",
+                swingActs, maxAmp, swingStops, climbs, downs, bellies, swingProps, slideProps, bags, outOfOrder));
+        System.out.println("V41 RAHUL:\n" + rep);
+        assertTrue("on the swing, then slow, fast, faster: " + swingActs, swingActs >= 4);
+        assertTrue("faster still with no hands: " + maxAmp, maxAmp >= 36);
+        assertEquals("stopped once and hopped off", 1, swingStops);
+        assertEquals("up the ladder twice", 2, climbs);
+        assertEquals("down the slide twice", 2, downs);
+        assertEquals("the second time on the belly", 1, bellies);
+        assertTrue("the swing and the slide stand in both scenes", swingProps >= 2 && slideProps >= 2);
+        assertEquals("his bag on the grass", 1, bags);
+        assertEquals("keys in time order", 0, outOfOrder);
+        assertEquals(0, posePictures(film, art));
+        File keep = new File(OUT.getParentFile(), "v41rahul");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        ac.pause().stop().destroy();
+    }
+
     static int posePictures(Film film, Art art) {
         int n = 0;
         for (Film.Shot sh : film.shots) for (java.util.Map.Entry<String, Integer> e : sh.pictures.entrySet()) {

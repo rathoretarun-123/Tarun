@@ -76,9 +76,13 @@ public final class Sets {
         if (Txt.has(text, "बेसमेंट", "तहखान", "मॉल", "सर्वर रूम", "पार्किंग", "गोदाम", "गैराज", "फैक्ट्री", "कारखान", "लैब")
                 || Txt.hasWord(text, "basement", "basements", "mall", "malls", "server room", "parking", "warehouse", "garage", "factory", "arcade", "bunker",
                 "lab", "laboratory")) return BASEMENT;
-        if (Txt.has(text, "छत पर", "की छत", "टैरेस", "बालकनी", "स्काई-लाइन", "स्काईलाइन", "सोसाइटी", "अपार्टमेंट", "टावर", "बिल्डिंग", "20वें फ्लोर")
-                || Txt.hasWord(text, "rooftop", "rooftops", "roof", "roofs", "terrace", "balcony", "high-rise", "highrise", "skyline", "society", "apartment",
-                "apartments", "tower", "towers", "building", "buildings", "20th floor")) return ROOFTOP;
+        boolean roof = Txt.has(text, "छत पर", "की छत", "टैरेस", "बालकनी", "स्काई-लाइन", "स्काईलाइन", "20वें फ्लोर")
+                || Txt.hasWord(text, "rooftop", "rooftops", "roof", "roofs", "terrace", "balcony", "high-rise", "highrise", "skyline", "20th floor");
+        boolean building = Txt.has(text, "सोसाइटी", "अपार्टमेंट", "टावर", "बिल्डिंग") || Txt.hasWord(text, "society", "apartment", "apartments", "tower", "towers", "building", "buildings");
+        // v41: a housing society's park, lane or road is that park, lane or road ("सोसाइटी का पार्क", "सोसाइटी की गली",
+        // "सोसाइटी के बाहर की सड़क"); a building with nothing on the ground named is its rooftop
+        if (roof || (building && !Txt.has(text, "पार्क", "बगीच", "गली", "सड़क", "रोड", "कमरा", "कमरे", "लिविंग रूम", "फ्लैट", "घर के अंदर", "बाज़ार", "बाजार")
+                && !Txt.hasWord(text, "park", "garden", "playground", "lane", "street", "road", "room", "flat", "inside", "market"))) return ROOFTOP;
         if (Txt.has(text, "गुफा", "cave", "कैदखान")) return CAVE_IN;
         if (Txt.has(text, "जंगल", "वन ", "forest", "jungle", "woods")) return FOREST;
         if (Txt.has(text, "सजा", "उत्सव", "जश्न", "रोशनियों", "ढोल", "celebration", "festival")) return CELEBRATION;

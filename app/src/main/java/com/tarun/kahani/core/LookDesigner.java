@@ -32,6 +32,28 @@ public final class LookDesigner {
             {"चमड़े", 0xFF6B4226}, {"leather", 0xFF6B4226},
     };
 
+    /**
+     * v41: the colour a thing is given in the text ("नीले सोफे", "नीला सोफा", "a blue sofa"): a colour word within a
+     * word or two before one of the nouns; 0 when none is given.
+     */
+    public static int colourNear(String text, String... nouns) {
+        String n = Txt.norm(text);
+        int best = -1, col = 0;
+        for (String noun : nouns) {
+            String x = Txt.norm(noun);
+            for (int i = n.indexOf(x); i >= 0; i = n.indexOf(x, i + 1)) {
+                String before = n.substring(Math.max(0, i - 16), i);
+                for (Object[] c : COLORS) {
+                    String w = Txt.norm((String) c[0]);
+                    int k = before.lastIndexOf(w);
+                    if (k >= 0 && k + w.length() >= before.length() - 6 && k > best - 1000) { best = k; col = (Integer) c[1]; }
+                }
+                if (col != 0) return col;
+            }
+        }
+        return col;
+    }
+
     static int darker(int c, float f) {
         int r = (int) (((c >> 16) & 255) * f), g = (int) (((c >> 8) & 255) * f), b = (int) ((c & 255) * f);
         return 0xFF000000 | (r << 16) | (g << 8) | b;

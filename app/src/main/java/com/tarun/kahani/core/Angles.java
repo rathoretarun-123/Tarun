@@ -740,11 +740,42 @@ public final class Angles {
         float skin = skinShare(r, r.eyeLX - inter * 0.5f, r.eyeY - inter * 0.3f, r.eyeRX + inter * 0.5f, r.mouthY + inter * 0.25f);
         if (beast) { if (dark > 0.42f || faceW > 1.0f || (hairAbove > 2.2f && skin < 0.3f)) return BACK; }
         else if (skin < 0.42f || (faceW > 1.0f && skin < 0.6f) || hairAbove > 1.6f || (dark > 0.42f && skin < 0.55f)) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
+        // v40: brown hair passes for skin (the boy's back of the head read as a front): "eyes" no darker than the
+        // "skin" round them, and that "skin" far darker than the figure's own arms and legs, are hair — a back
+        if (!beast && dark >= 0.85f) {
+            int fs = skinRead(r);
+            float body = bodySkinLum(r), face = lum(fs);
+            // (brown hair: as coloured as skin, far darker; a grey or black beard is not this colour)
+            // (and a back is the same on both sides: a face far to one side of the head is a profile)
+            float side = Art.facingOffset(r);
+            if (body > 0 && face < 0.6f * body && PicSense.hsv(fs)[1] >= 0.45f && (Float.isNaN(side) || Math.abs(side) < 0.1f)) return BACK;
+        }
         float eyeMid = (r.eyeLX + r.eyeRX) / 2f;
         float off = Math.abs(eyeMid - 0.5f);
-        if (inter < 0.05f || off > 0.16f) return SIDE;
+        // v40: how far the face's skin lies to one side of the head (Art.facingOf): about a tenth of the head's width
+        // for a three-quarter face, more for a profile — the eyes' place in the picture misread the boy's sheets
+        // (a three-quarter as a side, a three-quarter as a front; a profile with a ponytail swinging behind it is no
+        // further off than a three-quarter, so a three-quarter is never made a side by it)
+        float turn = beast ? Float.NaN : Math.abs(Art.facingOffset(r));
+        boolean known = !Float.isNaN(turn);
+        if (inter < 0.05f || off > 0.16f) return known && turn < 0.10f && turn >= 0.06f ? THREE_QUARTER : SIDE;
         if (off > 0.06f || inter < 0.085f) return THREE_QUARTER;
+        if (known && turn >= 0.085f) return THREE_QUARTER;
         return FRONT;
+    }
+
+    /** v40: the mean brightness of the skin below the chin (arms, hands, legs); 0 when too little shows. */
+    static float bodySkinLum(Cutout.Result r) {
+        if (r.px == null || r.w <= 0) return 0;
+        int[] px = r.read();
+        int y0 = Math.max(0, Math.round(Math.min(0.95f, r.chinY + 0.05f) * r.h));
+        float sum = 0; int n = 0;
+        for (int y = y0; y < r.h; y += 2) for (int x = 0; x < r.w; x += 2) {
+            int c = px[y * r.w + x];
+            if ((c >>> 24) < 100 || !Cutout.isSkin(c)) continue;
+            sum += lum(c); n++;
+        }
+        return n < 30 ? 0 : sum / n;
     }
 
     /** How dark the two eye spots are against the face's skin (1 = as bright as skin, 0 = black): real eyes are dark. */

@@ -262,10 +262,16 @@ public final class Art {
 
     /** v40: the same from a cut-out's own face points. */
     public static int facingOf(Cutout.Result r) {
-        if (r == null || !r.faceFound) return 0;
+        float off = facingOffset(r);
+        return Float.isNaN(off) ? 0 : off < -0.075f ? -1 : off > 0.075f ? 1 : 0;
+    }
+
+    /** v40: the facing offset from a cut-out's own face points (NaN = not known). */
+    public static float facingOffset(Cutout.Result r) {
+        if (r == null || !r.faceFound) return Float.NaN;
         Sprite s = new Sprite();
         s.faceKnown = true; s.eyeLX = r.eyeLX; s.eyeRX = r.eyeRX; s.eyeLY = s.eyeRY = r.eyeY; s.mouthY = r.mouthY;
-        return facingOf(r, s);
+        return facingOffset(r, s);
     }
 
     /** v40: how far the face's skin lies off the middle of the head (a share of the head's width; NaN = not known). */

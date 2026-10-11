@@ -39,7 +39,8 @@ the library, lips and eyes, the mesh, driving, every button — with new test st
 * **Your pictures as reference** — a picture of a moment is no longer shown in place of the moment: the rig acts it.
   The mesh is as fine as the screen (one cell per pixel for bodies and places).
 * **Blocking** — a run across, a walk up to someone and a ride now end on free ground, never on someone standing
-  there. The full app test run found three failures; all three are fixed.
+  there. The full app test runs found four failures (three in blocking, one in reading "राहुल का पार्क"); all four
+  are fixed, and the last run on the final code passed: 74 tests, 0 failures.
 * Details and numbers: [`docs/testing-v41.md`](docs/testing-v41.md).
 * **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
   quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.

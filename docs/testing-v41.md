@@ -191,7 +191,12 @@ new heading words took "वस्तु 1 - झूला:" for the heading of th
 what it gave before this round's reader changes — cast, places, things, scenes and all 3,333 lines and directions —
 and still 20 of 20 on the new ones.
 
-Run 3 on the final code (the APK's): running when this was written; its result is in the next commit.
+Run 3 on the final code (the APK's): **74 tests, 0 failures, 0 errors** (1 skipped: the hour-long 20-film soak that
+runs only when asked; the 154-story soak above covers that ground). Among them: every button on every screen, the
+upload buttons opening the picker everywhere, photos and the camera, several pictures through the buttons for every
+kind, sheets split wherever they are chosen and saved to the library, the library keeping every picture, uploads
+from the phone reaching the Studio, the login, dashboard, story, Studio, library and settings screens, and your two
+v41 stories with your own pictures.
 
 ## 7. Said plainly
 

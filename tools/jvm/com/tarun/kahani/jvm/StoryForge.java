@@ -644,6 +644,9 @@ public class StoryForge {
         float t = r.tA - 0.06f;
         // v45: one who uses a wheelchair (named so earlier in the story) rolls: a run is not theirs to make
         if (kind.equals("RUN") && r.main != null && r.main.look != null && r.main.look.aid == Look.AID_WHEELCHAIR) return true;
+        // (nor do they dance on their feet, jump or go down on their knees: the director keeps them in the chair)
+        if ((code.equals("ACT:DANCE") || code.equals("ACT:JUMP") || code.equals("BODY:KNEEL") || code.equals("BODY:CROUCH")) && r.main != null && r.main.look != null
+                && r.main.look.aid == Look.AID_WHEELCHAIR) return true;
         // (and one walking with care — a limp, a leg in plaster, a stick or crutches — walks: the director never runs them)
         if (kind.equals("RUN") && r.main != null && r.main.c != null) {
             List<Look> looks = new ArrayList<Look>();

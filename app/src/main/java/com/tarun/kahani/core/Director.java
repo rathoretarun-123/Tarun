@@ -3266,8 +3266,23 @@ public final class Director {
                 if (ty != Film.G_LISTEN && ty != Film.G_TURN && ty != Film.G_LOOK_AWAY && ty != Film.G_STEP_BACK) { incidental = false; break; }
             }
         if (nothing || incidental) d = Math.max(d, everyday(s, t));
+        // v45: "walks to the reception desk and asks for the doctor" — a walk to a thing not on the stage, and only a
+        // turn of the head staged: the walk is made all the same
+        else if (who != null && who.stateAt(t).visible && Txt.has(s, WALK_TO) && !negated(s)) {
+            boolean moved = false;
+            float x0 = xAt(who, t);
+            for (float dt = 0.2f; dt <= Math.max(1.0f, d) + 0.6f && !moved; dt += 0.2f) if (Math.abs(xAt(who, t + dt) - x0) > 40 || !who.stateAt(t + dt).visible) moved = true;
+            if (!moved) { walkedTo++; d = Math.max(d, everyday(s, t)); }
+        }
+        // v45: nobody glides seated — a move this sentence made from a seat or a bed is made on foot
+        if (seg != null) { List<Film.Seg> one = new ArrayList<Film.Seg>(); one.add(seg); standToWalk(one, t, true); }
         return d;
     }
+
+    /** v45: words of walking (or rolling) to a place or a thing. */
+    static final String[] WALK_TO = {"walks to the", "walks over to", "goes to the", "heads to the", "heads for the", "makes his way to", "makes her way to", "wheels himself",
+            "wheels herself", "की ओर जाता", "की ओर जाती", "की तरफ़ जाता", "की तरफ़ जाती", "की तरफ जाता", "की तरफ जाती", "तक जाता", "तक जाती"};
+    public int walkedTo;
 
     /** v43: an actor's states in order (where, posture, seat, face, seen, eyes, things in hand, sweat) — the facing left out. */
     private static String stateSig(Film.Actor a) {
@@ -3375,7 +3390,8 @@ public final class Director {
         {new String[]{"चाक पर", "चाक घुमा", "potter's wheel", "the clay", "clay pot", "मिट्टी का घड़ा", "मिट्टी के बर्तन", "घड़ा बना", "मटका बना"}, Pose.HAPPY, Film.G_PAT, 2.6f, EV_FLOOR},
         {new String[]{"शंख", "बिगुल", "तुरही", "conch", "bugle", "blows the horn", "blows a horn"}, Pose.PROUD, Film.G_LOOK_UP, 2.0f, EV_NONE},
         {new String[]{"कपड़े देख", "सामान देख", "चीज़ें देख", "window-shop", "window shop", "browses", "browsing", "looks at the clothes", "looks around the shop"}, Pose.CURIOUS, -1, 2.4f, EV_LOOK_ROUND},
-        {new String[]{"भीड़ में चल", "भीड़ से होकर", "भीड़ के बीच", "आगे बढ़", "खींचते हुए", "घसीट", "walks through", "walks along", "walks across", "walks past", "walks down the",
+        {new String[]{"walks to the", "walks over to", "goes to the", "heads to the", "heads for the", "की ओर जाता", "की ओर जाती", "की तरफ़ जाता", "की तरफ़ जाती",
+                "की तरफ जाता", "की तरफ जाती", "तक जाता", "तक जाती", "भीड़ में चल", "भीड़ से होकर", "भीड़ के बीच", "आगे बढ़", "खींचते हुए", "घसीट", "walks through", "walks along", "walks across", "walks past", "walks down the",
                 "walks up the", "makes his way", "makes her way", "shopping bag", "carries the bags", "carries his bags", "carries her bags", "the bags out", "drags his", "drags her", "pulls his suitcase", "pulls her suitcase", "wheels his", "wheels her"}, -1, -1, 2.6f, EV_WALK},
         // v43: dances by name
         {new String[]{"भांगड़ा", "भाँगड़ा", "गरबा", "डांडिया", "ठुमके", "नाचता", "नाचती", "नाचते", "नाच रह", "नृत्य", "dances", "dancing", "bhangra", "garba"}, Pose.HAPPY, Film.G_DANCE, 3.0f, EV_NONE},
@@ -3641,6 +3657,10 @@ public final class Director {
         Object[] mood = null;
         for (Object[] r : FEELINGS) if (Txt.hasStart(w, (String[]) r[0])) { mood = r; break; }
         if (row == null && mood == null) return 0;
+        // v45: one who has gone off the stage (ridden away, left) comes back on to do it
+        float backOn = 0;
+        if (row != null) for (Film.Actor a : who) if (!a.stateAt(t).visible) { float tv = walkOn(a, t); if (tv > 0) backOn = Math.max(backOn, tv - t); }
+        if (backOn > 0) return backOn + everydayOne(s, t + backOn, fallback, prevTarget);
         float dur = row != null ? (Float) row[3] : (Float) mood[3];
         // (a feeling the sentence names wins over the face an action row gives: "डरकर चीख़ पड़ता है" is a scared scream)
         int emo = mood != null ? (Integer) mood[1] : row != null && (Integer) row[1] >= 0 ? (Integer) row[1] : -1;
@@ -7096,7 +7116,7 @@ public final class Director {
             if (a.look == null || !a.look.isHumanoid() || a.stateAt(t).dead) continue;
             float tv = -1;
             for (float dt = 0; dt <= 2.6f && tv < 0; dt += 0.2f) if (a.stateAt(t + dt).visible && Math.abs(xAt(a, t + dt) - xAt(a, t + dt + 0.2f)) < 2) tv = t + dt;
-            if (tv < 0) continue;
+            if (tv < 0) { tv = walkOn(a, t); if (tv < 0) continue; }
             hurtOnes.add(a); tw = Math.max(tw, tv);
         }
         t = tw;
@@ -7190,7 +7210,13 @@ public final class Director {
 
     private float deathOne(String s, float t, Film.Actor subj, List<Film.Actor> who) {
         List<Film.Actor> dying = new ArrayList<Film.Actor>();
-        for (Film.Actor a : who) if (a.look != null && a.look.isHumanoid() && !a.stateAt(t).dead) dying.add(a);
+        // (v45: one already dying from a clause before — "आख़िरी साँस लेता है और दम तोड़ देता है" — dies once)
+        for (Film.Actor a : who) {
+            if (a.look == null || !a.look.isHumanoid() || a.stateAt(t).dead) continue;
+            boolean dies = false;
+            for (Film.Key k : a.keys) if (k.dead) dies = true;
+            if (!dies) dying.add(a);
+        }
         if (dying.isEmpty()) return 0;
         boolean heart = Txt.has(s, "दिल का दौरा", "हार्ट अटैक", "सीने में दर्द", "सीना पकड़", "heart attack", "clutches his chest", "clutches her chest", "chest pain");
         boolean weapon = Txt.has(s, "तीर", "तलवार", "गोली", "भाला", "बरछी", "युद्ध", "लड़ाई में", "शहीद", "arrow", "sword", "bullet", "shot", "spear", "battle", "war", "stabbed");
@@ -7265,6 +7291,24 @@ public final class Director {
         return end + 0.4f;
     }
 
+    /**
+     * v45: one the sentence is about who has gone off the stage (ridden away, left) comes back on to it first — from
+     * the side they left by — and the time they are in place is returned (-1: not a person who can walk on).
+     */
+    private float walkOn(Film.Actor a, float t) {
+        if (a == null || a.look == null || !a.look.isHumanoid() || a.stateAt(t).visible || a.stateAt(t).dead) return -1;
+        for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && x.t0 <= t + 0.1f && x.t1 > t) return -1;     // on a ride still
+        float lastX = xAt(a, t);
+        boolean right = lastX > 640;
+        List<Film.Actor> me = new ArrayList<Film.Actor>(); me.add(a);
+        float to = freeNear(right ? 900 : 380, t + 1.6f, me, 110);
+        Film.Key k0 = a.at(t); k0.x = right ? 1400 : -120; k0.visible = true; k0.anchor = Film.A_GROUND; k0.body = Pose.STAND; k0.seat = -1; k0.moveDur = 0;
+        Film.Key k1 = a.at(t + 0.05f); k1.x = to; k1.moveDur = 1.5f; k1.facing = right ? -1 : 1; k1.visible = true;
+        walkedOn++;
+        return t + 1.6f;
+    }
+    public int walkedOn;
+
     /** v45: the sentence names this actor (by name, relation or alias). */
     private boolean namedIn(String s, Film.Actor a) {
         return a != null && a.c != null && story != null && ScriptParser.mentions(story, s).contains(a.c);
@@ -7319,12 +7363,15 @@ public final class Director {
      * चला जाता है"): a move that leaves a seat or a bed is made on foot — up as it begins, and standing after it until
      * the next posture the story gives (a ride, the swing, a slide in the snow, a fall and a wheelchair move as they are).
      */
-    private void standToWalk() {
-        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+    private void standToWalk() { standToWalk(film.segs, -1, false); }
+
+    /** v45: from time `from` on (a sentence just staged: every key after its move is its own, so all are stood up). */
+    private void standToWalk(List<Film.Seg> segs, float from, boolean allAfter) {
+        for (Film.Seg sg : segs) for (Film.Actor a : sg.actors) {
             if (a.look == null || !a.look.isHumanoid() || a.look.aid == Look.AID_WHEELCHAIR) continue;
             for (int i = 0; i < a.keys.size(); i++) {
                 Film.Key k = a.keys.get(i);
-                if (k.moveDur <= 0.3f || !k.visible || k.dead || k.anchor != Film.A_GROUND) continue;
+                if (k.t < from - 0.01f || k.moveDur <= 0.3f || !k.visible || k.dead || k.anchor != Film.A_GROUND) continue;
                 if (k.body != Pose.SIT && k.body != Pose.LIE) continue;
                 if (Math.abs(k.x - xAt(a, k.t + 0.01f)) <= 40) continue;
                 boolean exempt = false;
@@ -7336,6 +7383,7 @@ public final class Director {
                 for (int j = i + 1; j < a.keys.size(); j++) {
                     Film.Key n = a.keys.get(j);
                     if (n.body != b0 || n.seat != s0) break;
+                    if (!allAfter && n.t > k.t + k.moveDur + 0.6f) break;     // (a later sentence's own sitting stays)
                     n.body = Pose.STAND; n.seat = -1;
                 }
                 standUps++;

@@ -202,7 +202,7 @@ public final class Puppet {
         float su = sitShare(p);
         if (su > 0) { b.seatH = seatHeight(p.seat) * H * seatScale(l); b.sitU = su; lift = (b.L - b.seatH) * su; b.floorY = -lift; }
         else if (p.body == Pose.SIT) lift = b.L * 0.55f;
-        else if (p.body == Pose.KNEEL) lift = b.L * 0.48f;
+        else if (p.body == Pose.KNEEL) { lift = b.L * 0.48f; b.floorY = -lift; b.sitU = 0.6f; }   // v45: a long skirt ends on the ground, spread, as one kneels
         else if (p.body == Pose.CROUCH) lift = b.L * 0.22f;
         g.save();
         g.translate(0, lift);
@@ -597,7 +597,7 @@ public final class Puppet {
                 float skirtW = hw * (l.isChild() ? 2.5f : 2.2f);
                 float topY = waistY;
                 // v35: seated, the skirt spans the waist to the floor (squeezed into the shorter drop)
-                boolean seated = b.seatH >= 0 && topY < b.floorY;
+                boolean seated = (b.seatH >= 0 || p.body == Pose.KNEEL) && topY < b.floorY;
                 if (seated) { g.save(); g.translate(0, topY); g.scale(1, (b.floorY - topY) / -topY); g.translate(0, -topY); }
                 g.begin();
                 g.moveTo(-hw * 0.95f, topY);
@@ -741,7 +741,7 @@ public final class Puppet {
             case Look.O_CLOAK: {
                 float cw = sw * 1.5f;
                 // v35: seated, the cloak spans the shoulders to the floor (squeezed into the shorter drop)
-                boolean seated = b.seatH >= 0 && shY < b.floorY;
+                boolean seated = (b.seatH >= 0 || p.body == Pose.KNEEL) && shY < b.floorY;
                 if (seated) { g.save(); g.translate(0, shY); g.scale(1, (b.floorY - shY) / -shY); g.translate(0, -shY); }
                 g.begin();
                 g.moveTo(-sw * 0.9f, shY - b.headR * 0.1f);

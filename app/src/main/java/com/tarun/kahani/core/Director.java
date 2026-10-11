@@ -7080,7 +7080,7 @@ public final class Director {
                 if (f.a == null || !(who.contains(f.a) || Txt.has(s, f.a.c.displayName) || Txt.has(s, "उसके", "उसकी", "his ", "her "))) continue;
                 // the one who bandages goes to them and binds it
                 if (subj != f.a && subj.look != null && subj.look.isHumanoid() && subj.stateAt(t).visible) {
-                    if (Math.abs(xAt(subj, t) - xAt(f.a, t)) > 140) moveNear(subj, f.a, t, 0.8f);
+                    if (Math.abs(xAt(subj, t) - xAt(f.a, t)) > 160 || Math.abs(xAt(subj, t) - xAt(f.a, t)) < 110) moveNear(subj, f.a, t, 0.8f, 140);
                     subj.acts.add(new Film.Act(t + 0.9f, t + 2.4f, Film.G_REACH));
                     f.t1 = t + 2.2f; d = 2.6f;
                 } else { f.t1 = t + 1.0f; d = Math.max(d, 1.6f); }
@@ -7093,7 +7093,7 @@ public final class Director {
             for (Film.Actor a : seg.actors) if (a != subj && namedIn(s, a) && a.look != null && a.look.isHumanoid() && a.stateAt(t).visible && !a.stateAt(t).dead) hurt = a;
             if (subj.look != null && subj.look.isHumanoid() && subj.stateAt(t).visible) {
                 if (hurt != null) {
-                    if (Math.abs(xAt(subj, t) - xAt(hurt, t)) > 140) moveNear(subj, hurt, t, 0.8f);
+                    if (Math.abs(xAt(subj, t) - xAt(hurt, t)) > 160 || Math.abs(xAt(subj, t) - xAt(hurt, t)) < 110) moveNear(subj, hurt, t, 0.8f, 140);
                     hurt.acts.add(new Film.Act(t + 0.5f, t + 2.2f, Film.G_OFFER));
                     Film.Key hk = keyAt(hurt, t + 0.5f); hk.emotion = Pose.PAIN;
                 }
@@ -7167,7 +7167,7 @@ public final class Director {
                 Film.Fx f = fx(Film.FX_SHROUD, t + 0.6f, 1e6f, xAt(dead, t), 0, dead, null);
                 f.color = (int) (dead.stateAt(t).facing >= 0 ? 1 : -1);
                 if (subj != null && subj != dead && subj.look != null && subj.look.isHumanoid()) {
-                    moveNear(subj, dead, t, 0.6f);
+                    moveNear(subj, dead, t, 0.6f, 170);
                     subj.acts.add(new Film.Act(t + 0.5f, t + 1.6f, Film.G_REACH));
                 }
                 shrouds++;
@@ -9317,9 +9317,12 @@ public final class Director {
         return p.x;
     }
 
-    private void moveNear(Film.Actor a, Film.Actor to, float t, float dur) {
+    private void moveNear(Film.Actor a, Film.Actor to, float t, float dur) { moveNear(a, to, t, dur, 95); }
+
+    /** v45: near, at this gap between them (a bandage, a sheet, a pulse: beside the one tended, not on them). */
+    private void moveNear(Film.Actor a, Film.Actor to, float t, float dur, float gap0) {
         float ax = xAt(a, t), tx = xAt(to, t);
-        float gap = 95 + (a.look.kind == Look.MONSTER || to.look.kind == Look.MONSTER ? 80 : 0);
+        float gap = gap0 + (a.look.kind == Look.MONSTER || to.look.kind == Look.MONSTER ? 80 : 0);
         float dest = ax < tx ? tx - gap : tx + gap;
         // v41: to the side of the one approached that is free — not onto a third one standing there
         if (standsAt(dest, t + dur, a, to)) {

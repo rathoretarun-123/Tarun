@@ -4864,14 +4864,22 @@ public final class Renderer {
         float u = Math.min(1, (t - f.t0) / 0.6f);
         float yT = s.ground - (seatOf(a, t) == Film.SEAT_BED ? h * BED_TOP : 0);
         // (the whole body, the face too — as a sheet is drawn over the dead — high enough to cover the lying picture)
-        float x1 = x - face * 0.52f * h, x2 = x1 + (x + face * 0.58f * h - x1) * u;
+        float x1 = x - face * 0.58f * h, x2 = x1 + (x + face * 0.68f * h - x1) * u;
         g.save();
-        g.linear(0, yT - h * 0.3f, 0, yT, 0xFFFAFAFA, 0xFFD5D5D5);
-        g.begin(); g.moveTo(x1, yT + h * 0.02f); g.lineTo(x1 - face * h * 0.02f, yT - h * 0.16f);
-        g.quadTo(x1 + face * h * 0.1f, yT - h * 0.31f, x1 + (x2 - x1) * 0.35f, yT - h * 0.27f);
-        g.quadTo(x1 + (x2 - x1) * 0.75f, yT - h * 0.24f, x2, yT - h * 0.16f); g.lineTo(x2 + face * h * 0.03f, yT + h * 0.02f); g.close(); g.fillPath();
-        g.color(0x28000000);
-        for (int i = 1; i < 5; i++) { float xx = x1 + (x2 - x1) * i / 5f; g.line(xx, yT, xx + face * h * 0.025f, yT - h * 0.22f, h * 0.003f); }
+        // (draped: the rise of the head, the chest, a dip at the knees, the feet — falling in folds to the ground and
+        // a little past it, so no hand or foot of the picture lying under it shows)
+        float L = x2 - x1, k = 1.2f, yB = yT + h * 0.06f;
+        g.linear(0, yT - h * 0.36f, 0, yB, 0xFFFAFAFA, 0xFFCFCFCF);
+        g.begin(); g.moveTo(x1 - face * h * 0.04f, yB);
+        g.quadTo(x1 - face * h * 0.03f, yT - h * 0.22f * k, x1 + L * 0.12f, yT - h * 0.3f * k);
+        g.quadTo(x1 + L * 0.24f, yT - h * 0.31f * k, x1 + L * 0.3f, yT - h * 0.26f * k);
+        g.quadTo(x1 + L * 0.45f, yT - h * 0.31f * k, x1 + L * 0.6f, yT - h * 0.25f * k);
+        g.quadTo(x1 + L * 0.72f, yT - h * 0.21f * k, x1 + L * 0.84f, yT - h * 0.24f * k);
+        g.quadTo(x1 + L * 0.95f, yT - h * 0.28f * k, x2, yT - h * 0.16f * k);
+        g.quadTo(x2 + face * h * 0.05f, yT - h * 0.05f, x2 + face * h * 0.06f, yB); g.close(); g.fillPath();
+        g.color(0x24000000);
+        for (int i = 1; i < 6; i++) { float xx = x1 + L * i / 6f; g.begin(); g.moveTo(xx, yB); g.quadTo(xx + face * h * 0.02f, yT - h * 0.12f, xx - face * h * 0.01f, yT - h * 0.24f); g.strokePath(h * 0.004f); }
+        g.color(0x30000000); g.rect(Math.min(x1, x2) - h * 0.06f, yB - h * 0.006f, Math.abs(L) + h * 0.12f, h * 0.012f);
         g.restore();
     }
 

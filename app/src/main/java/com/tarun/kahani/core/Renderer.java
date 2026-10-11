@@ -4210,7 +4210,9 @@ public final class Renderer {
                     // v36: a phone goes to the ear on the side the character faces
                     float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * w, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy + rise;
                     float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * mirror * mo.sx;
-                    tx = ecx + p.facing * ed * 1.4f; ty = ey + ed * 0.35f;
+                    // (a side or three-quarter picture: the ear is behind the eye, not beyond it)
+                    if (sp.userSide || sp.userQuarter) { tx = ecx - p.facing * w * 0.075f; ty = ey + w * 0.02f; }
+                    else { tx = ecx + p.facing * ed * 1.8f; ty = ey + ed * 0.3f; }
                 } else if (p.toMouthItem == Pose.I_BRUSH) { tx = mx + p.facing * mw * 0.2f + (float) Math.sin(p.time * 28) * mw * 0.35f; ty = my + mw * 0.2f; }
                 else if (Pose.makeup(p.toMouthItem)) {
                     // v37: make-up to its place on the face — the lips, the lower lid, between the brows, a cheek

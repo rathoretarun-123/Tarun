@@ -2534,7 +2534,8 @@ public final class Puppet {
      * With tack, a bridle and a bit.
      */
     static void horse(Gfx g, Look l, Pose p, float H, boolean tack) {
-        int coat = l.furColor, dark = shade(coat, 0.7f), mane = shade(coat, 0.38f);
+        boolean deer = l.species == Look.SP_DEER;
+        int coat = l.furColor, dark = shade(coat, 0.7f), mane = deer ? shade(coat, 0.8f) : shade(coat, 0.38f);
         g.save();
         g.scale(p.facing < 0 ? -1 : 1, 1);
         g.color(0x33000000);
@@ -2549,11 +2550,16 @@ public final class Puppet {
                 // the tail, then the body over the far legs
                 float lift = mv * 0.25f;
                 float tsw = (float) Math.sin(p.time * 3 + ph) * H * 0.03f + lw * H * 0.08f;
+                if (deer) {
+                    g.color(coat); g.oval(-0.53f * H, -0.8f * H + tsw * 0.2f, 0.05f * H, 0.08f * H);
+                    g.color(0xFFF5F5F5); g.oval(-0.535f * H, -0.78f * H + tsw * 0.2f, 0.03f * H, 0.06f * H);
+                } else {
                 g.color(mane);
                 g.begin(); g.moveTo(-0.5f * H, -0.8f * H);
                 g.quadTo(-0.72f * H, (-0.78f - lift * 0.4f) * H, -0.74f * H - tsw * 0.5f, (-0.5f - lift) * H);
                 g.quadTo(-0.76f * H - tsw, (-0.3f - lift * 0.6f) * H, -0.68f * H - tsw, (-0.24f - lift * 0.5f) * H);
                 g.quadTo(-0.64f * H - tsw * 0.5f, (-0.45f - lift) * H, -0.5f * H, -0.7f * H); g.close(); g.fillPath();
+                }
                 g.color(shade(coat, 0.85f));
                 g.oval(-0.36f * H, -0.66f * H, 0.2f * H, 0.2f * H);     // hindquarters
                 g.oval(0.34f * H, -0.64f * H, 0.17f * H, 0.19f * H);    // chest
@@ -2561,15 +2567,23 @@ public final class Puppet {
                 g.oval(0, -0.65f * H, 0.47f * H, 0.19f * H);            // barrel
                 g.oval(-0.36f * H, -0.68f * H, 0.19f * H, 0.18f * H);
                 g.oval(0.33f * H, -0.66f * H, 0.15f * H, 0.17f * H);
+                if (deer) {
+                    // the chital's white spots along the back and flank, and the pale belly
+                    g.color(lighten(coat, 0.55f)); g.oval(0, -0.52f * H, 0.36f * H, 0.06f * H);
+                    g.color(0xDDFFFFFF);
+                    for (int i = 0; i < 16; i++) g.oval((-0.45f + 0.06f * i) * H, (-0.76f + 0.05f * (i % 3)) * H, 0.012f * H, 0.01f * H);
+                }
                 // the neck, arched, up to the head
-                float hx = 0.62f * H, hy = -1.12f * H + nod;
+                float gz = Math.max(0, Math.min(1, p.nod * 1.6f)) * (1 - mv);     // grazing: the head down to the grass
+                float hx = 0.62f * H + gz * 0.14f * H, hy = -1.12f * H + nod + gz * 0.62f * H;
                 g.color(coat);
                 g.begin(); g.moveTo(0.2f * H, -0.8f * H);
                 g.quadTo(0.38f * H, -1.08f * H + nod * 0.5f, hx - 0.06f * H, hy - 0.04f * H);
                 g.lineTo(hx + 0.07f * H, hy + 0.06f * H);
                 g.quadTo(0.55f * H, -0.8f * H + nod * 0.3f, 0.47f * H, -0.6f * H);
                 g.lineTo(0.3f * H, -0.58f * H); g.close(); g.fillPath();
-                // the mane along the crest, its ends lifting with the gait and the wind
+                // the mane along the crest, its ends lifting with the gait and the wind (a deer has none)
+                if (!deer) {
                 g.color(mane);
                 g.begin(); g.moveTo(0.18f * H, -0.82f * H);
                 for (int i = 0; i <= 8; i++) {
@@ -2580,8 +2594,10 @@ public final class Puppet {
                 }
                 g.lineTo(hx - 0.04f * H, hy - 0.02f * H);
                 g.quadTo(0.36f * H, -1.0f * H + nod * 0.5f, 0.2f * H, -0.76f * H); g.close(); g.fillPath();
+                }
                 // the head: from the poll down and forward to the soft muzzle
-                g.save(); g.translate(hx, hy); g.rotate(48 + nod / H * 60);
+                g.save(); g.translate(hx, hy); g.rotate((deer ? 40 : 48) + nod / H * 60 + gz * 35);
+                if (deer) g.scale(0.78f, 0.82f);
                 g.color(coat);
                 g.begin(); g.moveTo(-0.07f * H, -0.05f * H);
                 g.quadTo(0.02f * H, -0.09f * H, 0.3f * H, -0.05f * H);
@@ -2611,8 +2627,19 @@ public final class Puppet {
                     g.quadTo(ex + 0.03f * H, ey - 0.05f * H, ex + 0.02f * H, ey + 0.015f * H); g.close(); g.fillPath();
                     g.color(shade(coat, 0.6f)); g.line(ex, ey - 0.01f * H, ex + 0.008f * H + tw, ey - 0.08f * H, 0.01f * H); g.color(coat);
                 }
+                if (deer) {
+                    // the antlers: a beam back and up with two tines
+                    g.color(0xFF8D7B68);
+                    for (int e = 0; e < 2; e++) {
+                        float ax = hx + e * 0.03f * H, ay = hy - 0.05f * H;
+                        g.line(ax, ay, ax - 0.06f * H, ay - 0.2f * H, 0.014f * H);
+                        g.line(ax - 0.03f * H, ay - 0.1f * H, ax + 0.03f * H, ay - 0.16f * H, 0.011f * H);
+                        g.line(ax - 0.06f * H, ay - 0.2f * H, ax - 0.02f * H, ay - 0.27f * H, 0.01f * H);
+                    }
+                } else {
                 g.color(mane);
                 g.begin(); g.moveTo(hx - 0.02f * H, hy - 0.04f * H); g.quadTo(hx + 0.07f * H, hy - 0.02f * H, hx + 0.08f * H, hy + 0.06f * H); g.lineTo(hx + 0.02f * H, hy + 0.01f * H); g.close(); g.fillPath();
+                }
             }
             for (float[] lg : legs) {
                 if ((lg[4] == 1) != (pass == 1)) continue;
@@ -2630,8 +2657,8 @@ public final class Puppet {
                 if (y2 > 0) { y1 -= y2; y2 = 0; }
                 int c = lg[4] == 1 ? coat : dark;
                 g.color(c);
-                g.line(x0, y0 - 0.04f * H, x1, y1, H * (front ? 0.085f : 0.1f));
-                g.line(x1, y1, x2, y2, H * 0.05f);
+                g.line(x0, y0 - 0.04f * H, x1, y1, H * (deer ? (front ? 0.06f : 0.075f) : (front ? 0.085f : 0.1f)));
+                g.line(x1, y1, x2, y2, H * (deer ? 0.032f : 0.05f));
                 g.oval(x1, y1, H * 0.03f, H * 0.03f);
                 g.color(lg[4] == 1 ? 0xFF2B2B2B : 0xFF1A1A1A);
                 g.roundRect(x2 - 0.03f * H, y2 - 0.05f * H, 0.06f * H, 0.05f * H, 0.01f * H);
@@ -2641,7 +2668,7 @@ public final class Puppet {
     }
 
     static void drawAnimal(Gfx g, Look l, Pose p, float H) {
-        if (l.species == Look.SP_HORSE && !l.robot) { horse(g, l, p, H, false); return; }
+        if ((l.species == Look.SP_HORSE || l.species == Look.SP_DEER) && !l.robot) { horse(g, l, p, H, false); return; }
         int sp = l.species, fur = l.furColor, dark = shade(fur, 0.72f), belly = l.skin;
         g.save();
         g.scale(p.facing < 0 ? -1 : 1, 1);

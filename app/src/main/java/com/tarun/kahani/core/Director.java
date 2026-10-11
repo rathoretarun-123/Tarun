@@ -6179,6 +6179,13 @@ public final class Director {
     static final String[] WINE = {"वाइन", "wine", "champagne", "शैंपेन"};
     static final String[] CLINK = {"चीयर्स", "गिलास टकरा", "जाम टकरा", "cheers", "clink", "a toast", "raise their glasses", "raises his glass", "raises her glass"};
 
+    /** v44: the glass or cup a drink comes in, from the words. */
+    static int drinkItem(String s) {
+        return Txt.has(s, WINE) ? Pose.I_WINE : Txt.has(s, BEER) ? Pose.I_BEER : Txt.has(s, WHISKY) ? Pose.I_WHISKY
+                : Txt.has(s, "बोतल", "bottle") ? Pose.I_BOTTLE : Txt.has(s, "चाय", "tea", "coffee", "कॉफ़ी", "कॉफी") ? Pose.I_TEA
+                : Txt.has(s, "कप", "प्याला", "प्याली", "cup", "mug") ? Pose.I_CUP : Pose.I_GLASS;
+    }
+
     /**
      * v35: eating and drinking, as the story tells it — the hand goes from the plate to the mouth and they chew (two
      * bites, heard: the spoon on the plate, quiet chewing); a drink is raised to the lips from a cup, a glass or a
@@ -6188,11 +6195,21 @@ public final class Director {
         String sp = " " + s + " ";
         float d = 0;
         if (Txt.has(sp, DRINK)) {
-            int item = Txt.has(s, WINE) ? Pose.I_WINE : Txt.has(s, BEER) ? Pose.I_BEER : Txt.has(s, WHISKY) ? Pose.I_WHISKY
-                    : Txt.has(s, "बोतल", "bottle") ? Pose.I_BOTTLE : Txt.has(s, "चाय", "tea", "coffee", "कॉफ़ी", "कॉफी") ? Pose.I_TEA
-                    : Txt.has(s, "कप", "प्याला", "प्याली", "cup", "mug") ? Pose.I_CUP : Pose.I_GLASS;
-            for (Film.Actor a : who) {
+            // v44: "तरुण व्हिस्की पीता है और प्रिया वाइन की चुस्की लेती है": each one named drinks what their own part of
+            // the sentence says (and both drink)
+            List<Film.Actor> drinkers = new ArrayList<Film.Actor>(who);
+            Map<Film.Actor, String> own = new HashMap<Film.Actor, String>();
+            if (seg != null) for (Film.Actor o : seg.actors) {
+                String c = seatClause(s, o);
+                if (c == null || c.isEmpty() || !Txt.has(" " + c + " ", DRINK)) continue;
+                own.put(o, c);
+                if (!drinkers.contains(o) && o.look != null && o.look.isHumanoid()) drinkers.add(o);
+            }
+            for (Film.Actor a : drinkers) {
                 if (!a.look.isHumanoid()) continue;
+                String cs = own.containsKey(a) ? own.get(a) : s;
+                int item = drinkItem(cs);
+                if (item == Pose.I_GLASS && cs != s) item = drinkItem(s);
                 Film.Act act = new Film.Act(t + 0.2f, t + 2.8f, Film.G_DRINK);
                 act.item = item;
                 a.acts.add(act);
@@ -6200,11 +6217,12 @@ public final class Director {
                 if (item != Pose.I_BOTTLE) film.sfx.add(sfxAt(Film.SFX_CUP, t + 2.6f, 0.3f, 0.3f, a));
                 if (item == Pose.I_WHISKY || item == Pose.I_WINE || item == Pose.I_BEER) {
                     // (a glass poured first when the sentence pours it; ice clinks in a whisky)
-                    if (Txt.has(s, "डाल", "बना", "pours", "pour", "fills")) film.sfx.add(sfxAt(Film.SFX_POUR, t, 0.6f, 0.25f, a));
+                    if (Txt.has(cs, "डाल", "बना", "pours", "pour", "fills")) film.sfx.add(sfxAt(Film.SFX_POUR, t, 0.6f, 0.25f, a));
                     grownUpDrinks++;
                 }
                 drinks++;
-                if (who.size() == 1 && photo(a)) { mealCU = a; mealCUt = t + 0.1f; }
+                // (the close-up of the first one drinking: a picture's glass reaches the lips only in a close-up)
+                if (photo(a) && (drinkers.size() == 1 || mealCU == null || mealCUt < t)) { mealCU = a; mealCUt = t + 0.1f; }
             }
             d = Math.max(d, 2.9f);
         }
@@ -6217,8 +6235,12 @@ public final class Director {
                 if (a.look == null || !a.look.isHumanoid()) continue;
                 boolean has = false;
                 for (Film.Act x : a.acts) if (x.type == Film.G_DRINK && Math.abs(x.t0 - (t + 0.2f)) < 0.05f) has = true;
-                if (!has) { Film.Act act = new Film.Act(t + 0.9f, t + 3.4f, Film.G_DRINK); act.item = glass; a.acts.add(act); }
-                Film.Act up = new Film.Act(t + 0.1f, t + 1.0f, Film.G_OFFER); up.item = glass; a.acts.add(up);
+                // each raises the glass they had (a whisky stays a whisky), else the one the sentence names
+                int mine = glass;
+                if (!Txt.has(s, BEER) && !Txt.has(s, WHISKY) && !Txt.has(s, WINE))
+                    for (Film.Act x : a.acts) if (x.type == Film.G_DRINK && x.t0 < t && (x.item == Pose.I_WHISKY || x.item == Pose.I_WINE || x.item == Pose.I_BEER)) mine = x.item;
+                if (!has) { Film.Act act = new Film.Act(t + 0.9f, t + 3.4f, Film.G_DRINK); act.item = mine; a.acts.add(act); }
+                Film.Act up = new Film.Act(t + 0.1f, t + 1.0f, Film.G_OFFER); up.item = mine; a.acts.add(up);
             }
             film.sfx.add(sfxAt(Film.SFX_CLINK, t + 0.7f, 0.5f, 0.42f, toast.isEmpty() ? null : toast.get(0)));
             toasts++;
@@ -6688,11 +6710,11 @@ public final class Director {
         Film.Fx tg = null;
         for (Film.Fx o : seg.fx) if (o.t1 > t && ((mark == Film.ARCH_HUNT && o.type == Film.FX_ANIMAL) || (mark == Film.ARCH_TARGET && o.type == Film.FX_TARGET && o.kind == 0))) tg = o;
         float dir = tg != null ? (tg.x >= x ? 1 : -1) : (x < 640 ? 1 : -1);
-        float mx = tg != null ? tg.x : Math.max(140, Math.min(1140, x + dir * 470));
-        if (Math.abs(mx - x) < 240) { dir = -dir; mx = Math.max(140, Math.min(1140, x + dir * 470)); }
+        float mx = tg != null ? tg.x : Math.max(210, Math.min(1070, x + dir * 470));
+        if (Math.abs(mx - x) < 240) { dir = -dir; mx = Math.max(210, Math.min(1070, x + dir * 470)); }
         // never shoot past anyone: a free side for a new mark; those still between step back behind the archer
         if (tg == null && between(a, x, mx, t) > 0) {
-            float ox = Math.max(140, Math.min(1140, x - dir * 470));
+            float ox = Math.max(210, Math.min(1070, x - dir * 470));
             if (Math.abs(ox - x) >= 240 && between(a, x, ox, t) == 0) { dir = -dir; mx = ox; }
         }
         int back = 0;

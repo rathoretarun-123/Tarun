@@ -1,4 +1,4 @@
-# Kahani Film — v40
+# Kahani Film — v41
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,31 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v41
+
+You asked for everything to be checked again — movements, lip-sync, nature, daily activities, expressions, uploads,
+the library, lips and eyes, the mesh, driving, every button — with new test stories made from your pictures, your
+"राहुल का पार्क" story, one more test story, and the director retrained on all your documents.
+
+* **"राहुल का पार्क"** — your swing seat and slide pictures stand in the park from the first frame (all six slide
+  pictures now cut out cleanly). राहुल runs in, hops on the swing and swings slowly, faster, faster still with no hands,
+  stops and hops off; climbs the slide's ladder, sits at the top, slides down with his arms up, tumbles and gets up;
+  slides down again on his belly and lies on the grass; the empty swing sways in its own shot; his bag lies on the grass.
+* **"बारिश वाला रविवार"** — a new story for your family's pictures: every chore of a line is done in order, the sofa
+  takes the room's colour, पापा drives the family's car and the others get in (and out side by side), thunder and rain,
+  "छाता लेकर" opens an umbrella over मम्मी, a held hand, a rainbow, a cycle and a bike, puddles on the road and a jump
+  into one with a splash, pretend anger that breaks into a laugh, a hug of all four and then the walk home.
+* **100 new test stories** (`tools/soak41`), directed with your pictures and checked one by one, plus the 34 earlier
+  stories. Found and fixed: changes that showed up late or jumped (keys out of time order, 68 on v40), lines spoken
+  from beyond the edge of the picture, close-ups that slid off the speaker, walking while seated, sliding while lying,
+  people left on top of each other (54 → 8), quick double cuts, a rainbow at night.
+* **The director against your documents** — every film is now scored the way the handbook's approval card scores it:
+  the place's opening wide is held (0 → 229 of 245 parts), every part where someone listens shows a reaction (38 films
+  failing → 2), still no shot over 4 s and no lip-sync shot over six words.
+* Details and numbers: [`docs/testing-v41.md`](docs/testing-v41.md).
+* **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
+  quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.
 
 ## New in v40
 

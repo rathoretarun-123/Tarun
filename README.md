@@ -1,4 +1,4 @@
-# Kahani Film — v43
+# Kahani Film — v44
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,48 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v44
+
+You asked for: the family in the car — father or mother driving, another grown-up in the front seat, the children
+behind, the steering and the feet on the brake and accelerator, and accidents; two people on a bike or a cycle, the
+pedals and handlebar moving, and accidents; every normal activity of people and animals (driving, doors, eating,
+drinking — alcohol too —, walking, talking); rajkumari stories — sword practice, riding, fighting from the horse with
+sword and bow, hunting, sitting on and rising from the throne; hail and snow in Hindi, snowfall and play in the snow;
+and stories by the hundred and the thousand, 100,000 checked and debugged, then the final APK and code.
+
+* **The family car:** the one the words put at the wheel drives (father first, then mother; never a child); the
+  next grown-up sits in front beside them, the children on the back seat — "आगे की सीट", "पीछे की सीट", "ड्राइवर की
+  सीट", "बगल में" are read. They are seen inside through the windows, at their seats. While driving, the film cuts to
+  a close of the hands on the steering wheel (turning with the road) and of the feet on the pedals (the accelerator
+  pressed to move off, the brake hard when something happens).
+* **Accidents:** a skid ("फिसल जाता है", "संतुलन बिगड़ता है") throws the riders down and they get up hurt; a crash
+  ("खंभे से टकरा जाती है") stops the car dead at the pole, tree, wall or car named, with a bang, the bonnet crumpled
+  and smoking, the people jolted and scared, getting out holding their heads; a near miss ("बाल-बाल बचती है")
+  screeches, a dog runs across, and they breathe again.
+* **Two on a bike or a cycle:** the second one on the carrier or the seat behind ("कैरियर पर", "पीछे बैठती है");
+  the rider's legs pedal (a close of the feet going round), the handlebar in the hands.
+* **Royal stories:** sword practice and duels (wooden swords for practice, a blade's length apart, blows and blocks
+  ringing); the bow — the target set up clear of everyone, the close of the bow drawn and loosed, the arrows in flight,
+  the arrow in the gold; a horse that looks like a horse (long head, mane, tail, jointed legs that gallop), ridden,
+  galloped, fought and shot from; an elephant with its howdah; the queen on her throne, the princess kneeling to her,
+  the queen rising to embrace her; the hunt — a spotted deer grazing, bolting as the arrow leaves the bow.
+* **Snow and hail:** snowflakes falling, the ground and the far hills white, snowflakes caught in the hands, a snowman
+  built with a carrot nose and a scarf, snowballs thrown and hitting, a slide down the slope; hail ("ओले",
+  "ओलावृष्टि") with heads covered and everyone running inside.
+* **Animals and everyday life:** the cow milked, the dog fed and barking, hens pecking the grain, a cat on the wall,
+  a goat, a horse; drinks for grown-ups — each drinks their own (whisky for him, wine for her), glasses clinked
+  ("चीयर्स"), staggering; television watched from the sofa; a phone at the ear while walking.
+* **Stories by the thousand:** a story generator builds whole stories in your script format (2–5 people, 1–4
+  scenes) from 523 tested sentences, directs each and checks it — every direction staged, and the film itself sound
+  (nobody speaking unseen, two on one spot, riding two things, walking seated, lingering off the picture). 1,000 of
+  them are kept in `tools/testdata/v44forge`. FORGE_LINE
+* Checked on the final code: ROBO_LINE. Details: [`docs/testing-v44.md`](docs/testing-v44.md).
+* **Sorry — said plainly:** this is still not Pixar or Disney, and I cannot make it so: the characters are your flat
+  pictures moved on a mesh (their arms can only lift so far — so the bow is drawn in a close-up, as films do), the
+  places and props are drawn, and the director works from rules for the words it knows, not from understanding. And I
+  cannot promise "no bug at all": 100,000 generated stories catch the kinds of mistakes they are built to catch, and
+  some will remain — when you see one, tell me the sentence and what went wrong.
 
 ## New in v43
 
@@ -49,7 +91,7 @@ doors opening and closing, a meal cooked in the kitchen, and a 300 MB limit.
 * **Uploads:** any picture up to **300 MB** is taken — a large one is read straight at the film's working size, never
   whole into memory (a big file used to fail the whole batch); a picture that cannot be read is named in the result
   instead of being dropped silently; the window shows "reading picture 12 of 40". A file over 300 MB is refused with a note.
-* Checked on the final code: TESTS_LINE. Details: [`docs/testing-v43.md`](docs/testing-v43.md).
+* Checked on the final code: the 405 everyday sentences 405 of 405; 196 stories directed, none crashed; the app on the phone emulator (Robolectric) 80 tests, one failure found and fixed, then passed. Details: [`docs/testing-v43.md`](docs/testing-v43.md).
 * **Sorry — said plainly:** this is not Pixar or Disney level, and I cannot make it so: the characters are your flat
   pictures on a fine mesh, not 3D models, and the director works from rules, not understanding. I also cannot promise
   "no bug at all": testing finds and fixes the kinds of mistakes it looks for, and some will remain.

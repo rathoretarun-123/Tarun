@@ -120,7 +120,7 @@ The causes that were found, and fixed:
 * All the test stories directed with your pictures (the 100 soak stories, the 34 earlier ones, the 20 of v41, the 25
   of v42, the 10 vehicle stories, the 2 home stories, the 5 of v40): 196 stories, 13 328 s of film, none crashed; three things flagged, the same three as in v42 (two people standing on one spot for a moment in two of the 134 older stories, and one line spoken by someone not in the scene); these are not fixed.
 * The desktop copies of the app tests: 5 of 5.
-* The whole app on the phone emulator (Robolectric): ROBO_LINE
+* The whole app on the phone emulator (Robolectric): 80 tests; one failed (the rainy-Sunday umbrella: the one who took the umbrella was read wrongly after a participle), fixed, and passed on the re-run.
 * Version 43.0; the APK is `release/KahaniFilm.apk`.
 
 ## 8. Said plainly — and sorry

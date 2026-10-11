@@ -6379,6 +6379,189 @@ public class AppTest {
         return n;
     }
 
+    // ================================================================== v44
+
+    static Film v44Film(String name) throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        Story st = ScriptParser.parse(new String(Files.readAllBytes(new File(root, "tools/testdata/v44stories/" + name).toPath()), "UTF-8"));
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        return d.direct(new Art());
+    }
+
+    static Film.Actor v44Actor(Film film, String name, int type) {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c.displayName.equals(name)) for (Film.Act x : a.acts) if (x.type == type) return a;
+        return null;
+    }
+
+    static java.util.List<Film.Act> v44Acts(Film film, String name, int type) {
+        java.util.List<Film.Act> out = new java.util.ArrayList<Film.Act>();
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c.displayName.equals(name)) for (Film.Act x : a.acts) if (x.type == type) out.add(x);
+        return out;
+    }
+
+    static int v44Fx(Film film, int type, int kind) {
+        int n = 0;
+        for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx) if (f.type == type && (kind < 0 || f.kind == kind)) n++;
+        return n;
+    }
+
+    /** No one rides two things at once, and no two people stand still on one spot for more than a moment. */
+    static void v44Sound(Film film, String name) {
+        for (Film.Seg sg : film.segs) {
+            for (Film.Actor a : sg.actors) {
+                java.util.List<Film.Act> r = new java.util.ArrayList<Film.Act>();
+                for (Film.Act x : a.acts) if (x.type == Film.G_RIDE) r.add(x);
+                for (Film.Act x : r) for (Film.Act y : r) if (x != y && x.t0 < y.t0 && x.t1 > y.t0 + 0.06f)
+                    assertTrue(name + ": " + a.c.displayName + " on two rides at " + y.t0, false);
+            }
+            for (int p = 0; p < sg.actors.size(); p++) for (int q = p + 1; q < sg.actors.size(); q++) {
+                Film.Actor A = sg.actors.get(p), B = sg.actors.get(q);
+                if (A.look == null || B.look == null || !A.look.isHumanoid() || !B.look.isHumanoid()) continue;
+                float run = 0;
+                for (float t = sg.t0 + 0.25f; t < sg.t1; t += 0.25f) {
+                    Film.Key ka = A.stateAt(t), kb = B.stateAt(t);
+                    boolean busy = false;
+                    for (Film.Actor x : new Film.Actor[]{A, B}) for (Film.Act ac : x.acts)
+                        if ((ac.type == Film.G_HUG || ac.type == Film.G_HOLD_HAND || ac.type == Film.G_RIDE || ac.type == Film.G_KISS || ac.type == Film.G_PLAYGROUND
+                                || ac.type == Film.G_GIVE || ac.type == Film.G_FALL) && t >= ac.t0 - 1.1f && t <= ac.t1 + 1.1f) busy = true;
+                    boolean still = Math.abs(Director.xAt(A, t) - Director.xAt(A, t - 0.25f)) < 3 && Math.abs(Director.xAt(B, t) - Director.xAt(B, t - 0.25f)) < 3;
+                    boolean close = !busy && still && ka.visible && kb.visible && ka.anchor == Film.A_GROUND && kb.anchor == Film.A_GROUND
+                            && Math.abs(Director.xAt(A, t) - Director.xAt(B, t)) < 45 && Math.abs(ka.depth - kb.depth) < 0.2f;
+                    run = close ? run + 0.25f : 0;
+                    assertTrue(name + ": " + A.c.displayName + " and " + B.c.displayName + " on one spot at " + t, run < 1.5f);
+                }
+            }
+        }
+    }
+
+    /**
+     * v44 (the user: "family sitting on back seat of car, father or mother driving and other sits on side front seat,
+     * and steering and legs moving to break and speed. Consider accidents"; "two persons on a bike or bicycle, pedal
+     * and handle moving, and also accidents"): the father drives, the mother beside him in front, the children behind;
+     * the steering wheel and the pedals are cut to as he drives and brakes; a dog makes him swerve; a scooter skids
+     * and both fall; a car hits a pole; a cycle carries one on the carrier and another falls off hers.
+     */
+    @Test
+    public void v44CarSeatsDrivingAndAccidents() throws Exception {
+        Film car = v44Film("s01_family_car.txt");
+        v44Sound(car, "s01");
+        java.util.List<Film.Act> drive = v44Acts(car, "तरुण", Film.G_RIDE);
+        boolean drives = false, swerve = false;
+        for (Film.Act x : drive) if (x.item == Film.V_CAR) { drives = true; if (x.mishap == Film.MISHAP_SWERVE) swerve = true; }
+        assertTrue("तरुण is at the wheel", drives);
+        assertTrue("the dog makes him swerve", swerve);
+        boolean front = false;
+        for (Film.Act x : v44Acts(car, "प्रिया", Film.G_RIDE)) if (x.item < 0 && x.seat == Film.CAR_FRONT) front = true;
+        assertTrue("प्रिया beside him in front", front);
+        for (String kid : new String[]{"वृंदा", "वनुशा"}) {
+            boolean back = false;
+            for (Film.Act x : v44Acts(car, kid, Film.G_RIDE)) if (x.item < 0 && x.seat == Film.CAR_BACK) back = true;
+            assertTrue(kid + " on the back seat", back);
+        }
+        assertTrue("the steering wheel is cut to", v44Fx(car, Film.FX_INSERT, Film.INS_STEER) >= 1);
+        assertTrue("the feet on the pedals are cut to", v44Fx(car, Film.FX_INSERT, Film.INS_PEDALS) >= 1);
+        assertTrue("the dog runs across", v44Fx(car, Film.FX_ANIMAL, -1) >= 1);
+
+        Film skid = v44Film("s02_scooter_skid.txt");
+        v44Sound(skid, "s02");
+        assertTrue("the scooter skids", v44Fx(skid, Film.FX_WRECK, Film.MISHAP_SKID) >= 1);
+        assertTrue("तरुण falls", !v44Acts(skid, "तरुण", Film.G_FALL).isEmpty());
+        assertTrue("प्रिया falls too", !v44Acts(skid, "प्रिया", Film.G_FALL).isEmpty());
+
+        Film crash = v44Film("s03_car_crash.txt");
+        v44Sound(crash, "s03");
+        boolean crashed = false;
+        for (Film.Act x : v44Acts(crash, "तरुण", Film.G_RIDE)) if (x.mishap == Film.MISHAP_CRASH) crashed = true;
+        assertTrue("the car hits the pole", crashed);
+        boolean bang = false;
+        for (Film.Sfx x : crash.sfx) if (x.type == Film.SFX_CRASH) bang = true;
+        assertTrue("the crash is heard", bang);
+
+        Film cycle = v44Film("s04_cycle_two.txt");
+        v44Sound(cycle, "s04");
+        boolean carrier = false;
+        for (Film.Act x : v44Acts(cycle, "वनुशा", Film.G_RIDE)) if (x.item == -Film.V_BICYCLE) carrier = true;
+        assertTrue("वनुशा on the carrier", carrier);
+        assertTrue("वृंदा falls off her cycle", !v44Acts(cycle, "वृंदा", Film.G_FALL).isEmpty());
+        System.out.println("V44 CARS ok");
+    }
+
+    /**
+     * v44 (the user: "rajkumari type stories, like practice of sword fighting, riding horse, riding horse and fighting
+     * with sword and bow and arrow, hunting, sitting and getting up from throne"): a duel trades blows, three arrows
+     * fly to the target (the bow drawn in a close, the arrow in the gold in another), she gallops and shoots from the
+     * saddle, kneels before the queen on the throne, who rises to embrace her; the hunter's deer bolts as the arrow
+     * leaves the bow.
+     */
+    @Test
+    public void v44RoyalSwordBowHorseThroneAndHunt() throws Exception {
+        Film f = v44Film("s05_rajkumari.txt");
+        v44Sound(f, "s05");
+        assertTrue("वृंदा fences", v44Acts(f, "वृंदा", Film.G_SWORD).size() >= 2);
+        assertTrue("तरुण fences back", v44Acts(f, "तरुण", Film.G_SWORD).size() >= 2);
+        assertTrue("three arrows (and one from the saddle)", v44Fx(f, Film.FX_ARROW, -1) >= 4);
+        assertTrue("the bow drawn, close", v44Fx(f, Film.FX_INSERT, Film.INS_BOW) >= 1);
+        assertTrue("the arrow in the gold, close", v44Fx(f, Film.FX_INSERT, Film.INS_ARROW) >= 1);
+        boolean gallop = false;
+        for (Film.Act x : v44Acts(f, "वृंदा", Film.G_RIDE)) if (x.item == Film.V_HORSE && x.mounted == Film.G_ARCHERY) gallop = true;
+        assertTrue("she shoots from the galloping horse", gallop);
+        Film.Actor v = v44Actor(f, "वृंदा", Film.G_HUG);
+        boolean kneels = false;
+        for (Film.Key k : v.keys) if (k.body == Pose.KNEEL) kneels = true;
+        assertTrue("she kneels before the queen", kneels);
+        boolean throne = false;
+        for (Film.Seg sg : f.segs) for (Film.Fx x : sg.fx) if (x.type == Film.FX_SEAT && x.kind == Film.SEAT_THRONE) throne = true;
+        assertTrue("the queen's throne", throne);
+        assertTrue("the queen rises and embraces her", !v44Acts(f, "प्रिया", Film.G_HUG).isEmpty());
+
+        Film h = v44Film("s06_hunt.txt");
+        v44Sound(h, "s06");
+        float shot = 1e9f, bolt = -1;
+        for (Film.Seg sg : h.segs) for (Film.Fx x : sg.fx) {
+            if (x.type == Film.FX_ARROW && x.kind == Film.ARCH_HUNT) shot = Math.min(shot, x.t0);
+            if (x.type == Film.FX_ANIMAL && x.kind == Look.SP_DEER && x.t2 < 1e5f) bolt = x.t2;
+        }
+        assertTrue("an arrow at the deer", shot < 1e9f);
+        assertTrue("the deer bolts as the arrow leaves (" + bolt + " vs " + shot + ")", bolt >= shot - 0.05f && bolt <= shot + 0.5f);
+        System.out.println("V44 ROYAL ok");
+    }
+
+    /**
+     * v44 (the user: "add hailstorm and snow in Hindi as well — snow falling, snow playing scenes"; "how people take
+     * alcohol"; "every normal activity of people and animals"): flakes caught, a snowman built with a carrot nose, a
+     * snowball thrown, hail sends everyone in; the cow milked, the dog fed and barking, hens fed; whisky for him, wine
+     * for her, glasses clinked; a walk round the room on the phone.
+     */
+    @Test
+    public void v44SnowHailAnimalsAndDrinks() throws Exception {
+        Film s = v44Film("s07_snow.txt");
+        v44Sound(s, "s07");
+        boolean ground = false;
+        for (Film.Seg sg : s.segs) if (sg.snowGround) ground = true;
+        assertTrue("snow lies on the ground", ground);
+        assertTrue("a snowman", v44Fx(s, Film.FX_SNOWMAN, -1) >= 1);
+        int man = 0, ball = 0, cat = 0;
+        for (Film.Seg sg : s.segs) for (Film.Actor a : sg.actors) for (Film.Act x : a.acts) if (x.type == Film.G_SNOW_PLAY) {
+            if (x.item == Film.SNOW_MAN) man++; if (x.item == Film.SNOW_BALL) ball++; if (x.item == Film.SNOW_CATCH) cat++;
+        }
+        assertTrue("built together, thrown, caught: " + man + "/" + ball + "/" + cat, man >= 2 && ball >= 1 && cat >= 1);
+        for (Film.Seg sg : s.segs) if (sg.type == Film.S_SCENE) for (Film.Actor a : sg.actors)
+            assertFalse(a.c.displayName + " runs in from the hail", a.stateAt(sg.t1 - 0.05f).visible);
+
+        Film p = v44Film("s08_farm_party.txt");
+        v44Sound(p, "s08");
+        assertTrue("the cow, the dog and the hens", v44Fx(p, Film.FX_ANIMAL, -1) >= 3);
+        boolean whisky = false, wine = false, clink = false;
+        for (Film.Act x : v44Acts(p, "तरुण", Film.G_DRINK)) if (x.item == Pose.I_WHISKY) whisky = true;
+        for (Film.Act x : v44Acts(p, "प्रिया", Film.G_DRINK)) if (x.item == Pose.I_WINE) wine = true;
+        for (Film.Sfx x : p.sfx) if (x.type == Film.SFX_CLINK) clink = true;
+        assertTrue("whisky for him", whisky);
+        assertTrue("wine for her", wine);
+        assertTrue("the glasses clink", clink);
+        System.out.println("V44 SNOW/PARTY ok");
+    }
+
     static void deleteTree(File f) {
         if (f.isDirectory()) for (File c : f.listFiles()) deleteTree(c);
         f.delete();

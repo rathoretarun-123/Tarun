@@ -464,6 +464,12 @@ public final class Puppet {
                 // standing: the knee half way down the straight leg, the foot under the hip, on the floor
                 kx = hx + (kx - hx) * u; ky = b.hipY * 0.5f + b.floorY * 0.5f + (ky - (b.hipY * 0.5f + b.floorY * 0.5f)) * u;
                 fx = hx + (sfx - hx) * u; fy = b.floorY + (sfy - b.floorY) * u;
+                // v44: pedalling — each foot goes round with its pedal (the far one half a turn on), the knee rising and falling
+                if (p.pedalAmt > 0 && u > 0.5f) {
+                    double ph = p.pedal + (side > 0 ? 0 : Math.PI);
+                    float r = b.L * 0.17f * p.pedalAmt, ox = (float) Math.cos(ph) * r, oy = (float) Math.sin(ph) * r;
+                    fx += ox; fy += oy - r * 1.4f; kx += ox * 0.35f; ky += oy * 0.6f - r * 0.5f;
+                }
                 kneeX = kx; kneeY = ky;
                 if (!longSkirt || u > 0.25f) {
                     g.color(legColor);
@@ -1350,6 +1356,11 @@ public final class Puppet {
             case Pose.I_CUP: case Pose.I_TEA: case Pose.I_GLASS: case Pose.I_PLATE:
                 drawVessel(g, hold, hx, hy, b.headR / 34f, p.time);
                 break;
+            // v44: the bow, the shield, the spear, the grown-ups' glasses, a snowball
+            case Pose.I_BOW: ActionProps.bow(g, hx, hy, b.H * 0.21f, p.facing, p.bowDraw, p.arrowOn); break;
+            case Pose.I_SHIELD: ActionProps.shield(g, hx, hy - b.H * 0.02f, b.H * 0.11f); break;
+            case Pose.I_SPEAR: ActionProps.spear(g, hx, hy, b.H * 0.75f, p.facing); break;
+            case Pose.I_WINE: case Pose.I_BEER: case Pose.I_WHISKY: case Pose.I_SNOWBALL: ActionProps.drink(g, hold, hx, hy, b.headR / 34f); break;
             case Pose.I_TURBAN:
                 drawTurbanShape(g, hx, hy - 6, b.headR * 1.0f, p.turbanColor, p.turbanBand, false);
                 break;

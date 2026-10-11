@@ -403,6 +403,19 @@ public final class DirectorsManual {
             case Film.SFX_CHOP: return "chopping";
             case Film.SFX_BOIL: return "something boiling";
             case Film.SFX_WHISTLE: return "a pressure cooker whistle";
+            case Film.SFX_SCREECH: return "tyres screeching";
+            case Film.SFX_CRASH: return "a crash";
+            case Film.SFX_ARROW: return "an arrow loosed";
+            case Film.SFX_HOOVES: return "hooves";
+            case Film.SFX_NEIGH: return "a horse neighing";
+            case Film.SFX_CLINK: return "glasses clinking";
+            case Film.SFX_SNOW: return "steps in the snow";
+            case Film.SFX_TRUMPET: return "an elephant trumpeting";
+            case Film.SFX_BARK: return "a dog barking";
+            case Film.SFX_MOO: return "a cow mooing";
+            case Film.SFX_MEOW: return "a cat meowing";
+            case Film.SFX_CLUCK: return "hens clucking";
+            case Film.SFX_BLEAT: return "a goat bleating";
             default: return "effect " + type;
         }
     }

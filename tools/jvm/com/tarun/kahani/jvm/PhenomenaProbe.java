@@ -69,8 +69,10 @@ public class PhenomenaProbe {
 
     static final class Ctx {
         String cat = "misc", place = "out", start = "stand", tod = "day", age = "kid";
-        Ctx copy() { Ctx c = new Ctx(); c.cat = cat; c.place = place; c.start = start; c.tod = tod; c.age = age; return c; }
-        String key() { return place + "/" + start + "/" + tod + "/" + age; }
+        /** v44: fam=1 — Father (पापा) is in the scene too (a family in the car, two on a bike). */
+        boolean fam;
+        Ctx copy() { Ctx c = new Ctx(); c.cat = cat; c.place = place; c.start = start; c.tod = tod; c.age = age; c.fam = fam; return c; }
+        String key() { return place + "/" + start + "/" + tod + "/" + age + (fam ? "/fam" : ""); }
     }
 
     /** key, Hindi place, Hindi "where", English place, English scene heading, English "where". */
@@ -85,6 +87,12 @@ public class PhenomenaProbe {
         {"terrace", "घर की छत", "छत पर", "The terrace of the house", "The terrace", "on the terrace"},
         {"garden", "घर का बगीचा", "बगीचे में", "The garden of the house", "The garden", "in the garden"},
         {"shore", "मछुआरों का गाँव", "गाँव में", "The fishermen's village", "The fishermen's village", "in the village"},
+        // v44: royal stories, the hunt, snow, the highway
+        {"palace", "राजमहल का दरबार", "दरबार में", "The royal court of the palace", "The royal court", "in the court"},
+        {"arena", "महल का अखाड़ा", "अखाड़े में", "The training ground of the palace", "The training ground", "on the training ground"},
+        {"forest", "घना जंगल", "जंगल में", "The dense forest", "The forest", "in the forest"},
+        {"snow", "बर्फ़ से ढकी पहाड़ी", "बर्फ़ में", "The snowy hillside", "The snowy hillside", "in the snow"},
+        {"road", "शहर की बड़ी सड़क", "सड़क पर", "The main road of the city", "The main road", "on the road"},
     };
 
     static String[] place(String key) {
@@ -113,13 +121,15 @@ public class PhenomenaProbe {
                 case "sofa": open = n + " " + p[2] + " सोफ़े पर " + sit + " है।"; break;
                 case "floor": open = n + " " + p[2] + " ज़मीन पर " + sit + " है।"; break;
                 case "bed": open = n + " " + p[2] + " बिस्तर पर " + sleep + " है।"; break;
+                case "throne": open = n + " " + p[2] + " सिंहासन पर " + sit + " है।"; break;
                 case "rain": open = "तेज़ बारिश हो रही है। " + here; break;
                 case "fog": open = "चारों ओर घना कोहरा छाया हुआ है। " + here; break;
                 case "wind": open = "तेज़ हवा चल रही है। " + here; break;
                 default: throw new IllegalArgumentException("unknown start " + c.start);
             }
-            return "शीर्षक: जाँच\n\nपात्र परिचय\n1. " + n + " - " + who + "\n2. माँ - " + mom + "\n\nजगह का परिचय\n1. " + p[1]
-                    + "\n\nस्क्रिप्ट शुरू\n\nदृश्य 1: " + p[1] + " - " + hiTod(c.tod) + "\n\n[" + open + " माँ पास में खड़ी है।]\n\nमाँ: \"" + n + "!\"\n\n["
+            String dad = c.fam ? "\n3. पापा - " + (adult ? "62 साल, पिता" : "40 साल, पिता") : "";
+            return "शीर्षक: जाँच\n\nपात्र परिचय\n1. " + n + " - " + who + "\n2. माँ - " + mom + dad + "\n\nजगह का परिचय\n1. " + p[1]
+                    + "\n\nस्क्रिप्ट शुरू\n\nदृश्य 1: " + p[1] + " - " + hiTod(c.tod) + "\n\n[" + open + " माँ पास में खड़ी है।" + (c.fam ? " पापा भी वहीं हैं।" : "") + "]\n\nमाँ: \"" + n + "!\"\n\n["
                     + sentence + "]\n\n" + n + ": \"हाँ माँ।\"\n";
         }
         String n = girl ? "Priya" : "Rahul", him = girl ? "her" : "him", his = girl ? "her" : "his";
@@ -133,13 +143,15 @@ public class PhenomenaProbe {
             case "sofa": open = n + " is sitting on the sofa " + p[5] + "."; break;
             case "floor": open = n + " is sitting on the floor " + p[5] + "."; break;
             case "bed": open = n + " is asleep in bed " + p[5] + "."; break;
+            case "throne": open = n + " is sitting on the throne " + p[5] + "."; break;
             case "rain": open = "It is raining heavily. " + here; break;
             case "fog": open = "Thick fog lies all around. " + here; break;
             case "wind": open = "A strong wind is blowing. " + here; break;
             default: throw new IllegalArgumentException("unknown start " + c.start);
         }
-        return "Title: Check\n\nCharacters\n1. " + n + " - " + who + "\n2. Mother - " + mom + "\n\nPlaces\n1. " + p[3]
-                + "\n\nScript begins\n\nScene 1: " + p[4] + " - " + c.tod + "\n\n[" + open + " Mother stands near " + him + ".]\n\nMother: \"" + n + "!\"\n\n["
+        String dad = c.fam ? "\n3. Father - " + (adult ? "62" : "40") + ", " + his + " father" : "";
+        return "Title: Check\n\nCharacters\n1. " + n + " - " + who + "\n2. Mother - " + mom + dad + "\n\nPlaces\n1. " + p[3]
+                + "\n\nScript begins\n\nScene 1: " + p[4] + " - " + c.tod + "\n\n[" + open + " Mother stands near " + him + "." + (c.fam ? " Father is there too." : "") + "]\n\nMother: \"" + n + "!\"\n\n["
                 + sentence + "]\n\n" + n + ": \"Yes, mother.\"\n";
     }
 
@@ -431,6 +443,31 @@ public class PhenomenaProbe {
             case "HIDE": { for (Film.Key k : windowKeys(r)) if (hidden(k)) return true; return false; }
             case "UMBRELLA": return !r.main.umbrellaAt(r.main.look, r.tA - 0.06f) && r.main.umbrellaAt(r.main.look, r.tB - 0.05f);
             case "ANY": return !r.sig.equals(r.sig0) && !r.sig.equals(r.sig1);
+            // v44: a ride's mishap (on anyone's ride in the window: the main character may be the passenger), a
+            // passenger's seat, a weapon from the saddle, the bow's mark, play in the snow, a close insert
+            case "MISHAP": {
+                int m = film("MISHAP_", arg);
+                for (Film.Actor a : r.seg.actors) for (Film.Act x : a.acts)
+                    if (x.type == Film.G_RIDE && x.mishap == m && x.mishapAt >= 0 && in(r, x.t0 + x.mishapAt)) return true;
+                return false;
+            }
+            case "SEATNO": {
+                int sn = film("CAR_", arg);
+                for (Film.Act x : r.main.acts) if (x.type == Film.G_RIDE && x.seat == sn && x.t1 > r.tA && x.t0 < r.tB) return true;
+                return false;
+            }
+            case "MOUNTED": {
+                int g = film("G_", arg);
+                for (Film.Act x : r.main.acts) if (x.type == Film.G_RIDE && x.mounted == g && x.t0 + x.mountedAt < r.tB && x.t0 + x.mountedTo > r.tA) return true;
+                return false;
+            }
+            case "ARCH": return act(r, Film.G_ARCHERY, film("ARCH_", arg), 0, false);
+            case "SNOW": return act(r, Film.G_SNOW_PLAY, film("SNOW_", arg), 0, false);
+            case "INSERT": {
+                int k = film("INS_", arg);
+                for (Film.Fx x : windowFx(r)) if (x.type == Film.FX_INSERT && x.kind == k) return true;
+                return false;
+            }
             default: throw new IllegalArgumentException("unknown code " + code);
         }
     }
@@ -478,6 +515,12 @@ public class PhenomenaProbe {
                 case "EX": film("EX_", arg); break;
                 case "MK": film("MK_", arg); break;
                 case "SEAT": film("SEAT_", arg); break;
+                case "SEATNO": film("CAR_", arg); break;
+                case "MISHAP": film("MISHAP_", arg); break;
+                case "MOUNTED": film("G_", arg); break;
+                case "ARCH": film("ARCH_", arg); break;
+                case "SNOW": film("SNOW_", arg); break;
+                case "INSERT": film("INS_", arg); break;
                 case "DRINK": case "HOLD": constant(Pose.class, "I_" + arg); break;
                 case "BODY": pose(arg, BODIES); break;
                 case "EMO": pose(arg, EMOTIONS); break;
@@ -495,7 +538,10 @@ public class PhenomenaProbe {
         String n = nameOf("G_", a.type);
         switch (a.type) {
             case Film.G_TASK: return n + "/" + nameOf("T_", a.item);
-            case Film.G_RIDE: return n + "/" + nameOf("V_", Math.abs(a.item) % Film.V_PASSENGER) + (a.item >= Film.V_PASSENGER ? "(passenger)" : a.item < 0 ? "(behind)" : "");
+            case Film.G_RIDE: return n + "/" + nameOf("V_", Math.abs(a.item) % Film.V_PASSENGER) + (a.item >= Film.V_PASSENGER ? "(passenger)" : a.item < 0 ? "(behind)" : "")
+                    + (a.seat >= 0 ? "[seat " + nameOf("CAR_", a.seat) + "]" : "") + (a.mishap != 0 ? "[" + nameOf("MISHAP_", a.mishap) + "]" : "") + (a.mounted != 0 ? "[" + nameOf("G_", a.mounted) + "]" : "");
+            case Film.G_ARCHERY: return n + "/" + nameOf("ARCH_", a.item);
+            case Film.G_SNOW_PLAY: return n + "/" + nameOf("SNOW_", a.item);
             case Film.G_PLAYGROUND: return n + "/" + nameOf("PG_", Math.abs(a.item));
             case Film.G_EXERCISE: return n + "/" + nameOf("EX_", a.item);
             case Film.G_MAKEUP: return n + "/" + nameOf("MK_", a.item);
@@ -610,10 +656,11 @@ public class PhenomenaProbe {
                 case "start": c.start = v; break;
                 case "tod": hiTod(v); c.tod = v; break;
                 case "age": if (!v.equals("kid") && !v.equals("adult")) throw new IllegalArgumentException("line " + no + ": age " + v); c.age = v; break;
+                case "fam": c.fam = v.equals("1"); break;
                 default: throw new IllegalArgumentException("line " + no + ": unknown directive " + k);
             }
         }
-        if (!Arrays.asList("stand", "chair", "sofa", "floor", "bed", "rain", "fog", "wind").contains(c.start)) throw new IllegalArgumentException("line " + no + ": start " + c.start);
+        if (!Arrays.asList("stand", "chair", "sofa", "floor", "bed", "throne", "rain", "fog", "wind").contains(c.start)) throw new IllegalArgumentException("line " + no + ": start " + c.start);
         return c;
     }
 

@@ -17,7 +17,14 @@ public final class Pose {
             // v37: exercise and make-up, the bath's mug, painting
             I_DUMBBELL = 24, I_KAJAL = 25, I_LIPSTICK = 26, I_BINDI = 27, I_CONE = 28, I_PUFF = 29, I_MUG = 30, I_PAINTBRUSH = 31, I_ROPE = 32,
             // v43: the kitchen's knife and rolling pin (belan)
-            I_KNIFE = 33, I_ROLLER = 34;
+            I_KNIFE = 33, I_ROLLER = 34,
+            // v44: the bow (an arrow on it while drawn), a wine glass, a beer mug, a whisky glass, a snowball, a spear
+            I_BOW = 35, I_WINE = 36, I_BEER = 37, I_WHISKY = 38, I_SNOWBALL = 39, I_SPEAR = 40, I_SHIELD = 41;
+
+    /** v37/v44: a make-up tool (it goes to its place on the face), not a drink or a weapon. */
+    public static boolean makeup(int item) { return item >= I_KAJAL && item <= I_ROPE && item != I_MUG && item != I_ROPE; }
+    /** v44: a glass of something grown-ups drink. */
+    public static boolean grownUpDrink(int item) { return item == I_WINE || item == I_BEER || item == I_WHISKY; }
 
     public int body = STAND;
     public int emotion = NEUTRAL;
@@ -70,6 +77,11 @@ public final class Pose {
     public float kajal, lipstick, bindi, mehndi, powder, facePaint;
     /** v37: a towel round the shoulders after a bath (0..1). */
     public float towel;
+    /** v44: the bow's string drawn back (0 slack .. 1 to the cheek), an arrow on it; a cyclist's crank angle (radians)
+     *  and how much the legs follow it (0 still .. 1 pedalling); a rider leaning into a skid or a crash (degrees). */
+    public float bowDraw;
+    public boolean arrowOn;
+    public float pedal, pedalAmt;
     /** v38: how strongly the cheeks flush with the feeling of the beat (0..1; FilmCraft.flush). */
     public float flush;
     public String turbanOwner;         // whose turban / cap is being worn (its real picture is used when there is one)              // a sword is being swung right now (otherwise a held sword rests calmly)
@@ -87,6 +99,7 @@ public final class Pose {
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.umbrellaAmt = umbrellaAmt; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld; q.turnBody = turnBody; q.turnHead = turnHead;
         q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel; q.flush = flush;
+        q.bowDraw = bowDraw; q.arrowOn = arrowOn; q.pedal = pedal; q.pedalAmt = pedalAmt;
         return q;
     }
 
@@ -98,5 +111,6 @@ public final class Pose {
         sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; umbrellaAmt = 1; toMouth = 0; toMouthItem = 0;
         gazeX = 0; gazeY = 0; gazeHeld = 0; turnBody = 0; turnHead = 0;
         kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0; flush = 0;
+        bowDraw = 0; arrowOn = false; pedal = 0; pedalAmt = 0;
     }
 }

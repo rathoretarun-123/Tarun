@@ -505,6 +505,9 @@ public final class Props {
             case Film.V_CAR: return new float[]{0.05f, 0.33f};
             case Film.V_BUS: return new float[]{1.35f, 0.62f};
             case Film.V_AUTO: return new float[]{0.12f, 0.4f};
+            // v44: on a horse's back just behind the withers, in an elephant's howdah
+            case Film.V_HORSE: return new float[]{-0.08f, 0.8f};
+            case Film.V_ELEPHANT: return new float[]{-0.1f, 1.22f};
             default: return new float[]{0, 0.3f};
         }
     }
@@ -537,6 +540,7 @@ public final class Props {
             case Film.V_CAR: car(g, s, f, dist, t, color, front, doorF, doorR); break;
             case Film.V_BUS: bus(g, s, f, dist, t, front); break;
             case Film.V_AUTO: auto(g, s, f, dist, t, front); break;
+            case Film.V_HORSE: case Film.V_ELEPHANT: mount(g, kind, s, f, dist, t, front, stand); break;
             default:
         }
         if (pass && !front) {
@@ -575,6 +579,71 @@ public final class Props {
         float ex = px + (float) Math.cos(an) * len * f, ey = py + (float) Math.sin(an) * len;
         g.color(0xFF37474F); g.line(px, py, ex, ey, Math.max(1.5f, 0.016f * s));
         if (down > 0.6f) { g.color(0xFF263238); g.oval(ex, ey, 0.018f * s, 0.006f * s); }      // its foot on the ground
+    }
+
+    private static Look horseLook, elephantLook;
+
+    /** v44: the look of a ridden animal: a bay horse, a grey elephant. */
+    static Look mountAnimal(int kind) {
+        if (kind == Film.V_HORSE && horseLook != null) return horseLook;
+        if (kind == Film.V_ELEPHANT && elephantLook != null) return elephantLook;
+        Look m = new Look();
+        m.kind = Look.ANIMAL;
+        m.species = kind == Film.V_HORSE ? Look.SP_HORSE : Look.SP_ELEPHANT;
+        m.furColor = kind == Film.V_HORSE ? 0xFF7B4A2A : 0xFF8A8580;
+        m.skin = Puppet.shade(m.furColor, 1.25f);
+        m.eyeColor = 0xFF2B1B10;
+        if (kind == Film.V_HORSE) horseLook = m; else elephantLook = m;
+        return m;
+    }
+
+    /**
+     * v44: a horse or an elephant under its rider (s = the rider's height): it walks, trots or gallops with the ground
+     * covered (its legs stride with dist), stands breathing when still (still = 1), a saddle cloth on the horse, a
+     * howdah on the elephant (its front rail in front of the rider: front = true).
+     */
+    static void mount(Gfx g, int kind, float s, float f, float dist, float t, boolean front, float still) {
+        boolean horse = kind == Film.V_HORSE;
+        float Hm = horse ? 0.94f * s : 1.32f * s;
+        if (front) {
+            if (!horse) {
+                // the howdah's front rail and its cloth over the elephant's back, in front of the rider's legs
+                float top = -0.93f * Hm;
+                g.color(0xFFB71C1C); g.roundRect(-0.36f * Hm, top - 0.02f * Hm, 0.72f * Hm, 0.16f * Hm, 0.03f * Hm);
+                g.color(0xFFFFC107); g.rect(-0.36f * Hm, top + 0.1f * Hm, 0.72f * Hm, 0.02f * Hm);
+                g.color(0xFF8D6E63); g.rect(-0.3f * Hm, top - 0.16f * Hm, 0.6f * Hm, 0.03f * Hm);
+            }
+            return;
+        }
+        Pose pm = new Pose();
+        pm.facing = f; pm.time = t;
+        float move = Math.max(0, Math.min(1, 1 - still));
+        pm.walkAmt = move;
+        pm.walk = dist / (horse ? 0.2f * Hm : 0.12f * Hm);
+        pm.blink = (t % 3.7f) < 0.12f ? 1 : 0;
+        g.save();
+        // a gallop rocks the body; standing still it breathes
+        float bob = move * (float) Math.abs(Math.sin(pm.walk)) * 0.03f * Hm;
+        g.translate(0, -bob);
+        if (move > 0.5f && horse) g.rotate((float) Math.sin(pm.walk * 2) * 2.5f * f);
+        Puppet.drawAnimal(g, mountAnimal(kind), pm, Hm);
+        // the saddle cloth (red with a gold edge) and the saddle on the horse; the howdah's back and seat on the elephant
+        float backY = -0.86f * Hm;
+        if (horse) {
+            g.color(0xFFB71C1C); g.roundRect(-0.2f * Hm, backY - 0.01f * Hm, 0.32f * Hm, 0.2f * Hm, 0.04f * Hm);
+            g.color(0xFFFFC107); g.rect(-0.2f * Hm, backY + 0.17f * Hm, 0.32f * Hm, 0.02f * Hm);
+            g.color(0xFF4E342E); g.roundRect(-0.15f * Hm, backY - 0.05f * Hm, 0.22f * Hm, 0.07f * Hm, 0.03f * Hm);
+            // the stirrup hanging
+            g.color(0xFF616161); g.line(-0.06f * Hm, backY, -0.06f * Hm, backY + 0.36f * Hm, 0.008f * Hm);
+            g.strokeOval(-0.06f * Hm, backY + 0.38f * Hm, 0.025f * Hm, 0.015f * Hm, 0.008f * Hm);
+        } else {
+            float top = -0.93f * Hm;
+            g.color(0xFF6A1B9A); g.roundRect(-0.42f * Hm, top - 0.02f * Hm, 0.84f * Hm, 0.34f * Hm, 0.06f * Hm);
+            g.color(0xFFFFC107); g.rect(-0.42f * Hm, top + 0.28f * Hm, 0.84f * Hm, 0.03f * Hm);
+            g.color(0xFF8D6E63); g.roundRect(-0.34f * Hm, top - 0.3f * Hm, 0.68f * Hm, 0.3f * Hm, 0.02f * Hm);
+            g.color(0xFFD32F2F); g.begin(); g.moveTo(-0.38f * Hm, top - 0.3f * Hm); g.quadTo(0, top - 0.55f * Hm, 0.38f * Hm, top - 0.3f * Hm); g.close(); g.fillPath();
+        }
+        g.restore();
     }
 
     /** A wheel: the tyre, the rim, spokes (or a hub cap) turned by the distance gone. */

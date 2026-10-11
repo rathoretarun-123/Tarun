@@ -77,7 +77,7 @@ public final class Cues {
         if (Txt.has(s, DATA) && Txt.has(s, "जाने", "जाता", "जाती", "चोरी", "flow", "goes", "leak", "transfer", "download", "upload", "खिंच")) out.add(new Cue(V_DATA, Film.SFX_GLITCH, 3f, 0.25f, "data"));
         if (Txt.has(s, BEAM)) out.add(new Cue(V_BEAM, Film.SFX_CHIME, 3f, 0.25f, "beam"));
         if (Txt.has(s, DRONE) && !Txt.has(s, "drone controller", "ड्रोन कंट्रोलर", "drone remote")) out.add(new Cue(V_DRONE, Film.SFX_DRONE, 6f, 0.25f, "drone"));
-        if (Txt.has(s, NOTIFY)) out.add(new Cue(V_NOTIFY, Film.SFX_BLIP, 1.8f, 0.45f, "notification"));
+        if (Txt.hasStart(s, NOTIFY)) out.add(new Cue(V_NOTIFY, Film.SFX_BLIP, 1.8f, 0.45f, "notification"));
         if (Txt.has(s, HEARTS)) out.add(new Cue(V_HEARTS, Film.SFX_TWINKLE, 2.4f, 0.3f, "hearts"));
         if (Txt.has(s, SPARK)) out.add(new Cue(V_SPARKS, Film.SFX_SPARK, 1f, 0.5f, "spark"));
         if (Txt.has(s, BLAST)) out.add(new Cue(V_BLAST, Film.SFX_BOOM, 1.5f, 0.8f, "blast"));

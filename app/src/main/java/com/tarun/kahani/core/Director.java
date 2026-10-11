@@ -3299,7 +3299,9 @@ public final class Director {
         {new String[]{"झाँक", "झांक", "peeks", "peeps", "peeking", "peers"}, Pose.CURIOUS, Film.G_TURN, 1.6f, EV_NONE},
         {new String[]{"घुटनों के बल", "घुटने के बल", "घुटने टेक", "kneels", "on his knees", "on her knees"}, -1, -1, 1.6f, EV_KNEEL},
         {new String[]{"पालथी", "cross-legged", "cross legged"}, -1, -1, 1.4f, EV_FLOOR},
-        {new String[]{"गिर", "फिसल", "लड़खड़ा", "ठोकर", "falls", "trips", "slips", "stumbles", "tumbles"}, Pose.PAIN, Film.G_FLAIL, 2.8f, EV_FALL},
+        // v44: unsteady after drinking (a sway, a stumble caught) — before the fall's words
+        {new String[]{"नशे में", "डगमगा", "staggers", "staggering", "drunkenly", "totters", "tipsy", "sways on"}, Pose.DIZZY, Film.G_STAGGER, 3.2f, EV_NONE},
+        {new String[]{"गिर", "फिसल", "ठोकर", "लड़खड़ा", "falls", "trips", "slips", "stumbles", "tumbles"}, Pose.PAIN, Film.G_FLAIL, 2.8f, EV_FALL},
         {new String[]{"उठ खड़", "खड़ा हो", "खड़ी हो", "खड़े हो", "उठ जा", "उठ बैठ", "उठता", "उठती", "उठते", "stands up", "gets up", "rises"}, -1, -1, 1.0f, EV_STAND},
         {new String[]{"जाग", "नींद खुल", "आँख खुल", "आंख खुल", "wakes up", "awakes"}, -1, Film.G_RUB_EYES, 1.8f, EV_WAKE},
         {new String[]{"अंगड़ाई", "उबासी", "जम्हाई", "हाथ-पैर फैला", "हाथ पैर फैला", "बदन सीधा", "शरीर सीधा", "stretches", "yawn"}, -1, Film.G_STRETCH, 1.8f, EV_NONE},
@@ -3484,7 +3486,16 @@ public final class Director {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("[\\u0900-\\u0963]कर[\\s,]").matcher(n);
         while (m.find()) part = m.end();
         if (n.matches("^[a-z]+ing\\b.*") && n.indexOf(", ") > 0) part = Math.max(part, n.indexOf(", ") + 2);
-        if (part > 0) {
+        // (v44: only when nobody plain stands before the participle: "प्रिया छाता लेकर कार से उतरती है और वनुशा का हाथ पकड़ती
+        // है" is प्रिया's — the one after "लेकर" is only whose hand; "माँ की आवाज़ सुनकर राहुल…" is राहुल's)
+        boolean plainBefore = false;
+        for (int i = 0; i < ms.size() && part > 0; i++) {
+            if (pos[i] < 0 || pos[i] >= part || objectMarked(n, pos[i], end[i])) continue;
+            String after = n.substring(Math.min(n.length(), end[i])).trim();
+            if (after.startsWith("का ") || after.startsWith("की ") || after.startsWith("के ") || after.startsWith("'s ")) continue;
+            plainBefore = true;
+        }
+        if (part > 0 && !plainBefore) {
             int best = -1;
             for (int i = 0; i < ms.size(); i++)
                 if (pos[i] >= part && !objectMarked(n, pos[i], end[i]) && (best < 0 || pos[i] < pos[best])) best = i;
@@ -3597,10 +3608,23 @@ public final class Director {
             switch (ev) {
                 case EV_FALL: {
                     if (!human || now.body != Pose.STAND || now.anchor != Film.A_GROUND) break;
-                    a.acts.add(new Film.Act(t0, t0 + 0.55f, Film.G_FLAIL));
-                    Film.Key down = keyAt(a, t0 + 0.55f); down.body = Pose.SIT; down.seat = Film.SEAT_FLOOR; down.emotion = Pose.PAIN;
-                    film.sfx.add(sfxAt(Film.SFX_THUD, t0 + 0.55f, 0.4f, 0.4f, a));
-                    Film.Key up = keyAt(a, t0 + 2.2f); up.body = Pose.STAND; up.seat = -1; up.emotion = Pose.NEUTRAL;
+                    // v44: a stumble that does not end on the ground ("ठोकर खाकर लड़खड़ा जाता है", "stumbles"): arms out, caught
+                    if (!Txt.has(w, "गिर", "फिसल", "falls", "fell", "slips", "slipped", "tumbles")) {
+                        a.acts.add(new Film.Act(t0, t0 + 0.8f, Film.G_FLAIL));
+                        keyAt(a, t0).emotion = Pose.PAIN;
+                        keyAt(a, t0 + 1.6f).emotion = Pose.NEUTRAL;
+                        gesture = -1; d = 1.6f;
+                        break;
+                    }
+                    // v44: down onto the ground (forwards: a trip; backwards: a slip), a moment there, up again in pain
+                    boolean back = Txt.has(w, "फिसल", "slips", "slipped", "पीछे");
+                    float f = now.facing >= 0 ? 1 : -1;
+                    Film.Act fa = new Film.Act(t0, t0 + 2.4f, Film.G_FALL); fa.item = (int) (back ? -f : f); a.acts.add(fa);
+                    Film.Key down = keyAt(a, t0 + 0.4f); down.body = Pose.LIE; down.seat = -1; down.emotion = Pose.PAIN;
+                    film.sfx.add(sfxAt(Film.SFX_THUD, t0 + 0.4f, 0.4f, 0.4f, a));
+                    Film.Key up = keyAt(a, t0 + 1.6f); up.body = Pose.STAND; up.seat = -1; up.emotion = Pose.PAIN;
+                    Film.Key ok = keyAt(a, t0 + 2.6f); ok.emotion = Pose.NEUTRAL;
+                    falls++;
                     gesture = -1; d = 2.7f;
                     break;
                 }
@@ -4221,16 +4245,6 @@ public final class Director {
                 groundThings++;
             }
         }
-        if (Txt.has(s, "तलवार") && Txt.has(s, "अभ्यास", "टकरा") ) {
-            int i = 0;
-            for (Film.Actor a : group) {
-                Film.Key k = a.at(t); k.holdR = Pose.I_WOOD_SWORD; k.facing = i % 2 == 0 ? 1 : -1;
-                a.acts.add(new Film.Act(t, t + 3.5f, i % 2 == 0 ? Film.G_SWORD : Film.G_BLOCK));
-                i++;
-            }
-            if (group.size() >= 2) { moveNear(group.get(0), group.get(1), t, 0.1f); }
-            d = Math.max(d, 3.4f);
-        }
         if (Txt.has(s, "दौड़ते हुए आते", "दौड़ते हुए आती")) d = Math.max(d, 1.8f);
         if (Txt.has(s, "पहरा")) d = Math.max(d, 2.2f);
         // the cues nothing else hardcodes: sounds written as words, light and machines (Cues)
@@ -4845,8 +4859,11 @@ public final class Director {
         if (s != null) for (Film.Actor p : s.actors) {
             if (p == driver) continue;
             for (Film.Act r : p.acts)
-                if (r.type == Film.G_RIDE && r.target == driver && r.item == -Film.V_CAR && t >= r.t0 - 0.05f && t <= r.t1 + 0.5f)
-                    dr = Math.max(dr, doorOpen(r, t, !rideJoined(p, r, false), !rideAway(p, r) && !rideJoined(p, r, true), rideInEnd(r)));
+                if (r.type == Film.G_RIDE && r.target == driver && r.item == -Film.V_CAR && t >= r.t0 - 0.05f && t <= r.t1 + 0.5f) {
+                    float o = doorOpen(r, t, !rideJoined(p, r, false), !rideAway(p, r) && !rideJoined(p, r, true), rideInEnd(r));
+                    // v44: the one beside the driver gets in and out by the front door
+                    if (r.seat == Film.CAR_FRONT) df = Math.max(df, o); else dr = Math.max(dr, o);
+                }
         }
         return new float[]{df, dr};
     }
@@ -4966,7 +4983,12 @@ public final class Director {
     static final String[] THUNDER = {"बिजली कड़क", "बिजली चमक", "बिजली गिर", "बादल गरज", "गड़गड़ाहट", "कड़कड़ाहट", "thunder", "lightning", "bijli"};
     /** v43: the clouds rumble with words between ("बादल ज़ोर से गरजते हैं") — never a lion's or a tiger's roar. */
     static final String[] RUMBLE = {"गरजते", "गरजता", "गरजती", "गरजने", "गरज रह", "गरज उठ", "rumble"};
-    static final String[] SNOW = {"बर्फ़ गिर", "बर्फ गिर", "बर्फबारी", "बर्फ़बारी", "हिमपात", "snow"};
+    static final String[] SNOW = {"बर्फ़ गिर", "बर्फ गिर", "बर्फबारी", "बर्फ़बारी", "हिमपात",
+            // v44: snow falling in other words — it comes down, flakes like cotton wool; in English only snow that falls
+            // (a snowy hill, a snowman, a snowball lie on the ground: SNOW_GROUND)
+            "बर्फ़ पड़", "बर्फ पड़", "फाहे गिर", "फाहे बरस", "के फाहे", "रुई जैसी बर्फ़", "रुई जैसी बर्फ", "रूई जैसी बर्फ", "बर्फ़ बरस", "बर्फ बरस", "हिमवर्षा", "बर्फ़ीला तूफ़ान", "बर्फीला तूफान",
+            "snow falls", "snow fell", "snow is falling", "falling snow", "snow begins", "snow starts", "begins to snow", "starts to snow", "started to snow", "it snows",
+            "it's snowing", "is snowing", "snowing", "snowfall", "snowflake", "snowstorm", "blizzard", "flurries", "snow drifts down", "snow comes down", "snow came down"};
     static final String[] FOG = {"कोहरा", "कोहरे", "धुंध", "fog", "mist", "kohra"};
     static final String[] FOG_STOP = {"कोहरा छँट", "कोहरा छंट", "धुंध छँट", "धुंध छंट", "fog lifted", "fog cleared", "mist cleared",
             "fog lifts", "fog clears", "mist lifts", "mist clears", "mist slowly clears", "fog slowly lifts", "कोहरा हट", "धुंध हट"};
@@ -5088,7 +5110,11 @@ public final class Director {
             "घर लौट", "चला जाता", "चली जाती", "चले जाते", "चला गया", "चली गई", "चली गयी", "चले गए", "भाग जाता", "भाग जाती", "भाग जाते", "भाग गया", "भाग गई",
             "भाग गयी", "भाग गए", "भागने लग", "भाग खड़ा", "भाग खड़ी", "भाग खड़े", "भाग निकल", "दूर चला", "दूर चली", "दूर चले",
             // v39: "भागते हुए पार्क से बाहर जाते हैं"
-            "बाहर जाता", "बाहर जाती", "बाहर जाते", "बाहर चला", "बाहर चली", "बाहर चले", "बाहर भाग", "बाहर निकल जा", "से निकल जा"};
+            "बाहर जाता", "बाहर जाती", "बाहर जाते", "बाहर चला", "बाहर चली", "बाहर चले", "बाहर भाग", "बाहर निकल जा", "से निकल जा",
+            // v44: going in (out of the rain, the hail, the dark) — into the house, out of this place
+            "अंदर जाता", "अंदर जाती", "अंदर जाते", "अंदर चला", "अंदर चली", "अंदर चले", "अंदर भाग", "अंदर की ओर भाग", "अंदर दौड़", "घर के अंदर", "भीतर चला", "भीतर चली", "भीतर जा",
+            "goes inside", "went inside", "runs inside", "ran inside", "hurries inside", "heads inside", "rushes inside", "dashes inside", "goes back inside", "runs indoors",
+            "goes indoors", "hurries indoors", "into the house"};
     /** v34: moving across the place (or round it) without a goal named. */
     static final String[] CROSS = {"runs across", "ran across", "walks across", "walked across", "dashes across", "races across", "rushes across",
             "runs around", "ran around", "runs about", "runs round", "walks around", "walks about", "दौड़ता है", "दौड़ती है", "दौड़ते हैं", "दौड़ पड़",
@@ -6043,8 +6069,12 @@ public final class Director {
         d = Math.max(d, taskFrom(s, t, who));
         d = Math.max(d, doorFrom(s, t, who));
         d = Math.max(d, carryFrom(s, t, who));
+        // v44: the sword, the shield, the spear and the bow; play in the snow; the animals of the place
+        d = Math.max(d, combatFrom(s, t, subj, who, group));
+        d = Math.max(d, snowFrom(s, t, subj, who, group));
+        d = Math.max(d, animalsFrom(s, t, subj, who));
         d = Math.max(d, activityFrom(s, t, subj, who, group));
-        if (Txt.has(s, BOW)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
+        if (Txt.has(s, BOW) && !archery(s)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
         // (v43: "Waves crash against the shore" waves no hand)
         boolean waving = Txt.has(s, "हाथ हिला", "टाटा") || Txt.has(s.toLowerCase(java.util.Locale.ROOT), "waves goodbye", "waves to ", "waves at ", "waves his", "waves her",
                 "waves back", "waves bye", "waved", "wave goodbye", "wave to ", "wave at ", "waves a hand", "waves hello", "waving goodbye", "waving to", "waving at")
@@ -6112,7 +6142,14 @@ public final class Director {
     static final String[] DRINK = {" पी रहा", " पी रही", " पी रहे", " पीता है", " पीती है", " पीते हैं", " पी लिया", " पी ली", " पीकर", " पीते हुए", "पानी पी", "चाय पी",
             "दूध पी", "शरबत पी", "लस्सी पी", "घूँट", "घूंट", " drinks", " drinking", " drank", " sips", " sipping", " gulps",
             // v43: a sip of tea, drunk up
-            "चुस्की", " पी लेता", " पी लेती", " पी लेते", " पी जाता", " पी जाती", "गटक", "a sip"};
+            "चुस्की", " पी लेता", " पी लेती", " पी लेते", " पी जाता", " पी जाती", "गटक", "a sip",
+            // v44: drinks of grown-ups — a peg of whisky, a beer, wine; a toast
+            "शराब पी", "शराब का", "व्हिस्की", "विस्की", "बीयर", "बियर", "वाइन", "पैग", "दारू पी", "मदिरा", "whisky", "whiskey", "beer", "wine", "glass of rum", "a peg", "a toast", "cocktail"};
+    /** v44: what grown-ups drink, by the glass it comes in. */
+    static final String[] WHISKY = {"व्हिस्की", "विस्की", "शराब", "पैग", "दारू", "मदिरा", "whisky", "whiskey", "glass of rum", "a peg", "scotch", "brandy", "liquor", "cocktail"};
+    static final String[] BEER = {"बीयर", "बियर", "beer", "lager", "ale "};
+    static final String[] WINE = {"वाइन", "wine", "champagne", "शैंपेन"};
+    static final String[] CLINK = {"चीयर्स", "गिलास टकरा", "जाम टकरा", "cheers", "clink", "a toast", "raise their glasses", "raises his glass", "raises her glass"};
 
     /**
      * v35: eating and drinking, as the story tells it — the hand goes from the plate to the mouth and they chew (two
@@ -6123,7 +6160,8 @@ public final class Director {
         String sp = " " + s + " ";
         float d = 0;
         if (Txt.has(sp, DRINK)) {
-            int item = Txt.has(s, "बोतल", "bottle") ? Pose.I_BOTTLE : Txt.has(s, "चाय", "tea", "coffee", "कॉफ़ी", "कॉफी") ? Pose.I_TEA
+            int item = Txt.has(s, WINE) ? Pose.I_WINE : Txt.has(s, BEER) ? Pose.I_BEER : Txt.has(s, WHISKY) ? Pose.I_WHISKY
+                    : Txt.has(s, "बोतल", "bottle") ? Pose.I_BOTTLE : Txt.has(s, "चाय", "tea", "coffee", "कॉफ़ी", "कॉफी") ? Pose.I_TEA
                     : Txt.has(s, "कप", "प्याला", "प्याली", "cup", "mug") ? Pose.I_CUP : Pose.I_GLASS;
             for (Film.Actor a : who) {
                 if (!a.look.isHumanoid()) continue;
@@ -6132,10 +6170,31 @@ public final class Director {
                 a.acts.add(act);
                 film.sfx.add(sfxAt(item == Pose.I_BOTTLE ? Film.SFX_GULP : Film.SFX_SIP, t + 0.75f, item == Pose.I_BOTTLE ? 1.3f : 1.1f, 0.4f, a));
                 if (item != Pose.I_BOTTLE) film.sfx.add(sfxAt(Film.SFX_CUP, t + 2.6f, 0.3f, 0.3f, a));
+                if (item == Pose.I_WHISKY || item == Pose.I_WINE || item == Pose.I_BEER) {
+                    // (a glass poured first when the sentence pours it; ice clinks in a whisky)
+                    if (Txt.has(s, "डाल", "बना", "pours", "pour", "fills")) film.sfx.add(sfxAt(Film.SFX_POUR, t, 0.6f, 0.25f, a));
+                    grownUpDrinks++;
+                }
                 drinks++;
                 if (who.size() == 1 && photo(a)) { mealCU = a; mealCUt = t + 0.1f; }
             }
             d = Math.max(d, 2.9f);
+        }
+        // v44: a toast — glasses raised and clinked ("चीयर्स!"): everyone in it raises a glass, the clink is heard
+        if (Txt.has(sp, CLINK)) {
+            List<Film.Actor> toast = new ArrayList<Film.Actor>(who);
+            if (toast.size() < 2) for (Film.Actor o : seg.actors) if (!toast.contains(o) && o.look != null && o.look.isHumanoid() && !o.look.isChild() && o.stateAt(t).visible) toast.add(o);
+            int glass = Txt.has(s, BEER) ? Pose.I_BEER : Txt.has(s, WHISKY) ? Pose.I_WHISKY : Pose.I_WINE;
+            for (Film.Actor a : toast) {
+                if (a.look == null || !a.look.isHumanoid()) continue;
+                boolean has = false;
+                for (Film.Act x : a.acts) if (x.type == Film.G_DRINK && Math.abs(x.t0 - (t + 0.2f)) < 0.05f) has = true;
+                if (!has) { Film.Act act = new Film.Act(t + 0.9f, t + 3.4f, Film.G_DRINK); act.item = glass; a.acts.add(act); }
+                Film.Act up = new Film.Act(t + 0.1f, t + 1.0f, Film.G_OFFER); up.item = glass; a.acts.add(up);
+            }
+            film.sfx.add(sfxAt(Film.SFX_CLINK, t + 0.7f, 0.5f, 0.42f, toast.isEmpty() ? null : toast.get(0)));
+            toasts++;
+            d = Math.max(d, 3.5f);
         }
         // (v43: "ठोकर खाकर", "चोट खाकर", "धोखा खाता", "चक्कर खाकर" — stumbled, hurt, cheated, dizzy: nothing is eaten)
         String ep = sp.replaceAll("(ठोकर|चोट|धोखा|मार|गोता|गोते|चक्कर|कसम|क़सम|हवा|डाँट|डांट|ग़म|गम|तरस|रहम|पछाड़|पछाड़|झटका|झटके|मुँह की|मुंह की)\\s+खा", " ");
@@ -6209,6 +6268,9 @@ public final class Director {
     static final String[] RIDE_VERBS = {"चला", "चलाते", "चलाती", "चलाता", "सवार", "बैठकर", "बैठ कर", "में बैठ", "पर बैठ", "से जा", "से आ", "से घर", "से स्कूल", "से बाज़ार",
             // v43: getting on and in — "अंदर बैठता है", "पीछे बैठती है", "बस में चढ़ते हैं", "किक मारकर स्टार्ट करता है"
             "अंदर बैठ", "पीछे बैठ", "में चढ़", "पर चढ़", "चढ़कर", "चढ़ कर", "सवारी", "स्टार्ट", "किक मार", "लेकर निकल",
+            // v44: driving in Hindi, the pedals, the steering wheel, a seat in a car
+            "ड्राइव", "पैडल मार", "पैडल चला", "पेडल मार", "स्टीयरिंग", "आगे की सीट", "आगे वाली सीट", "पीछे की सीट", "पिछली सीट", "बगल वाली सीट",
+            "steering", "back seat", "front seat", "passenger seat", "at the wheel", "brakes", "accelerator",
             "ride", "rides", "riding", "rode", "drive", "drives", "driving", "drove", "pedal", "takes the", "goes by", "comes by", "on a", "on his", "on her", "in a", "in his", "in her", "by bus", "by car",
             "gets on", "gets in", "got on", "got in", "hops on", "hops in", "climbs in", "climbs on", "jumps on", "jumps in", "starts the", "kick-start", "kickstart"};
     static final String[] BICYCLE = {"साइकिल", "साईकिल", "सायकिल", "सायकल", "bicycle", "cycle", "cycling", "cycles"};
@@ -6219,6 +6281,7 @@ public final class Director {
     /** v43: going somewhere on it. */
     static final String[] RIDE_MOVES = {"चलाता", "चलाती", "चलाते", "चलाकर", "चला कर", "चलाने", "चला रह", "चलाया", "चलाई", "जाता", "जाती", "जाते", "जा रह", "जाने",
             "आता", "आती", "आते", "आ रह", "आ गय", "आ गई", "निकल", "पहुँच", "पहुंच", "घूम", "दौड़", "भगा", "रवाना", "की ओर", "की तरफ", "तक ",
+            "आगे बढ़", "बढ़ाता", "बढ़ाती", "बढ़ाते", "सरपट", "पैडल", "drives off", "speeds", "steers", "turns the", "accelerat",
             "ride", "rides", "riding", "rode", "drive", "drives", "driving", "drove", "goes", "went", "comes", "came", "leaves", "heads", "toward",
             "pedal", "speeds", "races", "zooms", "around", " off"};
     /** v43: arriving on it. */
@@ -6290,14 +6353,570 @@ public final class Director {
     }
 
     /** v37: which vehicle a sentence rides or drives (Film.V_*), 0 for none. */
+    /**
+     * v44: what a ride brings with it beyond the going: the mishap (a skid and the fall, a crash into a pole or a tree,
+     * a hard brake for a dog in the road), the close inserts a driver's hands and feet get (the steering wheel turned,
+     * the accelerator, the brake, a cyclist's feet on the pedals) and a weapon used from the saddle. Returns when the
+     * last of it is over.
+     */
+    private float rideExtras(String s, int v, Film.Act lr, List<Film.Actor> riders, int mishap, float dir, float vs, float t) {
+        Film.Actor lead = riders.get(0);
+        float go = lr.t0 + rideMount(lr), stop = lr.t0 + rideStop(lr), end = lr.t1;
+        float tm = lr.mishapAt >= 0 ? lr.t0 + lr.mishapAt : -1;
+        boolean car = v == Film.V_CAR && lr.item == Film.V_CAR;          // their own car: the hands and feet of its driver
+        // ---- the mishap
+        if (mishap == Film.MISHAP_SKID && tm > 0) {
+            // the two-wheeler slides out from under them and lies on its side; they are thrown down beside it, lie a
+            // moment, and get up hurting (a pillion rider too)
+            float wx = xAt(lead, tm - 0.01f);
+            Film.Fx w = fx(Film.FX_WRECK, tm - 0.3f, 1e6f, wx, 0, lead, null); w.kind = Film.MISHAP_SKID; w.color = dir > 0 ? 1 : -1; w.t2 = v;
+            if (v != Film.V_BICYCLE && v != Film.V_HORSE) film.sfx.add(sfxAt(Film.SFX_SCREECH, tm - 0.6f, 0.7f, 0.34f, lead));
+            film.sfx.add(sfxAt(v == Film.V_BICYCLE || v == Film.V_HORSE ? Film.SFX_THUD : Film.SFX_CRASH, tm, 0.9f, v == Film.V_BICYCLE ? 0.4f : 0.32f, lead));
+            if (v == Film.V_HORSE) film.sfx.add(sfxAt(Film.SFX_NEIGH, tm - 0.4f, 1.2f, 0.4f, lead));
+            int n = 0;
+            for (Film.Actor a : riders) {
+                boolean on = a == lead;
+                for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && x.target == lead && Math.abs(x.t0 - lr.t0) < 0.5f) { on = true; x.t1 = Math.min(x.t1, tm + 0.05f); x.mishap = mishap; x.mishapAt = tm - x.t0; }
+                if (!on) continue;
+                fallDown(a, tm, a == lead ? wx + dir * 70 : wx - dir * (40 + 50 * n), dir);
+                n++;
+            }
+            falls += n;
+            mishaps++;
+            return tm + 2.6f;
+        }
+        if (mishap == Film.MISHAP_CRASH && tm > 0) {
+            // it hits what the sentence names (a pole, a tree, a wall, another car) and stops dead: a bang, glass, the
+            // bumper crumpled and smoke from under the bonnet; they lurch forward, sit stunned, then get out
+            float front = (v == Film.V_CAR ? 0.95f : v == Film.V_BUS ? 1.9f : 0.6f) * vs;
+            float wx = xAt(lead, tm - 0.01f) + dir * front;
+            int what = Txt.has(s, "पेड़", "पेड", "tree") ? 1 : Txt.has(s, "दीवार", "wall") ? 2 : Txt.has(s, "कार से", "गाड़ी से", "ट्रक", "बस से", "another car", "a car", "truck", "the car in front") ? 3 : 0;
+            Film.Fx w = fx(Film.FX_WRECK, seg.t0, 1e6f, wx, what, lead, null);          // (what it hits stands there from the start)
+            w.kind = Film.MISHAP_CRASH; w.color = dir > 0 ? 1 : -1; w.t2 = tm;
+            if (Txt.has(s, BRAKE_WORDS) || Txt.has(s, "अचानक", "suddenly")) {
+                film.sfx.add(sfxAt(Film.SFX_SCREECH, tm - 0.8f, 0.85f, 0.36f, lead));
+                if (car) insert(Film.INS_PEDALS, tm - 1.0f, tm - 0.15f, lead, Film.INS_MOVE_BRAKE | Film.INS_MOVE_HARD);
+            }
+            film.sfx.add(sfxAt(Film.SFX_CRASH, tm, 1.4f, 0.48f, lead));
+            for (Film.Actor a : seg.actors) {
+                boolean in = a == lead;
+                for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && x.target == lead && Math.abs(x.t0 - lr.t0) < 0.5f) { in = true; x.mishap = mishap; x.mishapAt = tm - x.t0; }
+                if (!in) continue;
+                Film.Key k = keyAt(a, tm); k.emotion = Pose.SCARED;
+                // after getting out: a hand to the head, then the look at the damage
+                Film.Act hh = new Film.Act(Math.max(tm + 1.6f, endOf(a, lr)), Math.max(tm + 1.6f, endOf(a, lr)) + 1.6f, Film.G_HOLD_HEAD);
+                a.acts.add(hh);
+            }
+            shake(tm, tm + 0.35f);
+            mishaps++;
+            return Math.max(end, tm + 3.2f);
+        }
+        if (mishap == Film.MISHAP_SWERVE && tm > 0) {
+            // a hard brake: the tyres screech, it stops short — a dog (a cow, a goat, a child's ball) in the road runs
+            // off — and it goes on
+            film.sfx.add(sfxAt(Film.SFX_SCREECH, tm - 0.35f, 0.8f, 0.38f, lead));
+            if (car) insert(Film.INS_PEDALS, tm - 0.95f, tm - 0.1f, lead, Film.INS_MOVE_BRAKE | Film.INS_MOVE_HARD);
+            int sp = Txt.has(s, "गाय", "cow") ? Look.SP_COW : Txt.has(s, "बकरी", "goat") ? Look.SP_GOAT : Txt.has(s, "बिल्ली", "cat") ? Look.SP_CAT
+                    : Txt.has(s, "हिरण", "deer") ? Look.SP_DEER : Look.SP_DOG;
+            float front = (v == Film.V_CAR ? 0.95f : v == Film.V_BUS ? 1.9f : 0.5f) * vs;
+            Film.Fx dog = fx(Film.FX_ANIMAL, tm - 1.2f, tm + 1.6f, xAt(lead, tm) + dir * (front + 70), 1, lead, null);
+            dog.kind = sp; dog.color = dir > 0 ? -1 : 1; dog.t2 = tm + 0.1f;
+            for (Film.Actor a : seg.actors) {
+                boolean in = a == lead;
+                for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && x.target == lead && Math.abs(x.t0 - lr.t0) < 0.5f) { in = true; x.mishap = mishap; x.mishapAt = tm - x.t0; }
+                if (!in) continue;
+                Film.Key k = keyAt(a, tm - 0.1f); k.emotion = Pose.SCARED;
+                Film.Key k2 = keyAt(a, tm + 1.2f); k2.emotion = Pose.RELIEVED;
+            }
+            mishaps++;
+        }
+        // ---- the driver's hands and feet, close
+        if (car && go + 1.0f < stop) {
+            boolean said = false;
+            if (Txt.has(s, ACCEL_WORDS)) { insert(Film.INS_PEDALS, go + 0.15f, go + 1.3f, lead, Film.INS_MOVE_GO); said = true; }
+            if (Txt.has(s, STEER_WORDS) || (Txt.has(s, "स्टार्ट", "starts the car", "starts the engine") && !said)) {
+                float a0 = Math.min(stop - 1.4f, go + (said ? 1.5f : 0.4f));
+                if (a0 > go) { insert(Film.INS_STEER, a0, a0 + 1.3f, lead, dir > 0 ? Film.INS_MOVE_TURN_R : Film.INS_MOVE_TURN_L); said = true; }
+            }
+            if (mishap == Film.MISHAP_NONE && Txt.has(s, BRAKE_WORDS)) {
+                float hard = Txt.has(s, "ज़ोर", "जोर", "अचानक", "hard", "slams", "suddenly") ? Film.INS_MOVE_HARD : 0;
+                insert(Film.INS_PEDALS, stop - 1.0f, stop - 0.1f, lead, Film.INS_MOVE_BRAKE | (int) hard);
+                if (hard != 0) film.sfx.add(sfxAt(Film.SFX_SCREECH, stop - 0.7f, 0.8f, 0.34f, lead));
+                said = true;
+            }
+            // (a long drive with nothing said: once, the hands on the wheel)
+            if (!said && stop - go >= 4.0f && mishap == Film.MISHAP_NONE) insert(Film.INS_STEER, go + (stop - go) * 0.45f, go + (stop - go) * 0.45f + 1.2f, lead, 0);
+        }
+        if (v == Film.V_BICYCLE && lr.item == Film.V_BICYCLE && Txt.has(s, PEDAL_WORDS) && go + 1.2f < stop)
+            insert(Film.INS_CYCLE_FEET, go + 0.4f, go + 1.7f, lead, Txt.has(s, "ज़ोर", "जोर", "तेज़", "hard", "fast", "खड़े होकर", "standing") ? Film.INS_MOVE_HARD : 0);
+        // ---- a weapon from the saddle
+        if ((v == Film.V_HORSE || v == Film.V_ELEPHANT) && go + 1.0f < stop) {
+            boolean bow = Txt.has(s, "तीर", "धनुष", "arrow", "bow and", "his bow", "her bow", "shoots");
+            boolean sword = Txt.has(s, "तलवार", "sword", "blade", "भाला", "spear");
+            if (bow || sword) {
+                lr.mounted = bow ? Film.G_ARCHERY : Film.G_SWORD;
+                lr.mountedAt = rideMount(lr) + 0.4f;
+                lr.mountedTo = Math.max(lr.mountedAt + 1.4f, rideStop(lr) - 0.3f);
+                if (bow) {
+                    float at = lr.t0 + lr.mountedAt + 1.1f;
+                    float hx = xAt(lead, at);
+                    Film.Fx ar = fx(Film.FX_ARROW, at, at + 6f, hx + dir * 520, 0, lead, null);
+                    ar.kind = Film.ARCH_TARGET; ar.t2 = at + 0.45f; ar.color = dir > 0 ? 1 : -1;
+                    film.sfx.add(sfxAt(Film.SFX_ARROW, at - 0.15f, 0.8f, 0.4f, lead));
+                } else {
+                    for (float st = lr.t0 + lr.mountedAt + 0.3f; st < lr.t0 + lr.mountedTo - 0.2f; st += 0.9f) film.sfx.add(sfxAt(Film.SFX_SWORD, st, 0.4f, 0.3f, lead));
+                }
+                mountedWeapons++;
+            }
+        }
+        return end;
+    }
+
+    /** v44: when this one's part of a ride ends (their own act on it), else the lead's ride's end. */
+    private static float endOf(Film.Actor a, Film.Act lr) {
+        for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && Math.abs(x.t0 - lr.t0) < 0.5f) return x.t1;
+        return lr.t1;
+    }
+
+    /** v44: a close insert over the whole frame (a driver's hands on the wheel, the feet on the pedals). */
+    private void insert(int kind, float t0, float t1, Film.Actor a, int moves) {
+        if (t1 - t0 < 0.5f) return;
+        for (Film.Fx o : seg.fx) if (o.type == Film.FX_INSERT && o.t0 < t1 && o.t1 > t0) return;     // one at a time
+        Film.Fx f = fx(Film.FX_INSERT, t0, t1, 0, 0, a, null);
+        f.kind = kind; f.color = moves;
+        inserts++;
+    }
+
+    /**
+     * v44: thrown down (a skid, a trip, a slip): onto the ground at x in 0.35 s, a moment lying there, up again in pain —
+     * a hand to the knee — and on their feet.
+     */
+    private void fallDown(Film.Actor a, float t, float x, float dir) {
+        Film.Act f = new Film.Act(t, t + 2.4f, Film.G_FALL);
+        f.item = dir > 0 ? 1 : -1;
+        a.acts.add(f);
+        Film.Key k = keyAt(a, t); k.x = Math.max(120, Math.min(1160, x)); k.moveDur = 0.35f; k.body = Pose.LIE; k.seat = -1; k.emotion = Pose.PAIN; k.facing = dir; k.run = false;
+        Film.Key up = keyAt(a, t + 1.5f); up.body = Pose.STAND; up.emotion = Pose.PAIN;
+        Film.Key ok = keyAt(a, t + 3.2f); ok.emotion = Pose.SAD;
+    }
+
+    /** v44: the words of a mishap on a ride. */
+    static final String[] CRASH_WORDS = {"टकरा", "टक्कर", "भिड़ ग", "भिड़ जा", "ठोक दी", "ठोक दिया", "एक्सीडेंट", "दुर्घटना", "crash", "collide", "collision", "rams into",
+            "smashes into", "slams into", "hits a ", "hits the ", "bumps into", "accident"};
+    static final String[] SKID_WORDS = {"फिसल", "संतुलन बिगड़", "संतुलन खो", "बैलेंस बिगड़", "उलट", "पलट जा", "पलट ग", "गिर पड़", "गिर जा", "गिर ग", "गिरता", "गिरती", "गिरते",
+            "skid", "slips", "slipped", "loses his balance", "loses her balance", "lost his balance", "lost her balance", "falls off", "fell off", "falls", "topples", "overturn",
+            "tips over", "comes off"};
+    static final String[] SWERVE_WORDS = {"बाल-बाल", "बाल बाल", "ज़ोर से ब्रेक", "जोर से ब्रेक", "ज़ोरदार ब्रेक", "अचानक ब्रेक", "तेज़ ब्रेक", "swerve", "brakes hard", "brake hard",
+            "slams on the brake", "slams the brake", "slammed on the brake", "narrowly", "just in time", "screeches to", "emergency brake"};
+    static final String[] BRAKE_WORDS = {"ब्रेक", "brake", "brakes", "braking"};
+    static final String[] ACCEL_WORDS = {"एक्सीलेरेटर", "एक्सिलरेटर", "रेस दे", "रफ़्तार बढ़", "रफ्तार बढ़", "तेज़ चला", "तेज चला", "accelerat", "speeds up", "speeds away", "steps on it",
+            "floors it", "puts his foot down", "puts her foot down"};
+    static final String[] STEER_WORDS = {"स्टीयरिंग", "स्टेयरिंग", "मोड़", "मुड़", "घुमाकर गाड़ी", "steering", "steers", "turns the wheel", "turns the car", "takes the turn", "turns left",
+            "turns right"};
+    static final String[] PEDAL_WORDS = {"पैडल", "पेडल", "pedal", "pedals", "pedalling", "pedaling"};
+
+
+    // ================================================================== v44: the sword, the bow, the snow, the animals
+
+    static final String[] ARROW_WORDS = {"तीर", "बाण", "धनुष", "तीरंदाज़", "तीरंदाज", "निशाना साध", "arrow", "arrows", "archery", "archer", "longbow"};
+    static final String[] BOW_WEAPON = {"his bow", "her bow", "the bow", "a bow and", "bow and arrow", "draws the bow", "draws his bow", "draws her bow", "strings the bow"};
+    static final String[] RELEASE = {"छोड़", "चलाता", "चलाती", "चलाते", "चला दे", "चला दिया", "मारता", "मारती", "लगता", "लगती", "जा लग", "shoots", "shot", "looses",
+            "fires", "lets fly", "releases", "hits the", "strikes the"};
+    static final String[] HUNT_WORDS = {"शिकार", "हिरण", "हिरन", "खरगोश", "जंगली सूअर", "hunt", "deer", "rabbit", "boar", "prey", "stag"};
+    static final String[] SWORD_WORDS = {"तलवार", "तलवारबाज़", "तलवारबाज", "खड्ग", "कटार", "sword", "swords", "fencing", "swordplay", "sabre", "saber", "blade"};
+    static final String[] SWORD_USE = {"चला", "घुमा", "वार", "लड़", "लड़ा", "भांज", "भाँज", "अभ्यास", "टकरा", "मुकाबला", "द्वंद्व", "भिड़", "practi", "swings", "swing", "slash",
+            "fight", "duel", "parr", "strikes", "attack", "clash", "spar", "lunges", "thrust", "train"};
+    static final String[] SHIELD_WORDS = {"ढाल", "shield"};
+    static final String[] SPEAR_WORDS = {"भाला", "भाले", "बरछी", "spear", "javelin", "lance"};
+    static final String[] SNOWBALL = {"बर्फ़ का गोला", "बर्फ का गोला", "बर्फ़ के गोले", "बर्फ के गोले", "बर्फ़ के गोलों", "बर्फ के गोलों", "स्नोबॉल", "snowball", "snow ball"};
+    static final String[] SNOWMAN = {"बर्फ़ का पुतला", "बर्फ का पुतला", "बर्फ़ का आदमी", "बर्फ का आदमी", "स्नोमैन", "स्नो मैन", "हिममानव", "snowman", "snow man", "snowmen"};
+    static final String[] SNOW_CATCH = {"फाहे पकड़", "फाहों को पकड़", "बर्फ़ पकड़", "बर्फ पकड़", "बर्फ़ को पकड़", "बर्फ को पकड़", "जीभ पर बर्फ़", "जीभ पर बर्फ", "catches snowflakes",
+            "catch snowflakes", "catches the snowflakes", "catching snowflakes", "catches snow", "snowflakes on his", "snowflakes on her", "snowflakes in his", "snowflakes in her"};
+    /** v44: snow lying on the ground (not falling): a snowy place, things done in the snow. */
+    static final String[] SNOW_GROUND = {"बर्फ़ से ढक", "बर्फ से ढक", "बर्फ़ीली", "बर्फीली", "बर्फ़ीला", "बर्फीला", "बर्फ़ में", "बर्फ में", "बर्फ़ पर", "बर्फ पर", "बर्फ़ की ढलान",
+            "बर्फ की ढलान", "हिमालय", "snowy", "snow-covered", "snow covered", "covered in snow", "covered with snow", "in the snow", "on the snow", "deep snow", "snowfield"};
+
+    static boolean archery(String s) {
+        s = s.replace("इंद्रधनुष", " ").replace("इन्द्रधनुष", " ").replace("rainbow", " ");      // (a rainbow is no bow)
+        return Txt.has(s, ARROW_WORDS) || (Txt.has(s, BOW_WEAPON) && !Txt.has(s, "bow to", "bows to", "bow down", "bows down", "bows before", "bow before"));
+    }
+
+    static boolean snowSlide(String s) {
+        return (Txt.has(s, "फिसल") && Txt.has(s, "बर्फ़", "बर्फ", "ढलान")) || Txt.has(s, "sledge", "sled ", "sled.", "sledding", "toboggan", "slides down the snow", "snowy slope",
+                "slides on the snow", "slides across the snow", "down the snowy");
+    }
+
+    /** v44: a sword, a shield, a spear, the bow — practice, a duel, an arrow loosed at a target, the hunt. */
+    private float combatFrom(String s, float t, Film.Actor subj, List<Film.Actor> who, List<Film.Actor> group) {
+        if (subj == null || negated(s) || subj.look == null || !subj.look.isHumanoid()) return 0;
+        // (from the saddle: the ride takes it — rideExtras)
+        int rv = vehicleIn(s, subj.look.isChild());
+        if (rv == Film.V_HORSE || rv == Film.V_ELEPHANT) return 0;
+        float d = 0;
+        if (archery(s)) d = Math.max(d, archeryFrom(s, t, subj, who));
+        boolean sword = Txt.has(s, SWORD_WORDS) && (Txt.has(s, SWORD_USE) || Txt.has(s, "उठा", "निकाल", "draws", "raises", "holds", "takes"));
+        boolean shield = Txt.has(s, SHIELD_WORDS), spear = Txt.has(s, SPEAR_WORDS);
+        if (sword || shield) {
+            boolean practice = Txt.has(s, "अभ्यास", "लकड़ी", "practi", "train", "wooden", "spar");
+            boolean ready = !Txt.has(s, SWORD_USE) || Txt.has(s, "तैयार", "ready", "stance");
+            // the fighters: the subject and whoever they fight ("वृंदा से", "with Priya", the others named)
+            List<Film.Actor> f = new ArrayList<Film.Actor>(who);
+            for (Film.Actor a : group) if (!f.contains(a) && a.look != null && a.look.isHumanoid() && a.c != null && Txt.has(s, a.c.displayName)) f.add(a);
+            int blade = practice ? Pose.I_WOOD_SWORD : Pose.I_SWORD;
+            for (Film.Actor a : f) {
+                Film.Key k = keyAt(a, t);
+                if (sword) k.holdR = blade;
+                if (shield) k.holdL = Pose.I_SHIELD;
+                if (Txt.has(s, "क्रोध", "गुस्से", "angr", "fierce")) k.emotion = Pose.ANGRY; else k.emotion = Pose.DETERMINED;
+            }
+            if (sword && !ready) {
+                if (f.size() >= 2) {
+                    // a duel: they close in and trade blows — one strikes, the other blocks, by turns — the blades ring
+                    Film.Actor a = f.get(0), b = f.get(1);
+                    moveNear(a, b, t, 0.1f);
+                    float xa = xAt(a, t + 0.8f), xb = xAt(b, t + 0.8f);
+                    keyAt(a, t + 0.8f).facing = xb >= xa ? 1 : -1;
+                    keyAt(b, t + 0.8f).facing = xa >= xb ? 1 : -1;
+                    for (int i = 0; i < 4; i++) {
+                        float b0 = t + 0.9f + i * 0.85f;
+                        Film.Actor hit = i % 2 == 0 ? a : b, def = i % 2 == 0 ? b : a;
+                        hit.acts.add(new Film.Act(b0, b0 + 0.8f, Film.G_SWORD));
+                        def.acts.add(new Film.Act(b0 + 0.1f, b0 + 0.8f, Film.G_BLOCK));
+                        film.sfx.add(sfxAt(Film.SFX_SWORD, b0 + 0.35f, 0.5f, 0.4f, hit));
+                    }
+                    duels++;
+                    d = Math.max(d, 4.4f);
+                } else {
+                    // practice alone: swings and cuts at the air (a straw dummy when the sentence has one)
+                    Film.Actor a = f.get(0);
+                    if (Txt.has(s, "पुतले", "पुतला", "dummy", "target", "निशाने")) {
+                        float x = xAt(a, t), dir = a.stateAt(t).facing >= 0 ? 1 : -1;
+                        boolean have = false;
+                        for (Film.Fx o : seg.fx) if (o.type == Film.FX_TARGET && o.t1 > t) have = true;
+                        if (!have) { Film.Fx tg = fx(Film.FX_TARGET, t, 1e6f, Math.max(140, Math.min(1140, x + dir * 150)), 0, a, null); tg.kind = 1; }
+                    }
+                    for (int i = 0; i < 3; i++) {
+                        float b0 = t + 0.3f + i * 1.0f;
+                        a.acts.add(new Film.Act(b0, b0 + 0.95f, Film.G_SWORD));
+                        film.sfx.add(sfxAt(Film.SFX_WHOOSH, b0 + 0.4f, 0.35f, 0.25f, a));
+                    }
+                    d = Math.max(d, 3.4f);
+                }
+                swordPlays++;
+            } else d = Math.max(d, 1.0f);
+        }
+        if (spear) {
+            for (Film.Actor a : who) {
+                Film.Key k = keyAt(a, t); k.holdR = Pose.I_SPEAR;
+                if (Txt.has(s, THROW) || Txt.has(s, "फेंक", "hurls", "throws", "casts")) {
+                    float x = xAt(a, t), dir = a.stateAt(t).facing >= 0 ? 1 : -1;
+                    a.acts.add(new Film.Act(t + 0.2f, t + 1.2f, Film.G_THROW));
+                    Film.Key off = keyAt(a, t + 0.75f); off.holdR = Pose.I_NONE;
+                    Film.Fx fl = fx(Film.FX_THROW, t + 0.7f, t + 4.5f, Math.max(60, Math.min(1220, x + dir * 460)), ground, a, null);
+                    fl.kind = 5;
+                    film.sfx.add(sfxAt(Film.SFX_WHOOSH, t + 0.7f, 0.6f, 0.35f, a));
+                    film.sfx.add(sfxAt(Film.SFX_THUD, t + 1.6f, 0.3f, 0.3f, a));
+                    d = Math.max(d, 2.4f);
+                } else d = Math.max(d, 1.0f);
+            }
+        }
+        return d;
+    }
+
+    /**
+     * v44: the bow: an arrow from the quiver onto the string, the string drawn back to the cheek, a breath's aim, the
+     * release (the twang, the whoosh) and the follow-through — once, or arrow after arrow — into a target board, into
+     * the ground where the hunted deer was (it bolts at the twang: the hunt is missed, the film stays kind), into the sky.
+     */
+    private float archeryFrom(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        int mark = Txt.has(s, HUNT_WORDS) ? Film.ARCH_HUNT : Txt.has(s, "आसमान", "आकाश", "sky", "ऊपर की ओर", "into the air") ? Film.ARCH_SKY
+                : Txt.has(s, "दुश्मन", "सैनिक", "शत्रु", "enemy", "soldier", "foe") ? Film.ARCH_ENEMY : Film.ARCH_TARGET;
+        boolean loose = Txt.has(s, RELEASE) || Txt.has(s, "तीर चल", "arrow at", "an arrow", "arrows at");
+        if (Txt.has(s, "निशाना साध", "aims") && !Txt.has(s, "छोड़", "चलाता", "चलाती", "shoots", "looses", "fires", "lets fly", "releases")) loose = false;
+        int n = !loose ? 0 : Txt.has(s, "तीन तीर", "three arrows", "एक के बाद एक", "one after another", "volley") ? 3 : Txt.has(s, "दो तीर", "two arrows") ? 2 : Txt.has(s, "arrows", "तीरों") ? 2 : 1;
+        Film.Actor a = subj;
+        float x = xAt(a, t);
+        // where the mark is: a target or the animal already there, else on the side with more room
+        Film.Fx tg = null;
+        for (Film.Fx o : seg.fx) if (o.t1 > t && ((mark == Film.ARCH_HUNT && o.type == Film.FX_ANIMAL) || (mark == Film.ARCH_TARGET && o.type == Film.FX_TARGET && o.kind == 0))) tg = o;
+        float dir = tg != null ? (tg.x >= x ? 1 : -1) : (x < 640 ? 1 : -1);
+        float mx = tg != null ? tg.x : Math.max(140, Math.min(1140, x + dir * 470));
+        if (Math.abs(mx - x) < 240) { dir = -dir; mx = Math.max(140, Math.min(1140, x + dir * 470)); }
+        float h = heightOf(a);
+        if (tg == null && mark == Film.ARCH_TARGET) { tg = fx(Film.FX_TARGET, t, 1e6f, mx, 0, a, null); tg.kind = 0; }
+        if (tg == null && mark == Film.ARCH_HUNT) {
+            int sp = Txt.has(s, "खरगोश", "rabbit") ? Look.SP_RABBIT : Look.SP_DEER;
+            tg = fx(Film.FX_ANIMAL, t, 1e6f, mx, 0, a, null); tg.kind = sp; tg.color = (int) dir; tg.t2 = 1e6f;
+            animalsShown++;
+        }
+        Film.Key k = keyAt(a, t); k.facing = dir; k.holdR = Pose.I_BOW; k.emotion = Pose.DETERMINED;
+        float per = 1.5f, dur = 0.5f + Math.max(1, n) * per + (n == 0 ? 0.6f : 0.3f);
+        Film.Act act = new Film.Act(t + 0.1f, t + 0.1f + dur, Film.G_ARCHERY);
+        act.item = mark; act.how = n; act.target = null;
+        a.acts.add(act);
+        float last = -1;
+        for (int i = 0; i < n; i++) {
+            float rel = act.t0 + 0.5f + i * per + 0.95f;
+            float tx = mark == Film.ARCH_SKY ? x + dir * 300 : mark == Film.ARCH_HUNT ? mx - dir * 30 + i * 18 * dir : mx + (i - (n - 1) / 2f) * 6;
+            float ty = mark == Film.ARCH_SKY ? -120 : mark == Film.ARCH_HUNT ? ground + 6 : ground - 0.52f * h + (i - (n - 1) / 2f) * 8;
+            float flight = Math.abs(tx - x) / 1500f + 0.14f;
+            Film.Fx ar = fx(Film.FX_ARROW, rel, 1e6f, tx, ty, a, null);
+            ar.kind = mark; ar.t2 = rel + flight; ar.color = (int) dir;
+            film.sfx.add(sfxAt(Film.SFX_ARROW, rel - 0.08f, flight + 0.4f, 0.42f, a));
+            if (mark == Film.ARCH_HUNT && i == 0 && tg != null && tg.type == Film.FX_ANIMAL && tg.t2 > rel) { tg.t2 = rel + 0.05f; tg.t1 = rel + 3f; }
+            last = rel + flight;
+            arrows++;
+        }
+        if (last > 0 && Txt.has(s, "बीच में", "निशाने के बीच", "बीचों-बीच", "बीचोंबीच", "सटीक", "bullseye", "bull's eye", "bull's-eye", "dead centre", "dead center", "the centre", "the center"))
+            insert(Film.INS_ARROW, last + 0.05f, last + 1.35f, a, 0);
+        Film.Key done = keyAt(a, act.t1 + 0.5f); done.holdR = Pose.I_NONE;
+        archeryActs++;
+        frameAround(t, Math.min(x, mx) - 60, Math.max(x, mx) + 60);
+        return dur + 0.3f + (last > 0 && last > act.t1 ? last - act.t1 : 0);
+    }
+
+    /** v44: play in the snow — a snowball made and thrown, a snowman built, snowflakes caught, a slide down the slope. */
+    private float snowFrom(String s, float t, Film.Actor subj, List<Film.Actor> who, List<Film.Actor> group) {
+        if (Txt.has(s, SNOW_GROUND) || Txt.has(s, SNOWBALL) || Txt.has(s, SNOWMAN) || snowSlide(s)) { if (Sets.outdoorSet(seg.set)) seg.snowGround = true; }
+        if (subj == null || negated(s) || subj.look == null || !subj.look.isHumanoid()) return 0;
+        float d = 0;
+        if (Txt.has(s, SNOWBALL)) {
+            for (Film.Actor a : who) {
+                if (a.look == null || !a.look.isHumanoid()) continue;
+                Film.Actor to = null;
+                for (Film.Actor o : group) if (o != a && !who.contains(o) && o.c != null && Txt.has(s, o.c.displayName)) to = o;
+                if (to == null) for (Film.Actor o : seg.actors) if (o != a && o.look != null && o.look.isHumanoid() && o.stateAt(t).visible && (to == null || Math.abs(xAt(o, t) - xAt(a, t)) < Math.abs(xAt(to, t) - xAt(a, t)))) to = o;
+                Film.Act act = new Film.Act(t + 0.1f, t + 2.2f, Film.G_SNOW_PLAY); act.item = Film.SNOW_BALL; act.target = to;
+                a.acts.add(act);
+                float x = xAt(a, t), face = to != null ? (xAt(to, t) >= x ? 1 : -1) : (a.stateAt(t).facing >= 0 ? 1 : -1);
+                keyAt(a, t + 0.1f).facing = face;
+                float rel = t + 1.45f;
+                Film.Fx f = fx(Film.FX_THROW, rel, rel + 3.0f, to != null ? xAt(to, rel + 0.9f) : Math.max(60, Math.min(1220, x + face * 340)), ground - (to != null ? 230 : 0), a, to);
+                f.kind = 4;
+                film.sfx.add(sfxAt(Film.SFX_WHOOSH, rel, 0.5f, 0.28f, a));
+                film.sfx.add(sfxAt(Film.SFX_SNOW, rel + 0.85f, 0.4f, 0.4f, a));
+                if (to != null) {
+                    to.acts.add(new Film.Act(rel + 0.85f, rel + 1.4f, Film.G_FLAIL));
+                    Film.Key hk = keyAt(to, rel + 0.9f); hk.emotion = Pose.SURPRISED;
+                    Film.Key lk = keyAt(to, rel + 1.6f); lk.emotion = Pose.LAUGH;
+                }
+                snowPlays++;
+            }
+            d = Math.max(d, 3.6f);
+        }
+        if (Txt.has(s, SNOWMAN) && !Txt.has(s, "पिघल", "melts")) {
+            Film.Actor a = subj;
+            float x = xAt(a, t), face = a.stateAt(t).facing >= 0 ? 1 : -1;
+            float sx = Math.max(140, Math.min(1140, x + face * 0.55f * heightOf(a)));
+            boolean have = false;
+            for (Film.Fx o : seg.fx) if (o.type == Film.FX_SNOWMAN && o.t1 > t) have = true;
+            if (!have) { Film.Fx f = fx(Film.FX_SNOWMAN, t + 0.3f, 1e6f, sx, 0, a, null); f.t2 = t + 5.2f; }
+            for (Film.Actor b : who) {
+                if (b.look == null || !b.look.isHumanoid()) continue;
+                Film.Act act = new Film.Act(t + 0.2f, t + 5.4f, Film.G_SNOW_PLAY); act.item = Film.SNOW_MAN;
+                b.acts.add(act);
+                keyAt(b, t + 0.2f).facing = sx >= xAt(b, t) ? 1 : -1;
+                Film.Key hk = keyAt(b, t + 5.4f); hk.emotion = Pose.HAPPY;
+            }
+            for (float st = t + 0.6f; st < t + 5f; st += 1.1f) film.sfx.add(sfxAt(Film.SFX_SNOW, st, 0.4f, 0.22f, a));
+            snowPlays++;
+            d = Math.max(d, 5.6f);
+        }
+        if (Txt.has(s, SNOW_CATCH)) {
+            for (Film.Actor a : who) {
+                if (a.look == null || !a.look.isHumanoid()) continue;
+                Film.Act act = new Film.Act(t + 0.1f, t + 3.2f, Film.G_SNOW_PLAY); act.item = Film.SNOW_CATCH;
+                a.acts.add(act);
+                Film.Key k = keyAt(a, t + 0.1f); k.emotion = Pose.HAPPY;
+            }
+            if (wOpen[Film.W_SNOW] < 0) open(Film.W_SNOW, t, 0.7f);
+            snowPlays++;
+            d = Math.max(d, 3.3f);
+        }
+        if (snowSlide(s)) {
+            for (Film.Actor a : who) {
+                Film.Key now = a.stateAt(t);
+                if (a.look == null || !a.look.isHumanoid() || now.anchor != Film.A_GROUND) continue;
+                float x = xAt(a, t), dest = x < 640 ? Math.min(1120, x + 420) : Math.max(160, x - 420);
+                Film.Act act = new Film.Act(t + 0.2f, t + 2.6f, Film.G_SNOW_PLAY); act.item = Film.SNOW_SLIDE;
+                a.acts.add(act);
+                Film.Key sit = keyAt(a, t + 0.2f); sit.body = Pose.SIT; sit.seat = Film.SEAT_FLOOR; sit.facing = dest > x ? 1 : -1; sit.emotion = Pose.LAUGH;
+                Film.Key go = keyAt(a, t + 0.6f); go.x = dest; go.moveDur = 1.7f; go.facing = dest > x ? 1 : -1;
+                Film.Key up = keyAt(a, t + 2.6f); up.body = Pose.STAND; up.seat = -1;
+                film.sfx.add(sfxAt(Film.SFX_WHOOSH, t + 0.6f, 1.6f, 0.3f, a));
+                snowPlays++;
+            }
+            d = Math.max(d, 3.1f);
+        }
+        return d;
+    }
+
+    /** v44: animals of the place, by the words for them: {species, words…}. */
+    static final Object[][] ANIMALS = {
+        {Look.SP_DOG, new String[]{"कुत्ता", "कुत्ते", "कुतिया", "पिल्ला", "पिल्ले", "dog", "dogs", "puppy", "puppies", "doggy"}},
+        {Look.SP_CAT, new String[]{"बिल्ली", "बिल्लियाँ", "बिलौटा", "cat", "cats", "kitten", "kitty"}},
+        {Look.SP_COW, new String[]{"गाय", "गायों", "गायें", "बछड़ा", "बछड़े", "भैंस", "cow", "cows", "calf", "buffalo", "cattle"}},
+        {Look.SP_GOAT, new String[]{"बकरी", "बकरा", "बकरियों", "बकरियाँ", "goat", "goats", "kid goat"}},
+        {Look.SP_HEN, new String[]{"मुर्गी", "मुर्गियों", "मुर्गियाँ", "मुर्गा", "मुर्गे", "चूज़े", "चूजे", "hen", "hens", "chicken", "chickens", "rooster", "chicks"}},
+        {Look.SP_HORSE, new String[]{"घोड़ा", "घोड़े", "घोड़ी", "horse", "pony", "mare"}},
+        {Look.SP_DEER, new String[]{"हिरण", "हिरन", "हिरणों", "deer", "fawn", "stag"}},
+        {Look.SP_RABBIT, new String[]{"खरगोश", "rabbit", "bunny"}},
+        {Look.SP_DUCK, new String[]{"बत्तख", "बतख", "duck", "ducks"}},
+        {Look.SP_PARROT, new String[]{"तोता", "तोते", "parrot"}},
+        {Look.SP_PEACOCK, new String[]{"मोर", "peacock"}},
+    };
+
+    /**
+     * v44: an animal the direction names that is not one of the cast: it is there, at the place — by the one who feeds,
+     * pats or milks it, else on free ground — and it barks, moos, meows, clucks or bleats when the words say so, runs
+     * off when they do, walks across when it walks.
+     */
+    private float animalsFrom(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        if (seg == null || negated(s)) return 0;
+        float d = 0;
+        for (Object[] row : ANIMALS) {
+            int sp = (Integer) row[0];
+            String[] words = (String[]) row[1];
+            if (!term(s, words)) continue;
+            // (the cast's own animal of that kind is the one meant; a horse ridden is the ride's)
+            boolean cast = false;
+            for (Film.Actor a : seg.actors) if (a.look != null && a.look.species == sp) cast = true;
+            if (cast) continue;
+            if (sp == Look.SP_HORSE && subj != null && subj.look != null && vehicleIn(s, subj.look.isChild()) == Film.V_HORSE) continue;
+            if (sp == Look.SP_PEACOCK && !Txt.has(s, "मोर ", "मोर।", "मोर,", "peacock")) continue;
+            boolean feed = Txt.has(s, "खिला", "चारा", "दाना", "feeds", "feeding", "gives food", "रोटी डाल"), pat = Txt.has(s, "सहला", "पुचकार", "pats", "strokes", "pets ", "cuddles");
+            boolean milk = Txt.has(s, "दुह", "दूध निकाल", "milks", "milking");
+            boolean near = subj != null && (feed || pat || milk) && subj.look != null && subj.look.isHumanoid();
+            Film.Fx f = null;
+            for (Film.Fx o : seg.fx) if (o.type == Film.FX_ANIMAL && o.kind == sp && o.t1 > t && o.t2 > t) f = o;
+            float x;
+            if (f == null) {
+                if (near) {
+                    float sx = xAt(subj, t), face = subj.stateAt(t).facing >= 0 ? 1 : -1;
+                    x = Math.max(120, Math.min(1160, sx + face * (sp == Look.SP_COW || sp == Look.SP_HORSE ? 0.75f : 0.5f) * heightOf(subj)));
+                } else x = freeSpot(t);
+                f = fx(Film.FX_ANIMAL, t, 1e6f, x, 0, subj, null);
+                f.kind = sp; f.t2 = 1e6f;
+                f.color = subj != null && xAt(subj, t) < x ? -1 : 1;
+                animalsShown++;
+            }
+            x = f.x;
+            // walking across, running off
+            if (Txt.has(s, "चलती", "चलता", "चलते", "घूम", "walks", "wanders", "strolls", "crosses", "पार")) { f.y = 2; f.t2 = t + 0.3f; f.t1 = Math.max(f.t1 == 1e6f ? 0 : f.t1, t + 6f); }
+            if (Txt.has(s, "भाग", "भग", "runs away", "runs off", "flees", "bolts", "scampers", "darts", "छलाँग", "छलांग")) { f.y = 0; f.t2 = t + 0.3f; f.t1 = t + 3f; }
+            // their voices
+            int voice = sp == Look.SP_DOG ? Film.SFX_BARK : sp == Look.SP_COW ? Film.SFX_MOO : sp == Look.SP_CAT ? Film.SFX_MEOW : sp == Look.SP_HEN ? Film.SFX_CLUCK
+                    : sp == Look.SP_GOAT ? Film.SFX_BLEAT : sp == Look.SP_HORSE ? Film.SFX_NEIGH : -1;
+            if (voice >= 0 && (Txt.has(s, "भौंक", "रंभा", "म्याऊ", "म्याऊँ", "कुकड़ू", "मिमिया", "हिनहिना", "barks", "barking", "woof", "moos", "mooing", "meows", "mewing", "purrs", "clucks",
+                    "crows", "bleats", "neighs", "whinnies") || feed)) film.sfx.add(sfxAt(voice, t + 0.3f, 1.4f, 0.38f, subj));
+            // the one with it: down to a small animal to feed or pat it, beside the cow to milk it
+            if (near) {
+                boolean small = sp == Look.SP_DOG || sp == Look.SP_CAT || sp == Look.SP_HEN || sp == Look.SP_RABBIT || sp == Look.SP_DUCK || sp == Look.SP_GOAT;
+                Film.Key k = keyAt(subj, t + 0.2f); k.facing = x >= xAt(subj, t) ? 1 : -1; k.emotion = Pose.HAPPY;
+                if ((small || milk) && subj.stateAt(t).body == Pose.STAND) {
+                    Film.Key c = keyAt(subj, t + 0.4f); c.body = Pose.CROUCH;
+                    Film.Key up = keyAt(subj, t + (milk ? 4.2f : 2.6f)); up.body = Pose.STAND;
+                }
+                boolean has = false;
+                for (Film.Act x2 : subj.acts) if ((x2.type == Film.G_PAT || x2.type == Film.G_REACH || x2.type == Film.G_THROW) && Math.abs(x2.t0 - t) < 0.6f) has = true;
+                if (!has) subj.acts.add(new Film.Act(t + 0.5f, t + (milk ? 4.0f : 2.4f), pat || milk ? Film.G_PAT : Film.G_REACH));
+                if (milk) film.sfx.add(sfxAt(Film.SFX_POUR, t + 0.8f, 3.0f, 0.2f, subj));
+                d = Math.max(d, milk ? 4.4f : 2.8f);
+            } else d = Math.max(d, 1.6f);
+        }
+        return d;
+    }
+
+    /** v44: the grown-up on the stage who would drive the family's car (a father first, then a mother), or null. */
+    private Film.Actor likelyDriver(float t, List<Film.Actor> not) {
+        Film.Actor best = null;
+        int bestRank = 0;
+        for (Film.Actor o : seg.actors) {
+            if (not.contains(o) || o.look == null || !o.look.isHumanoid() || o.look.isChild() || !o.stateAt(t).visible || o.c == null) continue;
+            String who = (o.c.displayName + " " + o.c.fullName + " " + o.c.role + " " + o.c.description).toLowerCase(java.util.Locale.ROOT);
+            int rank = Txt.has(who, "पापा", "पिता", "पिताजी", "बाबूजी", "father", "dad", "papa", "daddy", "पति", "husband") ? 3
+                    : Txt.has(who, "माँ", "मां", "मम्मी", "माता", "mother", "mom", "mum", "mummy", "पत्नी", "wife") ? 2 : 1;
+            if (rank > bestRank) { best = o; bestRank = rank; }
+        }
+        return best;
+    }
+
+    /** v44: what goes wrong on this ride, if anything (a two-wheeler or a horse that crashes falls instead). */
+    static int mishapIn(String s, int v) {
+        boolean two = v == Film.V_BICYCLE || v == Film.V_MOTORBIKE || v == Film.V_SCOOTER || v == Film.V_HORSE;
+        if (Txt.has(s, CRASH_WORDS) && !Txt.has(s, SWERVE_WORDS)) return two ? Film.MISHAP_SKID : Film.MISHAP_CRASH;
+        if (two && Txt.has(s, SKID_WORDS) && !Txt.has(s, "falls asleep", "नींद", "falls in love")) return Film.MISHAP_SKID;
+        if (Txt.has(s, SWERVE_WORDS) && v != Film.V_HORSE && v != Film.V_ELEPHANT) return Film.MISHAP_SWERVE;
+        return Film.MISHAP_NONE;
+    }
+
+    /** v44: words that put one at the wheel of a car. */
+    static final String[] DRIVES = {"चलाता", "चलाती", "चलाते", "चला रह", "चलाकर", "ड्राइव", "ड्राइविंग", "स्टीयरिंग", "drives", "driving", "drove", "at the wheel",
+            "behind the wheel", "is driving", "takes the wheel"};
+    /** v44: a seat in front beside the driver, or in the back. */
+    static final String[] FRONT_SEAT = {"आगे की सीट", "आगे वाली सीट", "अगली सीट", "आगे बैठ", "बगल वाली सीट", "बगल की सीट", "बगल में बैठ", "उनके बगल", "उसके बगल",
+            "ड्राइवर के बगल", "ड्राइवर के साथ वाली", "front seat", "in the front", "in front with", "passenger seat", "beside him in front", "beside her in front", "next to the driver",
+            "up front", "shotgun"};
+    static final String[] BACK_SEAT = {"पीछे की सीट", "पिछली सीट", "पीछे वाली सीट", "पीछे बैठ", "पीछे की ओर बैठ", "back seat", "backseat", "in the back", "rear seat", "at the back"};
+
+    static int carSeat(String clause) {
+        if (clause == null) return Film.CAR_AUTO;
+        if (Txt.has(clause, FRONT_SEAT)) return Film.CAR_FRONT;
+        if (Txt.has(clause, BACK_SEAT)) return Film.CAR_BACK;
+        return Film.CAR_AUTO;
+    }
+
+    /**
+     * v44: the part of a sentence about this one (split at commas, semicolons, colons, "और", "and", "while"): where
+     * they are named, not as the one gone with or sat beside ("पापा के साथ", "with Mother") — else wherever they are named.
+     */
+    static String seatClause(String s, Film.Actor a) {
+        if (a == null || a.c == null) return null;
+        List<String> names = new ArrayList<String>(a.c.aliases);
+        if (a.c.displayName != null) names.add(a.c.displayName);
+        if (a.c.fullName != null) names.add(a.c.fullName);
+        String any = null;
+        for (String c : s.split("[,;:।]| और | तथा | एवं | and | while | whereas | as ")) {
+            String n = Txt.norm(c);
+            for (String nm : names) {
+                String x = Txt.norm(nm);
+                if (x.length() < 2) continue;
+                int k = n.indexOf(x);
+                if (k < 0) continue;
+                if (!objectMarked(n, k, k + x.length())) return c;
+                if (any == null) any = "";            // (named only as the one gone with: not their seat, not their wheel)
+            }
+        }
+        return any;
+    }
+
+    /** v44: animals that are ridden. */
+    static final String[] HORSE = {"घोड़े", "घोड़ा", "घोड़ी", "घोडे", "घोडा", "घुड़सवार", "horse", "horses", "steed", "pony", "stallion", "mare"};
+    static final String[] ELEPHANT_RIDE = {"हाथी पर", "हाथी की पीठ", "हाथी की सवारी", "हाथी पे", "rides an elephant", "on an elephant", "on the elephant", "elephant ride",
+            "rides the elephant", "on his elephant", "on her elephant"};
+
     public static int vehicleIn(String s, boolean child) {
-        boolean verb = Txt.has(s, RIDE_VERBS);
+        boolean verb = Txt.has(s, RIDE_VERBS) || Txt.has(s, CRASH_WORDS) || Txt.has(s, SWERVE_WORDS)
+                || Txt.has(s, "सरपट", "दौड़ाता", "दौड़ाती", "दौड़ाते", "gallop", "trots", "mounts", "saddle", "घुड़सवारी")
+                || (Txt.has(s, SKID_WORDS) && (term(s, SCOOTER) || term(s, "बाइक", "bike") || Txt.has(s, BICYCLE) || Txt.has(s, "मोटरसाइकिल", "motorcycle", "motorbike")));
         if (!verb) return 0;
+        // v44: a horse or an elephant ridden (not one fed, patted or led by the reins)
+        if (term(s, HORSE) && !Txt.has(s, "को चारा", "को खिला", "को सहला", "feeds the horse", "pats", "strokes", "को पानी")) return Film.V_HORSE;
+        if (Txt.has(s, ELEPHANT_RIDE)) return Film.V_ELEPHANT;
         if (term(s, "बस") && Txt.has(s, "बस चला", "बस में", "बस से", "बस पर", "बस स्टॉप", "बस पकड़")) return Film.V_BUS;
         if (term(s, "bus", "buses")) return Film.V_BUS;
         if (term(s, AUTO_RICKSHAW)) return Film.V_AUTO;
         if (term(s, CAR)) return child && !Txt.has(s, "में", " in ", " into ", "से आ", "से उतर", "comes by", "out of") ? 0 : Film.V_CAR;
         if (term(s, SCOOTER)) return Film.V_SCOOTER;
+        // v44: a car named only by what is done in it — driving, its seats, its wheel, its brakes ("पापा ड्राइव करते हैं",
+        // "sits in the front passenger seat while Mother drives", "slams on the brakes")
+        boolean noOther = !Txt.has(s, BICYCLE) && !term(s, "बाइक", "bike", "बुलेट") && !Txt.has(s, "मोटरसाइकिल", "motorcycle", "motorbike", "ट्रैक्टर", "tractor", "truck", "ट्रक")
+                && !term(s, HORSE) && !Txt.has(s, "नाव", "boat", "ship", "जहाज़", "train", "ट्रेन", "plane", "विमान", "हवाई");
+        if (noOther && !child && (Txt.has(s, "ड्राइव", "स्टीयरिंग", "एक्सीलेरेटर", "steering", "accelerator", "at the wheel", "behind the wheel")
+                || Txt.hasWord(s, "drives", "driving", "drove", "brakes", "brake")))
+            return Film.V_CAR;
+        if (noOther && Txt.has(s, "आगे की सीट", "आगे वाली सीट", "पीछे की सीट", "पिछली सीट", "बगल वाली सीट", "back seat", "front seat", "passenger seat", "backseat"))
+            return Film.V_CAR;
         if (Txt.has(s, "मोटरसाइकिल", "मोटर साइकिल", "motorcycle", "motorbike") || term(s, "बाइक", "बुलेट", "मोटरबाइक", "bike")) return child ? Film.V_BICYCLE : Film.V_MOTORBIKE;
         if (Txt.has(s, BICYCLE)) return Film.V_BICYCLE;
         return 0;
@@ -6326,6 +6945,10 @@ public final class Director {
     /** v43: rides that followed another's, vehicles turned round before the family got in; riders who only got on, who
      *  arrived on it, who rode on; hired vehicles that drove up or away. */
     int following, uTurns, stays, arrivals, rodeOn, hiredMoves;
+    /** v44: drivers picked out of a car's riders, passengers seated in front and in the back. */
+    int carDriversChosen, frontSeats, backSeats;
+    /** v44: mishaps staged, falls, close inserts, weapons used from the saddle. */
+    int mishaps, falls, inserts, mountedWeapons, grownUpDrinks, toasts, duels, swordPlays, arrows, archeryActs, snowPlays, animalsShown;
     /** v43: the keys a ride sets (its start, its move, its turn round, its going out of the picture): the only ones that
      *  may turn a rider while the ride runs (steadyRiders). */
     private final Set<Film.Key> rideKeys = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Film.Key, Boolean>());
@@ -6828,23 +7451,47 @@ public final class Director {
         }
         int v = vehicleIn(s, subj.look.isChild());
         if (v != 0) {
+            // v44: a mishap on the way — a skid and a fall, a crash, a hard brake that just saves them
+            int mishap = mishapIn(s, v);
             boolean away = leaving(s) || Txt.has(s, "चला जा", "चली जा", "चले जा", "निकल", "रवाना", "rides off", "drives off", "drives away", "rides away", "leaves");
+            if (mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH) away = false;
             boolean takes = Txt.has(s, " को ", "takes ", "with ");
             // v43: off to another place on it ("स्कूटर से बाज़ार जाते हैं", "drives to the office"): out of the picture
             boolean arrives = Txt.has(s, ARRIVE_WORDS);
             if (!away && !arrives && Txt.has(s, DESTINATIONS) && Txt.has(s, GO_WORDS)) away = true;
-            float speed = v == Film.V_BICYCLE ? (subj.look.isChild() ? 190 : 230) : v == Film.V_BUS ? 320 : v == Film.V_AUTO ? 340 : 400;
+            float speed = v == Film.V_BICYCLE ? (subj.look.isChild() ? 190 : 230) : v == Film.V_BUS ? 320 : v == Film.V_AUTO ? 340
+                    : v == Film.V_HORSE ? (Txt.has(s, "धीरे", "slowly", "walks", "trots", "कदम") ? 150 : 330) : v == Film.V_ELEPHANT ? 110 : 400;
             List<Film.Actor> riders = new ArrayList<Film.Actor>();
             for (Film.Actor a : all) if (a.look.isHumanoid()) riders.add(a);
+            // v44: in a car the one at the wheel drives — named with the driving verb or "at the wheel" — and the ones
+            // given a seat beside or behind ride with them ("राहुल पापा के साथ कार में आगे वाली सीट पर बैठता है": पापा
+            // drives; a child named first is driven by the grown-up named with them)
+            if (v == Film.V_CAR && riders.size() > 1) {
+                Film.Actor wheel = null;
+                for (Film.Actor a : riders) {
+                    String c = seatClause(s, a);
+                    if (c != null && Txt.has(c, DRIVES) && carSeat(c) == Film.CAR_AUTO) { wheel = a; break; }
+                }
+                Film.Actor first = riders.get(0);
+                if (wheel == null && (carSeat(seatClause(s, first)) != Film.CAR_AUTO || first.look.isChild()))
+                    for (Film.Actor a : riders) if (a != first && !a.look.isChild() && carSeat(seatClause(s, a)) == Film.CAR_AUTO) { wheel = a; break; }
+                if (wheel != null && wheel != first) { riders.remove(wheel); riders.add(0, wheel); carDriversChosen++; }
+            }
             // in a bus or an auto one who does not drive rides as a passenger (a driver is at the wheel) — v43: in a car only
             // in a taxi, or children alone ("तरुण कार में बैठता है" is his own car, not a taxi with a stranger driving him)
             boolean kidsOnly = true;
             for (Film.Actor a : riders) if (!a.look.isChild()) kidsOnly = false;
             boolean hired = Txt.has(s, "टैक्सी", "taxi", "cab", "ड्राइवर", "driver", "किराए", "उबर", "ओला", "uber");
+            // v44: children do not drive, and do not take a taxi by themselves when a grown-up of theirs is there: the
+            // grown-up drives them (a father first, then a mother, then any grown-up on the stage)
+            if (v == Film.V_CAR && kidsOnly && !hired) {
+                Film.Actor grown = likelyDriver(t, riders);
+                if (grown != null) { riders.add(0, grown); kidsOnly = false; carDriversChosen++; }
+            }
             boolean passenger = (v == Film.V_BUS || v == Film.V_AUTO || (v == Film.V_CAR && (hired || kidsOnly)))
                     && !Txt.has(s, "चला", "चलाते", "चलाती", "चलाता", "drive", "drives", "driving", "drove", "ड्राइव");
             // v43: "प्रिया स्कूटर पर पीछे बैठती है", "sits behind him on the bike": a pillion rider, on the one who rides it
-            boolean pillion = (v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE)
+            boolean pillion = (v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE || v == Film.V_HORSE || v == Film.V_ELEPHANT)
                     && Txt.has(s, "पीछे बैठ", "पीछे सवार", "sits behind", "seated behind", "behind him on", "behind her on", "pillion");
             // v43: only getting on — "तरुण स्कूटर पर बैठता है और किक मारकर स्टार्ट करता है", "gets on his bike": they sit on it (the
             // engine running) and wait, until a later direction rides it on, or they do something else and get off first
@@ -6903,7 +7550,8 @@ public final class Director {
             float vs = vehiclePx(lead, v);
             // v43: arriving on it from beyond the edge of the picture: one not yet in it ("तरुण बाइक से घर आता है")
             boolean enters = !joined && driver == null && (!lead.stateAt(t).visible || justIn(lead, t)
-                    || ((arrives || Txt.has(s, "रुकता", "रुकती", "रुकते", "पार्क", "stops", "pulls up", "parks")) && firstThing(lead, t)));
+                    || ((arrives || Txt.has(s, "रुकता", "रुकती", "रुकते", "पार्क", "stops", "pulls up", "parks")) && firstThing(lead, t))
+                    || ((mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH) && !Txt.has(s, MOUNT_ONLY)));
             float x0 = xAt(lead, t + 0.05f);
             float faces = lead.stateAt(t).facing >= 0 ? 1 : -1;
             // v43: their own vehicle parked in this part (where they got off it): they walk back to it and ride it from there
@@ -6922,7 +7570,7 @@ public final class Director {
             // v43: a vehicle already standing (under its rider, or parked) goes on the way it faces when there is road
             // enough that way — it does not turn round on the spot (and never with someone on the seat behind)
             boolean behindSeat = false;
-            for (Film.Actor o : carried) if (v < Film.V_CAR) behindSeat = true;
+            for (Film.Actor o : carried) if (!Film.cabin(v)) behindSeat = true;
             if (joined || parked != null || waiting != null) {
                 if (away || behindSeat || waiting != null || (x0 + faces * 300 >= 170 && x0 + faces * 300 <= 1110)) dir = faces;
             }
@@ -6981,6 +7629,10 @@ public final class Director {
             // and the family walked out of the picture to get in)
             if (!away && !stay) { to = inFrame(to, dir, v, vs); if ((to - x0) * dir < 40 && !enters) to = x0 + dir * 40; }
             float dur = stay ? 0 : Math.max(2.2f, Math.min(5.5f, Math.abs(to - x0) / speed));
+            if (stay) mishap = Film.MISHAP_NONE;
+            // v44: a hard brake stops it for a moment before it goes on; after a crash they sit stunned a moment
+            float pause = mishap == Film.MISHAP_SWERVE ? 0.9f : 0, extraTime = mishap == Film.MISHAP_SWERVE ? 1.2f : mishap == Film.MISHAP_CRASH ? 1.0f : 0;
+            boolean skid = mishap == Film.MISHAP_SKID;
             // v43: getting on before it moves. They walk up to it first — a pillion rider to the seat behind, the ones who
             // ride inside a car to its rear door one behind the other, inside a bus or an auto to its door, a rider back to
             // where they left it — then the driver opens the door or swings onto the seat, kicks the stand up, the others
@@ -6998,6 +7650,28 @@ public final class Director {
             }
             float[] off = new float[riders.size()];
             int nIn = 0, nNew = 0;
+            // v44: who sits where in a car: as the sentence says ("आगे की सीट पर", "in the back"); else the first grown-up
+            // beside the driver and the children (and anyone after) in the back. The one in front gets in first, by the
+            // front door, after the driver.
+            int[] seats = new int[riders.size()];
+            if (v == Film.V_CAR) {
+                boolean front = false;
+                for (int i = 1; i < riders.size(); i++) {
+                    seats[i] = carSeat(seatClause(s, riders.get(i)));
+                    if (seats[i] == Film.CAR_FRONT) { if (front) seats[i] = Film.CAR_BACK; front = true; }
+                }
+                // (whoever already sits in front from the ride before keeps it)
+                for (Film.Actor o : carried) for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.seat == Film.CAR_FRONT && x.t1 >= t - 0.1f) front = true;
+                for (int i = 1; i < riders.size(); i++) {
+                    if (seats[i] != Film.CAR_AUTO) continue;
+                    boolean held = false;
+                    for (Film.Act x : riders.get(i).acts) if (x.type == Film.G_RIDE && x.item == -Film.V_CAR && x.seat >= 0 && x.t1 >= t - 0.1f) { seats[i] = x.seat; held = true; }
+                    if (held) continue;
+                    if (!front && !passenger && !riders.get(i).look.isChild()) { seats[i] = Film.CAR_FRONT; front = true; }
+                    else seats[i] = Film.CAR_BACK;
+                }
+                for (int i = 1; i < riders.size(); i++) { if (seats[i] == Film.CAR_FRONT) frontSeats++; else backSeats++; }
+            }
             float walk = 0;
             boolean leadWalks = false;
             for (int i = 0; i < riders.size(); i++) {
@@ -7008,7 +7682,7 @@ public final class Director {
                     spot = x0;                                         // back to where they left it (to the one waiting for them)
                 } else {
                     if (ownBikes) continue;                            // each on a bicycle of their own
-                    if (inside) { nIn++; off[i] = v == Film.V_CAR ? (passenger ? 0.2f + 0.16f * (nIn - 1) : 0.45f + 0.16f * (nIn - 1)) * vs : 60 + 55 * (nIn - 1); }
+                    if (inside) { nIn++; off[i] = v == Film.V_CAR ? (passenger ? 0.2f + 0.16f * (nIn - 1) : seats[i] == Film.CAR_FRONT ? 0.12f * vs : (0.45f + 0.16f * (nIn - 1)) * vs) : 60 + 55 * (nIn - 1); }
                     else off[i] = 0.24f * vs;                         // on the seat behind the rider
                     if (carried.contains(pa)) continue;               // already on it
                     nNew++;
@@ -7070,13 +7744,24 @@ public final class Director {
                 k0.moveDur = 0;
                 rideKeys.add(k0);
                 float go = stay ? k0.x : own ? to - (ownBikes ? i * 150 * dir : 0) : to - dir * off[i];
-                if (!stay) { Film.Key k = keyAt(a, t0 + lag + Math.max(mount, 0.02f)); k.x = go; k.moveDur = dur; k.facing = dir; k.run = false; rideKeys.add(k); }
-                Film.Act ride = new Film.Act(t0 + lag, t0 + lag + mount + dur + hold + (away ? 0 : 0.8f + extra), Film.G_RIDE);
+                boolean hit = (i == 0 || !own) && mishap != Film.MISHAP_NONE;      // (each on a cycle of their own: the lead's mishap only)
+                if (!stay && hit && mishap == Film.MISHAP_SWERVE) {
+                    float mid = k0.x + (go - k0.x) * 0.55f;
+                    Film.Key k = keyAt(a, t0 + lag + Math.max(mount, 0.02f)); k.x = mid; k.moveDur = dur * 0.55f; k.facing = dir; k.run = false; rideKeys.add(k);
+                    Film.Key k2 = keyAt(a, t0 + lag + mount + dur * 0.55f + pause); k2.x = go; k2.moveDur = dur * 0.45f + 0.3f; k2.facing = dir; k2.run = false; rideKeys.add(k2);
+                } else if (!stay) {
+                    Film.Key k = keyAt(a, t0 + lag + Math.max(mount, 0.02f)); k.x = go; k.moveDur = dur; k.facing = dir; k.run = false; rideKeys.add(k);
+                    k.hardStop = hit && (mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH);
+                }
+                float more = hit ? extraTime : 0;
+                Film.Act ride = new Film.Act(t0 + lag, hit && skid ? t0 + lag + mount + dur + 0.05f : t0 + lag + mount + dur + more + hold + (away ? 0 : 0.8f + extra), Film.G_RIDE);
+                if (hit) { ride.mishap = mishap; ride.mishapAt = mount + (mishap == Film.MISHAP_SWERVE ? dur * 0.55f - 0.15f : dur); }
                 ride.item = own ? (passenger ? v + Film.V_PASSENGER : v) : -v;
                 ride.target = own ? null : riders.get(0);
                 ride.a0 = mount;                   // v43: getting on takes this long; it moves after it
-                ride.a1 = mount + dur + hold;      // v43: and stops here (getting off after it)
+                ride.a1 = mount + dur + hold + (hit && mishap == Film.MISHAP_SWERVE ? pause + 0.3f : 0);      // v43: and stops here (getting off after it)
                 ride.how = stay ? -1 : own || !inside ? 0 : i;     // v43: only getting on (-1); the i-th to get in through the door
+                if (!own && v == Film.V_CAR) ride.seat = seats[i];
                 a.acts.add(ride);
                 if (i == 0) leadRide = ride;
                 if (away) { Film.Key gone = a.at(t0 + lag + mount + dur + 0.05f); gone.visible = false; rideKeys.add(gone); leftFrom.put(a, dir > 0 ? 1400f : -120f); goneAt.put(a, t0 + lag + mount + dur); }
@@ -7084,13 +7769,13 @@ public final class Director {
                 // again (it faded away while the family stood beside it)
                 // v43: ... and one ridden from here stands parked there from the start of the part (it appeared from
                 // nowhere under its rider); the parked one and the ridden one take over from each other at once
-                if (own && ride.item > 0 && ride.item < Film.V_PASSENGER && (v == Film.V_CAR || v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE)) {
+                if (own && ride.item > 0 && ride.item < Film.V_PASSENGER && (v == Film.V_CAR || v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE || v == Film.V_HORSE || v == Film.V_ELEPHANT)) {
                     boolean joinedBefore = rideJoinedBefore(a, ride), hadParked = false;
                     for (Film.Fx o : seg.fx) if (o.type == Film.FX_PARKED && o.a == a && o.t1 > ride.t0 && o.t0 <= ride.t0) { o.t1 = ride.t0; hadParked = true; }
                     if (!hadParked && !joinedBefore && !enters && Sets.outdoorSet(seg.set)) {
                         Film.Fx pre = fx(Film.FX_PARKED, seg.t0, ride.t0, xAt(a, ride.t0), 0, a, null); pre.kind = ride.item; pre.color = dir > 0 ? 1 : -1;
                     }
-                    if (!away) { Film.Fx pk = fx(Film.FX_PARKED, ride.t1, 1e6f, go, 0, a, null); pk.kind = ride.item; pk.color = dir > 0 ? 1 : -1; }
+                    if (!away && !(hit && skid)) { Film.Fx pk = fx(Film.FX_PARKED, ride.t1, 1e6f, go, 0, a, null); pk.kind = ride.item; pk.color = dir > 0 ? 1 : -1; }
                 }
                 if (own) {
                     float mid = t0 + lag + mount;
@@ -7098,8 +7783,18 @@ public final class Director {
                         // (getting on and starting it: the engine heard idling while they wait)
                         if (v == Film.V_MOTORBIKE || v == Film.V_SCOOTER) film.sfx.add(sfxAt(Film.SFX_MOTOR, mid - 0.2f, 2.2f, 0.26f, a));
                         else if (v == Film.V_CAR) film.sfx.add(sfxAt(Film.SFX_ENGINE, mid - 0.2f, 2.2f, 0.26f, a));
+                        else if (v == Film.V_HORSE) film.sfx.add(sfxAt(Film.SFX_NEIGH, mid - 0.3f, 1.2f, 0.3f, a));
                     } else switch (v) {
                         case Film.V_BICYCLE: film.sfx.add(sfxAt(Film.SFX_CYCLE_BELL, mid - 0.3f, 0.8f, 0.4f, a)); film.sfx.add(sfxAt(Film.SFX_CHAIN, mid, dur, 0.3f, a)); break;
+                        // v44: a horse snorts and neighs as it is mounted, its hooves as it goes; an elephant trumpets and pads
+                        case Film.V_HORSE:
+                            film.sfx.add(sfxAt(Film.SFX_NEIGH, mid - 0.5f, 1.2f, 0.36f, a));
+                            film.sfx.add(sfxAt(Film.SFX_HOOVES, mid, dur, speed > 200 ? 0.42f : 0.3f, a));
+                            break;
+                        case Film.V_ELEPHANT:
+                            film.sfx.add(sfxAt(Film.SFX_TRUMPET, mid - 0.4f, 1.6f, 0.4f, a));
+                            film.sfx.add(sfxAt(Film.SFX_STEPS_HARD, mid, dur, 0.28f, a));
+                            break;
                         case Film.V_MOTORBIKE: case Film.V_SCOOTER: case Film.V_AUTO:
                             film.sfx.add(sfxAt(Film.SFX_MOTOR, mid - 0.5f, dur + 0.8f, 0.38f, a));
                             if (v == Film.V_AUTO) film.sfx.add(sfxAt(Film.SFX_HORN, mid - 0.2f, 0.8f, 0.3f, a));
@@ -7110,10 +7805,10 @@ public final class Director {
                     }
                     rides++;
                 }
-                d = Math.max(d, stay ? t0 + lag + mount + 0.5f - t : t0 + lag + mount + dur + extra - t + 0.3f);
+                d = Math.max(d, stay ? t0 + lag + mount + 0.5f - t : t0 + lag + mount + dur + extra + more - t + 0.3f);
                 // v41: a car (a scooter, an auto) that stops here lets them out side by side, not one on top of another
-                if (!away && !stay && riders.size() > 1 && v != Film.V_BICYCLE) {
-                    float out = t0 + lag + mount + dur + 0.85f + extra;
+                if (!away && !stay && riders.size() > 1 && v != Film.V_BICYCLE && !(hit && skid)) {
+                    float out = t0 + lag + mount + dur + 0.85f + extra + more;
                     float spot = Math.max(150, Math.min(1130, to + (i - (riders.size() - 1) / 2f) * 115));
                     Film.Key ko = keyAt(a, out);
                     ko.x = spot; ko.moveDur = 0.6f; ko.facing = spot >= go ? 1 : -1; ko.run = false; ko.body = Pose.STAND;
@@ -7123,6 +7818,7 @@ public final class Director {
                 }
             }
             if (leadRide != null && !outs.isEmpty()) outKeys.put(leadRide, outs);
+            if (leadRide != null && !stay) d = Math.max(d, rideExtras(s, v, leadRide, riders, mishap, dir, vs, t) - t);
             // v43: the hired vehicle that dropped them drives off once the last one is out (it faded away where it stood)
             if (passenger && !away && leadRide != null) {
                 float last = leadRide.t1;
@@ -7141,7 +7837,7 @@ public final class Director {
             return d;
         }
         // ---- the playground
-        int pg = Txt.has(s, ROUNDABOUT) ? Film.PG_ROUND : Txt.has(s, SEESAW) ? Film.PG_SEESAW : Txt.has(s, SLIDE) && !Txt.has(s, "फिसल गय", "फिसल ग", "slipped") ? Film.PG_SLIDE
+        int pg = Txt.has(s, ROUNDABOUT) ? Film.PG_ROUND : Txt.has(s, SEESAW) ? Film.PG_SEESAW : Txt.has(s, SLIDE) && !Txt.has(s, "फिसल गय", "फिसल ग", "slipped") && !snowSlide(s) ? Film.PG_SLIDE
                 : (Txt.has(s, SWING) && !Txt.has(s, "तलवार", "sword", "bat ", "बल्ला", "axe", "कुल्हाड़ी", "arms", "हाथ")) ? Film.PG_SWING : 0;
         // v40: going to the slide or the swing is a walk, not yet a slide or a swing ("वनुशा फिसलपट्टी की तरफ़ जाती है"
         // slid where she stood); the play needs its own verb ("फिसलती है", "झूलने लगता है")
@@ -7364,6 +8060,17 @@ public final class Director {
                 continue;
             }
             float d = oneTask(s, sp, f[1], t + total, who);
+            // v44: on the phone while walking about ("फ़ोन पर बात करते हुए टहलता है", "paces the room on the phone")
+            if (f[1] == Film.T_PHONE && Txt.has(sp, "टहल", "चहलकदमी", "घूमते हुए", "चलते हुए", "इधर-उधर", "walks", "walking", "paces", "pacing", "strolls", "wanders"))
+                for (Film.Actor a : who) {
+                    Film.Key now = a.stateAt(t + total);
+                    if (now.anchor != Film.A_GROUND || now.body != Pose.STAND || a.look == null || !a.look.isHumanoid()) continue;
+                    float x = xAt(a, t + total), dest = x < 640 ? Math.min(1100, x + 300) : Math.max(180, x - 300);
+                    List<Film.Actor> me = new ArrayList<Film.Actor>(); me.add(a);
+                    dest = freeNear(dest, t + total + d, me, 110);
+                    if (Math.abs(dest - x) < 60) continue;
+                    Film.Key k = keyAt(a, t + total + 0.3f); k.x = dest; k.moveDur = Math.max(1.6f, d - 0.5f); k.facing = dest > x ? 1 : -1; k.run = false;
+                }
             total += d;
             if (found.size() > 1 && f != found.get(found.size() - 1)) total += 0.2f;
         }
@@ -7580,7 +8287,7 @@ public final class Director {
             open(Film.W_SNOW, t, 0.45f);
             d = 2.2f;
         }
-        else if (Txt.has(rs, RAIN) && !negated(s) && !flowersRain && !afterRain) {
+        else if (Txt.hasStart(rs, RAIN) && !negated(s) && !flowersRain && !afterRain) {
             float st = Txt.has(s, "तेज़ बारिश", "तेज बारिश", "मूसलाधार", "heavy rain", "pouring", "downpour") ? 1.35f
                     : Txt.has(s, "हल्की", "बूँदाबाँदी", "बूंदाबांदी", "drizzl", "light rain") ? 0.5f : 1f;
             open(Film.W_RAIN, t, st);
@@ -7595,6 +8302,8 @@ public final class Director {
             d = Math.max(d, 1.6f);
         }
         if (Txt.has(s, SNOW) && !negated(s)) { open(Film.W_SNOW, t, 1f); d = Math.max(d, 2f); }
+        // v44: a snowy place has snow on the ground (it is not falling unless the words say so)
+        if (place && seg != null && Sets.outdoorSet(seg.set) && Txt.has(s, SNOW_GROUND)) seg.snowGround = true;
         // v34 (realism): rain or snow beginning while the characters are out in it — they look up, then cover their heads
         // (no umbrella) or shiver
         if (!place && seg != null && Sets.outdoorSet(seg.set)) {
@@ -7700,7 +8409,7 @@ public final class Director {
             f.kind = kind;
             film.sfx.add(new Film.Sfx(Film.SFX_THUD, t + 0.3f + 0.53f, 0.6f, 0.45f));
             d = Math.max(d, 2.2f);
-        } else if ((Txt.has(s, BALL) || Txt.has(s, "फल फेंक", "आम फेंक", "फूल फेंक", "fruit", "flower")) && Txt.has(s, THROW) && !Txt.has(s, STONE)) {
+        } else if ((Txt.has(s, BALL) || Txt.has(s, "फल फेंक", "आम फेंक", "फूल फेंक", "fruit", "flower")) && Txt.has(s, THROW) && !Txt.has(s, STONE) && !Txt.has(s, SNOWBALL)) {
             int kind = Txt.has(s, BALL) ? 1 : Txt.has(s, FLOWER) ? 3 : 2;
             Film.Actor to = null;
             for (Story.CharacterDef c : mentionsWithGroups(s, null)) { Film.Actor a = actor(c); if (a != null && a != subj) { to = a; break; } }
@@ -7745,7 +8454,9 @@ public final class Director {
         for (Film.Key k : a.keys) { if (k.t <= t) { prev = cur; cur = k; } else break; }
         if (cur.moveDur > 0 && t < cur.t + cur.moveDur && prev != null) {
             float u = (t - cur.t) / cur.moveDur;
-            u = u * u * (3 - 2 * u);
+            // v44: a move that ends in a crash or a skid speeds up and keeps its speed to the end (it stops dead)
+            if (cur.hardStop) u = u < 0.3f ? u * u / (0.3f * 1.7f) : (2 * u - 0.3f) / 1.7f;
+            else u = u * u * (3 - 2 * u);
             float px = prevX(a, cur);
             return px + (cur.x - px) * u;
         }

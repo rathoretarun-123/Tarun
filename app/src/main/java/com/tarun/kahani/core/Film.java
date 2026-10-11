@@ -110,6 +110,8 @@ public final class Film {
         public boolean midground;
         /** v41: the colour of a sofa drawn in this part (the script's own "नीला सोफा"; 0: from the place's picture, else the studio's). */
         public int sofaColor;
+        /** v44: snow lies on the ground of this part (a snowy place, play in the snow): the ground and the tops of things white. */
+        public boolean snowGround;
         public Actor find(Story.CharacterDef c) {
             for (Actor a : actors) if (a.c == c) return a;
             return null;
@@ -135,6 +137,8 @@ public final class Film {
         public int seat = -1;       // when sitting: SEAT_* (-1 = none drawn)
         /** v34: the clothes worn now — 0 the character's own, n the n-th change of the story (CharacterDef.costumes). */
         public int costume;
+        /** v44: this key's move ends at full speed (a crash, a skid: no slowing down before it stops dead); never copied on. */
+        public boolean hardStop;
         public Key copy() {
             Key k = new Key();
             k.t = t; k.moveDur = 0; k.x = x; k.depth = depth; k.body = body; k.facing = facing; k.emotion = emotion; k.anchor = anchor;
@@ -169,6 +173,10 @@ public final class Film {
             G_BATHE = 63,         // v37: a bath behind a curtain (shoulders up), water poured from a mug, then a towel
             G_SCREEN = 64,        // v37: changing clothes behind a folding screen (the new clothes on as they step out)
             G_KISS = 65,          // v37: a peck on the cheek or the forehead (affection in a family film)
+            G_ARCHERY = 66,       // v44: the bow — an arrow nocked, the string drawn to the cheek, aimed, loosed (Act.item: ARCH_*)
+            G_STAGGER = 67,       // v44: unsteady on the feet after drinking: a sway, a stumble caught, a hand out for balance
+            G_SNOW_PLAY = 68,     // v44: in the snow (Act.item: SNOW_*): a snowball made and thrown, a snowman built, flakes caught
+            G_FALL = 69,          // v44: a fall (an accident): thrown down onto the ground, a moment there, then up holding the knee or the elbow
             G_PULL = 50,          // a hard pull (a plug, a wire, a rope): lean back and yank
             G_LISTEN = 51;        // thought before action (handbook ch. 6): a pause, the head turns toward the sound, the body holds still
 
@@ -181,7 +189,21 @@ public final class Film {
     public static final int T_COOK = 1, T_SWEEP = 2, T_WASH = 3, T_READ = 4, T_WRITE = 5, T_PHONE = 6, T_BRUSH = 7, T_COMB = 8, T_WATER = 9, T_PAPER = 10,
             T_RANGOLI = 11, T_PAINT = 12;     // v37: drawing a rangoli on the floor, painting at an easel
     /** v37: what a G_RIDE act rides, a G_PLAYGROUND act plays on, a G_EXERCISE act does, a G_MAKEUP act puts on. */
-    public static final int V_BICYCLE = 1, V_MOTORBIKE = 2, V_SCOOTER = 3, V_CAR = 4, V_BUS = 5, V_AUTO = 6;
+    public static final int V_BICYCLE = 1, V_MOTORBIKE = 2, V_SCOOTER = 3, V_CAR = 4, V_BUS = 5, V_AUTO = 6,
+            V_HORSE = 7, V_ELEPHANT = 8;      // v44: ridden animals — a horse (walk, trot, gallop), a royal elephant
+    /** v44: a G_ARCHERY act's mark: a target board, an animal hunted (it bolts; the arrow goes into the ground), the sky (a signal). */
+    public static final int ARCH_TARGET = 0, ARCH_HUNT = 1, ARCH_SKY = 2, ARCH_ENEMY = 3;
+    /** v44: a G_SNOW_PLAY act: a snowball made and thrown, a snowman built, snowflakes caught on the hands, a slide down a slope. */
+    public static final int SNOW_BALL = 1, SNOW_MAN = 2, SNOW_CATCH = 3, SNOW_SLIDE = 4;
+    /** v44: a ride's mishap (Act.mishap): a two-wheeler skids and falls on its side, the rider thrown off; a car or a
+     *  horse hits something and stops dead (the jolt, the crash, smoke from the bonnet); a car swerves and brakes hard in time. */
+    public static final int MISHAP_NONE = 0, MISHAP_SKID = 1, MISHAP_CRASH = 2, MISHAP_SWERVE = 3;
+    /** v44: a passenger's seat in a car (Act.seat: CAR_*): the front seat beside the driver, the back seat (behind the driver, or the far window). */
+    public static final int CAR_AUTO = -1, CAR_FRONT = 0, CAR_BACK = 1;
+    /** v44: a vehicle one rides inside (a car, a bus, an auto) — not a two-wheeler, not a horse or an elephant. */
+    public static boolean cabin(int v) { v = Math.abs(v) % V_PASSENGER; return v == V_CAR || v == V_BUS || v == V_AUTO; }
+    /** v44: a vehicle one sits astride (a bicycle, a motorbike, a scooter, a horse, an elephant). */
+    public static boolean astride(int v) { v = Math.abs(v) % V_PASSENGER; return v == V_BICYCLE || v == V_MOTORBIKE || v == V_SCOOTER || v == V_HORSE || v == V_ELEPHANT; }
     /** v37: added to a G_RIDE act's vehicle when its rider is a passenger (a driver is drawn at the wheel). */
     public static final int V_PASSENGER = 100;
     public static final int PG_SWING = 1, PG_SLIDE = 2, PG_SEESAW = 3, PG_ROUND = 4;
@@ -210,6 +232,13 @@ public final class Film {
         public float a0 = -1, a1 = -1, since = -1;
         public int how;
         public Fx prop;
+        /** v44: a ride's mishap (MISHAP_*) and when it happens (seconds into the act); a passenger's seat in a car (CAR_FRONT / CAR_BACK). */
+        public int mishap;
+        public float mishapAt = -1;
+        public int seat = CAR_AUTO;
+        /** v44: on a ride, a weapon used from the saddle (G_SWORD or G_ARCHERY from this time to mountedTo; 0: none). */
+        public int mounted;
+        public float mountedAt = -1, mountedTo = -1;
         public Act(float t0, float t1, int type) { this.t0 = t0; this.t1 = t1; this.type = type; }
     }
 
@@ -334,8 +363,22 @@ public final class Film {
             FX_DOOR = 47,         // v43: a room's door at the edge of the picture (x: -1 left, +1 right); kind 0: the
                                   //      door itself, there all through the part; kind 1: it swings open from t0 (0.4 s),
                                   //      stands open, swings shut from t2, shut at t1
-            FX_SKY = 48;          // v43: the light of the sky changing within a part from t0 (kind: SKY_*): the sun
+            FX_SKY = 48,          // v43: the light of the sky changing within a part from t0 (kind: SKY_*): the sun
                                   //      going down, night falling, the sun rising, the full moon up — to t1
+            FX_INSERT = 49,       // v44: a close insert over the whole frame from t0 to t1 (kind: INS_*; a: whose hands
+                                  //      or feet; color: the moves, INS_MOVE_*): the steering wheel turned, the feet on
+                                  //      the pedals, the feet on a cycle's pedals, the arrow striking the target
+            FX_ARROW = 50,        // v44: an arrow loosed by a at t0 from its bow, flying to x, y (t2: when it strikes;
+                                  //      kind: ARCH_*), standing in the target (or the ground) until t1
+            FX_TARGET = 51,       // v44: an archery target board on its stand at x, sized for actor a
+            FX_SNOWMAN = 52,      // v44: a snowman built at x from t0 (rolled, stacked, the face and the scarf by t2), sized for actor a
+            FX_WRECK = 53,        // v44: what an accident leaves at x from t0 (kind: MISHAP_*; color: facing): the bike
+                                  //      on its side, the car's crumpled bumper and smoke from its bonnet, the dust
+            FX_ANIMAL = 54;       // v44: an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2
+                                  //      it lifts its head and bolts off the edge of the picture (hunting), or stays
+    /** v44: FX_INSERT kinds and the moves of a driver's feet and hands (FX_INSERT.color bits). */
+    public static final int INS_STEER = 0, INS_PEDALS = 1, INS_CYCLE_FEET = 2, INS_ARROW = 3;
+    public static final int INS_MOVE_GO = 1, INS_MOVE_BRAKE = 2, INS_MOVE_TURN_L = 4, INS_MOVE_TURN_R = 8, INS_MOVE_HARD = 16;
     /** v43: FX_SKY kinds. */
     public static final int SKY_SUNSET = 0, SKY_NIGHTFALL = 1, SKY_SUNRISE = 2, SKY_MOON = 3;
     /** v43: what is cooked (FX_KITCHEN.kind, a cooking act's how): a whole meal (chopping, the pot, the dish served),
@@ -460,7 +503,20 @@ public final class Film {
             SFX_KNOCK = 81,         // v43: knocking at a door — three firm knuckle raps on wood
             SFX_CHOP = 82,          // v43: a knife chopping on a board — quick dull taps
             SFX_BOIL = 83,          // v43: something boiling in a pan — small bubbles bursting
-            SFX_WHISTLE = 84;       // v43: a pressure cooker's whistle — steam rushing up into a shrill hiss
+            SFX_WHISTLE = 84,       // v43: a pressure cooker's whistle — steam rushing up into a shrill hiss
+            SFX_SCREECH = 85,       // v44: tyres screeching under hard braking
+            SFX_CRASH = 86,         // v44: a crash — a metal bang, glass, a scrape, bits falling
+            SFX_ARROW = 87,         // v44: a bowstring's twang, the arrow's whoosh and its thunk into the mark
+            SFX_HOOVES = 88,        // v44: a horse's hooves (a walk's four beats, a gallop's three)
+            SFX_NEIGH = 89,         // v44: a horse's neigh, a snort
+            SFX_CLINK = 90,         // v44: glasses clinked ("cheers"), ice in a glass
+            SFX_SNOW = 91,          // v44: footsteps crunching in snow, a snowball's soft thump
+            SFX_TRUMPET = 92,       // v44: an elephant's trumpet
+            SFX_BARK = 93,          // v44: a dog's barks
+            SFX_MOO = 94,           // v44: a cow's low moo
+            SFX_MEOW = 95,          // v44: a cat's meow
+            SFX_CLUCK = 96,         // v44: hens clucking (a rooster's call when it crows)
+            SFX_BLEAT = 97;         // v44: a goat's bleat
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

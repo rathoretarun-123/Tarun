@@ -986,10 +986,25 @@ public final class Nature {
             vY = -(vY + gr * tHit) * 0.4f; vX *= 0.6f;          // each bounce keeps 40 % of the speed
             if (Math.abs(vY) < 60) { x += vX * Math.min(a, 0.3f); a = 0; break; }
         }
-        float r = (kind == 0 ? 6 : kind == 1 ? 10 : kind == 2 ? 11 : 8) * size;
+        float r = (kind == 0 ? 6 : kind == 1 ? 10 : kind == 2 ? 11 : kind == 4 ? 9 : 8) * size;
+        if (kind == 5) {
+            // v44: a spear in flight along its path (stuck in the ground, slanting, once it lands)
+            float vyNow = a > 0 ? vY : vY + gr * age;
+            double ang = Math.atan2(y >= groundY - 1 ? 0.5 : vyNow, vX == 0 ? 1 : vX);
+            float L = 46 * size, cx = (float) Math.cos(ang) * L, cy = (float) Math.sin(ang) * L;
+            g.color(0xFF6D4C41); g.line(x - cx, y - cy - 4, x, y - 4, 2.4f * size);
+            g.color(0xFFB0BEC5); g.oval(x + cx * 0.06f, y - 4 + cy * 0.06f, 3.2f * size, 3.2f * size);
+            return;
+        }
+        if (kind == 4 && y >= groundY - 1) {
+            // v44: a snowball bursts into a white puff where it lands
+            g.color(0xCCF4F8FC); g.oval(x, groundY - r * 0.4f, r * 1.8f, r * 0.6f);
+            for (int i = 0; i < 6; i++) g.oval(x + (i - 2.5f) * r * 0.5f, groundY - r * (0.6f + (i % 2) * 0.4f), r * 0.3f, r * 0.3f);
+            return;
+        }
         g.color(0x40000000);
         g.oval(x, groundY + 3, r * 1.1f, r * 0.3f);
-        int c = kind == 0 ? 0xFF757575 : kind == 1 ? 0xFFE53935 : kind == 2 ? 0xFFFFA726 : 0xFFF06292;
+        int c = kind == 0 ? 0xFF757575 : kind == 1 ? 0xFFE53935 : kind == 2 ? 0xFFFFA726 : kind == 4 ? 0xFFF4F8FC : 0xFFF06292;
         g.color(c);
         g.oval(x, y - r, r, r);
         if (kind == 2) { g.color(0xFF43A047); g.oval(x + r * 0.4f, y - r * 1.9f, r * 0.45f, r * 0.22f); }

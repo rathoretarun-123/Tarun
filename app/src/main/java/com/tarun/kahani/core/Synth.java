@@ -185,6 +185,61 @@ public final class Synth {
                 noiseBedRange(o, 0, wl, 0.5f, 0.1f); fadeEnds(o, 0.15f);
                 break;
             }
+            // v44: tyres screeching — a rising, wavering squeal over rough noise
+            case Film.SFX_SCREECH: {
+                float sl = Math.min(dur, 1.0f);
+                for (float st = 0; st < sl; st += 0.015f) { float u = st / sl; tone(o, st, 0.02f, 1900 + 500 * (float) Math.sin(st * 37) + 300 * u, 1950 + 500 * (float) Math.sin(st * 37), 0.16f * (float) Math.sin(Math.PI * Math.min(1, u * 1.3f)), 1); }
+                noiseBedRange(o, 0, sl, 0.6f, 0.08f); fadeEnds(o, 0.08f);
+                break;
+            }
+            // v44: a crash — a deep bang, a metal crunch, glass tinkling down, a few bits falling
+            case Film.SFX_CRASH: {
+                thump(o, 0, 45, 1.0f); burst(o, 0, 0.35f, 0.5f, 0.75f); burst(o, 0.05f, 0.25f, 0.85f, 0.4f);
+                for (int i = 0; i < 9; i++) bellTone(o, 0.12f + i * 0.06f + Math.abs(rnd()) * 0.05f, 3200 + Math.abs(rnd()) * 2400, 0.25f, 0.07f);
+                for (int i = 0; i < 4; i++) knock(o, 0.5f + i * 0.17f + Math.abs(rnd()) * 0.1f, 600 + rnd() * 200, 0.18f);
+                break;
+            }
+            // v44: the bow — the string's twang, the whoosh of the flight, the thunk into the mark
+            case Film.SFX_ARROW: {
+                tone(o, 0, 0.18f, 210, 190, 0.35f, 0); tone(o, 0, 0.12f, 420, 380, 0.12f, 0);
+                sweepNoise(o, 0.04f, Math.max(0.15f, dur - 0.3f), 0.15f, 0.5f, 0.3f);
+                float th = Math.max(0.2f, dur - 0.25f);
+                knock(o, th, 260, 0.5f); thump(o, th, 140, 0.35f);
+                break;
+            }
+            // v44: hooves — a gallop's three beats and a pause, or a walk's four (slower)
+            case Film.SFX_HOOVES: {
+                float ht = 0.03f;
+                while (ht < dur - 0.1f) { for (int k = 0; k < 3; k++) { knock(o, ht + k * 0.075f, 380 + rnd() * 60, 0.3f); thump(o, ht + k * 0.075f, 90, 0.15f); } ht += 0.42f; }
+                break;
+            }
+            // v44: a horse's neigh — a high whinny falling and shaking, then a snort
+            case Film.SFX_NEIGH: {
+                float nl = Math.min(dur, 1.0f);
+                for (float nt = 0; nt < nl * 0.8f; nt += 0.02f) { float u = nt / (nl * 0.8f); tone(o, nt, 0.025f, 900 - 450 * u + 60 * (float) Math.sin(nt * 70), 880 - 450 * u, 0.2f * (1 - u * 0.6f), 1); }
+                burst(o, nl * 0.85f, 0.12f, 0.3f, 0.3f);
+                break;
+            }
+            // v44: glasses clinked — two bright rings, ice settling
+            case Film.SFX_CLINK: {
+                bellTone(o, 0, 2900, 0.9f, 0.3f); bellTone(o, 0.01f, 4300, 0.6f, 0.15f); bellTone(o, 0.06f, 3300, 0.7f, 0.18f);
+                for (int i = 0; i < 3; i++) knock(o, 0.3f + i * 0.09f, 2400 + rnd() * 400, 0.06f);
+                break;
+            }
+            // v44: snow — footsteps crunching, a snowball's soft thump
+            case Film.SFX_SNOW: { float st = 0.02f; while (st < dur - 0.05f) { burst(o, st, 0.09f, 0.35f, 0.25f); thump(o, st, 90, 0.1f); st += 0.36f; } break; }
+            // v44: an elephant's trumpet — a brassy blare that rises and wavers
+            case Film.SFX_TRUMPET: {
+                float tl = Math.min(dur, 1.4f);
+                for (float tt = 0; tt < tl; tt += 0.02f) { float u = tt / tl; tone(o, tt, 0.025f, 420 + 260 * (float) Math.sin(Math.PI * u) + 30 * (float) Math.sin(tt * 40), 430 + 260 * (float) Math.sin(Math.PI * u), 0.24f * (float) Math.sin(Math.PI * u), 1); }
+                break;
+            }
+            // v44: the animals' voices — a dog's barks, a cow's moo, a cat's meow, hens clucking, a goat's bleat
+            case Film.SFX_BARK: { float bt = 0.02f; int k = 0; while (bt < dur - 0.2f && k < 4) { tone(o, bt, 0.14f, 520, 330, 0.4f, 1); burst(o, bt, 0.08f, 0.4f, 0.2f); bt += k % 2 == 0 ? 0.22f : 0.5f; k++; } lowpass(o, 0.3f); break; }
+            case Film.SFX_MOO: { float ml = Math.min(dur, 1.3f); tone(o, 0, ml, 150, 120, 0.4f, 1); tone(o, 0, ml, 300, 240, 0.12f, 0); lowpass(o, 0.12f); fadeEnds(o, 0.15f); break; }
+            case Film.SFX_MEOW: { tone(o, 0, 0.55f, 600, 900, 0.18f, 0); tone(o, 0.25f, 0.4f, 900, 520, 0.2f, 0); break; }
+            case Film.SFX_CLUCK: { float ct = 0.02f; while (ct < dur - 0.08f) { tone(o, ct, 0.06f, 1100 + rnd() * 200, 700, 0.2f, 1); ct += 0.12f + Math.abs(rnd()) * 0.25f; } break; }
+            case Film.SFX_BLEAT: { for (float bt = 0; bt < Math.min(dur, 0.8f); bt += 0.02f) tone(o, bt, 0.025f, 520 + 70 * (float) Math.sin(bt * 60), 520, 0.2f, 1); fadeEnds(o, 0.1f); break; }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

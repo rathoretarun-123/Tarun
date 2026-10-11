@@ -72,6 +72,8 @@ public final class Rig {
          *  right, -1 its left); its thighs swing forward to the horizontal and the shins hang from the knees. 0: a
          *  front picture's sit (the thighs shorten towards the viewer). */
         public float sitSide;
+        /** v44: pedalling a cycle: the crank's angle (radians, in the picture's frame) and how much the legs follow it. */
+        public float pedal, pedalAmt;
         /** v35: seated on the floor, cross-legged: the shins fold under too and the knees spread. */
         public boolean floor;
         public boolean twirl;                // the raised hand fidgets (twirling a moustache)
@@ -748,11 +750,19 @@ public final class Rig {
             // v43: seated in profile: the thighs swing forward about the hip to the horizontal (their front comes up),
             // the shins are carried by the knee and hang straight down from it; across the knee the two are blended
             float knee = hipY + (bottom - hipY) * 0.5f, ky = f.T0 + knee * f.H0;
-            double th = Math.toRadians(84 * Math.min(1, s.sit));
+            // (v44: pedalling — the knee rises as the pedal comes up, falls as it goes down)
+            double th = Math.toRadians(84 * Math.min(1, s.sit) - (s.pedalAmt > 0 ? 16 * s.pedalAmt * Math.sin(s.pedal) : 0));
             float c = (float) Math.cos(th), sn = -(float) Math.sin(th) * (s.sitSide > 0 ? 1 : -1);
             float jx = f.L0 + cx * f.W0, dx = x - jx, dy = y - hy;
             float tx = jx + c * dx - sn * dy, ty = hy + sn * dx + c * dy;                 // the point on the swung thigh
             float kdy = ky - hy, shx = x - sn * kdy, shy = y + (c - 1) * kdy;              // carried by the knee, upright
+            if (s.pedalAmt > 0) {
+                // v44: the shin swings with the pedal about the knee — forward as the pedal goes forward
+                float kxn = jx - sn * kdy, kyn = ky + (c - 1) * kdy;
+                double ph = Math.toRadians(-22 * s.pedalAmt * Math.cos(s.pedal)) * (s.sitSide > 0 ? 1 : -1);
+                float cs = (float) Math.cos(ph), ss = (float) Math.sin(ph), ddx = shx - kxn, ddy = shy - kyn;
+                shx = kxn + cs * ddx - ss * ddy; shy = kyn + ss * ddx + cs * ddy;
+            }
             float w = smooth(knee - 0.05f, knee + 0.05f, v);
             sx2 = tx + (shx - tx) * w;
             sy2 = ty + (shy - ty) * w;

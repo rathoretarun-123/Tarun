@@ -5663,6 +5663,33 @@ public class AppTest {
         Director d = new Director(st, new Director.Options());
         d.prepare();
         Film film = d.direct(art);
+        // v41: his own side picture is his side view — its facing read, with the far leg of its stride — and it takes
+        // his steps when he walks across, never while he speaks
+        Art.Sprite boySp = art.sprites.get(boy.id);
+        Art.Sprite side = boySp.view(1);
+        assertNotNull("his side picture is his side view", side);
+        assertTrue("it is his own and its facing is read: " + side.faces, side.userSide && side.faces != 0);
+        assertNotNull("the far leg of its stride", side.legImg);
+        Method viewOf = Renderer.class.getDeclaredMethod("viewOf", Art.Sprite.class, Film.Actor.class, Film.Seg.class, Pose.class, Film.Key.class, boolean.class, float.class);
+        viewOf.setAccessible(true);
+        Renderer sideR = new Renderer(film, art);
+        int sideSteps = 0, sideSpeaking = 0;
+        for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) {
+            if (ac2.c != boy) continue;
+            for (Film.Key k : ac2.keys) {
+                if (k.moveDur < 1f || k.body != Pose.STAND) continue;
+                float tm = k.t + k.moveDur / 2;
+                Film.Key ks = ac2.stateAt(tm);
+                Pose pz = new Pose();
+                pz.reset();
+                pz.walkAmt = 1; pz.facing = ks.facing;
+                if (viewOf.invoke(sideR, boySp, ac2, sg, pz, ks, false, tm) == side) sideSteps++;
+                if (viewOf.invoke(sideR, boySp, ac2, sg, pz, ks, true, tm) == side) sideSpeaking++;
+            }
+        }
+        rep.append("walks in his side picture: ").append(sideSteps).append('\n');
+        assertTrue("he walks in his side picture: " + sideSteps, sideSteps >= 1);
+        assertEquals("never while speaking", 0, sideSpeaking);
         int swingActs = 0, swingStops = 0, climbs = 0, downs = 0, bellies = 0, swingProps = 0, slideProps = 0, bags = 0, outOfOrder = 0;
         float maxAmp = 0;
         for (Film.Seg sg : film.segs) {
@@ -5748,6 +5775,24 @@ public class AppTest {
         String cast = p.read("cast.txt");
         Art art = Art.fromManifest(cast, st, p.loader());
         for (Story.CharacterDef c : st.cast()) assertNotNull(c.fullName + " has a picture", art.sprites.get(c.id));
+        // v41 final recheck: every front picture shows a face (प्रिया's back, holding two cups, was taken for her front
+        // and talked in a close-up), and every view is the figure turned — never a close-up of the sheet
+        for (Story.CharacterDef c : st.cast()) {
+            String charFile = null;
+            for (String l : cast.split("\n")) { String[] f = l.split("\\|"); if (f.length >= 3 && f[0].equals("char") && ScriptParser.resolve(st, f[1]) == c) charFile = f[2]; }
+            assertNotNull(c.fullName + " has a front", charFile);
+            Bitmap b = android.graphics.BitmapFactory.decodeFile(new File(p.dir, charFile).getAbsolutePath());
+            int[] fpx = new int[b.getWidth() * b.getHeight()];
+            b.getPixels(fpx, 0, b.getWidth(), 0, 0, b.getWidth(), b.getHeight());
+            com.tarun.kahani.core.Cutout.Result fr = com.tarun.kahani.core.Cutout.process(fpx, b.getWidth(), b.getHeight(), false);
+            assertTrue(c.fullName + "'s front picture is no back: " + charFile, fr.faceFound && Math.abs(com.tarun.kahani.core.Angles.guess(fr, false)) < 100);
+            Art.Sprite sp = art.sprites.get(c.id);
+            for (int i = 0; i < 3; i++) {
+                Art.Sprite v = sp.view(i);
+                if (v != null) assertTrue(c.fullName + " view " + i + " is a whole figure (" + v.w + "x" + v.h + " for a front of " + sp.w + "x" + sp.h + ")",
+                        v.h / (float) v.w >= 0.7f * sp.h / sp.w);
+            }
+        }
         Director d = new Director(st, new Director.Options());
         d.prepare();
         Film film = d.direct(art);
@@ -5805,6 +5850,21 @@ public class AppTest {
         assertTrue("the clouds thunder", lightning >= 1);
         assertTrue("a rainbow", rainbow);
         assertEquals("keys in time order", 0, outOfOrder);
+        // v41 final recheck: the car waits where he stopped it, him at the wheel, while they walk to it and get in — it
+        // vanished between the two drives, he stood in the road and the three walked onto one spot
+        java.util.List<Film.Act> drives = new java.util.ArrayList<Film.Act>();
+        java.util.List<Film.Actor> riders = new java.util.ArrayList<Film.Actor>();
+        for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) for (Film.Act act : ac2.acts) {
+            if (act.type == Film.G_RIDE && act.item == 4 && ac2.c != null && "तरुण".equals(ac2.c.fullName)) drives.add(act);
+            if (act.type == Film.G_RIDE && act.item == -4 && !riders.contains(ac2)) riders.add(ac2);
+        }
+        java.util.Collections.sort(drives, new java.util.Comparator<Film.Act>() { public int compare(Film.Act x, Film.Act y) { return Float.compare(x.t0, y.t0); } });
+        assertEquals(2, drives.size());
+        assertTrue("the car waits between the drives: " + drives.get(0).t1 + " / " + drives.get(1).t0, Math.abs(drives.get(1).t0 - drives.get(0).t1) < 0.1f);
+        float board = drives.get(1).t0 - 0.2f;
+        for (int i = 0; i < riders.size(); i++) for (int j = i + 1; j < riders.size(); j++)
+            assertTrue("they wait at the car side by side: " + riders.get(i).c.fullName + " / " + riders.get(j).c.fullName,
+                    Math.abs(Director.xAt(riders.get(i), board) - Director.xAt(riders.get(j), board)) >= 40);
         assertEquals(0, posePictures(film, art));
         File keep = new File(OUT.getParentFile(), "v41rain");
         deleteTree(keep);

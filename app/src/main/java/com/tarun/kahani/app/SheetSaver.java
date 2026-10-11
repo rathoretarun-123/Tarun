@@ -477,16 +477,28 @@ final class SheetSaver {
                 }
             }
             if (mainI >= 0) angles[mainI] = com.tarun.kahani.core.Angles.FRONT;
+            // v41: a view is the front's figure turned, so about as tall for its width as the front (a close-up or a
+            // half figure among the sheet's pictures — प्रिया laughing over her cup — is no three-quarter view)
+            float mainAspect = !beast && mainI >= 0 && cuts[mainI] != null && cuts[mainI].w > 0 ? cuts[mainI].h / (float) cuts[mainI].w : 0;
             for (float sa : slotAngles) {
                 if (sa == com.tarun.kahani.core.Angles.FRONT) continue;
-                int best = -1; long bestArea = -1;
+                int best = -1; long bestArea = -1; int bestRank = -1;
                 for (int i = 0; i < pics.size(); i++) {
                     if (i == mainI || guessed[i] != sa) continue;
                     // v39: a view turns the rigged figure: a whole standing figure only (never half-length or seated)
                     if (tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
                             || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
+                    com.tarun.kahani.core.Cutout.Result r = cuts[i];
+                    if (mainAspect >= 1.3f && r != null && r.w > 0 && r.h / (float) r.w < 0.75f * mainAspect) continue;
+                    // v41: the back takes the surest back first — no eyes seen in it and nothing of a face to one side
+                    // (वृंदा's profile, read as a back, took the slot from her real back)
+                    int rank = 0;
+                    if (sa == com.tarun.kahani.core.Angles.BACK && r != null && !beast) {
+                        float off = com.tarun.kahani.core.Art.facingOffset(r);
+                        rank = (!r.eyesSeen ? 2 : 0) + (Float.isNaN(off) || Math.abs(off) < 0.1f ? 1 : 0);
+                    }
                     long area = (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2];
-                    if (area > bestArea) { bestArea = area; best = i; }
+                    if (rank > bestRank || (rank == bestRank && area > bestArea)) { bestRank = rank; bestArea = area; best = i; }
                 }
                 if (best >= 0) angles[best] = sa;
             }

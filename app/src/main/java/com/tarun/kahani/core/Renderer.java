@@ -1729,7 +1729,8 @@ public final class Renderer {
         if (a.look.aid == Look.AID_WHEELCHAIR) { p.walkAmt = 0; mo.dy = 0; mo.rot *= 0.3f; }
         if (chair) { p.body = Pose.SIT; p.sit = 1; drawWheelchair(g, h, false, p.facing, Director.xAt(a, t) / (0.22f * h)); }
         // v37: what is behind the body — a vehicle's frame or dark inside, a bath's tiled corner, a mat, the rope behind
-        float rideFade = ride == null ? 0 : Math.min(1, Math.min(t - ride.t0 + 0.35f, ride.t1 - t) / 0.35f);
+        // (v41: no fading between two drives of the same car that follow on: it waits while they get in)
+        float rideFade = ride == null ? 0 : Math.min(1, Math.min(rideJoined(a, ride, false) ? 1 : (t - ride.t0 + 0.35f) / 0.35f, rideJoined(a, ride, true) ? 1 : (ride.t1 - t) / 0.35f));
         int vColor = vehicleColor(look, a.order);
         if (ride != null && ride.item > 0) {
             g.save(); g.setAlpha(Math.max(0, rideFade)); g.translate(0, -mo.dy);
@@ -1813,7 +1814,18 @@ public final class Renderer {
         }
         if (sp != null) {
             if (DEBUG_DRAW) { Art.Sprite vv = k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t); System.out.printf(java.util.Locale.US, "  VIEW %s %s %dx%d rig=%s sit=%.2f%n", a.c.shown(), vv == sp ? "main" : "view", vv.w, vv.h, vv.rig == null ? "none" : vv.rig.still ? "still" : vv.rig.animal ? "animal" : "full", p.sit); }
-            drawSprite(g, k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t), look, p, h, mo.rot, a);
+            // v41: into and out of the side picture's steps the figure turns: it narrows for a moment as the pictures
+            // change (no pop from the front to the side)
+            float turn = k.costume == 0 && p.sit <= 0 && sideWalks(sp, k, spk != null, a, t) && p.walkAmt > 0.05f ? 0.45f + 0.55f * Math.min(1, Math.abs(p.walkAmt - 0.35f) / 0.33f) : 1;
+            if (turn < 0.999f) { g.save(); g.scale(turn, 1); }
+            Art.Sprite drawn = k.costume > 0 ? sp : viewOf(sp, a, s, p, k, spk != null, t);
+            // a side picture cannot turn its head to someone: while it walks it faces the way it goes
+            if (drawn != sp && drawn == sp.view(1)) {
+                float dir = Math.signum(Director.xAt(a, t + 0.04f) - Director.xAt(a, t - 0.04f));
+                if (dir != 0) p.facing = dir;
+            }
+            drawSprite(g, drawn, look, p, h, mo.rot, a);
+            if (turn < 0.999f) g.restore();
             if (p.umbrellaOpen) spriteUmbrella(g, look, p, h);
         }
         else {
@@ -2047,7 +2059,7 @@ public final class Renderer {
                     // the hands on the handlebar or the steering wheel; getting off in the last half second
                     p.walkAmt = 0; p.walk = 0; mo.rot = 0; mo.dy = 0;
                     int v = Math.abs(act.item) % Film.V_PASSENGER;
-                    float off = act.item > 0 ? Rig.smooth(act.t1 - act.t0 - 0.6f, act.t1 - act.t0, u) : 0;
+                    float off = act.item > 0 && !rideJoined(a, act, true) ? Rig.smooth(act.t1 - act.t0 - 0.6f, act.t1 - act.t0, u) : 0;
                     p.body = off > 0.5f ? Pose.STAND : Pose.SIT; p.sit = 1 - off;
                     p.seat = v == Film.V_CAR || v == Film.V_BUS ? Film.SEAT_CHAIR : Film.SEAT_THRONE;
                     boolean bars = v == Film.V_BICYCLE || v == Film.V_MOTORBIKE || v == Film.V_SCOOTER || v == Film.V_AUTO;
@@ -3189,6 +3201,9 @@ public final class Renderer {
         // v34: turned away or leaving: the back view (the user's back picture, or the one made from the front)
         if (sp.views != null && k.backTurned && !speaking && k.anchor == Film.A_GROUND && sp.view(2) != null) return sp.view(2);
         if (sp.views == null || speaking || k.body != Pose.STAND || k.anchor != Film.A_GROUND || p.sit > 0) return sp;
+        // v41: walking across, a rigged person takes its steps in the user's own side picture (its own rig, drawn
+        // facing the way of the walk); standing, talking or turning to someone, the front picture
+        if (sideWalks(sp, k, speaking, a, t) && p.walkAmt > 0.35f) return sp.view(1);
         // v40: a rigged person turns through its own mesh, to the one it talks to and into each walk — no other picture
         // swaps in for it (a swap popped from one picture to another, and a side picture facing the wrong way walked
         // backwards)
@@ -3205,6 +3220,38 @@ public final class Renderer {
             }
         }
         return sp;
+    }
+
+    /**
+     * v41: a ride that runs straight on into another ride of the same vehicle (after = true), or straight on from one
+     * (after = false): the car waits, its driver at the wheel, while the family gets in — no getting off, no fading.
+     */
+    static boolean rideJoined(Film.Actor a, Film.Act r, boolean after) {
+        for (Film.Act x : a.acts)
+            if (x != r && x.type == Film.G_RIDE && x.item == r.item && Math.abs(after ? x.t0 - r.t1 : x.t1 - r.t0) < 0.1f) return true;
+        return false;
+    }
+
+    /**
+     * v41: the user's side picture can take this character's steps now (all but the walk itself) — not while the
+     * hands are busy with someone or something (a held hand, a hug, a gift, a push, a pat, a ride, a task): those
+     * poses are the front picture's
+     */
+    private static boolean sideWalks(Art.Sprite sp, Film.Key k, boolean speaking, Film.Actor a, float t) {
+        Art.Sprite side = sp == null ? null : sp.view(1);
+        if (side == null || !side.userSide || side.faces == 0 || side.rig == null || side.rig.still || speaking
+                || k.backTurned || k.body != Pose.STAND || k.anchor != Film.A_GROUND || sp.rig == null || sp.rig.animal) return false;
+        if (a != null) for (Film.Act x : a.acts) {
+            // (a walk that ends in one keeps the front picture all the way: no swap a moment before it)
+            if (t < x.t0 - 1.5f || t > x.t1 + 0.3f) continue;
+            switch (x.type) {
+                case Film.G_HOLD_HAND: case Film.G_HUG: case Film.G_KISS: case Film.G_GIVE: case Film.G_OFFER: case Film.G_PUSH:
+                case Film.G_PAT: case Film.G_RIDE: case Film.G_TASK: case Film.G_SCREEN: case Film.G_EAT: case Film.G_DRINK:
+                    return false;
+                default:
+            }
+        }
+        return true;
     }
 
     private int lastShot;
@@ -3430,6 +3477,16 @@ public final class Renderer {
             // v36: the shadow of a nearby flame, from the picture's own outline, flickering with it
             float[] fsh = upright ? fireShadow(actorX, h) : null;
             if (fsh != null) onGround(g, sp.shadowImg, rf.body, rf.cols, rf.rows, left, top, w, h, false, fsh[0] * fsh[1] * h * mirror, fsh[2] * h, fsh[3]);
+            // v41: the user's side picture strides: the far leg swings one way behind (in a little shade), the near
+            // leg and the body the other way in front — the profile walk of cut-out animation
+            if (sp.userSide && sp.legImg != null && st.sit <= 0 && p.walkAmt > 0.05f && !bare) {
+                float swing = (float) Math.sin(p.walk) * 24f * Math.min(1, p.walkAmt);
+                st.stride = -swing;
+                rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
+                g.imageMesh(sp.legImg, rf.cols, rf.rows, rf.body);
+                st.stride = swing;
+                rig.bodyMesh(rf, st, left, top, w, h, h * pxPerUnit);
+            }
             g.imageMesh(bodyImg, rf.cols, rf.rows, rf.body);
             if (p.wet > 0.02f && sp.wetImg != null && !bare) { g.save(); g.setAlpha(Math.min(0.85f, p.wet)); g.imageMesh(sp.wetImg, rf.cols, rf.rows, rf.body); g.restore(); }
             if (st.sit > 0.3f && !beast && p.body != Pose.LIE && p.seat >= 0 && p.seat != Film.SEAT_FLOOR) {

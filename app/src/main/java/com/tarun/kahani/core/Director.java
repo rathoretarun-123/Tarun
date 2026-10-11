@@ -6005,13 +6005,18 @@ public final class Director {
                 float walk = 0;
                 for (int i = 1; i < riders.size(); i++) {
                     Film.Actor pa = riders.get(i);
-                    float px = xAt(pa, t), dd = Math.abs(px - dx);
+                    float px = xAt(pa, t);
+                    // (v41: each to a place along the car's side on the way they come, not all onto one spot)
+                    float side = px < dx ? -1 : 1, spot = dx + side * (55 + 50 * (i - 1)), dd = Math.abs(px - spot);
                     if (dd < 30) continue;
                     float wd = Math.min(2.0f, Math.max(0.6f, dd / 190f));
-                    Film.Key wk = keyAt(pa, t + 0.1f); wk.x = dx; wk.moveDur = wd; wk.facing = dx > px ? 1 : -1; wk.run = false; wk.body = Pose.STAND;
+                    Film.Key wk = keyAt(pa, t + 0.1f); wk.x = spot; wk.moveDur = wd; wk.facing = spot > px ? 1 : -1; wk.run = false; wk.body = Pose.STAND;
                     walk = Math.max(walk, wd);
                 }
                 t0 = t + 0.4f + walk;
+                // v41: the car stays where he stopped it, him at the wheel, while they walk to it and get in (it was
+                // gone between the two drives: he stood in the road and they walked into him)
+                for (Film.Act x : driver.acts) if (x.type == Film.G_RIDE && x.item == v && x.t1 >= t - 4f && x.t0 < t) x.t1 = Math.max(x.t1, t0);
                 film.sfx.add(sfxAt(Film.SFX_DOOR, t0 - 0.3f, 0.6f, 0.3f, driver));
                 familyRides++;
             }
@@ -6027,11 +6032,14 @@ public final class Director {
                 to = freeNear(want, t, riders, 140);
                 if (Math.abs(to - x0) < 260) {
                     // (the other way when the ground ahead is taken)
+                    // (v41: and on a crowded stage a little nearer them and a little closer — still a ride across, never
+                    // onto someone: a bike stopped on वृंदा's toes)
                     float on = Float.NaN, onDir = dir;
-                    for (int side = 0; side < 2 && Float.isNaN(on); side++) {
-                        float dd = side == 0 ? dir : -dir;
-                        for (float c = x0 + dd * 300; c >= 170 && c <= 1110; c += dd * 60) if (freeAt(c, t, riders, 140)) { on = c; onDir = dd; break; }
-                    }
+                    for (int pass = 0; pass < 2 && Float.isNaN(on); pass++)
+                        for (int side = 0; side < 2 && Float.isNaN(on); side++) {
+                            float dd = side == 0 ? dir : -dir;
+                            for (float c = x0 + dd * (pass == 0 ? 300 : 260); c >= 170 && c <= 1110; c += dd * 60) if (freeAt(c, t, riders, pass == 0 ? 140 : 84)) { on = c; onDir = dd; break; }
+                        }
                     if (Float.isNaN(on)) to = want;
                     else { to = on; dir = onDir; }
                 }

@@ -850,6 +850,11 @@ public final class Angles {
         // on skin, a back has none (the spots are as bright as the skin), or its "face" is as wide as the body
         float inter = Math.max(0.02f, r.eyeRX - r.eyeLX);
         float dark = eyeDarkness(r);
+        // v41: a whole standing figure with no pair of eyes seen in it, nothing dark where its eyes are guessed, and
+        // its "face" a quarter of its height below the top of its head (no standing figure's eyes are that low) shows
+        // its back: the "face" is skin-coloured clothing (प्रिया's beige kurta from behind, holding two cups, was read
+        // as a front and became her picture — a back that talked). A dark-furred face with bright eyes is high up.
+        if (!beast && !r.eyesSeen && r.h >= r.w * 1.6f && dark >= 0.85f && r.eyeY - r.headTop > 0.25f) return BACK;
         float faceW = inter / 0.4f;
         float hairAbove = (r.faceTop - r.headTop) / Math.max(0.01f, r.chinY - r.faceTop);
         float skin = skinShare(r, r.eyeLX - inter * 0.5f, r.eyeY - inter * 0.3f, r.eyeRX + inter * 0.5f, r.mouthY + inter * 0.25f);

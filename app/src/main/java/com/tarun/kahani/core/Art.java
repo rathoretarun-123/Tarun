@@ -44,6 +44,10 @@ public final class Art {
          * back). The film mirrors a picture by this, so a three-quarter or side picture never walks backwards.
          */
         public int faces;
+        /** v41: the user's own side picture of the character (a view), which the rig walks with when it walks across. */
+        public boolean userSide;
+        /** v41: of a side picture, the legs alone (below the hips), a little in the shade: the far leg of the stride. */
+        public Object legImg;
         public transient Cutout.Result pixelsForSampling;
         /** Bones and face for moving the picture (null = moved as one piece). */
         public Rig rig;
@@ -279,6 +283,37 @@ public final class Art {
      * sides); a three-quarter or side face shows its skin toward the side it looks to, the hair and the ear toward
      * the other. -1 = looks to the picture's left, +1 = to its right, 0 = a front (or not known).
      */
+    /** v41: marks a view made from one of the user's own side pictures. */
+    static final String USER_SIDE = "user-side";
+
+    /**
+     * v41: which way a side picture of a person looks (1 right, -1 left, 0 not known): in the head (the top quarter of
+     * the figure) the skin of the face lies to the front, the hair to the back (a mop of hair leaves little skin: a
+     * fiftieth of the head is enough).
+     */
+    static int sideFacing(Cutout.Result r, int skin) {
+        if (r == null || r.px == null || r.w < 12 || r.h < 24) return 0;
+        int w = r.w, h = r.h, top = -1, bottom = -1;
+        for (int y = 0; y < h && top < 0; y++) for (int x = 0; x < w; x++) if ((r.px[y * w + x] >>> 24) > 128) { top = y; break; }
+        for (int y = h - 1; y >= 0 && bottom < 0; y--) for (int x = 0; x < w; x++) if ((r.px[y * w + x] >>> 24) > 128) { bottom = y; break; }
+        if (top < 0 || bottom - top < 20) return 0;
+        int y1 = top + Math.round((bottom - top) * 0.25f);
+        int sr = skin >> 16 & 255, sg = skin >> 8 & 255, sb = skin & 255;
+        double all = 0, allN = 0, sk = 0, skN = 0;
+        int minX = w, maxX = -1;
+        for (int y = top; y <= y1; y++) for (int x = 0; x < w; x++) {
+            int c = r.px[y * w + x];
+            if ((c >>> 24) <= 128) continue;
+            all += x; allN++;
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            int dr = (c >> 16 & 255) - sr, dg = (c >> 8 & 255) - sg, db = (c & 255) - sb;
+            if (dr * dr + dg * dg + db * db < 55 * 55) { sk += x; skN++; }
+        }
+        if (allN < 50 || skN < Math.max(30, allN * 0.02) || maxX <= minX) return 0;
+        double off = (sk / skN - all / allN) / (maxX - minX);
+        return off > 0.08 ? 1 : off < -0.08 ? -1 : 0;
+    }
+
     public static int facingOf(Cutout.Result r, Sprite s) {
         float off = facingOffset(r, s);
         return Float.isNaN(off) ? 0 : off < -0.075f ? -1 : off > 0.075f ? 1 : 0;
@@ -856,7 +891,9 @@ public final class Art {
             if (f[0].equals("char") && f.length >= 3 && poseLines.containsKey(f[1])) {
                 String[] better = fullLengthFront(L, f, poseLines.get(f[1]));
                 if (better != null) {
-                    extra.add("pose|" + f[1] + "|" + f[2] + "|0|0|0|1");      // the close-up stays, for the face shots
+                    // the close-up stays, for the face shots — v41: when it has a face (a back read as a front, put
+                    // aside for having none, is never cast in a close-up: प्रिया's back talked in one)
+                    if (showsFace(L, f[2])) extra.add("pose|" + f[1] + "|" + f[2] + "|0|0|0|1");
                     f = better;
                     art.notes.add("front picture of " + f[1] + ": the full-length one (" + f[2] + ") instead of a close-up");
                 }
@@ -1005,6 +1042,17 @@ public final class Art {
         }
         // v41: the user's own slide and swing for the playground of the place (read from their side views)
         try { PlayPics.read(art, L, thingLines); } catch (RuntimeException e) { art.slideGeo = null; art.swingSeat = null; }
+        // v41: the user's own side picture of a character — a standing figure at ±90° among the pictures of their
+        // sheets — is the side view the rig walks with (in place of one the 3D maker made); read after the others
+        java.util.Set<String> sideOf = new java.util.HashSet<String>();
+        for (String[] f : poses) {
+            try {
+                if (f.length < 6 || sideOf.contains(f[1])) continue;
+                if (Math.abs(Math.abs(Float.parseFloat(f[3].trim())) - 90) > 1 || Integer.parseInt(f[4].trim()) != PoseSense.STAND) continue;
+                views.add(new String[]{"view", f[1], "-90", f[2], USER_SIDE});
+                sideOf.add(f[1]);
+            } catch (RuntimeException ignored) { }
+        }
         for (String[] f : views) {
             try {
                 Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
@@ -1017,7 +1065,14 @@ public final class Art {
                 try {
                     int[] dd = L.decode(f[3], 320);
                     boolean[] fr = dd != null && dd[1] > 0 ? framingOf(dd, -1) : null;
+                    // v41: a standing side picture is tall and narrow (its shoes, pointing forward, are no cut edge)
+                    if (fr != null && fr[0] && idx == 1 && dd[0] > 0 && dd[1] >= 2.0f * dd[0]) fr[0] = false;
                     if (fr != null && (fr[0] || fr[1])) { art.notes.add("view of " + f[1] + " at " + f[2].trim() + "° left out: " + (fr[0] ? "a half-length picture" : "a seated picture")); continue; }
+                    // v41: and about as tall for its width as the front it turns (a close-up of the sheet saved as a
+                    // three-quarter view turned प्रिया into a giant laughing bust)
+                    boolean beastC = c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER || c.look.kind == Look.MONKEY);
+                    float mainAspect = main.w > 0 ? main.h / (float) main.w : 0;
+                    if (!beastC && mainAspect >= 1.3f && dd != null && dd[0] > 0 && dd[1] / (float) dd[0] < 0.7f * mainAspect) { art.notes.add("view of " + f[1] + " at " + f[2].trim() + "° left out: a close-up or a half figure"); continue; }
                 } catch (RuntimeException ignored) { }
                 Sprite v = makeSprite(L, f[3], spriteSide, false);
                 if (v == null) continue;
@@ -1044,6 +1099,27 @@ public final class Art {
                 }
                 mouthFromPicture(v.pixelsForSampling, v);
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L); } catch (RuntimeException e) { v.rig = null; }
+                // v41: a side picture of the user's: which way it looks (the face's skin lies to the front of the head,
+                // the hair behind), so it is drawn facing the way of the walk — never walking backwards
+                if (idx == 1 && f.length == 5 && USER_SIDE.equals(f[4]) && v.pixelsForSampling != null) {
+                    v.faces = sideFacing(v.pixelsForSampling, main.skin);
+                    v.userSide = v.faces != 0;
+                    if (!v.userSide) art.notes.add("side picture of " + f[1] + " not used: which way it looks could not be read");
+                }
+                // v41: the far leg of a side picture's stride: its legs alone, below the hips, in a little shade
+                if (v.userSide && v.rig != null && !v.rig.still && v.pixelsForSampling != null) {
+                    try {
+                        Cutout.Result cr = v.pixelsForSampling;
+                        int[] lp = new int[cr.w * cr.h];
+                        int cut = Math.round((v.rig.hipY + 0.01f) * cr.h);
+                        for (int y = Math.max(0, cut); y < cr.h; y++) for (int x = 0; x < cr.w; x++) {
+                            int px0 = cr.px[y * cr.w + x];
+                            int rr = (int) ((px0 >> 16 & 255) * 0.8f), gg = (int) ((px0 >> 8 & 255) * 0.8f), bb = (int) ((px0 & 255) * 0.82f);
+                            lp[y * cr.w + x] = (px0 & 0xFF000000) | rr << 16 | gg << 8 | bb;
+                        }
+                        v.legImg = L.create(lp, cr.w, cr.h);
+                    } catch (Throwable ignored) { v.legImg = null; }
+                }
                 if (v.rig != null && v.pixelsForSampling != null) {
                     try {
                         Cutout.Result cr = v.pixelsForSampling;
@@ -1154,6 +1230,20 @@ public final class Art {
         return PoseSense.framing(px, w, h, eyeY);
     }
 
+    /** v41: a face can be read in this picture and it is no back (eyes found in the hair of a back are no face). */
+    static boolean showsFace(Loader L, String file) {
+        try {
+            int[] d = L.decode(file, 320);
+            if (d == null) return false;
+            int[] px = new int[d[0] * d[1]];
+            System.arraycopy(d, 2, px, 0, px.length);
+            Cutout.Result cr = Cutout.process(px, d[0], d[1]);
+            return cr.faceFound && Math.abs(Angles.guess(cr, false)) < 100;
+        } catch (RuntimeException e) {
+            return true;
+        }
+    }
+
     /**
      * v39: when the front picture is no full-length figure (about as wide as it is tall: a face and shoulders, a
      * sitting picture), the best full-length standing front picture among the character's own (eyes near the top, a
@@ -1207,7 +1297,7 @@ public final class Art {
                     if (!pr.faceFound || facingOf(pr) != 0) continue;
                 } else if (aspect < Math.max(1.3f, mainAspect + 0.3f)) continue;       // clearly more of the figure than the front
                 float sc = aspect - 2 * eyeY + (emo == PoseSense.NEUTRAL ? 0.3f : emo == PoseSense.HAPPY ? 0.15f : -0.4f) + (pose == PoseSense.STAND ? 0.3f : 0)
-                        + (Math.abs(angle) < 1 ? 1f : 0);                      // a front before a three-quarter
+                        + (Math.abs(angle) < 1 ? 3f : 0);                      // a front before a three-quarter (v41: always — a turned figure as the front turns the wrong way)
                 if (sc > bestScore) { bestScore = sc; best = p; }
             }
             if (best == null) return null;

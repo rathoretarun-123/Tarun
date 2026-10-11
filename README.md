@@ -41,6 +41,13 @@ the library, lips and eyes, the mesh, driving, every button — with new test st
 * **Blocking** — a run across, a walk up to someone and a ride now end on free ground, never on someone standing
   there. The full app test runs found four failures (three in blocking, one in reading "राहुल का पार्क"); all four
   are fixed, and the last run on the final code passed: 74 tests, 0 failures.
+* **The final recheck with your pictures** — प्रिया's back picture had become her main picture and talked in a
+  close-up; her front with the tea tray was read as a side; close-ups sat in the three-quarter slots; वृंदा's profile
+  sat in her back slot; the car vanished while the family got in. All fixed: a picture with no eyes and no face is a
+  back and never plays, the eye finder prefers the centred pair, a view is the whole figure turned, the back slot
+  takes the surest back, and the car waits with पापा at the wheel while they get in.
+* **Your side and back pictures** — a standing side picture of yours is the side the rig walks in (facing the way of
+  the walk, the far leg striding); your back picture shows when someone turns away or leaves.
 * Details and numbers: [`docs/testing-v41.md`](docs/testing-v41.md).
 * **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
   quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.

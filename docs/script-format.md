@@ -66,4 +66,5 @@ a photo, a cake, an umbrella. `tools/testdata/v41vocab` holds 189 such sentences
 
 It reads the words of a script; it does not understand a story the way a person does. A direction it has no words for
 gets at least the feeling it names, or nothing. The characters are your pictures on a fine mesh (flat pictures, not 3D
-models): they turn to about three-quarter, never to a full profile or their back.
+models): from the front picture they turn to about three-quarter; a full profile (walking across) and the back (turned
+away) show only when you give a standing side picture and a back picture of the same character.

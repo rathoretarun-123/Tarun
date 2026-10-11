@@ -64,6 +64,8 @@ public final class Rig {
         public float lean;                   // upper body
         public float armL, armR;             // outward swing of the arm on the picture's left / right side
         public float legLAng, legRAng, legLLift, legRLift;
+        /** v41: a side view's legs swing as one block about the hip by this many degrees (a profile stride; 0 = none). */
+        public float stride;
         public float legScale = 1;           // < 1 when kneeling / crouching
         public float sit;                    // 0 standing .. 1 seated: thighs fold towards the viewer, shins stay
         /** v35: seated on the floor, cross-legged: the shins fold under too and the knees spread. */
@@ -94,7 +96,7 @@ public final class Rig {
             follow = followLean = 0;
             turn = headTurn = 0;
             gazeX = gazeY = 0;
-            headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
+            headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = stride = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
             lipWide = lipRound = 0;
             legScale = 1; sit = 0; twirl = false; floor = false;
@@ -536,7 +538,7 @@ public final class Rig {
             double a = Math.toRadians(ang);   // outward: the left arm turns clockwise
             f.armC[side] = (float) Math.cos(a); f.armS[side] = (float) Math.sin(a);
         }
-        float[] la = {s.legLAng, s.legRAng, (s.legLAng - s.legRAng) * 0.15f};
+        float[] la = {s.legLAng, s.legRAng, s.stride != 0 ? s.stride : (s.legLAng - s.legRAng) * 0.15f};
         for (int i = 0; i < 3; i++) { double a = Math.toRadians(la[i]); f.legC[i] = (float) Math.cos(a); f.legS[i] = (float) Math.sin(a); }
         float headH = (neckY - this.top) * h;
         f.nodS = handAtFace ? 1 : 1 - 0.035f * Math.abs(s.nod);

@@ -200,7 +200,63 @@ v41 stories with your own pictures.
 
 ## 7. Said plainly
 
-The rig is a flat picture turned and bent on a fine mesh, not a 3D model: it turns to about a three-quarter view,
-never to a full profile, and cannot show a side the picture does not have. Nothing here makes the film Pixar or
+The rig is a flat picture turned and bent on a fine mesh, not a 3D model: from the front picture it turns to about a
+three-quarter view; a full profile or the back shows only when you give a side or a back picture (section 8), and it
+cannot show a side no picture has. Nothing here makes the film Pixar or
 Disney quality, and no amount of testing can promise software with no bug at all: these checks find the kinds of
 mistakes listed above, and the ones they found are fixed.
+
+## 8. The final recheck with your pictures, and your side and back pictures
+
+You asked for one more check that the films made with your own pictures come out as intended — lip-sync, movement,
+camera, placement and resizing — and said you will give back and side pictures for reference. The whole of "बारिश वाला
+रविवार" was drawn again with your family's sheets and looked at frame by frame. What was wrong, and what was done:
+
+* **प्रिया's back talked.** Her picture holding two cups, seen from behind, was read as a front: no eyes were found in
+  it, only the beige kurta, which has the colour of skin. It became her main picture, and when the loader swapped in a
+  full-length front it kept the back "for the close-ups" — so in one close-up her back spoke, a mouth drawn on her
+  kurta. Now a whole standing figure with no eyes seen in it, nothing dark where its eyes would be and its "face" a
+  quarter of its height below the top of its head is read as a back, and a picture with no face is never kept for
+  the close-ups. Of the 795 figures in all the test sheets, only her two beige backs change reading.
+* **Her front with the tea tray was read as a side.** The eye finder had paired one eye with a dark spot in her hair.
+  On a face whose skin is centred on the head it now prefers the centred pair, when that pair is nearly as strong and
+  its two eyes mirror each other better (an eye and a lock of hair never look alike). Across the 795 figures this
+  moved the eyes of 11 pictures: 9 are read better (closed eyes, tears, the tray picture), 1 close-up of a laughing
+  girl has its eyes placed better but is now called a back, and 1 is a background.
+* **A front is always a front.** When the loader has to choose a full-length front among your pictures, a front now
+  always wins over a three-quarter one (a turned figure as the front turns the wrong way): प्रिया plays from her
+  plain standing front.
+* **The views are the figure turned, never a close-up.** The three-quarter slot of प्रिया, वृंदा and वनुशा held a
+  close-up or a half figure (प्रिया laughing over her cup); turned to three-quarter, the figure became a giant bust.
+  A view must now be about as tall for its width as the front, on upload and when a saved story is opened.
+* **The back slot takes the surest back** — no eyes seen in it and nothing of a face to one side. वृंदा's profile,
+  read as a back, had taken the slot from her real back.
+* **Your side pictures walk.** A standing side picture of yours is the rig's side view: walking across, the person
+  takes the steps in your side picture, drawn facing the way of the walk (which way it looks is read from where the
+  face's skin lies in the head), with the far leg striding behind; standing, talking, turning to someone or with the
+  hands busy (a held hand, a hug, a gift, a ride, a task) it is the front picture. Turned away or leaving, your back
+  picture. A side picture whose facing cannot be read (वृंदा's) or that is cut at the knees (वनुशा's) is not used,
+  and the Studio says so.
+* **The car vanished while the family got in.** तरुण drove up and stopped; between that drive and the next the car was
+  gone — he stood in the road and the three walked onto one spot where he stood. Now the car waits where he stopped
+  it, him at the wheel, with no fade and no getting off between the two drives; the three wait along its side, get
+  in, and it drives on.
+* **A ride never stops on someone** when free ground is a little nearer: a bike stopped on वृंदा's toes in one
+  test story.
+
+Checked after the changes: the 154 test stories directed with your pictures (no crash), the 20 stories in your
+format (59 of 59 lines read right), the 189 everyday sentences (all staged), the desktop copies of the app tests, and
+the full app test run on the phone emulator (numbers below).
+
+Still not right, said plainly:
+
+* Seated on a sofa that is drawn (not one in your room's picture), a person's legs go into the sofa: a front picture
+  cannot show its knees coming forward. It reads as sitting deep in the sofa, and in a wide shot sometimes as sitting
+  behind it. The drawn sofa and other drawn things are flat next to your painted rooms.
+* A front picture holding something (प्रिया's tea tray) keeps holding it in every scene; give a plain standing front
+  as the first picture when you have one.
+* Reading the angle of a picture is a guess from the face: on your sheets some figures are still read at the wrong
+  angle (वनुशा laughing with her eyes shut read as a back, वृंदा's side views with glasses read as backs, a seated
+  front read as a back). The slot rules above choose around most of these; you can always correct a reading in the
+  Studio.
+

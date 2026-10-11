@@ -17,6 +17,8 @@ public final class Cutout {
         public float headTop = 0f, faceTop = 0.05f, chinY = 0.25f;
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E;
         public boolean faceFound;
+        /** v41: a pair of real eyes was seen (refineFace); false when the face is only the skin patch guessed from proportions. */
+        public boolean eyesSeen;
         /** v34: heads side by side in the picture (Ravana): the face found is the central one's; 1 for everyone else. */
         public int heads = 1;
         /**
@@ -312,6 +314,34 @@ public final class Cutout {
             if (lower == null) break;
             bl = peaks.get((int) lower[5]); br = peaks.get((int) lower[6]); bestS = lower[4];
         }
+        // v41: a front face whose pair sits to one side of the head — one eye and a dark spot beside it, in the hair or
+        // at the ear (प्रिया's front with the tea tray was read as a side, its mouth on her cheek): when the face's skin
+        // is centred on the head and a nearly as good pair shares an eye with this one and sits on the head's middle,
+        // those are the eyes
+        {
+            float pdx = br[0] - bl[0], pey = (bl[1] + br[1]) / 2, pmx = (bl[0] + br[0]) / 2;
+            float[] span = headSpan(r, Math.round(pey), Math.round(pmx), pdx);
+            if (span != null) {
+                float hc = (span[0] + span[1]) / 2, hw = span[1] - span[0];
+                float sc0 = skinCentre(r, Math.round(span[0]), Math.round(span[1]), Math.round(pey - 0.2f * pdx), Math.round(pey + 0.8f * pdx));
+                if (!Float.isNaN(sc0) && Math.abs(sc0 - hc) < 0.05f * hw && Math.abs(pmx - hc) > 0.25f * pdx) {
+                    float[] alt = null;
+                    for (float[] g : good) {
+                        if (g[4] < bestS * 0.85f) continue;
+                        float gdx = g[2] - g[0], gmx = (g[0] + g[2]) / 2;
+                        if (Math.abs(gmx - hc) > 0.15f * gdx || Math.abs(gmx - hc) > 0.5f * Math.abs(pmx - hc)) continue;
+                        boolean shares = false;
+                        for (float[] e : new float[][]{bl, br})
+                            if (Math.hypot(g[0] - e[0], g[1] - e[1]) < pdx * 0.15f || Math.hypot(g[2] - e[0], g[3] - e[1]) < pdx * 0.15f) shares = true;
+                        if (shares && (alt == null || g[4] > alt[4])) alt = g;
+                    }
+                    // (and its eyes mirror each other better than this pair's do: an eye and an ear never look alike)
+                    if (alt != null && mirrorLikeness(lum, w, h, alt[0], alt[1], alt[2], alt[3]) > mirrorLikeness(lum, w, h, bl[0], bl[1], br[0], br[1]) + 0.05f) {
+                        bl = peaks.get((int) alt[5]); br = peaks.get((int) alt[6]); bestS = alt[4];
+                    }
+                }
+            }
+        }
         float d = br[0] - bl[0], ey = (bl[1] + br[1]) / 2, mx = (bl[0] + br[0]) / 2;
         // the mouth: the strongest dark / red line in a band below the eyes
         int half = (int) (d * 0.38f);
@@ -356,6 +386,7 @@ public final class Cutout {
             if (sc > bestM) { bestM = sc; my = y; }
         }
         r.faceFound = true;
+        r.eyesSeen = true;
         r.eyeLX = bl[0] / w; r.eyeRX = br[0] / w; r.eyeY = ey / h;
         r.eyeR = Math.max(bl[2], br[2]) * 0.9f / w;
         r.mouthX = mx / w;
@@ -507,6 +538,53 @@ public final class Cutout {
 
     private static double rect(double[] ii, int W1, int x0, int y0, int x1, int y1) {
         return ii[(y1 + 1) * W1 + x1 + 1] - ii[y0 * W1 + x1 + 1] - ii[(y1 + 1) * W1 + x0] + ii[y0 * W1 + x0];
+    }
+
+    /**
+     * v41: how alike two eyes look, one mirrored onto the other (the best correlation of their brightness over a small
+     * shift, -1..1): a pair of real eyes are mirror images, an eye and an ear or a lock of hair are not.
+     */
+    static float mirrorLikeness(int[] lum, int w, int h, float lx, float ly, float rx, float ry) {
+        int k = Math.max(2, Math.round((rx - lx) * 0.3f)), sh = Math.max(1, k / 4);
+        float best = -1;
+        for (int sy = -sh; sy <= sh; sy++) for (int sx = -sh; sx <= sh; sx++) {
+            double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0; int n = 0;
+            for (int v = -k; v <= k; v++) for (int u = -k; u <= k; u++) {
+                int ax = Math.round(lx) + u, ay = Math.round(ly) + v, bx = Math.round(rx) + sx - u, by = Math.round(ry) + sy + v;
+                if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax >= w || bx >= w || ay >= h || by >= h) continue;
+                double a = lum[ay * w + ax], b = lum[by * w + bx];
+                sa += a; sb += b; saa += a * a; sbb += b * b; sab += a * b; n++;
+            }
+            if (n < 9) continue;
+            double ca = saa - sa * sa / n, cb = sbb - sb * sb / n, cab = sab - sa * sb / n;
+            if (ca > 1e-6 && cb > 1e-6) best = Math.max(best, (float) (cab / Math.sqrt(ca * cb)));
+        }
+        return best;
+    }
+
+    /**
+     * v41: the head's outline in the row y: the opaque run around column x (gaps of up to two pixels bridged), as
+     * {left, right}, or null when it is narrower than the eyes are apart.
+     */
+    static float[] headSpan(Result r, int y, int x, float eyesApart) {
+        int w = r.w;
+        if (y < 0 || y >= r.h || x < 0 || x >= w || (r.px[y * w + x] >>> 24) < 128) return null;
+        int row = y * w, a = x, b = x, gap = 0;
+        while (a > 0 && gap <= 2) { a--; if ((r.px[row + a] >>> 24) < 128) gap++; else gap = 0; }
+        gap = 0;
+        while (b < w - 1 && gap <= 2) { b++; if ((r.px[row + b] >>> 24) < 128) gap++; else gap = 0; }
+        return b - a < eyesApart ? null : new float[]{a, b};
+    }
+
+    /** v41: the mean column of the skin between columns a and b, rows y0 to y1 (NaN when too little is skin). */
+    static float skinCentre(Result r, int a, int b, int y0, int y1) {
+        double sx = 0; int n = 0;
+        for (int y = Math.max(0, y0); y <= Math.min(r.h - 1, y1); y++)
+            for (int x = Math.max(0, a); x <= Math.min(r.w - 1, b); x++) {
+                int c = r.px[y * r.w + x];
+                if (isSkin(c) || faceSkin(c)) { sx += x; n++; }
+            }
+        return n < 20 ? Float.NaN : (float) (sx / n);
     }
 
     /** Skin of a face in pictures and cartoons (light to dark brown skin, and the monkey's fur-free face). */

@@ -5696,6 +5696,122 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * v41 (the user: "use my uploaded pics and create new test stories based on them"): "बारिश वाला रविवार", a new
+     * story for the family's own pictures (tools/testdata/sheets38) — morning chores in the living room, a drive in the
+     * rain with thunder, an umbrella and a held hand, a rainbow, a cycle and a bike in the lane, a puddle jump, pretend
+     * anger and a hug of all four. Uploaded as on the phone; the film is checked for every one of those moments.
+     */
+    @Test
+    public void v41RainySundayWithTheFamilysPictures() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets38");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/v40stories/barish_wala_ravivar.txt").toPath()), "UTF-8");
+        Story st = ScriptParser.parse(script);
+        assertEquals("बारिश वाला रविवार", st.title);
+        assertEquals("the family of four", 4, st.cast().size());
+        assertEquals(3, st.places.size());
+        assertEquals(3, st.scenes.size());
+        assertEquals("the living room", Sets.ROOM, Sets.forScene(st.scenes.get(0)));
+        assertEquals("the road outside the society (not a rooftop)", Sets.STREET, Sets.forScene(st.scenes.get(1)));
+        assertEquals("the society's lane (not a rooftop)", Sets.STREET, Sets.forScene(st.scenes.get(2)));
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        String[][] who = {
+                {"तरुण", "08_papa_sheet_a.png,09_papa_sheet_b.png,25_papa_5views.png,26_papa_sheet_c.png"},
+                {"प्रिया", "06_mummy_sheet_b.png,07_mummy_sheet_c.png,12_mummy_5views.png"},
+                {"वृंदा", "14_siya_glasses_a.png,15_siya_glasses_b.png,19_siya_5views_staggered.png"},
+                {"वनुशा", "20_pari_toddler_a.png,29_pari_toddler_b.png"}};
+        StringBuilder rep = new StringBuilder();
+        for (String[] w : who) {
+            Story.CharacterDef c = null;
+            for (Story.CharacterDef x : st.cast()) if (x.fullName.equals(w[0])) c = x;
+            assertNotNull(w[0], c);
+            rep.append(w[0]).append(": ").append(upload(a, onResult, tf, "angles:char:" + keyFor.invoke(a, c) + ":" + c.shown(), dir, w[1].split(","))).append('\n');
+        }
+        rep.append("living room: ").append(upload(a, onResult, tf, "angles:scene:1:लिविंग रूम", dir,
+                new String[]{"02_place_livingroom_6views.jpg", "30_place_tv_wall.jpg"})).append('\n');
+        String cast = p.read("cast.txt");
+        Art art = Art.fromManifest(cast, st, p.loader());
+        for (Story.CharacterDef c : st.cast()) assertNotNull(c.fullName + " has a picture", art.sprites.get(c.id));
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        java.util.Set<Integer> tasks = new java.util.HashSet<Integer>();
+        java.util.Set<String> passengers = new java.util.HashSet<String>(), hugged = new java.util.HashSet<String>(), carDrivers = new java.util.HashSet<String>();
+        int carDrives = 0, cycles = 0, bikes = 0, jumps = 0, handHolds = 0, outOfOrder = 0, splashes = 0, lightning = 0, puddles = 0, jumpedIn = 0;
+        String umbrella = "";
+        for (int si = 0; si < film.segs.size(); si++) {
+            Film.Seg sg = film.segs.get(si);
+            for (Film.Fx f : sg.fx) {
+                if (f.type == Film.FX_SPLASH) splashes++;
+                if (f.type == Film.FX_LIGHTNING) lightning++;
+                if (f.type == Film.FX_PUDDLE) { puddles++; if (f.t2 >= 0) jumpedIn++; }
+            }
+            for (Film.Actor ac2 : sg.actors) {
+                String n = ac2.c == null ? null : ac2.c.fullName;
+                if (ac2.umbrellaFrom >= 0) umbrella += n;
+                for (int i = 1; i < ac2.keys.size(); i++) if (ac2.keys.get(i).t < ac2.keys.get(i - 1).t - 1e-3f) outOfOrder++;
+                for (Film.Act act : ac2.acts) {
+                    if (act.type == Film.G_TASK) tasks.add(act.item);
+                    if (act.type == Film.G_RIDE && act.item == 4) { carDrivers.add(n); carDrives++; }
+                    if (act.type == Film.G_RIDE && act.item == -4) passengers.add(n);
+                    if (act.type == Film.G_RIDE && act.item == 1 && "वृंदा".equals(n)) cycles++;
+                    if (act.type == Film.G_RIDE && act.item == 2 && "तरुण".equals(n)) bikes++;
+                    if (act.type == Film.G_JUMP && "वनुशा".equals(n)) jumps++;
+                    if (act.type == Film.G_HOLD_HAND && "प्रिया".equals(n)) handHolds++;
+                    if (act.type == Film.G_HUG) hugged.add(n);
+                }
+            }
+        }
+        float end = film.duration;
+        boolean rain = false, rainbow = false;
+        for (Film.Weather w : film.weather) {
+            if (w.type == Film.W_RAIN || w.type == Film.W_STORM) rain = true;
+            if (w.type == Film.W_RAINBOW) rainbow = true;
+        }
+        rep.append("umbrella taken up: " + umbrella + ", puddles " + puddles + " (jumped into " + jumpedIn + ")\n");
+        rep.append(String.format("tasks %s, car drivers %s (%d drives), passengers %s, cycles %d, bikes %d, puddle jumps %d (splashes %d), hand held %d, hugged %s, rain %b, lightning %d, rainbow %b, keys out of order %d, %.1f s%n",
+                tasks, carDrivers, carDrives, passengers, cycles, bikes, jumps, splashes, handHolds, hugged, rain, lightning, rainbow, outOfOrder, end));
+        System.out.println("V41 RAIN:\n" + rep);
+        assertTrue("tea, newspaper, combing, sweeping, watering the plants: " + tasks, tasks.size() >= 5);
+        // he drives up, stops, they get in, he drives on with them: his car twice, no other driver
+        assertEquals("only तरुण drives: " + carDrivers, java.util.Collections.singleton("तरुण"), carDrivers);
+        assertTrue("he drives up and then drives them: " + carDrives, carDrives == 2);
+        assertEquals("the other three ride in his car", 3, passengers.size());
+        assertTrue("वृंदा on her cycle", cycles >= 1);
+        assertTrue("तरुण on his bike", bikes >= 1);
+        assertTrue("वनुशा jumps in the puddle", jumps >= 1 && splashes >= 1);
+        assertTrue("the lane's puddles lie on the road (गीली सड़क, पानी के गड्ढे)", puddles >= 3);
+        assertEquals("she lands in one of them", 1, jumpedIn);
+        assertEquals("प्रिया takes the umbrella (छाता लेकर)", "प्रिया", umbrella);
+        assertTrue("प्रिया holds वनुशा's hand", handHolds >= 1);
+        assertEquals("all four hug: " + hugged, 4, hugged.size());
+        assertTrue("it rains", rain);
+        assertTrue("the clouds thunder", lightning >= 1);
+        assertTrue("a rainbow", rainbow);
+        assertEquals("keys in time order", 0, outOfOrder);
+        assertEquals(0, posePictures(film, art));
+        File keep = new File(OUT.getParentFile(), "v41rain");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        ac.pause().stop().destroy();
+    }
+
     static int posePictures(Film film, Art art) {
         int n = 0;
         for (Film.Shot sh : film.shots) for (java.util.Map.Entry<String, Integer> e : sh.pictures.entrySet()) {

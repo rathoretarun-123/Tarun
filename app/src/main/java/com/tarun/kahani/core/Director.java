@@ -424,12 +424,19 @@ public final class Director {
                 float step = (next - c.t) / n;
                 for (int k = 1; k < n; k++) {
                     boolean tight = k % 2 == 1;
+                    // v41: never a cut-in in the middle of a jump (a puddle's splash at the feet): after it lands, or none
+                    float tk = c.t + k * step;
+                    if (tight) {
+                        for (Film.Actor a : sg.actors) for (Film.Act x : a.acts)
+                            if (x.type == Film.G_JUMP && tk > x.t0 - 0.2f && tk < x.t1 + 0.6f && a.stateAt(tk).visible) tk = x.t1 + 0.6f;
+                        if (tk > next - 0.6f) continue;
+                    }
                     // the second framing of a long hold: closer for a wider shot; for a close-up a touch wider (a
                     // close-up never gets tighter here, so a head, hair or a turban is never cut)
                     boolean close = c.zoom >= ShotPlanner.ZOOM[ShotPlanner.CU] * 0.95f;
                     float z2 = close ? Math.max(1f, c.zoom / 1.18f) : Math.min(Math.max(ShotPlanner.MAX_ZOOM, c.zoom), c.zoom * 1.2f);
                     float y2 = close ? c.cy : c.cy - 14 / c.zoom;
-                    Film.Cam d = new Film.Cam(c.t + k * step, c.cx, tight ? y2 : c.cy, tight ? z2 : c.zoom, 0);
+                    Film.Cam d = new Film.Cam(tk, c.cx, tight ? y2 : c.cy, tight ? z2 : c.zoom, 0);
                     d.still = true; d.roll = c.roll; d.angle = c.angle; d.light = c.light;
                     add.add(d);
                 }
@@ -1063,6 +1070,12 @@ public final class Director {
         campfire(sc);
         playgroundProps(sc, b0, b1, where);
         seg.sofaColor = LookDesigner.colourNear(where + " । " + partWords, "सोफे", "सोफा", "सोफ़े", "सोफ़ा", "sofa", "couch");
+        // v41: "गीली सड़क, पानी के छोटे-छोटे गड्ढे" — the place's puddles lie on the ground (the sky in them), out of doors
+        if (Sets.outdoorSet(seg.set) && (Txt.has(where, "पोखर", "puddle") || (Txt.has(where, "गड्ढ") && Txt.has(where, "पानी", "बारिश", "गीली", "गीला", "कीचड़")))) {
+            float[][] spots = {{330, 30, 200}, {840, 54, 240}, {1080, 14, 150}};
+            for (float[] sp : spots) { Film.Fx pf = fx(Film.FX_PUDDLE, seg.t0, 1e6f, sp[0], sp[1], null, null); pf.color = (int) sp[2]; pf.t2 = -1; }
+            film.notes.add("  ↳ puddles on the ground (the place's description)");
+        }
         if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
             // natural night: stars in the sky, fireflies in the woods
             if (wOpen[Film.W_STARS] < 0) open(Film.W_STARS, seg.t0, 0.9f);
@@ -1143,6 +1156,7 @@ public final class Director {
             }
             if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
+            for (Film.Actor a : seg.actors) orderKeys(a);
             for (Object[] ch : changed) {
                 // v37: from behind the screen: the reveal waits until they have stepped out
                 for (Film.Act sa : ((Film.Actor) ch[0]).acts) if (sa.type == Film.G_SCREEN && sa.t1 > tc) tc = sa.t1 + 0.05f;
@@ -1325,7 +1339,7 @@ public final class Director {
         }
         // v34 (realism): coming through the rain without an umbrella, one hurries in; a blindfolded one feels the way in
         boolean aided = a.look.aid != Look.AID_NONE || (a.look.injury & Look.INJ_LEG) != 0;
-        if (!run && !aided && !a.look.umbrella && a.look.isHumanoid() && !a.look.cannotSee() && Sets.outdoorSet(seg.set)
+        if (!run && !aided && !a.umbrellaAt(a.look, tc) && a.look.isHumanoid() && !a.look.cannotSee() && Sets.outdoorSet(seg.set)
                 && (wOpen[Film.W_RAIN] >= 0 || wOpen[Film.W_STORM] >= 0)) { run = true; hurried++; }
         boolean blindIn = a.look.cannotSee();         // v35: blind as well as blindfolded
         if (blindIn) run = false;
@@ -2607,12 +2621,12 @@ public final class Director {
         for (Film.Seg sg : film.segs) {
             if (!Sets.outdoorSet(sg.set)) continue;
             for (Film.Actor a : sg.actors) {
-                if (a.look == null || !a.look.umbrella || !a.look.isHumanoid()) continue;
+                if (a.look == null || !(a.look.umbrella || a.umbrellaFrom >= 0) || !a.look.isHumanoid()) continue;
                 float start = -1;
                 for (int i = 0; ; i++) {
                     float t = sg.t0 + i * 0.25f;
                     boolean end = t >= sg.t1;
-                    boolean on = !end && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && a.stateAt(t).visible;
+                    boolean on = !end && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && a.stateAt(t).visible && a.umbrellaAt(a.look, t);
                     if (on && start < 0) start = t;
                     if (!on && start >= 0) {
                         float e = Math.min(t, sg.t1);
@@ -2985,6 +2999,7 @@ public final class Director {
     /** Stages one sentence of a stage direction; returns its duration. */
     private float sentence(String s, float t, boolean establishing) {
         rode = false;
+        travelAfter = 0;
         List<Story.CharacterDef> ms = mentionsWithGroups(s, null);
         boolean pronoun = Txt.has(s.length() > 6 ? s.substring(0, Math.min(s.length(), 8)) : s, "वह ", "वो ", "उसने", "उसकी", "उसके", "उसे ", "तीनों", "दोनों");
         Story.CharacterDef subjC = (!ms.isEmpty() && !(pronoun && lastSubject != null && !Txt.has(s, "तीनों", "दोनों"))) ? ms.get(0) : lastSubject;
@@ -3439,12 +3454,34 @@ public final class Director {
         }
         // v41: a jump into a puddle — the jump, the splash at the feet and its sound
         if (subj != null && Txt.has(s, "गड्ढे", "गड्ढा", "पोखर", "puddle") && Txt.has(s, "कूद", "jump", "छपाक", "splash", "stamps")) {
-            float tj = t + 0.2f;
+            float tj = t + 0.2f, px = xAt(subj, t);
+            // the puddle she lands in: one of the place's own if one is near (she skips over to it first), else one
+            // where she stands
+            Film.Fx pd = null;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_PUDDLE && f.t2 < 0 && Math.abs(f.x - px) < 300 && (pd == null || Math.abs(f.x - px) < Math.abs(pd.x - px))) pd = f;
+            if (pd == null) { pd = fx(Film.FX_PUDDLE, Math.max(seg.t0, t - 2f), 1e6f, px, 6, subj, null); pd.color = 190; }
+            else if (Math.abs(pd.x - px) > 20) {
+                float wd = Math.max(0.35f, Math.min(1.1f, Math.abs(pd.x - px) / 280f));
+                Film.Key k = keyAt(subj, t + 0.1f); k.x = pd.x; k.moveDur = wd; k.run = true; k.facing = pd.x > px ? 1 : -1; spread(subj, k);
+                tj = t + 0.15f + wd;
+                px = pd.x;
+            }
             subj.acts.add(new Film.Act(tj, tj + 0.7f, Film.G_JUMP));
-            fx(Film.FX_SPLASH, tj + 0.45f, tj + 1.6f, xAt(subj, tj), ground - 4, subj, null);
+            pd.t2 = tj + 0.45f;
+            pd.y = 6;                                   // where her feet come down (not a step in front of them)
+            fx(Film.FX_SPLASH, tj + 0.45f, tj + 1.6f, px, ground - 4, subj, null);
             film.sfx.add(sfxAt(Film.SFX_SPLASH, tj + 0.45f, 0.8f, 0.45f, subj));
+            // the whole figure, feet and puddle in the frame: the jump and the splash are the shot
+            if (!focusSet && !establishing) {
+                // the tallest one standing near her keeps a whole head in the frame, the puddle stays above its bottom
+                float maxH = heightOf(subj);
+                for (Film.Actor o : seg.actors) if (o.stateAt(tj).visible && Math.abs(xAt(o, tj) - px) < 380) maxH = Math.max(maxH, heightOf(o));
+                float z = Math.max(1.0f, Math.min(1.5f, 720f / (maxH * 1.3f + 130)));
+                cam(Math.max(t + 0.05f, tj - 0.5f), px, ground + 70 - 360f / z, z, 0.35f);
+                focusSet = true;
+            }
             puddleJumps++;
-            d = Math.max(d, 1.8f);
+            d = Math.max(d, Math.max(1.8f, tj - t + 1.3f));
         }
         // v41: "गुस्से का नाटक करती है, फिर हँस पड़ती है" — a frown put on, then the laugh breaks through it
         if (subj != null && Txt.has(s, "गुस्से का नाटक", "नाराज़ होने का नाटक", "नाराज होने का नाटक", "pretends to be angry", "mock anger", "pretend anger")) {
@@ -3498,6 +3535,8 @@ public final class Director {
         }
         // v34: walking off, across or up to someone (last: its keys must come after every other key of the sentence)
         travelFramed = false;
+        // v41: "… गले लगाते हैं और … घर की तरफ चल पड़ते हैं": the hug first, then the walk (not walking off mid-hug)
+        if (travelAfter > playDelay) playDelay = travelAfter;
         if (!playStaged) d = Math.max(d, playDelay + travelFrom(s, t + playDelay, subj, target, group));
         if (travelFramed) focusSet = true;
 
@@ -3932,8 +3971,10 @@ public final class Director {
     private static Film.Key insertKey(Film.Actor a, float t) {
         int i = 0;
         while (i < a.keys.size() && a.keys.get(i).t <= t) i++;
-        Film.Key k = a.keys.get(Math.max(0, i - 1)).copy();
+        Film.Key p = a.keys.get(Math.max(0, i - 1)), k = p.copy();
         k.t = t; k.moveDur = 0;
+        // one still on the way keeps going from where they are (as Film.Actor.at does), never a jump to where they go
+        if (p.moveDur > 0 && t > p.t && t < p.t + p.moveDur) { k.moveDur = p.t + p.moveDur - t; k.run = p.run; }
         a.keys.add(i, k);
         return k;
     }
@@ -4204,7 +4245,7 @@ public final class Director {
             boolean blind = lk.cannotSee();             // v35: blind as well as blindfolded
             boolean cane = lk.aid == Look.AID_STICK;
             boolean run = runWords && !blind;
-            if (!run && !blind && !slow && wet && !lk.umbrella && !aided && lk.isHumanoid()) { run = true; hurried++; }
+            if (!run && !blind && !slow && wet && !a.umbrellaAt(lk, ta) && !aided && lk.isHumanoid()) { run = true; hurried++; }
             // a blindfolded walk is careful but not "slowly" on top of it; no walk on the stage lasts more than 4.5 s
             // (a film shortens a long walk; a story that waits ten seconds for one loses its audience)
             float speed = (blind ? 120f : run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
@@ -4441,7 +4482,7 @@ public final class Director {
             Look lk = lookAt(a, t);
             a.acts.add(new Film.Act(t + 0.25f, t + 1.05f, Film.G_LOOK_UP));
             if (snow) a.acts.add(new Film.Act(t + 1.05f, t + 2.6f, Film.G_SHIVER));
-            else if (lk == null || !lk.umbrella) a.acts.add(new Film.Act(t + 1.05f, t + 2.8f, Film.G_COVER_HEAD));
+            else if (!a.umbrellaAt(lk, t)) a.acts.add(new Film.Act(t + 1.05f, t + 2.8f, Film.G_COVER_HEAD));
             n++;
         }
         skyReactions += n;
@@ -4773,6 +4814,11 @@ public final class Director {
             }
             d = Math.max(d, 1.2f);
         }
+        // v41: "प्रिया छाता लेकर कार से उतरती है": from now on she carries an umbrella (it opens over her while it rains)
+        if (Txt.has(s, "छाता", "छतरी", "छाते", "umbrella") && !negated(s) && !Txt.has(s, "छाता बंद", "छतरी बंद", "closes the umbrella", "छाता भूल", "no umbrella", "without an umbrella", "बिना छात")
+                && Txt.has(s, "लेकर", "ले कर", "लेती", "लेता", "लेते", "ले ली", "ले लिया", "खोल", "उठा", "पकड़", "लिए", "लिये", "take", "open", "with an umbrella", "with umbrella", "hold", "carr")) {
+            for (Film.Actor a : who) if (a.look != null && a.look.isHumanoid() && !a.look.umbrella && a.umbrellaFrom < 0) { a.umbrellaFrom = t; umbrellasTaken++; }
+        }
         d = Math.max(d, mealFrom(s, t, who));
         d = Math.max(d, taskFrom(s, t, who));
         d = Math.max(d, activityFrom(s, t, subj, who, group));
@@ -4999,6 +5045,9 @@ public final class Director {
     private boolean playStaged;
     /** v41: how long the getting off the swing takes before the sentence's walk may start. */
     private float playDelay;
+    /** v41: how long after the sentence's start a walk it names waits (the hug before it is over). */
+    private float travelAfter;
+    int umbrellasTaken;
     /** v41: the sentence being staged is one of the playground (playKind): its sitting is on the seat of the swing or the top of the slide. */
     private int playSentence;
     int swingRides, swingChanges, slideClimbs, slideRuns, playProps, emptySwingShots, groundThings, stoodToWalk, familyRides, handsHeld, puddleJumps, groupHugs;
@@ -5033,6 +5082,38 @@ public final class Director {
             if (body) { if (l.body == p.body) l.body = k.body; else body = false; }
             if (seat) { if (l.seat == p.seat) l.seat = k.seat; else seat = false; }
             if (face) { if (l.facing == p.facing) l.facing = k.facing; else face = false; }
+        }
+    }
+
+    /**
+     * v41: a key made for a time before the actor's last key (a turn to the one who speaks while a feeling made earlier
+     * still runs out, a step after a hug) was added at the end of the list, so its change showed only after that later
+     * key (up to 3 s late) or jumped there. It is put in its place in time: a copy of the state then, with what it
+     * changed (from the key it was copied from), held on in the later keys that still had the old state.
+     */
+    static void orderKeys(Film.Actor a) {
+        for (int i = 1; i < a.keys.size(); i++) {
+            Film.Key k = a.keys.get(i), l = a.keys.get(i - 1);
+            if (k.t >= l.t - 1e-3f) continue;
+            a.keys.remove(i);
+            Film.Key in = insertKey(a, k.t);
+            if (Math.abs(k.x - l.x) > 0.5f || k.moveDur > 0) { in.x = k.x; in.moveDur = k.moveDur; in.run = k.run; }
+            if (k.body != l.body) in.body = k.body;
+            if (k.seat != l.seat) in.seat = k.seat;
+            if (k.facing != l.facing) in.facing = k.facing;
+            if (k.emotion != l.emotion) in.emotion = k.emotion;
+            if (k.visible != l.visible) in.visible = k.visible;
+            if (k.backTurned != l.backTurned) in.backTurned = k.backTurned;
+            if (k.eyesShut != l.eyesShut) in.eyesShut = k.eyesShut;
+            if (k.holdR != l.holdR) in.holdR = k.holdR;
+            if (k.holdL != l.holdL) in.holdL = k.holdL;
+            if (k.anchor != l.anchor || k.anchorActor != l.anchorActor) { in.anchor = k.anchor; in.anchorActor = k.anchorActor; }
+            if (k.depth != l.depth) in.depth = k.depth;
+            if (k.tears != l.tears) in.tears = k.tears;
+            if (k.sweat != l.sweat) in.sweat = k.sweat;
+            if (k.costume != l.costume) in.costume = k.costume;
+            spread(a, in);
+            i = 0;
         }
     }
 
@@ -5670,6 +5751,7 @@ public final class Director {
                     Film.Key kh = keyAt(a, t + 1.0f); kh.emotion = Pose.HAPPY;
                 }
                 frameAround(t + 0.2f, cx - gap * hug.size() / 2, cx + gap * hug.size() / 2);
+                travelAfter = 3.5f;
                 groupHugs++;
                 hugs++;
                 return 3.6f;
@@ -5682,6 +5764,7 @@ public final class Director {
             Film.Act h1 = new Film.Act(t + 0.7f, t + 3.0f, Film.G_HUG); h1.target = to; a.acts.add(h1);
             Film.Act h2 = new Film.Act(t + 0.7f, t + 3.0f, Film.G_HUG); h2.target = a; to.acts.add(h2);
             feel(a, t + 0.7f, 2.3f, Pose.HAPPY); feel(to, t + 0.7f, 2.3f, Pose.HAPPY);
+            travelAfter = 3.1f;
             hugs++;
             return 3.2f;
         }

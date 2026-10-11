@@ -257,6 +257,9 @@ public final class Film {
         public final List<Act> acts = new ArrayList<Act>();
         public final List<Speak> speaks = new ArrayList<Speak>();
         public int order;
+        /** v41: from when they carry an umbrella the story hands them ("छाता लेकर …"); -1: none taken up (Look.umbrella: always). */
+        public float umbrellaFrom = -1;
+        public boolean umbrellaAt(Look lk, float t) { return (lk != null && lk.umbrella) || (umbrellaFrom >= 0 && t >= umbrellaFrom - 1e-3f); }
         /** Spider-Verse: the frame rate this character's poses step on (24 experts, 12 learners, 8 rebels; 0 = smooth, every frame). */
         public int stepFps;
         /**
@@ -315,7 +318,9 @@ public final class Film {
             // v41: the playground as part of the place, there from the first frame (sized for actor a, y as FX_SEAT)
             FX_SWING = 40,        // a swing: its frame at x; the seat hangs empty and sways in the air when no one is on it
             FX_SLIDE = 41,        // a slide: its ladder at x, the chute running toward kind (+1 right, -1 left)
-            FX_THING = 42;        // v41: a thing lying on the ground at x (kind 1: a school bag), sized for actor a
+            FX_THING = 42,        // v41: a thing lying on the ground at x (kind 1: a school bag), sized for actor a
+            FX_PUDDLE = 43;       // v41: a rain puddle on the ground at x (y: below the ground line, color: its width);
+                                  //      t2: when someone jumps into it — the splash and its rings (-1: no one)
 
     public static final class Fx {
         public float t0, t1;

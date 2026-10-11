@@ -95,6 +95,12 @@ public class MakeFilm {
         // ACTS=1: every playground act of the film as made (the swing and the slide, v41)
         if (System.getenv("ACTS") != null) for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) for (Film.Act x : ac.acts)
             if (x.type == Film.G_PLAYGROUND || "all".equals(System.getenv("ACTS"))) System.out.printf(java.util.Locale.US, "ACT %s type=%d item=%d %.2f-%.2f how=%d a0=%.0f a1=%.0f%n", ac.c.displayName, x.type, x.item, x.t0, x.t1, x.how, x.a0, x.a1);
+        // FXS=1: every effect of the film (type, time, place)
+        if (System.getenv("FXS") != null) for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx)
+            System.out.printf(java.util.Locale.US, "FX type=%d %.2f-%.2f x=%.0f y=%.0f t2=%.2f color=%d%n", f.type, f.t0, f.t1, f.x, f.y, f.t2, f.color);
+        // keys made out of time order (a later key placed before an earlier one) — none expected
+        for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) for (int i = 1; i < ac.keys.size(); i++)
+            if (ac.keys.get(i).t < ac.keys.get(i - 1).t - 1e-3f) System.out.printf(java.util.Locale.US, "KEY ORDER %s %.2f after %.2f%n", ac.c.displayName, ac.keys.get(i).t, ac.keys.get(i - 1).t);
         System.out.println("film: " + film.duration + "s, segs=" + film.segs.size() + " lines=" + film.lines.size() + " sfx=" + film.sfx.size());
         for (String n : film.notes) System.out.println("  " + n);
         if (System.getenv("SHOTS") != null) Files.write(Paths.get(System.getenv("SHOTS")), film.shotList.getBytes("UTF-8"));

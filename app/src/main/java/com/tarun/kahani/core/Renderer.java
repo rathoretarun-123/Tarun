@@ -1399,7 +1399,7 @@ public final class Renderer {
             p.wind = wnd * (0.75f + 0.45f * gust) + 0.12f * (0.6f + 0.4f * gust) * (float) Math.sin(t * 0.9f + a.order * 1.3f);
             p.wet = film.wetness(t);
             // v34: an umbrella opens over the head while it rains (and keeps its carrier dry)
-            if (look.umbrella && look.isHumanoid() && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && k.body != Pose.LIE && k.body != Pose.HANG && a.look.mount < 0) {
+            if (a.umbrellaAt(look, t) && look.isHumanoid() && Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t)) > 0.05f && k.body != Pose.LIE && k.body != Pose.HANG && a.look.mount < 0) {
                 p.umbrellaOpen = true;
                 p.wet *= 0.25f;
             }
@@ -3983,7 +3983,11 @@ public final class Renderer {
                     float x = f.a != null ? actorScreenX(f.a, t) + f.a.stateAt(t).facing * 60 : f.x;
                     sparkles(g, t, x - 120, f.y - 120, 240, 240, 14, f.color == 0 ? 0xFFFFF59D : f.color);
                 } break;
-                case Film.FX_SPLASH: if (!behind) splash(g, f, u); break;
+                case Film.FX_SPLASH: if (!behind) { boolean inPuddle = false; for (Film.Fx o : s.fx) if (o.type == Film.FX_PUDDLE && Math.abs(o.t2 - f.t0) < 1e-3f) inPuddle = true; if (!inPuddle) splash(g, f, u); } break;
+                case Film.FX_PUDDLE: if (behind) puddle(g, s, f, t); else if (f.t2 >= 0 && t >= f.t2) {
+                    float ps = perspective(s, f.y);
+                    Nature.splashRipples(g, f.x, s.ground + f.y - 2, Math.min(t - f.t2, 0.9f), 1.6f * ps);
+                } break;
                 case Film.FX_SWING: if (behind) drawSwingProp(g, s, f, t); break;
                 case Film.FX_THING: if (behind) {
                     float hh = propHeight(s, f), ps = perspective(s, f.y);
@@ -4379,6 +4383,33 @@ public final class Renderer {
         }
         g.color(0xFF8D6E63);
         g.rect(x + w / 2 - 30, y - h / 2 - 8, 18, 16);
+    }
+
+    /**
+     * v41: a rain puddle lying on the road: a flat pool with the sky's colour in it, a darker wet rim, a streak of light;
+     * when someone jumps in, rings run out to its edge and die away (the drops are drawn in front of the people).
+     */
+    private void puddle(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        float ps = perspective(s, f.y), w = (f.color > 0 ? f.color : 180) * ps, h = w * 0.13f;
+        float x = f.x, y = s.ground + f.y;
+        int sky = s.tod == Sets.NIGHT ? 0xFF2A3550 : s.tod == Sets.EVENING ? 0xFFB49AB8 : 0xFFA9C4DA;
+        g.color(Puppet.alpha(0xFF3E4650, 0.45f));
+        g.oval(x, y, w * 0.53f, h * 0.62f);
+        g.color(Puppet.alpha(sky, 0.78f));
+        g.oval(x, y, w * 0.5f, h * 0.5f);
+        g.color(Puppet.alpha(Props.mix(sky, 0xFFFFFFFF, 0.5f), 0.55f));
+        g.oval(x - w * 0.12f, y - h * 0.12f, w * 0.22f, h * 0.12f);
+        if (f.t2 >= 0 && t >= f.t2) {
+            float age = t - f.t2;
+            for (int k = 0; k < 4; k++) {
+                float a = age - k * 0.18f;
+                if (a <= 0 || a > 2.2f) continue;
+                float r = Math.min(w * 0.48f, (12 + a * 120) * ps);
+                float al = (float) Math.exp(-a / 0.8f) * 0.8f;
+                g.color(Puppet.alpha(0xFFFFFFFF, al));
+                g.strokeOval(x, y, r, r * 0.26f, 2f);
+            }
+        }
     }
 
     private void splash(Gfx g, Film.Fx f, float u) {

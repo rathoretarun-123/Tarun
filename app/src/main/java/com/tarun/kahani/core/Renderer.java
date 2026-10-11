@@ -911,6 +911,31 @@ public final class Renderer {
     /** v35: the feet line and scale of the character being drawn. */
     private float actorY, actorScale = 1, actorX;
 
+    /** v44: how white with snow the ground of this part is at t (a snowy place, or snow settling as it falls). */
+    private float snowCover(Film.Seg s, float t) {
+        if (!Sets.outdoorSet(s.set) || film == null) return 0;
+        float cover = s.snowGround ? 1 : 0;
+        for (Film.Weather w : film.weather) if (w.type == Film.W_SNOW && w.t0 <= t && w.t0 >= s.t0 - 0.5f) cover = Math.max(cover, Math.min(1, (t - w.t0) / 8f) * Math.min(1, w.strength));
+        return cover;
+    }
+
+    /** v44: the land under the sky white with snow — the far hills and fields, and a cold winter light over it all. */
+    private void snowLand(Gfx g, Film.Seg s, float t, float skyBottom) {
+        float c = snowCover(s, t);
+        if (c <= 0.01f) return;
+        float hz = skyBottom * H;
+        g.color(Puppet.alpha(0xFFEAF2FA, 0.14f * c)); g.rect(-W, -H, W * 3, H * 3);
+        g.linear(0, hz - 10, 0, hz + 60, Puppet.alpha(0xFFF4F8FC, 0.0f), Puppet.alpha(0xFFF4F8FC, 0.62f * c));
+        g.rect(-W, hz - 10, W * 3, 70);
+        g.color(Puppet.alpha(0xFFF4F8FC, 0.62f * c)); g.rect(-W, hz + 60, W * 3, H * 2);
+        // drifts catching the light
+        g.color(Puppet.alpha(0xFFFFFFFF, 0.35f * c));
+        for (int i = 0; i < 9; i++) {
+            float bx = W * ((i * 0.618034f) % 1f), by = hz + 40 + (H - hz) * 0.5f * ((i * 0.7548777f) % 1f);
+            g.oval(bx, by, 90 + (i * 31) % 80, 10 + (i % 3) * 4);
+        }
+    }
+
     private void drawScene(Gfx g, final Film.Seg s, float t) {
         curSeg = s;
         camera(s, t);
@@ -957,6 +982,7 @@ public final class Renderer {
             if (s.festive) Sets.celebrationLights(g, t);
             skyNature(g, s, t, sc == null ? 0.35f : sc.skyBottom);
             waterNature(g, s, t, sc, b);
+            snowLand(g, s, t, sc == null ? 0.35f : sc.skyBottom);
         } else {
             final int set = s.set, tod = s.tod;
             // v35: a painted place is drawn as shapes when the camera is in on it (a cached picture of it, enlarged,
@@ -967,6 +993,7 @@ public final class Renderer {
             Sets.paintLive(g, set, tod, t, wind);
             skyNature(g, s, t, 0.38f);
             waterNature(g, s, t, null, null);
+            snowLand(g, s, t, 0.38f);
         }
         g.restore();
         // ---- near layer: characters and effects
@@ -980,11 +1007,8 @@ public final class Renderer {
         // the boat the characters are in (they stand on its deck, rolling and bobbing with it)
         if (s.inBoat) { float[] d = deck(s, t); Nature.boat(g, 640, d[0], t, d[4], rough(t)); }
         // v44: snow on the ground — a snowy place, or snow that has been falling a while (it settles over 8 s)
-        if (Sets.outdoorSet(s.set) && film != null) {
-            float cover = s.snowGround ? 1 : 0;
-            for (Film.Weather w : film.weather) if (w.type == Film.W_SNOW && w.t0 <= t && w.t0 >= s.t0 - 0.5f) cover = Math.max(cover, Math.min(1, (t - w.t0) / 8f) * Math.min(1, w.strength));
-            if (cover > 0.01f) ActionProps.snowCover(g, -400, 1680, s.ground - 14, 900, cover, t);
-        }
+        float cover = snowCover(s, t);
+        if (cover > 0.01f) ActionProps.snowCover(g, -400, 1680, s.ground - 14, 900, cover, t);
         drawFxLayer(g, s, t, true);
         List<Film.Actor> list = new ArrayList<Film.Actor>(s.actors);
         final float tt = t;
@@ -3223,6 +3247,15 @@ public final class Renderer {
     }
 
     /** Arm angle of the cartoon pose (0 down, 90 sideways, 170 up) as an outward swing a picture can show. */
+    static boolean weapon(int item) {
+        return item == Pose.I_SWORD || item == Pose.I_WOOD_SWORD || item == Pose.I_BOW || item == Pose.I_SPEAR || item == Pose.I_SHIELD;
+    }
+
+    /** v44: the arm's swing on a picture when it holds a weapon: up to 80 degrees out. */
+    static float armReach(float a) {
+        return Math.max(-6, Math.min(80, (a - 8) * 0.62f));
+    }
+
     static float armSwing(float a) {
         return Math.max(-6, Math.min(26, (a - 8) * 0.3f));
     }
@@ -3297,6 +3330,9 @@ public final class Renderer {
         float en = a != null ? a.look.energy : 1f, poise = a != null ? a.look.poise : 0f;
         st.armL = armSwing(8 + (p.armL - 8) * en);
         st.armR = armSwing(8 + (p.armR - 8) * en);
+        // v44: a weapon in hand — the arm raised much further than everyday gestures (a sword up, a bow held out)
+        if (weapon(p.holdR)) st.armR = armReach(8 + (p.armR - 8) * en);
+        if (weapon(p.holdL) || p.holdR == Pose.I_BOW) st.armL = armReach(8 + (p.armL - 8) * en);
         st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f * en + p.seed) * 0.6f * en;
         st.lean = p.tilt;
         st.breathe = (float) Math.sin(t * 2.1f + p.seed);
@@ -3366,7 +3402,7 @@ public final class Renderer {
         if (p.sit > 0.02f && p.sit < 0.98f && p.lie < 0.01f) st.lean += 9 * (float) Math.sin(Math.PI * p.sit);     // v35: forward over the feet
         switch (p.body) {
             case Pose.SIT: break;
-            case Pose.KNEEL: st.legScale = 0.7f; st.lean += 4; break;
+            case Pose.KNEEL: st.legScale = 0.56f; st.lean += 5; st.nod += 0.3f; break;      // v44: lower — down on the knees
             case Pose.CROUCH: st.legScale = 0.75f; st.lean += 9; st.nod += 0.4f; break;
             default:
         }
@@ -4200,8 +4236,12 @@ public final class Renderer {
                 g.rotate(p.swing ? p.facing * (40 + (float) Math.sin(p.time * 7) * 25) : p.facing * (150 + (float) Math.sin(p.time * 1.3f) * 2));
                 g.color(0xFF5D4037); g.line(0, 0, 0, 16, 7);
                 g.color(0xFFE5B530); g.line(-10, 0, 10, 0, 5);
-                g.color(p.holdR == Pose.I_SWORD ? 0xFFE0E0E0 : 0xFFC08A55);
+                // an edge line under the blade so it reads against any background
+                g.color(p.holdR == Pose.I_SWORD ? 0xFF455A64 : 0xFF4E342E);
+                g.line(0, 2, 0, -h * 0.32f - 2, 12);
+                g.color(p.holdR == Pose.I_SWORD ? 0xFFE0E0E0 : 0xFFD7A86E);
                 g.line(0, 0, 0, -h * 0.32f, 8);
+                if (p.holdR == Pose.I_SWORD) { g.color(0xFFFFFFFF); g.line(-1.5f, -h * 0.04f, -1.5f, -h * 0.3f, 2); }
                 g.restore();
             } else {
                 drawItem(g, p.holdR, hx, hy, h, p);
@@ -4734,6 +4774,7 @@ public final class Renderer {
             case Film.INS_CYCLE_FEET: ActionProps.insertCycleFeet(g, vw, vh, u, f.t0 + u, (f.color & Film.INS_MOVE_HARD) != 0, shoe, Puppet.shade(cloth, 0.75f),
                     f.a != null ? vehicleColor(f.a.look, f.a.order) : 0xFF1565C0); break;
             case Film.INS_ARROW: ActionProps.insertArrow(g, vw, vh, u); break;
+            case Film.INS_BOW: ActionProps.insertBow(g, vw, vh, u, d, (f.color & Film.INS_MOVE_GO) != 0, skin, cloth); break;
             default:
         }
         g.restore();

@@ -377,7 +377,7 @@ public final class Film {
             FX_ANIMAL = 54;       // v44: an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2
                                   //      it lifts its head and bolts off the edge of the picture (hunting), or stays
     /** v44: FX_INSERT kinds and the moves of a driver's feet and hands (FX_INSERT.color bits). */
-    public static final int INS_STEER = 0, INS_PEDALS = 1, INS_CYCLE_FEET = 2, INS_ARROW = 3;
+    public static final int INS_STEER = 0, INS_PEDALS = 1, INS_CYCLE_FEET = 2, INS_ARROW = 3, INS_BOW = 4;
     public static final int INS_MOVE_GO = 1, INS_MOVE_BRAKE = 2, INS_MOVE_TURN_L = 4, INS_MOVE_TURN_R = 8, INS_MOVE_HARD = 16;
     /** v43: FX_SKY kinds. */
     public static final int SKY_SUNSET = 0, SKY_NIGHTFALL = 1, SKY_SUNRISE = 2, SKY_MOON = 3;

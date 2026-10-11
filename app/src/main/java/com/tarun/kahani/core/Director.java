@@ -105,7 +105,7 @@ public final class Director {
             if (b.type != Story.Beat.DIRECTION) continue;
             for (String sent : sentences(b.text)) {
                 int pose = Txt.has(sent, LIE_DOWN) || Txt.has(sent, WAKE) ? PoseSense.LIE
-                        : Txt.has(sent, SIT_DOWN) && !Txt.has(sent, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") && vehicleIn(sent, false) == 0 ? PoseSense.SIT : -1;
+                        : Txt.has(sent, SIT_DOWN) && !Txt.has(sent, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") && !Txt.has(sent, KNEEL_WORDS) && vehicleIn(sent, false) == 0 ? PoseSense.SIT : -1;
                 if (pose < 0) continue;
                 List<Story.CharacterDef> m = ScriptParser.mentions(story, sent);
                 if (m.isEmpty()) continue;
@@ -3753,7 +3753,10 @@ public final class Director {
             for (Story.CharacterDef c : lastGroup) { Film.Actor a = actor(c); if (a != null) group.add(a); }
         }
         // v36: "सब / सभी / everyone" with no one named is everyone on the stage ("सब अलाव के पास बैठ जाते हैं")
-        if (ms.isEmpty() && Txt.has(" " + s + " ", " सब ", " सभी ", "everyone", "everybody", " all of them", " they all ") && seg != null) {
+        // (v44: the ones carried over from the sentence before are not named here: "… ओले पड़ने लगते हैं और सब भागकर अंदर जाते हैं")
+        boolean namedHere = false;
+        for (Story.CharacterDef c : ms) if (Txt.has(s, c.displayName) || (c.fullName != null && !c.fullName.isEmpty() && Txt.has(s, c.fullName))) namedHere = true;
+        if (!namedHere && Txt.has(" " + s + " ", " सब ", " सभी ", "everyone", "everybody", " all of them", " they all ") && seg != null) {
             group.clear();
             if (subj != null && subj.stateAt(t).visible) group.add(subj);
             for (Film.Actor a : seg.actors) if (a != subj && a.stateAt(t).visible && a.look != null) group.add(a);
@@ -3783,7 +3786,8 @@ public final class Director {
                 int score(Film.Actor a) { return (a.stateAt(tt).visible ? 4 : 0) + (storyGroup.contains(a.c) ? 2 : 0) + (a.look.hero == heroSide ? 1 : 0); }
                 public int compare(Film.Actor a, Film.Actor b) { return score(b) - score(a); }
             });
-            for (Film.Actor a : rest) if (pick.size() < want && !pick.contains(a) && (a.look.hero == heroSide || pick.size() < 2)) pick.add(a);
+            // ("सब" / "everyone" is everyone on the stage, whichever side they are on)
+            for (Film.Actor a : rest) if (pick.size() < want && !pick.contains(a) && (gn == 0 || a.look.hero == heroSide || pick.size() < 2)) pick.add(a);
             if (pick.size() >= 2) {
                 group = pick;
                 if (subj == null || !pick.contains(subj)) subj = pick.get(0);
@@ -5092,6 +5096,9 @@ public final class Director {
 
     // ================================================================== postures and gestures
 
+    public int kneels;
+    static final String[] KNEEL_WORDS = {"घुटनों के बल", "घुटने के बल", "घुटने टेक", "kneels", "kneel", "kneeling", "on his knees", "on her knees", "on their knees"};
+    static final java.util.regex.Pattern COME_THEN_SIT = java.util.regex.Pattern.compile("(आकर|आ कर|जाकर|जा कर|comes in|enters|walks in|walks to)[^।.]*(बैठ|sits|sat)");
     static final String[] SIT_DOWN = {"बैठ गया", "बैठ गई", "बैठ गए", "बैठ गयी", "बैठ जाता", "बैठ जाती", "बैठ जाते", "बैठते हैं", "बैठा है", "बैठी है",
             "बैठे हैं", "बैठा हुआ", "बैठी हुई", "बैठे हुए", "पर बैठा", "पर बैठी", "पर बैठे", "बैठकर", "बैठ कर", "sat down", "sits down", "sat on", "sits on",
             "is sitting", "are sitting", "was sitting", "were sitting", "seated", "took a seat", "baith gaya", "baith gayi",
@@ -5952,6 +5959,20 @@ public final class Director {
             }
             d = Math.max(d, 0.8f);
         }
+        // v44: down on the knees ("घुटनों के बल बैठकर प्रणाम करती है", "kneels before the queen") — a held posture;
+        // the bow or the prayer of the same sentence is made from the knees; they rise at a later "उठ" / "rises"
+        if (Txt.has(s, KNEEL_WORDS) && !negated(s) && !birdLike && !Txt.has(s, "गिर", "falls", "collapses")) {
+            for (Film.Actor a : who) {
+                if (a.look == null || !a.look.isHumanoid() || a.look.aid == Look.AID_WHEELCHAIR) continue;
+                Film.Key now = a.stateAt(t);
+                if (now.body == Pose.KNEEL) continue;
+                float tk = t;
+                if (now.body == Pose.SIT || now.body == Pose.LIE) { Film.Key up = a.at(t); up.body = Pose.STAND; up.seat = -1; tk = t + 0.6f; }
+                Film.Key k = a.at(tk); k.body = Pose.KNEEL;
+                kneels++;
+            }
+            d = Math.max(d, 1.2f);
+        }
         // v35: waking — the eyes open; one lying sits up (0.9 s) and stretches with a yawn
         if (Txt.has(s, WAKE) && !birdLike) {
             for (Film.Actor a : who) {
@@ -5988,11 +6009,12 @@ public final class Director {
             }
             d = Math.max(d, 1.0f);
         } else if (Txt.has(s, SIT_DOWN) && !birdLike && !Txt.has(s, "कंधे पर", "नाक पर", "सिर पर", "पीठ पर", "डाल पर", "shoulder") && vehicleIn(s, false) == 0
-                && !creatureSits(s, subj.c)) {
+                && !creatureSits(s, subj.c) && !Txt.has(s, KNEEL_WORDS)) {
             int seat = Txt.has(s, THRONE) ? Film.SEAT_THRONE : Txt.has(s, SOFA) ? Film.SEAT_SOFA : Txt.has(s, BED) ? Film.SEAT_BED : Txt.has(s, CHAIR) ? Film.SEAT_CHAIR
                     : Txt.has(s, STOOL) ? Film.SEAT_STOOL : Txt.has(s, ROCK) ? Film.SEAT_ROCK : Txt.has(s, FLOOR) ? Film.SEAT_FLOOR : -2;
             // v39: "पास आकर बैठती है" — they come first (the walk is staged after this rule) and sit there: never at the scene's start
-            boolean comeThenSit = Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat");
+            boolean comeThenSit = Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat")
+                    || COME_THEN_SIT.matcher(s).find();     // v44: "दरबार में आकर सिंहासन पर बैठती है"
             for (Film.Actor a : who) {
                 // v41: "from the start" only for one with nothing staged yet in this part (not under a run already made)
                 float ta = comeThenSit ? t : tsFor(a, t);
@@ -6581,7 +6603,14 @@ public final class Director {
                 if (f.size() >= 2) {
                     // a duel: they close in and trade blows — one strikes, the other blocks, by turns — the blades ring
                     Film.Actor a = f.get(0), b = f.get(1);
-                    moveNear(a, b, t, 0.1f);
+                    // a blade's length apart, face to face (never one on the other's spot)
+                    float xa0 = xAt(a, t), xb0 = xAt(b, t), mid = Math.max(240, Math.min(1040, (xa0 + xb0) / 2));
+                    float sa = xa0 <= xb0 ? -1 : 1;
+                    if (a.stateAt(t).body != Pose.STAND || b.stateAt(t).body != Pose.STAND) { moveNear(a, b, t, 0.1f); }
+                    else {
+                        Film.Key ka = a.at(t); ka.x = mid + sa * 105; ka.moveDur = 0.7f;
+                        Film.Key kb = b.at(t); kb.x = mid - sa * 105; kb.moveDur = 0.7f;
+                    }
                     float xa = xAt(a, t + 0.8f), xb = xAt(b, t + 0.8f);
                     keyAt(a, t + 0.8f).facing = xb >= xa ? 1 : -1;
                     keyAt(b, t + 0.8f).facing = xa >= xb ? 1 : -1;
@@ -6641,6 +6670,17 @@ public final class Director {
                 : Txt.has(s, "दुश्मन", "सैनिक", "शत्रु", "enemy", "soldier", "foe") ? Film.ARCH_ENEMY : Film.ARCH_TARGET;
         boolean loose = Txt.has(s, RELEASE) || Txt.has(s, "तीर चल", "arrow at", "an arrow", "arrows at");
         if (Txt.has(s, "निशाना साध", "aims") && !Txt.has(s, "छोड़", "चलाता", "चलाती", "shoots", "looses", "fires", "lets fly", "releases")) loose = false;
+        // "the last arrow strikes the centre": the arrows already flown — only the close of where it struck
+        boolean shot = Txt.has(s, "छोड़", "चलाता", "चलाती", "चलाते", "चला दे", "चला दिया", "मारता", "मारती", "shoots", "shot", "looses", "fires", "lets fly", "releases", "draws");
+        if (!shot && Txt.has(s, "जा लग", "लगता है", "लगती है", "धँस", "धंस", "hits", "strikes", "lands", "thuds", "finds its mark", "pierces")) {
+            float lastHit = -1;
+            for (Film.Fx o : seg.fx) if (o.type == Film.FX_ARROW && o.a == subj && o.t0 > t - 8 && o.t0 <= t + 0.5f) lastHit = Math.max(lastHit, o.t2);
+            if (lastHit > 0) {
+                float at = Math.max(t, lastHit + 0.05f);
+                insert(Film.INS_ARROW, at, at + 1.3f, subj, 0);
+                return at + 1.4f - t;
+            }
+        }
         int n = !loose ? 0 : Txt.has(s, "तीन तीर", "three arrows", "एक के बाद एक", "one after another", "volley") ? 3 : Txt.has(s, "दो तीर", "two arrows") ? 2 : Txt.has(s, "arrows", "तीरों") ? 2 : 1;
         Film.Actor a = subj;
         float x = xAt(a, t);
@@ -6650,6 +6690,20 @@ public final class Director {
         float dir = tg != null ? (tg.x >= x ? 1 : -1) : (x < 640 ? 1 : -1);
         float mx = tg != null ? tg.x : Math.max(140, Math.min(1140, x + dir * 470));
         if (Math.abs(mx - x) < 240) { dir = -dir; mx = Math.max(140, Math.min(1140, x + dir * 470)); }
+        // never shoot past anyone: a free side for a new mark; those still between step back behind the archer
+        if (tg == null && between(a, x, mx, t) > 0) {
+            float ox = Math.max(140, Math.min(1140, x - dir * 470));
+            if (Math.abs(ox - x) >= 240 && between(a, x, ox, t) == 0) { dir = -dir; mx = ox; }
+        }
+        int back = 0;
+        for (Film.Actor o : seg.actors) {
+            if (o == a || !o.stateAt(t).visible) continue;
+            float ox = xAt(o, t);
+            if ((ox - x) * dir > 30 && (mx - ox) * dir > -40) {
+                Film.Key ok = o.at(t); ok.x = Math.max(110, Math.min(1170, x - dir * (140 + 100 * back++))); ok.moveDur = 0.8f;
+                ok.facing = dir;
+            }
+        }
         float h = heightOf(a);
         if (tg == null && mark == Film.ARCH_TARGET) { tg = fx(Film.FX_TARGET, t, 1e6f, mx, 0, a, null); tg.kind = 0; }
         if (tg == null && mark == Film.ARCH_HUNT) {
@@ -6675,12 +6729,22 @@ public final class Director {
             last = rel + flight;
             arrows++;
         }
+        // the close of the bow drawn and loosed (the picture's arm cannot draw it in the wide shot)
+        insert(Film.INS_BOW, act.t0 + 0.55f, n > 0 ? act.t0 + 1.5f : act.t0 + 1.8f, a, n > 0 ? Film.INS_MOVE_GO : 0);
         if (last > 0 && Txt.has(s, "बीच में", "निशाने के बीच", "बीचों-बीच", "बीचोंबीच", "सटीक", "bullseye", "bull's eye", "bull's-eye", "dead centre", "dead center", "the centre", "the center"))
             insert(Film.INS_ARROW, last + 0.05f, last + 1.35f, a, 0);
         Film.Key done = keyAt(a, act.t1 + 0.5f); done.holdR = Pose.I_NONE;
         archeryActs++;
         frameAround(t, Math.min(x, mx) - 60, Math.max(x, mx) + 60);
         return dur + 0.3f + (last > 0 && last > act.t1 ? last - act.t1 : 0);
+    }
+
+    /** v44: how many others stand between x0 and x1 (exclusive of the ends) at t. */
+    private int between(Film.Actor a, float x0, float x1, float t) {
+        int n = 0;
+        float lo = Math.min(x0, x1) + 30, hi = Math.max(x0, x1) + 40;
+        for (Film.Actor o : seg.actors) if (o != a && o.stateAt(t).visible) { float ox = xAt(o, t); if (ox > lo && ox < hi) n++; }
+        return n;
     }
 
     /** v44: play in the snow — a snowball made and thrown, a snowman built, snowflakes caught, a slide down the slope. */
@@ -6812,7 +6876,13 @@ public final class Director {
             x = f.x;
             // walking across, running off
             if (Txt.has(s, "चलती", "चलता", "चलते", "घूम", "walks", "wanders", "strolls", "crosses", "पार")) { f.y = 2; f.t2 = t + 0.3f; f.t1 = Math.max(f.t1 == 1e6f ? 0 : f.t1, t + 6f); }
-            if (Txt.has(s, "भाग", "भग", "runs away", "runs off", "flees", "bolts", "scampers", "darts", "छलाँग", "छलांग")) { f.y = 0; f.t2 = t + 0.3f; f.t1 = t + 3f; }
+            if (Txt.has(s, "भाग", "भग", "runs away", "runs off", "flees", "bolts", "scampers", "darts", "छलाँग", "छलांग")) {
+                // v44: shot at as it flees ("तीर चलाता है पर हिरण भाग जाता है"): it bolts as the arrow leaves the bow
+                float shotAt = -1;
+                for (Film.Fx o : seg.fx) if (o.type == Film.FX_ARROW && o.t0 >= t && (shotAt < 0 || o.t0 < shotAt)) shotAt = o.t0;
+                float b = shotAt > 0 ? shotAt + 0.05f : t + 0.3f;
+                f.y = 0; f.t2 = b; f.t1 = b + 3f;
+            }
             // their voices
             int voice = sp == Look.SP_DOG ? Film.SFX_BARK : sp == Look.SP_COW ? Film.SFX_MOO : sp == Look.SP_CAT ? Film.SFX_MEOW : sp == Look.SP_HEN ? Film.SFX_CLUCK
                     : sp == Look.SP_GOAT ? Film.SFX_BLEAT : sp == Look.SP_HORSE ? Film.SFX_NEIGH : -1;
@@ -8037,7 +8107,7 @@ public final class Director {
                     Film.Actor a = hug.get(i);
                     float x = cx + (i - (hug.size() - 1) / 2f) * gap, x0 = xAt(a, t);
                     Film.Key k = keyAt(a, t + 0.1f);
-                    if (k.body == Pose.LIE || k.body == Pose.SIT) k.body = Pose.STAND;
+                    if (k.body == Pose.LIE || k.body == Pose.SIT || k.body == Pose.KNEEL) k.body = Pose.STAND;
                     k.x = x; k.moveDur = Math.max(0.4f, Math.min(1.2f, Math.abs(x - x0) / 200f)); k.facing = x <= cx ? 1 : -1; k.run = false;
                     spread(a, k);
                     Film.Act h = new Film.Act(t + 1.0f, t + 3.4f, Film.G_HUG);
@@ -8055,7 +8125,7 @@ public final class Director {
         if (Txt.has(s, HUG) && all.size() >= 2) {
             Film.Actor a = all.get(0), to = all.get(1);
             moveNear(a, to, t, 0.6f);
-            Film.Key kt = to.at(t + 0.1f); if (kt.body == Pose.LIE || kt.body == Pose.SIT) kt.body = Pose.STAND;
+            Film.Key kt = to.at(t + 0.1f); if (kt.body == Pose.LIE || kt.body == Pose.SIT || kt.body == Pose.KNEEL) { kt.body = Pose.STAND; kt.seat = -1; }
             Film.Act h1 = new Film.Act(t + 0.7f, t + 3.0f, Film.G_HUG); h1.target = to; a.acts.add(h1);
             Film.Act h2 = new Film.Act(t + 0.7f, t + 3.0f, Film.G_HUG); h2.target = a; to.acts.add(h2);
             feel(a, t + 0.7f, 2.3f, Pose.HAPPY); feel(to, t + 0.7f, 2.3f, Pose.HAPPY);
@@ -8541,7 +8611,7 @@ public final class Director {
         // v41: one sitting or lying gets up first (never slides across the ground seated or lying down)
         Film.Key st = a.stateAt(t);
         float tm = t;
-        if ((st.body == Pose.SIT || st.body == Pose.LIE) && st.anchor == Film.A_GROUND && a.look.isHumanoid()) {
+        if ((st.body == Pose.SIT || st.body == Pose.LIE || st.body == Pose.KNEEL) && st.anchor == Film.A_GROUND && a.look.isHumanoid()) {
             Film.Key up = a.at(t); up.body = Pose.STAND; up.seat = -1; up.eyesShut = false;
             tm = t + (st.body == Pose.LIE ? 0.8f : 0.45f);
             stoodToWalk++;

@@ -626,7 +626,7 @@ public final class Props {
         float bob = move * (float) Math.abs(Math.sin(pm.walk)) * 0.03f * Hm;
         g.translate(0, -bob);
         if (move > 0.5f && horse) g.rotate((float) Math.sin(pm.walk * 2) * 2.5f * f);
-        Puppet.drawAnimal(g, mountAnimal(kind), pm, Hm);
+        if (horse) Puppet.horse(g, mountAnimal(kind), pm, Hm, true); else Puppet.drawAnimal(g, mountAnimal(kind), pm, Hm);
         // the saddle cloth (red with a gold edge) and the saddle on the horse; the howdah's back and seat on the elephant
         float backY = -0.86f * Hm;
         if (horse) {

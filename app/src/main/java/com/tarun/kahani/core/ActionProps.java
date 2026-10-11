@@ -422,16 +422,16 @@ public final class ActionProps {
             float dim = near ? 1f : 0.72f;
             g.color(Puppet.shade(0xFFB0BEC5, dim)); g.line(cx, cy, px, py, h * 0.03f);
             // the leg: hip above the frame, knee out in front, ankle just above the pedal (two-bone reach)
-            float hx = cx - w * 0.1f - (hard ? -w * 0.03f : 0), hy = -h * 0.42f;
+            float hx = cx - w * 0.1f - (hard ? -w * 0.03f : 0), hy = -h * 0.12f;
             float ax = px - h * 0.02f, ay = py - h * 0.07f;
-            float L1 = h * 0.62f, L2 = h * 0.6f, dx = ax - hx, dy = ay - hy, dd = (float) Math.sqrt(dx * dx + dy * dy);
+            float L1 = h * 0.46f, L2 = h * 0.46f, dx = ax - hx, dy = ay - hy, dd = (float) Math.sqrt(dx * dx + dy * dy);
             dd = Math.min(dd, L1 + L2 - 1);
             double base = Math.atan2(dy, dx), k = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + dd * dd - L2 * L2) / (2 * L1 * dd))));
             double th = base - k;                                     // the knee bends forward (to the right)
             float kx = hx + (float) Math.cos(th) * L1, ky = hy + (float) Math.sin(th) * L1;
             int leg = Puppet.shade(trouser, dim);
-            g.color(leg); g.line(hx, hy, kx, ky, h * 0.15f); g.line(kx, ky, ax, ay, h * 0.12f);
-            g.color(Puppet.shade(trouser, dim * 0.8f)); g.oval(kx, ky, h * 0.065f, h * 0.065f);
+            g.color(leg); g.line(hx, hy, kx, ky, h * 0.1f); g.line(kx, ky, ax, ay, h * 0.08f);
+            g.color(Puppet.shade(trouser, dim * 0.8f)); g.oval(kx, ky, h * 0.048f, h * 0.048f);
             // the pedal and the shoe on it
             g.color(0xFF212121); g.roundRect(px - h * 0.07f, py - h * 0.015f, h * 0.14f, h * 0.03f, h * 0.01f);
             g.color(Puppet.shade(shoe, dim));
@@ -440,6 +440,55 @@ public final class ActionProps {
             g.color(Puppet.shade(0xFF1A1A1A, dim)); g.rect(px - h * 0.09f, py - h * 0.02f, h * 0.21f, h * 0.012f);
         }
         g.color(0xFF424242); g.oval(cx, cy, R * 0.14f, R * 0.14f);
+    }
+
+    /**
+     * v44: the archer close, from the side: the bow held out at arm's length, the string drawn back to the cheek,
+     * held a breath (a little tremble), then loosed — the string snaps forward, the arrow leaves, the hand opens back.
+     * Facing right; d is the insert's length, the loose in its last fifth (only aimed: drawn and held).
+     */
+    public static void insertBow(Gfx g, float w, float h, float u, float d, boolean loose, int skin, int sleeve) {
+        // a soft, far background: the sky, the trees and the field out of focus
+        g.linear(0, 0, 0, h, 0xFFA9D3EE, 0xFFDDEFD8); g.rect(0, 0, w, h);
+        g.color(0x557CB342); g.oval(w * 0.2f, h * 0.95f, w * 0.5f, h * 0.25f); g.oval(w * 0.85f, h * 0.98f, w * 0.45f, h * 0.22f);
+        g.color(0x442E7D32); g.oval(w * 0.92f, h * 0.55f, w * 0.12f, h * 0.2f);
+        float rel = loose ? d * 0.78f : d + 1;
+        float draw = u < 0.2f ? 0 : u < rel ? Rig.smooth(0.2f, Math.min(rel, 0.75f), u) : 0;
+        float after = u > rel ? Math.min(1, (u - rel) / 0.25f) : 0;
+        float trem = u > 0.75f && u < rel ? (float) Math.sin(u * 47) * h * 0.003f : 0;
+        float cy = h * 0.5f, bx = w * 0.7f, R = h * 0.42f;
+        // the cheek and jaw of the archer at the left, the string hand at its corner
+        g.color(Puppet.shade(skin, 0.92f));
+        g.begin(); g.moveTo(0, h * 0.12f); g.quadTo(w * 0.16f, h * 0.18f, w * 0.17f, h * 0.38f); g.quadTo(w * 0.17f, h * 0.5f, w * 0.12f, h * 0.56f);
+        g.quadTo(w * 0.06f, h * 0.62f, 0, h * 0.62f); g.close(); g.fillPath();
+        g.color(Puppet.shade(skin, 0.7f)); g.line(w * 0.13f, h * 0.27f, w * 0.155f, h * 0.27f, h * 0.012f);           // the eye along the arrow
+        g.color(0xFF2B1B10); g.begin(); g.moveTo(0, 0); g.lineTo(w * 0.14f, 0); g.quadTo(w * 0.15f, h * 0.12f, w * 0.1f, h * 0.2f); g.lineTo(0, h * 0.26f); g.close(); g.fillPath();
+        // the bow: its limbs bend further as it is drawn; the string from tip to tip through the nock
+        float bend = 0.18f + 0.1f * draw * (1 - after);
+        float tipX = bx - R * bend * 0.9f;
+        float nockX = bx - w * 0.06f - draw * (bx - w * 0.2f - w * 0.06f) * (1 - after) + after * (float) Math.sin(after * 18) * (1 - after) * w * 0.02f;
+        float sy = cy + trem;
+        g.color(0xFF5D4037);
+        g.begin(); g.moveTo(tipX, cy - R); g.quadTo(bx + R * bend * 0.9f, cy - R * 0.5f, bx, cy); g.quadTo(bx + R * bend * 0.9f, cy + R * 0.5f, tipX, cy + R); g.strokePath(h * 0.03f);
+        g.color(0xFF8D6E63); g.oval(tipX, cy - R, h * 0.012f, h * 0.012f); g.oval(tipX, cy + R, h * 0.012f, h * 0.012f);
+        g.color(0xFFEEEEEE); g.line(tipX, cy - R, nockX, sy, 2); g.line(nockX, sy, tipX, cy + R, 2);
+        // the arrow on the string — or gone, flying out to the right
+        if (after == 0) arrowShape(g, nockX, sy, nockX + w * 0.66f, sy, h * 0.012f);
+        else if (after < 1) { float fx = nockX + w * 0.66f + after * w * 0.7f; arrowShape(g, fx - w * 0.6f, sy, fx, sy, h * 0.012f); }
+        // the bow hand round the grip, the arm out from the left
+        // (bare forearms: the sleeve's colour in a picture is not known — only a cuff at the frame's edge)
+        g.color(Puppet.shade(skin, 0.9f)); g.line(-w * 0.02f, cy + h * 0.2f, bx - w * 0.02f, cy + h * 0.02f, h * 0.065f);
+        g.color(sleeve); g.line(-w * 0.03f, cy + h * 0.21f, w * 0.05f, cy + h * 0.185f, h * 0.075f);
+        g.roundRect(bx - w * 0.025f, cy - h * 0.045f, w * 0.045f, h * 0.1f, h * 0.03f);
+        g.color(Puppet.shade(skin, 0.8f)); for (int i = 0; i < 3; i++) g.line(bx + w * 0.008f, cy - h * 0.025f + i * h * 0.028f, bx + w * 0.02f, cy - h * 0.025f + i * h * 0.028f, 2);
+        // the string hand: two fingers on the string, the forearm back past the cheek; opening after the loose
+        float hx = nockX - w * 0.015f - after * w * 0.05f, hy = sy + after * h * 0.03f;
+        g.color(skin); g.line(w * 0.02f, h * 0.7f - draw * h * 0.12f, hx - w * 0.04f, hy + h * 0.015f, h * 0.06f);
+        g.color(sleeve); g.line(-w * 0.01f, h * 0.73f - draw * h * 0.12f, w * 0.04f, h * 0.69f - draw * h * 0.12f, h * 0.07f);
+        g.color(skin); g.roundRect(hx - w * 0.05f, hy - h * 0.035f, w * 0.06f, h * 0.075f, h * 0.025f);
+        float open = after * 0.8f;
+        g.line(hx, hy - h * 0.012f, hx + w * 0.02f + open * w * 0.02f, hy - h * 0.02f - open * h * 0.04f, h * 0.018f);
+        g.line(hx, hy + h * 0.012f, hx + w * 0.02f + open * w * 0.02f, hy + h * 0.02f + open * h * 0.04f, h * 0.018f);
     }
 
     /** The target close: the rings, an arrow just struck into the gold, quivering. */

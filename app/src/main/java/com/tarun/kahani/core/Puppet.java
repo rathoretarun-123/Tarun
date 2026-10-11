@@ -2527,7 +2527,121 @@ public final class Puppet {
 
     // ------------------------------------------------------------------ animals (side view)
 
+    /**
+     * v44: a horse drawn as a horse — a deep barrel, a long arched neck with its mane, a long head carried at an angle
+     * with upright ears, a flowing tail, and four jointed legs with hooves that gallop in turn (hind pair, then the
+     * front pair) or stand square. Facing +1 is to the right; the back is at about 0.86 H (the saddle's place).
+     * With tack, a bridle and a bit.
+     */
+    static void horse(Gfx g, Look l, Pose p, float H, boolean tack) {
+        int coat = l.furColor, dark = shade(coat, 0.7f), mane = shade(coat, 0.38f);
+        g.save();
+        g.scale(p.facing < 0 ? -1 : 1, 1);
+        g.color(0x33000000);
+        g.oval(0, 2, H * 0.6f, H * 0.06f);
+        float mv = Math.max(0, Math.min(1, p.walkAmt)), ph = p.walk;
+        float lw = p.wind * (p.facing < 0 ? -1 : 1);
+        float nod = (float) Math.sin(ph * 2) * H * 0.025f * mv;
+        // the legs: {hip x, hip y, phase, front?, near?} — far pair first (darker), then the near pair over the body
+        float[][] legs = {{-0.36f, -0.6f, 0.0f, 0, 0}, {0.33f, -0.56f, 0.55f, 1, 0}, {-0.33f, -0.6f, 0.12f, 0, 1}, {0.36f, -0.56f, 0.68f, 1, 1}};
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1) {
+                // the tail, then the body over the far legs
+                float lift = mv * 0.25f;
+                float tsw = (float) Math.sin(p.time * 3 + ph) * H * 0.03f + lw * H * 0.08f;
+                g.color(mane);
+                g.begin(); g.moveTo(-0.5f * H, -0.8f * H);
+                g.quadTo(-0.72f * H, (-0.78f - lift * 0.4f) * H, -0.74f * H - tsw * 0.5f, (-0.5f - lift) * H);
+                g.quadTo(-0.76f * H - tsw, (-0.3f - lift * 0.6f) * H, -0.68f * H - tsw, (-0.24f - lift * 0.5f) * H);
+                g.quadTo(-0.64f * H - tsw * 0.5f, (-0.45f - lift) * H, -0.5f * H, -0.7f * H); g.close(); g.fillPath();
+                g.color(shade(coat, 0.85f));
+                g.oval(-0.36f * H, -0.66f * H, 0.2f * H, 0.2f * H);     // hindquarters
+                g.oval(0.34f * H, -0.64f * H, 0.17f * H, 0.19f * H);    // chest
+                g.radial(0.05f * H, -0.78f * H, 0.6f * H, lighten(coat, 0.14f), shade(coat, 0.86f));
+                g.oval(0, -0.65f * H, 0.47f * H, 0.19f * H);            // barrel
+                g.oval(-0.36f * H, -0.68f * H, 0.19f * H, 0.18f * H);
+                g.oval(0.33f * H, -0.66f * H, 0.15f * H, 0.17f * H);
+                // the neck, arched, up to the head
+                float hx = 0.62f * H, hy = -1.12f * H + nod;
+                g.color(coat);
+                g.begin(); g.moveTo(0.2f * H, -0.8f * H);
+                g.quadTo(0.38f * H, -1.08f * H + nod * 0.5f, hx - 0.06f * H, hy - 0.04f * H);
+                g.lineTo(hx + 0.07f * H, hy + 0.06f * H);
+                g.quadTo(0.55f * H, -0.8f * H + nod * 0.3f, 0.47f * H, -0.6f * H);
+                g.lineTo(0.3f * H, -0.58f * H); g.close(); g.fillPath();
+                // the mane along the crest, its ends lifting with the gait and the wind
+                g.color(mane);
+                g.begin(); g.moveTo(0.18f * H, -0.82f * H);
+                for (int i = 0; i <= 8; i++) {
+                    float u = i / 8f;
+                    float cx = 0.18f * H + (hx - 0.24f * H) * u, cy = -0.82f * H + (hy + 0.02f * H + 0.82f * H) * (float) Math.pow(u, 0.8);
+                    float fl = H * (0.04f + 0.02f * (float) Math.sin(p.time * 7 + i)) * (1 + mv + Math.abs(lw));
+                    g.lineTo(cx - fl * 0.8f, cy - fl * 0.3f + (i % 2) * H * 0.015f);
+                }
+                g.lineTo(hx - 0.04f * H, hy - 0.02f * H);
+                g.quadTo(0.36f * H, -1.0f * H + nod * 0.5f, 0.2f * H, -0.76f * H); g.close(); g.fillPath();
+                // the head: from the poll down and forward to the soft muzzle
+                g.save(); g.translate(hx, hy); g.rotate(48 + nod / H * 60);
+                g.color(coat);
+                g.begin(); g.moveTo(-0.07f * H, -0.05f * H);
+                g.quadTo(0.02f * H, -0.09f * H, 0.3f * H, -0.05f * H);
+                g.quadTo(0.38f * H, -0.02f * H, 0.36f * H, 0.05f * H);
+                g.quadTo(0.3f * H, 0.08f * H, 0.2f * H, 0.06f * H);
+                g.quadTo(0.05f * H, 0.11f * H, -0.06f * H, 0.08f * H); g.close(); g.fillPath();
+                g.color(shade(coat, 0.8f)); g.oval(0.33f * H, 0.02f * H, 0.045f * H, 0.045f * H);     // muzzle
+                g.color(0xFF1A1A1A); g.oval(0.345f * H, -0.005f * H, 0.012f * H, 0.008f * H);        // nostril
+                g.line(0.3f * H, 0.055f * H, 0.36f * H, 0.045f * H, 0.006f * H);                       // mouth line
+                float bl = Math.max(0, Math.min(1, p.blink));
+                g.color(0xFF120A06); g.oval(0.05f * H, -0.035f * H, 0.022f * H, 0.022f * H * (1 - bl * 0.85f));
+                if (bl < 0.5f) { g.color(0xCCFFFFFF); g.oval(0.058f * H, -0.043f * H, 0.006f * H, 0.006f * H); }
+                if (l.skin != 0 && l.skin != coat) { g.color(lighten(coat, 0.6f)); g.begin(); g.moveTo(0.08f * H, -0.06f * H); g.quadTo(0.2f * H, -0.075f * H, 0.3f * H, -0.03f * H); g.lineTo(0.29f * H, -0.015f * H); g.quadTo(0.2f * H, -0.05f * H, 0.08f * H, -0.045f * H); g.close(); g.fillPath(); }
+                if (tack) {
+                    g.color(0xFF3E2723);
+                    g.line(0.24f * H, -0.06f * H, 0.24f * H, 0.08f * H, 0.012f * H);    // noseband
+                    g.line(-0.02f * H, -0.07f * H, 0.24f * H, 0.07f * H, 0.01f * H);    // cheek strap
+                    g.color(0xFFBDBDBD); g.oval(0.27f * H, 0.065f * H, 0.012f * H, 0.012f * H);  // the bit
+                }
+                g.restore();
+                // the ears, upright and pricked forward, and the forelock
+                g.color(coat);
+                for (int e = 0; e < 2; e++) {
+                    float ex = hx - 0.03f * H + e * 0.035f * H, ey = hy - 0.05f * H;
+                    float tw = (float) Math.sin(p.time * 1.7f + e) * 0.01f * H;
+                    g.begin(); g.moveTo(ex - 0.025f * H, ey + 0.01f * H); g.quadTo(ex - 0.02f * H, ey - 0.09f * H, ex + 0.015f * H + tw, ey - 0.12f * H);
+                    g.quadTo(ex + 0.03f * H, ey - 0.05f * H, ex + 0.02f * H, ey + 0.015f * H); g.close(); g.fillPath();
+                    g.color(shade(coat, 0.6f)); g.line(ex, ey - 0.01f * H, ex + 0.008f * H + tw, ey - 0.08f * H, 0.01f * H); g.color(coat);
+                }
+                g.color(mane);
+                g.begin(); g.moveTo(hx - 0.02f * H, hy - 0.04f * H); g.quadTo(hx + 0.07f * H, hy - 0.02f * H, hx + 0.08f * H, hy + 0.06f * H); g.lineTo(hx + 0.02f * H, hy + 0.01f * H); g.close(); g.fillPath();
+            }
+            for (float[] lg : legs) {
+                if ((lg[4] == 1) != (pass == 1)) continue;
+                boolean front = lg[3] == 1;
+                double a = (ph + lg[2] * Math.PI * 2);
+                float sw = (float) Math.sin(a) * 0.55f * mv;                     // the swing of the whole leg
+                float lift = Math.max(0, (float) Math.cos(a)) * mv;              // folding as it comes forward
+                float up = H * 0.29f, low = H * 0.29f;
+                float a1 = sw + (front ? 0.05f : -0.22f);
+                float a2 = a1 + (front ? -1.4f * lift : 0.55f + 0.9f * lift);
+                float x0 = lg[0] * H, y0 = lg[1] * H;
+                float x1 = x0 + (float) Math.sin(a1) * up, y1 = y0 + (float) Math.cos(a1) * up;
+                float x2 = x1 + (float) Math.sin(a2) * low, y2 = y1 + (float) Math.cos(a2) * low;
+                // stand on the ground: a leg that reaches below it is lifted by the difference
+                if (y2 > 0) { y1 -= y2; y2 = 0; }
+                int c = lg[4] == 1 ? coat : dark;
+                g.color(c);
+                g.line(x0, y0 - 0.04f * H, x1, y1, H * (front ? 0.085f : 0.1f));
+                g.line(x1, y1, x2, y2, H * 0.05f);
+                g.oval(x1, y1, H * 0.03f, H * 0.03f);
+                g.color(lg[4] == 1 ? 0xFF2B2B2B : 0xFF1A1A1A);
+                g.roundRect(x2 - 0.03f * H, y2 - 0.05f * H, 0.06f * H, 0.05f * H, 0.01f * H);
+            }
+        }
+        g.restore();
+    }
+
     static void drawAnimal(Gfx g, Look l, Pose p, float H) {
+        if (l.species == Look.SP_HORSE && !l.robot) { horse(g, l, p, H, false); return; }
         int sp = l.species, fur = l.furColor, dark = shade(fur, 0.72f), belly = l.skin;
         g.save();
         g.scale(p.facing < 0 ? -1 : 1, 1);

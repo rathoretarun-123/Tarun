@@ -3968,7 +3968,7 @@ public class MainActivity extends Activity {
     /** One picture per shot (the keyframes of the film), as a grid, named by shot ID. */
     private void showShotPictures(final File dir) {
         LinearLayout body = page(S_QC, "🎞 One picture per shot", false);
-        body.addView(Ui.text(this, "The first frame of every shot, made with the film: the reverse shots over the speaker's shoulder, the walks in side view, the two-shots — one picture per shot, named by its shot ID, kept with the story.", 14, Ui.SUB, false));
+        body.addView(Ui.text(this, "The first frame of every shot, made with the film: the reverse shots over the speaker's shoulder, the walks, the two-shots — one picture per shot, named by its shot ID, kept with the story.", 14, Ui.SUB, false));
         File[] fs = dir.listFiles();
         if (fs == null) return;
         java.util.Arrays.sort(fs);

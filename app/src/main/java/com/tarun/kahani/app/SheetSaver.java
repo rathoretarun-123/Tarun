@@ -582,7 +582,8 @@ final class SheetSaver {
                     } catch (Exception ignored) { /* the picture stays a view / library picture */ }
                 }
             }
-            if (posesMade > 0) done.append(posesMade).append(" pose pictures for the shots; ");
+            // v40: the rig plays every shot; these pictures are what it is made from and checked against
+            if (posesMade > 0) done.append(posesMade).append(" pose pictures for the rig; ");
             Studio3DArt.dropProposals(project, Studio3DArt.P_VIEW, key, null, true);     // real angles beat made views
         } else if (kind.equals("scene")) {
             // v39: every whole picture of the place stays in the film (it kept two: "places do not take many pictures

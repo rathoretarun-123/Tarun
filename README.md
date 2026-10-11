@@ -1,4 +1,4 @@
-# Kahani Film — v39
+# Kahani Film — v40
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,50 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v40
+
+You wrote about the "चाय पर बात" film: new lips at वृंदा's neck doing the talking, people floating instead of walking,
+nobody turning to whoever they talk to (only one front pose), and वृंदा walking backwards; and asked for the rigged,
+finely meshed skeleton to do every movement, ignoring the pictures you uploaded.
+
+* **No new lips** — the face reader took वृंदा's three-quarter picture as a front face: one "eye" on her ear, so the
+  mouth landed on her jaw and neck, and the mesh opened lips there. मम्मी's mouth point sat on her nose. Every mouth
+  point is now checked against the picture: a point with no lips under it moves onto the lips found by their colour
+  (redder than the skin, with skin above and a chin below; a three-quarter face's mouth near its edge is found too). A
+  green or blue face, or lips hidden under a moustache, keep the point as before. On 18 test faces: the three points
+  on a jaw, a nose and a moustache moved onto the lips, three moved a pixel or two, twelve stayed (two of those are
+  still wrong — a laughing pose picture whose eyes were read at its eyebrows, and a picture whose face is not found;
+  neither is a picture a rig is made from).
+* **The rig plays every shot, made from your front picture** — your uploaded pose pictures are no longer swapped in for
+  shots; they are what the rig is made from. The one place a picture of yours is still drawn as it is: the back of a
+  head and shoulder in the foreground of an over-the-shoulder shot (a front rig has no back to turn to). When the first picture is a three-quarter
+  one (वृंदा's), your whole standing front picture becomes the rig instead, so the face speaks with its whole mouth and
+  turns both ways.
+* **They turn to each other** — the rig turns through its mesh like a rounded body (the face, nose and the shirt's
+  front move toward the turn, the far side narrows; up to about 30° for the body and 40° for the head): a listener
+  turns to whoever is speaking and keeps looking at them through the pause after the line; a speaker turns to the one
+  spoken to (the one who spoke before, else the one who answers, else the nearest); the eyes lead, the head follows,
+  the body comes last (overlapping action). In a close-up the turn is about half, so the face stays to the camera with
+  the eyeline just off it.
+* **They walk instead of floating** — before the first step they turn toward where they are going (anticipation), then
+  the legs swing past each other from the hips, the swinging leg bends and lifts its foot, the arms swing against the
+  legs, the body leans into the walk, rises as the legs pass and comes down on each step. The steps keep pace with
+  the ground (one step per stride covered, slower as the walk starts and stops), so the planted foot does not slide.
+  A walk "to the window" is now long enough to be seen (it was a 0.9-second slide of a third of a body when others
+  stood in the way).
+* **Nobody walks backwards** — a picture turned to one side was drawn as if it looked the other way when the character
+  walked that way; now each picture's own facing is read (which side of the head its face is on), a front rig is
+  never mirrored (it turns; the ponytail and the shirt's print stay on their side), and a turned picture is mirrored
+  only to face where the character goes or looks.
+* **One sofa** — three people on the sofa had three sofas drawn over each other; people seated side by side now share
+  one sofa (one back, armrests at its two ends).
+* **Names joined, all move** — "वृंदा और वनुशा कमरे से बाहर जाती हैं" moved only वृंदा; everyone named with a plural
+  verb now goes ("Asha and Raju walk up to the cave" too).
+* Details and measurements: [`docs/testing-v40.md`](docs/testing-v40.md).
+* **Said plainly:** the rig is a flat picture turned and bent on a fine mesh, not a 3D model: it turns convincingly to
+  about a three-quarter view, not to a full profile, and a picture never shows a side it does not have. It is not
+  Pixar or Disney quality.
 
 ## New in v39
 

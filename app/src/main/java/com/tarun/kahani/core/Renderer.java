@@ -2565,6 +2565,10 @@ public final class Renderer {
                 float sw = h * 1.05f, st = -h * 0.25f;
                 float sl = seatSpan != null ? seatSpan[0] : -sw / 2, sr = seatSpan != null ? seatSpan[1] : sw / 2;
                 boolean armL = seatSpan == null || seatSpan[2] > 0, armR = seatSpan == null || seatSpan[3] > 0;
+                // where it joins its neighbour's part, a little past the half-way line: the rounded corners of the two
+                // parts lie over each other's flat cloth, so the join shows no notch
+                if (!armL) sl -= h * 0.06f;
+                if (!armR) sr += h * 0.06f;
                 float in = h * 0.025f;          // the cushions stop short of an end with an armrest
                 float cl = armL ? sl + in : sl, cr = armR ? sr - in : sr;
                 if (!front) {
@@ -3123,14 +3127,15 @@ public final class Renderer {
 
     /** v39: picture drawings, with a living face, speaking frames, speaking with the jaw moving, blinks, feelings shown. */
     public static final java.util.concurrent.atomic.AtomicLong[] STAT = {new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(),
-            new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong()};
+            new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong(),
+            new java.util.concurrent.atomic.AtomicLong(), new java.util.concurrent.atomic.AtomicLong()};
 
     static final boolean DEBUG_DRAW = System.getProperty("kahani.debugDraw") != null;
 
     public static String stats() {
         long n = STAT[0].get(), alive = STAT[1].get(), sp = STAT[2].get(), spa = STAT[3].get();
-        return String.format(java.util.Locale.US, "pictures drawn %d, living face %.0f%%, speaking %d, lips moving %.0f%%, blinks %d, feelings %d",
-                n, n == 0 ? 0 : 100f * alive / n, sp, sp == 0 ? 0 : 100f * spa / sp, STAT[4].get(), STAT[5].get());
+        return String.format(java.util.Locale.US, "pictures drawn %d, living face %.0f%%, speaking %d, lips moving %.0f%%, blinks %d, feelings %d, head turned 10+ degrees %.0f%%, in mid-stride %d",
+                n, n == 0 ? 0 : 100f * alive / n, sp, sp == 0 ? 0 : 100f * spa / sp, STAT[4].get(), STAT[5].get(), n == 0 ? 0 : 100f * STAT[6].get() / n, STAT[7].get());
     }
 
     /**
@@ -3172,6 +3177,8 @@ public final class Renderer {
             if (p.mouth > 0.06f) { STAT[2].incrementAndGet(); if (alive && st.jaw > 0.02f) STAT[3].incrementAndGet(); }
             if (p.blink > 0.5f || p.eyesClosed) STAT[4].incrementAndGet();
             if (p.emotion != Pose.NEUTRAL && alive) STAT[5].incrementAndGet();
+            if (st != null && Math.abs(st.turn + st.headTurn) >= 10) STAT[6].incrementAndGet();          // v40
+            if (st != null && !beast && Math.abs(st.legLAng) + Math.abs(st.legRAng) >= 8) STAT[7].incrementAndGet();
         }
         g.save();
         if (p.body == Pose.LIE && !beast) {

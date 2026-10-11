@@ -5257,6 +5257,159 @@ public class AppTest {
         return String.valueOf(toast);
     }
 
+    /**
+     * v40 (the user: "new lips at the neck of वृंदा which do every talking; while moving they seem to float; while
+     * talking to each other they are not turning to each other, only one front pose; वृंदा walking backward; use the
+     * rigged, finely meshed skeleton and ignore the pictures I uploaded"): mouth points on the lips, the rig turned
+     * toward whom it talks to and into each walk without folding, a real stride, a turned picture never walking
+     * backwards, the rig in every shot, spot walks long enough to be seen, a group leaving together.
+     */
+    @Test
+    public void v40LipsTurnsStrideAndTheRigEverywhere() throws Exception {
+        Project p = sampleProject();
+        Story story = ScriptParser.parse(p.read("script.txt"));
+        Art art = Art.fromManifest(p.read("cast.txt"), story, p.loader());
+        StringBuilder rep = new StringBuilder();
+        // 1. lips: the guard's mouth point (on his moustache) moved onto his open mouth; no face is left with a point
+        //    the lip check would still move
+        Art.Sprite guard = null;
+        int faces = 0, still = 0;
+        for (Story.CharacterDef c : story.characters) {
+            Art.Sprite sp = art.sprites.get(c.id);
+            if (sp == null || !sp.faceKnown || !(sp.img instanceof Bitmap)) continue;
+            Bitmap b = (Bitmap) sp.img;
+            int w = b.getWidth(), h = b.getHeight();
+            int[] px = new int[w * h];
+            b.getPixels(px, 0, w, 0, 0, w, h);
+            faces++;
+            float[] again = com.tarun.kahani.core.Cutout.betterMouth(px, w, h, sp.eyeLX * w, sp.eyeRX * w, (sp.eyeLY + sp.eyeRY) / 2 * h, sp.mouthX * w, sp.mouthY * h, sp.mouthHW * w, sp.skin);
+            if (again != null) { still++; rep.append(c.displayName).append(" would still move; "); }
+            if (c.displayName.equals("रतनलाल")) {
+                guard = sp;
+                float hue = com.tarun.kahani.core.PicSense.hsv(sp.skin)[0], d = Math.abs(sp.eyeRX - sp.eyeLX) * w;
+                float dens = com.tarun.kahani.core.Cutout.lipDensity(px, w, h, sp.mouthX * w - sp.mouthHW * w * 0.8f, sp.mouthY * h - d * 0.12f, sp.mouthX * w + sp.mouthHW * w * 0.8f, sp.mouthY * h + d * 0.12f, hue);
+                rep.append(String.format(java.util.Locale.US, "guard's mouth moved=%b, lip colour there %.2f; ", sp.mouthMoved, dens));
+                assertTrue("the guard's mouth point is on his lips now: " + dens, sp.mouthMoved && dens >= 0.12f);
+            }
+        }
+        assertNotNull(guard);
+        assertTrue("no mouth point left off the lips: " + rep, still == 0 && faces >= 5);
+        // 2. a turn through the mesh never folds the picture over itself, and the face moves toward the turn
+        Rig.State st = new Rig.State();
+        st.reset();
+        st.turn = 30; st.headTurn = 10;
+        float[] rows = {guard.rig.eLY, (guard.rig.chinY + guard.rig.shoulderY) / 2, guard.rig.hipY};
+        for (float v : rows) {
+            float prev = -1e9f;
+            for (int i = 0; i <= 200; i++) {
+                float u = i / 200f, x = u + guard.rig.yawShift(st, u, v);
+                assertTrue("no fold at u=" + u + " v=" + v, x > prev);
+                prev = x;
+            }
+        }
+        float fc = (guard.rig.eLX + guard.rig.eRX) / 2;
+        assertTrue("the face moves toward the turn", guard.rig.yawShift(st, fc, guard.rig.eLY) > 0.005f);
+        // 3. mirroring: a rigged front picture never (it turns instead); a picture looking left mirrored to walk right
+        Method mirror = Renderer.class.getDeclaredMethod("mirrorFor", Art.Sprite.class, Pose.class);
+        mirror.setAccessible(true);
+        Pose pose = new Pose();
+        pose.reset();
+        int keep = guard.faces;
+        guard.faces = 0;
+        pose.facing = -1;
+        assertEquals(1f, (Float) mirror.invoke(null, guard, pose), 0f);
+        guard.faces = -1;
+        pose.facing = 1; pose.walkAmt = 1;
+        assertEquals("looks left, walks right: mirrored", -1f, (Float) mirror.invoke(null, guard, pose), 0f);
+        pose.facing = -1;
+        assertEquals("looks left, walks left: as it is", 1f, (Float) mirror.invoke(null, guard, pose), 0f);
+        guard.faces = keep;
+        // 4. a real stride: the legs swing past each other, the swinging one lifts
+        Director d = new Director(story, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        Renderer r = new Renderer(film, art);
+        Method rigState = Renderer.class.getDeclaredMethod("rigState", Pose.class, Film.Actor.class, Art.Sprite.class, float.class);
+        rigState.setAccessible(true);
+        pose.reset();
+        pose.facing = 1; pose.walkAmt = 1; pose.walk = (float) (Math.PI / 2); pose.time = 1;
+        Rig.State ws = (Rig.State) rigState.invoke(r, pose, null, guard, 1f);
+        rep.append(String.format(java.util.Locale.US, "stride legs %.1f / %.1f; ", ws.legLAng, ws.legRAng));
+        assertTrue("legs swing apart: " + ws.legLAng + " / " + ws.legRAng, ws.legLAng * ws.legRAng < 0 && Math.abs(ws.legLAng) >= 10 && Math.abs(ws.legRAng) >= 10);
+        pose.walk = 0;
+        ws = (Rig.State) rigState.invoke(r, pose, null, guard, 1f);
+        assertTrue("the passing leg lifts its foot", Math.max(ws.legLLift, ws.legRLift) > 0.08f);
+        // 5. the rig in every shot, and listeners turned to the one speaking
+        assertEquals("no pose picture for a rigged character", 0, posePictures(film, art));
+        // (the family's own uploaded sheets, when the v39 family test has made that project: 100 pose pictures and more)
+        File fam = new File(OUT.getParentFile(), "v39family");
+        if (new File(fam, "cast.txt").exists()) {
+            String chai = new String(Files.readAllBytes(new File(fam, "script.txt").toPath()), "UTF-8");
+            Story cs = ScriptParser.parse(chai);
+            Art fart = Art.fromManifest(new String(Files.readAllBytes(new File(fam, "cast.txt").toPath()), "UTF-8"), cs, new Project(fam).loader());
+            Director fd = new Director(cs, new Director.Options());
+            fd.prepare();
+            Film ff = fd.direct(fart);
+            int poses = 0;
+            for (Art.Sprite sp : fart.sprites.values()) if (sp.poses != null) poses += sp.poses.size();
+            int used = posePictures(ff, fart);
+            rep.append("family film: ").append(poses).append(" pose pictures loaded, ").append(used).append(" used; ");
+            assertEquals("the family's pose pictures are never swapped in", 0, used);
+        }
+        Method goal = Renderer.class.getDeclaredMethod("turnGoal", Film.Seg.class, Film.Actor.class, float.class);
+        goal.setAccessible(true);
+        int listeners = 0, toward = 0;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            for (Film.Actor sp : sg.actors) for (Film.Speak line : sp.speaks) {
+                float t = (line.t0 + line.t1) / 2;
+                if (!sp.stateAt(t).visible) continue;
+                for (Film.Actor o : sg.actors) {
+                    if (o == sp || !o.stateAt(t).visible || o.stateAt(t).anchor != Film.A_GROUND || Director.xAt(o, t - 0.6f) != Director.xAt(o, t)) continue;
+                    if (o.speaks.stream().anyMatch(x -> x.t0 <= t && x.t1 > t)) continue;
+                    float dx = Director.xAt(sp, t) - Director.xAt(o, t);
+                    if (Math.abs(dx) < 5) continue;
+                    listeners++;
+                    float g = (Float) goal.invoke(r, sg, o, t);
+                    if (Math.signum(g) == Math.signum(dx) && Math.abs(g) >= 0.8f) toward++;
+                }
+            }
+        }
+        rep.append("listeners turned to the speaker ").append(toward).append(" of ").append(listeners).append("; ");
+        assertTrue("listeners turn to the one speaking: " + toward + " of " + listeners, listeners >= 10 && toward >= listeners * 0.9f);
+        // 6. "धीरे-धीरे चलकर खिड़की के पास जाती है" is a walk worth seeing; two named and a plural verb both leave
+        String hi = "पात्र परिचय\n1. वृंदा - 11 साल, बड़ी बेटी\n2. वनुशा - 7 साल, छोटी बेटी\n\nजगह का परिचय\nमुख्य जगह: लिविंग रूम\n\nदृश्य 1: लिविंग रूम - सुबह\n"
+                + "[वृंदा और वनुशा कमरे में खड़ी हैं।]\nवनुशा: दीदी, खिड़की के पास चलो!\n[वृंदा धीरे-धीरे चलकर खिड़की के पास जाती है।]\nवृंदा: देखो, बाहर कितनी धूप है!\n"
+                + "वनुशा: हाँ दीदी!\nवृंदा: चलो, अब नाश्ता करते हैं।\n[वृंदा और वनुशा कमरे से बाहर जाती हैं।]\n";
+        Story hs = ScriptParser.parse(hi);
+        Director hd = new Director(hs, new Director.Options());
+        hd.prepare();
+        Film hf = hd.direct(new Art());
+        float walk = 0;
+        int left = 0;
+        for (Film.Seg sg : hf.segs) for (Film.Actor a : sg.actors) for (Film.Key k : a.keys) {
+            if (k.moveDur <= 0) continue;
+            float dist = Math.abs(k.x - Director.xAt(a, k.t - 0.01f));
+            if (a.c.displayName.equals("वृंदा") && k.x > 0 && k.x < 1280) walk = Math.max(walk, dist);
+            if (k.x < 0 || k.x > 1280) left++;
+        }
+        rep.append(String.format(java.util.Locale.US, "walk to the window %.0f, leaving %d", walk, left));
+        System.out.println("V40: " + rep);
+        assertTrue("the walk to the window is seen: " + walk, walk >= 230);
+        assertTrue("both leave: " + left, left >= 2);
+    }
+
+    /** v40: how many shot appearances of a rigged character use one of the uploaded pose pictures instead of the rig. */
+    static int posePictures(Film film, Art art) {
+        int n = 0;
+        for (Film.Shot sh : film.shots) for (java.util.Map.Entry<String, Integer> e : sh.pictures.entrySet()) {
+            Art.Sprite sp = art.sprites.get(e.getKey());
+            if (sp == null || sp.rig == null || sp.rig.animal || sp.rig.still) continue;
+            if (e.getValue() >= 0) n++;
+        }
+        return n;
+    }
+
     static void deleteTree(File f) {
         if (f.isDirectory()) for (File c : f.listFiles()) deleteTree(c);
         f.delete();

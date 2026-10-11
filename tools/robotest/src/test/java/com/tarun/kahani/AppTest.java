@@ -5399,6 +5399,89 @@ public class AppTest {
         assertTrue("both leave: " + left, left >= 2);
     }
 
+    /**
+     * v40 (the user's new sheets: a park with a red swing and a slide, a wooden swing in a garden, a slide, a red
+     * swing seat, two turnaround sheets of a boy): every sheet uploaded as the phone does it — the boy for आरव, the
+     * park for the place, the slide and the swing as things — each split into its six pictures (the swing-seat sheet
+     * has a thin frame round every picture; it gave five), the boy's front chosen for his rig, his angles read, and
+     * the park story directed with them. The project is kept for the desktop film (build/v40park).
+     */
+    @Test
+    public void v40ParkSheetsBoySwingAndSlide() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets40"), fam = new File(root, "tools/testdata/sheets38");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/v40stories/jhoola_aur_fisalpatti.txt").toPath()), "UTF-8");
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Story st = ScriptParser.parse(script);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        Story.CharacterDef boy = null, girl = null;
+        for (Story.CharacterDef x : st.cast()) { if (x.fullName.equals("आरव")) boy = x; if (x.fullName.equals("वनुशा")) girl = x; }
+        assertNotNull(boy); assertNotNull(girl);
+        StringBuilder rep = new StringBuilder();
+        String boyKey = (String) keyFor.invoke(a, boy), girlKey = (String) keyFor.invoke(a, girl);
+        rep.append("boy: ").append(upload(a, onResult, tf, "angles:char:" + boyKey + ":" + boy.shown(), dir, new String[]{"05_boy_turnaround_a.jpg", "06_boy_turnaround_b.jpg"})).append('\n');
+        rep.append("girl: ").append(upload(a, onResult, tf, "angles:char:" + girlKey + ":" + girl.shown(), fam, new String[]{"20_pari_toddler_a.png", "29_pari_toddler_b.png"})).append('\n');
+        rep.append("park: ").append(upload(a, onResult, tf, "angles:scene:1:पार्क", dir, new String[]{"01_park_swing_slide_6views.jpg", "02_park_wooden_swing_6views.jpg"})).append('\n');
+        rep.append("swing: ").append(upload(a, onResult, tf, "angles:obj:झूला:झूला", dir, new String[]{"04_swing_seat_6views.jpg"})).append('\n');
+        rep.append("slide: ").append(upload(a, onResult, tf, "angles:obj:फिसलपट्टी:फिसलपट्टी", dir, new String[]{"03_slide_6views.jpg"})).append('\n');
+        String cast = p.read("cast.txt");
+        int boyPics = 0, girlPics = 0;
+        java.util.Set<String> boyAngles = new java.util.TreeSet<String>();
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length > 3 && (f[0].equals("pose") || f[0].equals("view")) && f[1].equals(boyKey)) {
+                boyPics++;
+                float ang = Float.parseFloat(f[f[0].equals("pose") ? 3 : 2].trim());
+                boyAngles.add(com.tarun.kahani.core.Angles.name(ang));
+            }
+            if (f.length > 3 && (f[0].equals("pose") || f[0].equals("view")) && f[1].equals(girlKey)) girlPics++;
+        }
+        Method pp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("placePictures", Project.class, String.class);
+        pp.setAccessible(true);
+        Method tp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("thingPictures", Project.class, String.class);
+        tp.setAccessible(true);
+        int placeN = (Integer) pp.invoke(null, p, "1"), swingN = (Integer) tp.invoke(null, p, "झूला"), slideN = (Integer) tp.invoke(null, p, "फिसलपट्टी");
+        rep.append(String.format("boy %d pictures, angles %s; girl %d; park %d; swing %d; slide %d%n", boyPics, boyAngles, girlPics, placeN, swingN, slideN));
+        // the film's own reading of them
+        Art art = Art.fromManifest(cast, st, p.loader());
+        Art.Sprite bs = art.sprites.get(boy.id);
+        assertNotNull("the boy has a picture", bs);
+        rep.append(String.format("boy's rig: %dx%d face=%b faces=%d legs=%s%n", bs.w, bs.h, bs.faceKnown, bs.faces, bs.rig == null ? "-" : String.valueOf(bs.rig.legs)));
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        int playActs = 0;
+        for (Film.Seg sg : film.segs) for (Film.Actor ac2 : sg.actors) for (Film.Act act : ac2.acts) if (act.type == Film.G_PLAY) playActs++;
+        rep.append("play acts (swing, slide): ").append(playActs).append(", pose pictures used for the rig: ").append(posePictures(film, art));
+        System.out.println("V40 PARK:\n" + rep);
+        assertTrue("the boy's two sheets give his twelve pictures: " + boyPics, boyPics >= 10);
+        assertTrue("front, three-quarter, side and back read: " + boyAngles, boyAngles.size() >= 3 && boyAngles.contains("back"));
+        assertTrue("the park keeps its twelve views: " + placeN, placeN >= 10);
+        assertTrue("the swing sheet gives all six (a thin frame round each): " + swingN, swingN >= 6);
+        assertTrue("the slide sheet gives all six: " + slideN, slideN >= 6);
+        assertTrue("the boy's rig is a front with a face and two legs", bs.faceKnown && bs.faces == 0 && bs.rig != null && bs.rig.legs);
+        assertTrue("the swing and the slide are played: " + playActs, playActs >= 2);
+        assertEquals(0, posePictures(film, art));
+        File keep = new File(OUT.getParentFile(), "v40park");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        ac.pause().stop().destroy();
+    }
+
     /** v40: how many shot appearances of a rigged character use one of the uploaded pose pictures instead of the rig. */
     static int posePictures(Film film, Art art) {
         int n = 0;

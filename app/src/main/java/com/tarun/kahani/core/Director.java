@@ -3862,7 +3862,7 @@ public final class Director {
             // v40: a key this sentence already gave them (a look, a feeling) a moment after it starts: they set off
             // just after it, in time order (they were left standing: "वृंदा और वनुशा … बाहर जाती हैं" took only one)
             float ta = t;
-            if (a.last().t > t + 0.149f && a.last().t - t < 1.2f) ta = a.last().t - 0.14f;
+            if (a.last().t > t + 0.149f && a.last().t - t < 2.5f) ta = a.last().t - 0.14f;
             Film.Key now = a.stateAt(ta);
             if (!now.visible || now.anchor != Film.A_GROUND || a.look.kind == Look.BIRD || a.look.mount >= 0 || movedFrom(a, ta)) continue;
             if (a.last().t > ta + 0.149f) continue;          // keys are kept in time order: nothing may come after one already planned
@@ -4575,6 +4575,11 @@ public final class Director {
     static final String[] AUTO_RICKSHAW = {"ऑटो", "आटो", "रिक्शा", "auto", "rickshaw", "tuk-tuk"};
     static final String[] SWING = {"झूला झूल", "झूले पर", "झूला", "झूलती", "झूलता", "झूलते", "झूल रह", "swing", "swings", "swinging"};
     static final String[] SLIDE = {"फिसलपट्टी", "फिसल पट्टी", "फिसलन पट्टी", "स्लाइड", "slide", "slides", "sliding"};
+    /** v40: the play itself (a mere "फिसलपट्टी की तरफ़ जाती है" is a walk to it). */
+    static final String[] SLIDE_PLAY = {"फिसलती", "फिसलता", "फिसलते", "फिसलने", "फिसलकर", "फिसल कर", "फिसलूँ", "फिसलू", "फिसल रह", "slides down", "slid down",
+            "goes down the slide", "went down the slide", "down the slide", "sliding", "slides", "slid"};
+    static final String[] SWING_PLAY = {"झूला झूल", "झूले झूल", "झूलती", "झूलता", "झूलते", "झूलने", "झूलकर", "झूल कर", "झूल रह", "झूले पर", "swings on", "swinging",
+            "on the swing", "swung"};
     static final String[] SEESAW = {"सी-सॉ", "सीसॉ", "सी सॉ", "ढेंकी", "see-saw", "seesaw", "see saw"};
     static final String[] ROUNDABOUT = {"गोल झूला", "गोल झूले", "चकरी", "चक्री", "merry-go-round", "merry go round", "roundabout"};
     static final String[] DUMBBELL = {"डंबल", "डम्बल", "dumbbell", "weights", "वज़न उठा", "वजन उठा"};
@@ -4699,6 +4704,10 @@ public final class Director {
         // ---- the playground
         int pg = Txt.has(s, ROUNDABOUT) ? Film.PG_ROUND : Txt.has(s, SEESAW) ? Film.PG_SEESAW : Txt.has(s, SLIDE) && !Txt.has(s, "फिसल गय", "फिसल ग", "slipped") ? Film.PG_SLIDE
                 : (Txt.has(s, SWING) && !Txt.has(s, "तलवार", "sword", "bat ", "बल्ला", "axe", "कुल्हाड़ी", "arms", "हाथ")) ? Film.PG_SWING : 0;
+        // v40: going to the slide or the swing is a walk, not yet a slide or a swing ("वनुशा फिसलपट्टी की तरफ़ जाती है"
+        // slid where she stood); the play needs its own verb ("फिसलती है", "झूलने लगता है")
+        boolean goThere = Txt.has(s, GO_TO);
+        if (goThere && (pg == Film.PG_SLIDE || pg == Film.PG_SWING) && !Txt.has(s, pg == Film.PG_SLIDE ? SLIDE_PLAY : SWING_PLAY)) pg = 0;
         if (pg != 0) {
             float dur = pg == Film.PG_SLIDE ? 5.2f : 6.5f;
             List<Film.Actor> kids = new ArrayList<Film.Actor>(all);
@@ -4729,11 +4738,21 @@ public final class Director {
             float lag = 0;
             for (Film.Actor a : kids) {
                 if (pg == Film.PG_SEESAW) break;
-                float h = heightOf(a), x = xAt(a, t + lag);
+                float h = heightOf(a), x = xAt(a, t + lag), from = x;
+                // v40: "झूले की तरफ़ दौड़ता है और झूले पर बैठकर झूलने लगता है": first the run to it, then the play (the
+                // swing or the slide stands toward the middle of the stage, a walk worth seeing away)
+                if (goThere) x = Math.abs(640 - x) > 260 ? x + (x < 640 ? 300 : -300) : x + (x < 640 ? -280 : 280);
                 float f = x < 640 ? 1 : -1;
                 if (pg == Film.PG_SLIDE) x = f > 0 ? Math.max(180, Math.min(1100 - Props.SLIDE_LEN * h, x)) : Math.min(1100, Math.max(180 + Props.SLIDE_LEN * h, x));
                 else x = Math.max(200, Math.min(1080, x));
-                Film.Key k = a.at(t + 0.1f + lag); k.x = x; k.moveDur = 0.6f; k.facing = f;
+                // a "बैठकर" of this sentence is the seat of the swing itself (drawn by the play): no sitting on the grass first
+                for (Film.Key kk : a.keys) if (kk.t >= t - 0.01f && kk.body == Pose.SIT) kk.body = Pose.STAND;
+                float go = goThere ? Math.min(3.5f, Math.max(0.8f, Math.abs(x - from) / (running(s) ? 250f : 170f))) : 0.6f;
+                Film.Key k = a.at(t + 0.1f + lag); k.x = x; k.moveDur = go; k.facing = goThere ? (x > from ? 1 : -1) : f; k.run = goThere && running(s);
+                if (goThere) {
+                    t0 = Math.max(t0, t + 0.1f + lag + go + 0.3f);
+                    Film.Key turn = a.at(t + 0.1f + lag + go + 0.05f); turn.facing = f;
+                }
                 Film.Act act = new Film.Act(t0 + lag, t0 + lag + dur, Film.G_PLAYGROUND);
                 act.item = pg;
                 a.acts.add(act);
@@ -4747,11 +4766,13 @@ public final class Director {
                     film.sfx.add(sfxAt(Film.SFX_CREAK, t0 + lag, dur, 0.25f, a));
                     feel(a, t0 + lag, dur, Pose.HAPPY);
                 }
+                // v40: off the swing (or the slide) and standing again when the play is over — the seat is the play's
+                if (a.last().t <= t0 + lag + dur + 0.05f) { Film.Key off = a.at(t0 + lag + dur + 0.05f); off.body = Pose.STAND; off.seat = -1; }
                 playground++;
                 lag += 0.5f;
                 camOn(a, t0, pg == Film.PG_SLIDE ? 0.95f : 1.1f);
             }
-            return dur + 1.0f + lag;
+            return t0 - (t + 0.9f) + dur + 1.0f + lag;
         }
         // ---- exercise
         int ex = Txt.has(s, PUSHUP) ? Film.EX_PUSHUP : Txt.has(s, SKIPPING) ? Film.EX_SKIP : Txt.has(s, DUMBBELL) ? Film.EX_DUMBBELL

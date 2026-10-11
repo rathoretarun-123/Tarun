@@ -42,6 +42,13 @@ public final class Angles {
             // the background is what the border's colour reaches from the border (white clothes on a white sheet
             // stay part of the figure: a plain colour distance would cut a white kurta into gaps)
             int[] tmp = src.clone();
+            // v40: a thin frame round each panel shuts the white inside it off from the border: the background never
+            // reached it and the whole panel stayed solid. The frame lines (and grid lines) are taken out first.
+            boolean[] raw = new boolean[w * h];
+            for (int i = 0; i < raw.length; i++) raw[i] = Cutout.dist(src[i], bg) > 40;
+            boolean[] lined = raw.clone();
+            clearPanelFrames(raw, w, h);
+            for (int i = 0; i < raw.length; i++) if (lined[i] && !raw[i]) tmp[i] = bg;
             try { Cutout.removeBackground(tmp, w, h, false, bg); } catch (RuntimeException e) { for (int i = 0; i < tmp.length; i++) tmp[i] = Cutout.dist(src[i], bg) > 60 ? src[i] | 0xFF000000 : 0; }
             for (int i = 0; i < on.length; i++) on[i] = (tmp[i] >>> 24) > 100;
         }
@@ -93,6 +100,59 @@ public final class Angles {
             }
             y = y1;
         }
+        clearPanelFrames(on, w, h);
+    }
+
+    /**
+     * v40: the thin frame drawn round each panel of a sheet (the swing-seat sheet: a grey box round every picture).
+     * Its lines run only along one panel — a third of the sheet, half its height — so the whole-sheet pass above
+     * leaves them, and a chain hanging from the top of a panel joined its swing to the frame: the panel came out
+     * whole and one swing was lost. A frame line is a long straight run at most 4 px thick all along; a chain, a rope
+     * or a pole is thicker, or broken by the holes of its links, and stays.
+     */
+    static void clearPanelFrames(boolean[] on, int w, int h) {
+        int thin = Math.max(2, Math.round(Math.max(w, h) * 0.0035f));
+        int minV = Math.round(h * 0.25f), minH = Math.round(w * 0.2f);
+        java.util.List<int[]> cut = new java.util.ArrayList<int[]>();
+        for (int x = 0; x < w; x++) {
+            int y = 0;
+            while (y < h) {
+                if (!on[y * w + x]) { y++; continue; }
+                int y1 = y;
+                while (y1 < h && on[y1 * w + x]) y1++;
+                if (y1 - y >= minV) {
+                    int narrow = 0;
+                    for (int yy = y; yy < y1; yy++) {
+                        int a = x, b = x;
+                        while (a > 0 && on[yy * w + a - 1] && x - a < thin + 2) a--;
+                        while (b < w - 1 && on[yy * w + b + 1] && b - x < thin + 2) b++;
+                        if (b - a + 1 <= thin) narrow++;
+                    }
+                    if (narrow >= (y1 - y) * 0.85f) cut.add(new int[]{x, y, x + 1, y1});
+                }
+                y = y1;
+            }
+        }
+        for (int y = 0; y < h; y++) {
+            int x = 0;
+            while (x < w) {
+                if (!on[y * w + x]) { x++; continue; }
+                int x1 = x;
+                while (x1 < w && on[y * w + x1]) x1++;
+                if (x1 - x >= minH) {
+                    int narrow = 0;
+                    for (int xx = x; xx < x1; xx++) {
+                        int a = y, b = y;
+                        while (a > 0 && on[(a - 1) * w + xx] && y - a < thin + 2) a--;
+                        while (b < h - 1 && on[(b + 1) * w + xx] && b - y < thin + 2) b++;
+                        if (b - a + 1 <= thin) narrow++;
+                    }
+                    if (narrow >= (x1 - x) * 0.85f) cut.add(new int[]{x, y, x1, y + 1});
+                }
+                x = x1;
+            }
+        }
+        for (int[] c : cut) for (int yy = c[1]; yy < c[3]; yy++) for (int xx = c[0]; xx < c[2]; xx++) on[yy * w + xx] = false;
     }
 
     /** The occupied runs of a profile: runs thinner than 'noise' are dropped (grid lines), gaps thinner than 'join' are closed. Returns {start, end} pairs (end exclusive). */
@@ -402,6 +462,7 @@ public final class Angles {
      * back to the figure it touches instead of being dropped.
      */
     public static List<Piece> figures(List<Piece> parts, int w, int h) {
+        parts = joinStacked(parts, w, h);
         List<Piece> out = new ArrayList<Piece>();
         int tallest = 0;
         for (Piece pc : parts) tallest = Math.max(tallest, pc.h);
@@ -426,6 +487,86 @@ public final class Angles {
         }
         return order(out, h);
     }
+
+    /**
+     * v40: cut-out parts that touch one above the other, in the same column, are one thing cut across where it is
+     * thin — a swing's chain at an edge-on link, a rope, a pole, a neck: the strips are joined again (the seat of a
+     * swing left alone looked like a small prop and was dropped). Side by side never joins (two figures standing
+     * close), and whole panels of a place sheet are never joined.
+     */
+    static List<Piece> joinStacked(List<Piece> parts, int w, int h) {
+        int n = parts.size();
+        if (n < 2 || n > 400) return parts;
+        int[] owner = new int[w * h];
+        java.util.Arrays.fill(owner, -1);
+        boolean any = false;
+        for (int i = 0; i < n; i++) {
+            Piece p = parts.get(i);
+            if (opaqueShare(p) >= 0.9f) continue;                 // a whole panel
+            any = true;
+            for (int y = 0; y < p.h; y++) for (int x = 0; x < p.w; x++) {
+                int gx = p.x0 + x, gy = p.y0 + y;
+                if (gx < 0 || gy < 0 || gx >= w || gy >= h) continue;
+                if ((p.px[y * p.w + x] >>> 24) > 100) owner[gy * w + gx] = i;
+            }
+        }
+        if (!any) return parts;
+        int[] root = new int[n], gy0 = new int[n], gy1 = new int[n];
+        for (int i = 0; i < n; i++) { root[i] = i; gy0[i] = parts.get(i).y0; gy1[i] = parts.get(i).y0 + parts.get(i).h; }
+        // only a short fragment joins (a strip of chain, a cut-off seat): two whole figures one above the other (a
+        // figure over a "?" or a label) never do — under 60% of the usual figure's height, one side at least
+        int tallest = 0;
+        for (Piece p : parts) tallest = Math.max(tallest, p.h);
+        List<Integer> hs = new ArrayList<Integer>();
+        for (Piece p : parts) if (p.h >= tallest * 0.25f) hs.add(p.h);
+        java.util.Collections.sort(hs);
+        float shortH = 0.6f * hs.get(hs.size() / 2);
+        int r = Math.max(3, Math.round(Math.min(w, h) / 200f));      // the cut takes a row or two out of the thing
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int a = owner[y * w + x];
+            if (a < 0) continue;
+            for (int dy = 1; dy <= r && y + dy < h; dy++) for (int dx = -r; dx <= r; dx++) {
+                int xx = x + dx;
+                if (xx < 0 || xx >= w) continue;
+                int b = owner[(y + dy) * w + xx];
+                if (b < 0 || b == a) continue;
+                int ra = find(root, a), rb = find(root, b);
+                if (ra == rb) continue;
+                Piece pa = parts.get(a), pb = parts.get(b);
+                // one above the other: the touch is at the bottom of the upper and the top of the lower, and they share
+                // most of the narrower one's width
+                Piece up = pa.y0 <= pb.y0 ? pa : pb, lo = up == pa ? pb : pa;
+                int ov = Math.min(up.x0 + up.w, lo.x0 + lo.w) - Math.max(up.x0, lo.x0);
+                if (ov < 0.5f * Math.min(up.w, lo.w) || lo.y0 < up.y0 + up.h * 0.5f) continue;
+                if (Math.min(gy1[ra] - gy0[ra], gy1[rb] - gy0[rb]) >= shortH) continue;
+                root[ra] = rb;
+                gy0[rb] = Math.min(gy0[rb], gy0[ra]); gy1[rb] = Math.max(gy1[rb], gy1[ra]);
+            }
+        }
+        java.util.Map<Integer, List<Piece>> groups = new java.util.LinkedHashMap<Integer, List<Piece>>();
+        for (int i = 0; i < n; i++) {
+            int g = find(root, i);
+            if (!groups.containsKey(g)) groups.put(g, new ArrayList<Piece>());
+            groups.get(g).add(parts.get(i));
+        }
+        if (groups.size() == n) return parts;
+        List<Piece> out = new ArrayList<Piece>();
+        for (List<Piece> g : groups.values()) {
+            if (g.size() == 1) { out.add(g.get(0)); continue; }
+            int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE;
+            for (Piece p : g) { x0 = Math.min(x0, p.x0); y0 = Math.min(y0, p.y0); x1 = Math.max(x1, p.x0 + p.w); y1 = Math.max(y1, p.y0 + p.h); }
+            Piece m = new Piece();
+            m.x0 = x0; m.y0 = y0; m.w = x1 - x0; m.h = y1 - y0; m.px = new int[m.w * m.h];
+            for (Piece p : g) for (int y = 0; y < p.h; y++) for (int x = 0; x < p.w; x++) {
+                int c = p.px[y * p.w + x];
+                if ((c >>> 24) > 0) m.px[(p.y0 - y0 + y) * m.w + (p.x0 - x0 + x)] = c;
+            }
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static int find(int[] root, int i) { while (root[i] != i) { root[i] = root[root[i]]; i = root[i]; } return i; }
 
     /**
      * v34: the dropped parts that touch a kept figure (an opaque pixel within half a percent of the sheet's smaller

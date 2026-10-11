@@ -93,6 +93,22 @@ public class PhenomenaProbe {
         {"forest", "घना जंगल", "जंगल में", "The dense forest", "The forest", "in the forest"},
         {"snow", "बर्फ़ से ढकी पहाड़ी", "बर्फ़ में", "The snowy hillside", "The snowy hillside", "in the snow"},
         {"road", "शहर की बड़ी सड़क", "सड़क पर", "The main road of the city", "The main road", "on the road"},
+        // v45: places the director has never been told about — modern and old
+        {"hospital", "शहर का अस्पताल", "अस्पताल में", "The city hospital ward", "The hospital ward", "in the ward"},
+        {"office", "कंपनी का दफ़्तर", "दफ़्तर में", "The company office", "The office", "in the office"},
+        {"metro", "मेट्रो स्टेशन", "प्लेटफ़ॉर्म पर", "The metro station platform", "The metro platform", "on the platform"},
+        {"mall", "शहर का मॉल", "मॉल में", "The shopping mall", "The mall", "in the mall"},
+        {"airport", "हवाई अड्डा", "हवाई अड्डे पर", "The airport terminal", "The airport", "at the airport"},
+        {"gym", "मोहल्ले का जिम", "जिम में", "The neighbourhood gym", "The gym", "in the gym"},
+        {"school", "स्कूल की कक्षा", "कक्षा में", "The school classroom", "The classroom", "in the classroom"},
+        {"cafe", "शहर का रेस्टोरेंट", "रेस्टोरेंट में", "The city restaurant", "The restaurant", "in the restaurant"},
+        {"village", "गाँव का कुआँ", "कुएँ के पास", "The village well", "The village well", "by the well"},
+        {"fields", "गाँव के खेत", "खेत में", "The village fields", "The fields", "in the fields"},
+        {"potter", "कुम्हार का आँगन", "आँगन में", "The potter's yard", "The potter's yard", "in the yard"},
+        {"temple", "पुराना मंदिर", "मंदिर में", "The old temple", "The temple", "in the temple"},
+        {"ghat", "नदी का घाट", "घाट पर", "The river ghat", "The ghat", "on the ghat"},
+        {"camp", "युद्ध का मैदान", "मैदान में", "The battlefield", "The battlefield", "on the battlefield"},
+        {"bazaar", "पुराने शहर का बाज़ार", "बाज़ार में", "The old city bazaar", "The bazaar", "in the bazaar"},
     };
 
     static String[] place(String key) {
@@ -440,6 +456,12 @@ public class PhenomenaProbe {
                 return false;
             }
             case "TEARS": { for (Film.Key k : windowKeys(r)) if (k.tears) return true; return false; }
+            // v45: the one the sentence is about dies in the window; someone else weeps for them
+            case "DEAD": { if (before(r).dead) return false; for (Film.Key k : windowKeys(r)) if (k.dead) return true; return false; }
+            case "MOURN": {
+                for (Film.Actor o : r.seg.actors) if (o != r.main) for (Film.Key k : o.keys) if (in(r, k.t) && k.tears) return true;
+                return false;
+            }
             case "SWEAT": { for (Film.Key k : windowKeys(r)) if (k.sweat) return true; return false; }
             case "COSTUME": { int c0 = before(r).costume; for (Film.Key k : windowKeys(r)) if (k.costume != c0) return true; return false; }
             case "HIDE": { for (Film.Key k : windowKeys(r)) if (hidden(k)) return true; return false; }
@@ -531,7 +553,7 @@ public class PhenomenaProbe {
                 case "DRINK": case "HOLD": constant(Pose.class, "I_" + arg); break;
                 case "BODY": pose(arg, BODIES); break;
                 case "EMO": pose(arg, EMOTIONS); break;
-                case "MOVE": case "RUN": case "EYES": case "AWAKE": case "TEARS": case "SWEAT": case "COSTUME": case "HIDE": case "UMBRELLA": case "ANY":
+                case "MOVE": case "RUN": case "EYES": case "AWAKE": case "TEARS": case "SWEAT": case "COSTUME": case "HIDE": case "UMBRELLA": case "ANY": case "DEAD": case "MOURN":
                     if (arg.length() > 0) throw new IllegalArgumentException("code takes no argument: " + code);
                     break;
                 default: throw new IllegalArgumentException("unknown code " + code);

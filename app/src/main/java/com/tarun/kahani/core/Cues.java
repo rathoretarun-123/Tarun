@@ -58,7 +58,7 @@ public final class Cues {
     static final String[] BUZZ = {"भिन-भिन", "भिनभिना", "buzz", "bzz", "गूँज"};
     static final String[] HUM = {"गुन-गुन", "hum of", "humming of", "घर्र"};
     static final String[] POP = {"पप-पप", "pop-pop", "पॉप-पॉप", "टप-टप करके खिल"};
-    static final String[] RING = {"घंटी बज", "bell rings", "ring ring", "ट्रिन", "टन-टन", "tring"};
+    static final String[] RING = {"घंटी बज", "bell rings", "rings the bell", "rings the temple bell", "rings the doorbell", "rings a bell", "temple bell", "घंटा बज", "ring ring", "ट्रिन", "टन-टन", "tring"};
 
     /** A quoted sound in a direction: "सन-सन", "टिम-टिम", "कर-कर". */
     static final Pattern QUOTED = Pattern.compile("[\"“']([^\"”'\\s]{1,12}([\\-–][^\"”'\\s]{1,12}){0,3})[\"”']");

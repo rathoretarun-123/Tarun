@@ -357,6 +357,7 @@ public final class Director {
         umbrellaRain();
         walkSounds();
         settleStays();
+        keepDead();
         oneRideAtATime();
         unstack();
         steadyRiders();
@@ -3286,7 +3287,16 @@ public final class Director {
      */
     private static final Object[][] EVERYDAY = {
         {new String[]{"पैर छू", "पाँव छू", "पांव छू", "चरण छू", "चरण स्पर्श", "touches the feet", "touches her feet", "touches his feet"}, Pose.HAPPY, Film.G_BOW, 2.2f, EV_NEAR},
+        // v45: jostled in a crowd, nearly down — a stagger caught, not a fall (before the push and the fall)
+        {new String[]{"धक्का खा", "धक्का लग", "धक्के से", "धक्के में", "गिरते-गिरते बच", "गिरते गिरते बच", "is pushed", "gets pushed", "is jostled", "gets jostled", "nearly falls",
+                "almost falls", "nearly trips", "almost trips", "regains his balance", "regains her balance", "catches himself", "catches herself"}, Pose.SURPRISED, Film.G_STAGGER, 1.6f, EV_NONE},
         {new String[]{"धक्का", "धकेल", "pushes", "shoves"}, Pose.ANGRY, Film.G_PUSH, 1.4f, EV_NEAR},
+        // v45: a handshake; a pulse felt, a forehead felt for fever; a payment; a bargain
+        {new String[]{"हाथ मिला", "shakes hands", "shake hands", "shaking hands", "handshake"}, Pose.HAPPY, Film.G_HOLD_HAND, 1.6f, EV_NEAR},
+        {new String[]{"नब्ज़", "नब्ज", "नाड़ी देख", "बुखार देख", "माथा छूकर", "pulse", "feels his forehead", "feels her forehead", "takes his temperature", "takes her temperature"},
+                Pose.CURIOUS, Film.G_REACH, 1.8f, EV_NEAR},
+        {new String[]{"पैसे दे", "पैसे चुका", "भुगतान", "बिल चुका", "बिल दे", "pays", "paying", "hands over the money", "hands him the money", "hands her the money"}, Pose.HAPPY, Film.G_GIVE, 1.6f, EV_NEAR},
+        {new String[]{"मोल-भाव", "मोलभाव", "मोल भाव", "भाव-ताव", "haggles", "haggling", "bargains", "bargaining"}, Pose.CURIOUS, Film.G_SHAKE_HEAD, 2.0f, EV_NEAR},
         // v43: clinging, a hand held out to help up
         {new String[]{"लिपट", "गले लग", "गले से लग", "clings to", "hugs", "embraces"}, Pose.HAPPY, Film.G_HUG, 2.0f, EV_NEAR},
         {new String[]{"हाथ पकड़", "हाथ थाम", "सहारा दे", "सहारा देकर", "उठने में मदद", "helps", "takes her hand", "takes his hand", "holds her hand", "holds his hand", "helping"}, Pose.HAPPY, Film.G_HOLD_HAND, 2.0f, EV_NEAR},
@@ -3305,7 +3315,10 @@ public final class Director {
         {new String[]{"नशे में", "डगमगा", "staggers", "staggering", "drunkenly", "totters", "tipsy", "sways on"}, Pose.DIZZY, Film.G_STAGGER, 3.2f, EV_NONE},
         {new String[]{"गिर", "फिसल", "ठोकर", "लड़खड़ा", "falls", "trips", "slips", "stumbles", "tumbles"}, Pose.PAIN, Film.G_FLAIL, 2.8f, EV_FALL},
         {new String[]{"उठ खड़", "खड़ा हो", "खड़ी हो", "खड़े हो", "उठ जा", "उठ बैठ", "उठता", "उठती", "उठते", "stands up", "gets up", "rises"}, -1, -1, 1.0f, EV_STAND},
-        {new String[]{"जाग", "नींद खुल", "आँख खुल", "आंख खुल", "wakes up", "awakes"}, -1, Film.G_RUB_EYES, 1.8f, EV_WAKE},
+        {new String[]{"जाग", "नींद खुल", "आँख खुल", "आंख खुल", "wakes up", "awakes",
+                // v45: eyes opened in bed, coming round
+                "आँखें खोल", "आंखें खोल", "आँख खोल", "आंख खोल", "होश में आ", "होश आ", "opens his eyes", "opens her eyes", "comes round", "comes to his senses", "comes to her senses",
+                "regains consciousness"}, -1, Film.G_RUB_EYES, 1.8f, EV_WAKE},
         {new String[]{"अंगड़ाई", "उबासी", "जम्हाई", "हाथ-पैर फैला", "हाथ पैर फैला", "बदन सीधा", "शरीर सीधा", "stretches", "yawn"}, -1, Film.G_STRETCH, 1.8f, EV_NONE},
         {new String[]{"आँखें मल", "आंखें मल", "आँख मल", "rubs his eyes", "rubs her eyes"}, -1, Film.G_RUB_EYES, 1.6f, EV_NONE},
         {new String[]{"छींक", "खाँस", "खांस", "sneez", "cough"}, -1, Film.G_COUGH, 1.4f, EV_NONE},
@@ -3325,7 +3338,26 @@ public final class Director {
         {new String[]{"कपड़े टाँग", "कपड़े टांग", "रस्सी पर", "hangs the", "hangs up", "hangs out"}, -1, Film.G_REACH, 1.6f, EV_NONE},
         // v43: in the blazing sun — a hand over the eyes; sweat
         {new String[]{"आँखों पर हाथ", "आंखों पर हाथ", "shields his eyes", "shields her eyes", "shades his eyes", "shades her eyes"}, -1, Film.G_SHIELD_EYES, 1.8f, EV_NONE},
+        // v45: the sweat wiped off the brow
+        {new String[]{"पसीना पोंछ", "पसीना पोछ", "माथा पोंछ", "wipes the sweat", "wipes his brow", "wipes her brow", "wipes his forehead", "wipes her forehead", "mops his brow",
+                "mops her brow"}, Pose.SAD, Film.G_SHIELD_EYES, 1.8f, EV_SWEAT},
         {new String[]{"पसीन", "sweating", "sweats", "drenched in sweat"}, Pose.SAD, Film.G_WEIGHT_SHIFT, 1.8f, EV_SWEAT},
+        // v45: a hand up in class
+        {new String[]{"हाथ उठा", "हाथ ऊपर", "raises his hand", "raises her hand", "puts up his hand", "puts up her hand", "puts his hand up", "puts her hand up", "hand up"},
+                Pose.HAPPY, Film.G_WAVE, 1.6f, EV_NONE},
+        // v45: water drawn from the well; a face splashed; a plough pushed; a harvest cut; a rest in the shade; the potter's wheel;
+        // a conch or a bugle blown; browsing in a shop; walking through a crowd, on with a bag in tow
+        {new String[]{"पानी निकाल", "पानी खींच", "रस्सी खींच", "बाल्टी खींच", "डोल खींच", "draws water", "pulls up the bucket", "pulls the rope", "hauls the bucket"}, -1, Film.G_PULL_ROPE, 2.6f, EV_NONE},
+        {new String[]{"छींटे", "मुँह धो", "मुंह धो", "चेहरा धो", "splashes water", "splashes his face", "splashes her face", "washes his face", "washes her face"}, Pose.HAPPY, Film.G_SPLASH, 2.0f, EV_NONE},
+        {new String[]{"हल चला", "हल जोत", "ploughs", "plows", "ploughing", "plowing"}, Pose.DETERMINED, Film.G_PUSH, 3.0f, EV_WALK},
+        {new String[]{"फसल काट", "गेहूँ काट", "गेहूं काट", "धान काट", "हँसिया", "हंसिया", "दरांती", "दराँती", "harvests", "harvesting", "reaps", "sickle"}, Pose.DETERMINED, Film.G_REACH, 2.6f, EV_KNEEL},
+        {new String[]{"आराम करता", "आराम करती", "आराम करते", "आराम कर रह", "सुस्ता", "rests under", "rests in the", "rests by", "rests for", "takes a rest", "has a rest", "relaxes"},
+                Pose.RELIEVED, -1, 2.2f, EV_FLOOR},
+        {new String[]{"चाक पर", "चाक घुमा", "potter's wheel", "the clay", "clay pot", "मिट्टी का घड़ा", "मिट्टी के बर्तन", "घड़ा बना", "मटका बना"}, Pose.HAPPY, Film.G_PAT, 2.6f, EV_FLOOR},
+        {new String[]{"शंख", "बिगुल", "तुरही", "conch", "bugle", "blows the horn", "blows a horn"}, Pose.PROUD, Film.G_LOOK_UP, 2.0f, EV_NONE},
+        {new String[]{"कपड़े देख", "सामान देख", "चीज़ें देख", "window-shop", "window shop", "browses", "browsing", "looks at the clothes", "looks around the shop"}, Pose.CURIOUS, -1, 2.4f, EV_LOOK_ROUND},
+        {new String[]{"भीड़ में चल", "भीड़ से होकर", "भीड़ के बीच", "आगे बढ़", "खींचते हुए", "घसीट", "walks through", "walks along", "walks across", "walks past", "walks down the",
+                "walks up the", "makes his way", "makes her way", "shopping bag", "carries the bags", "carries his bags", "carries her bags", "the bags out", "drags his", "drags her", "pulls his suitcase", "pulls her suitcase", "wheels his", "wheels her"}, -1, -1, 2.6f, EV_WALK},
         // v43: dances by name
         {new String[]{"भांगड़ा", "भाँगड़ा", "गरबा", "डांडिया", "ठुमके", "नाचता", "नाचती", "नाचते", "नाच रह", "नृत्य", "dances", "dancing", "bhangra", "garba"}, Pose.HAPPY, Film.G_DANCE, 3.0f, EV_NONE},
         {new String[]{"गाना गा", "गीत गा", "गुनगुना", "गाता", "गाती", "गाते", "sings", "hums"}, Pose.HAPPY, Film.G_BOUNCE, 2.4f, EV_NONE},
@@ -3336,7 +3368,10 @@ public final class Director {
         {new String[]{"के पीछे भाग", "के पीछे दौड़", "पीछे-पीछे भाग", "पीछे पीछे भाग", "पीछे-पीछे दौड़", "पीछे पीछे दौड़", "पीछा कर", "runs after", "chases",
                 "जॉगिंग", "जोगिंग", "दौड़ लगा", "jogging", "jogs", "goes for a run"}, Pose.HAPPY, -1, 1.6f, EV_RUN},
         {new String[]{"चुपके", "दबे पाँव", "दबे पांव", "पंजों के बल", "sneaks", "tiptoe"}, Pose.CURIOUS, -1, 2.4f, EV_WALK},
-        {new String[]{"सीढ़ियाँ", "सीढ़ियां", "सीढ़ी", "उतर", "the stairs", "the steps", "comes down", "goes down"}, -1, -1, 2.2f, EV_WALK},
+        // v45: down (or up) the stairs at a run
+        {new String[]{"सीढ़ियों से भाग", "सीढ़ियों से दौड़", "सीढ़ियों पर भाग", "सीढ़ियों पर दौड़", "भागकर नीचे", "दौड़कर नीचे", "भागकर ऊपर", "दौड़कर ऊपर", "runs down the", "runs up the",
+                "rushes down the", "rushes up the", "races down the", "races up the"}, -1, -1, 1.6f, EV_RUN},
+        {new String[]{"सीढ़ियों", "सीढ़ियाँ", "सीढ़ियां", "सीढ़ी", "उतर", "the stairs", "the steps", "comes down", "goes down"}, -1, -1, 2.2f, EV_WALK},
         {new String[]{"खिड़की से", "खिड़की के बाहर", "बाहर देख", "out of the window", "looks out"}, Pose.CURIOUS, Film.G_TURN, 1.6f, EV_NONE},
         {new String[]{"कपड़े बदल", "ड्रेस बदल", "changes clothes", "changes his clothes", "changes her clothes"}, -1, Film.G_TURN, 1.4f, EV_NONE},
         {new String[]{"धीरे-धीरे चल", "धीरे धीरे चल", "टहल", "चहलकदमी", "लंगड़ा", "walks slowly", "strolls", "paces", "limps"}, -1, -1, 2.6f, EV_WALK},
@@ -5951,7 +5986,9 @@ public final class Director {
             "सो रहा", "सो रही", "सो रहे", "सोता है", "सोती है", "सोने चल", "lay down", "lies down", "lie down", "fell asleep", "falls asleep", "goes to sleep",
             "went to sleep", "is asleep", "sleeping", "goes to bed", "went to bed", "gets into bed", " sleeps", " naps", "takes a nap", "dozes off",
             // v43: lying there already
-            "लेटा हुआ", "लेटी हुई", "लेटे हुए", "लेटा है", "लेटी है", "लेटे हैं", "is lying", "lies on", "lying on"};
+            "लेटा हुआ", "लेटी हुई", "लेटे हुए", "लेटा है", "लेटी है", "लेटे हैं", "is lying", "lies on", "lying on",
+            // v45: ill in bed
+            "lies in bed", "lying in bed", "lies ill", "lies sick", "is bedridden", "बिस्तर पर पड़ा", "बिस्तर पर पड़ी", "बीमार पड़ा", "बीमार पड़ी", "खाट पर पड़ा", "खाट पर पड़ी"};
     /** v35: sleep (eyes shut, slow breathing, under a blanket in a bed) rather than only lying down. */
     static final String[] SLEEP = {"सो ", "सोता", "सोती", "सोने", "नींद", "asleep", "sleep", "goes to bed", "went to bed", "gets into bed"};
     /** v35: waking up — the eyes open, they sit up and stretch (and get up when the story says so). */
@@ -6224,10 +6261,18 @@ public final class Director {
         d = Math.max(d, doorFrom(s, t, who));
         d = Math.max(d, carryFrom(s, t, who));
         // v44: the sword, the shield, the spear and the bow; play in the snow; the animals of the place
-        d = Math.max(d, combatFrom(s, t, subj, who, group));
-        d = Math.max(d, snowFrom(s, t, subj, who, group));
-        d = Math.max(d, animalsFrom(s, t, subj, who));
-        d = Math.max(d, activityFrom(s, t, subj, who, group));
+        // v45: a death owns its sentence ("तीर लगने से सैनिक मर जाता है" is no archery of his); a wound from a blow is
+        // no fighting of the wounded one's
+        float died = deathFrom(s, t, subj, who);
+        d = Math.max(d, died);
+        float hurt = died > 0 ? 0 : woundFrom(s, t, subj, who);
+        d = Math.max(d, hurt);
+        if (died == 0) {
+            if (hurt == 0 || !woundedBy(s)) d = Math.max(d, combatFrom(s, t, subj, who, group));
+            d = Math.max(d, snowFrom(s, t, subj, who, group));
+            d = Math.max(d, animalsFrom(s, t, subj, who));
+            d = Math.max(d, activityFrom(s, t, subj, who, group));
+        }
         if (Txt.has(s, BOW) && !archery(s)) { for (Film.Actor a : who) a.acts.add(new Film.Act(t, t + 1.7f, Film.G_BOW)); d = Math.max(d, 1.7f); }
         // (v43: "Waves crash against the shore" waves no hand)
         boolean waving = Txt.has(s, "हाथ हिला", "टाटा") || Txt.has(s.toLowerCase(java.util.Locale.ROOT), "waves goodbye", "waves to ", "waves at ", "waves his", "waves her",
@@ -6373,7 +6418,7 @@ public final class Director {
             d = Math.max(d, 3.5f);
         }
         // (v43: "ठोकर खाकर", "चोट खाकर", "धोखा खाता", "चक्कर खाकर" — stumbled, hurt, cheated, dizzy: nothing is eaten)
-        String ep = sp.replaceAll("(ठोकर|चोट|धोखा|मार|गोता|गोते|चक्कर|कसम|क़सम|हवा|डाँट|डांट|ग़म|गम|तरस|रहम|पछाड़|पछाड़|झटका|झटके|मुँह की|मुंह की)\\s+खा", " ");
+        String ep = sp.replaceAll("(ठोकर|चोट|धोखा|धक्का|धक्के|मार|गोता|गोते|चक्कर|कसम|क़सम|हवा|डाँट|डांट|ग़म|गम|तरस|रहम|पछाड़|पछाड़|झटका|झटके|मुँह की|मुंह की)\\s+खा", " ");
         if (Txt.has(ep, EAT)) {
             for (Film.Actor a : who) {
                 if (!a.look.isHumanoid()) continue;
@@ -6405,8 +6450,10 @@ public final class Director {
             // v43: a poem read aloud, an exam prepared for
             "कविता पढ़", "पढ़ता है", "पढ़ती है", "पढ़ते हैं", "परीक्षा की तैयारी", "इम्तिहान की तैयारी", "the exam", "his exam", "her exam", "exams", "revises", "revising"};
     static final String[] WRITE = {"लिख रहा", "लिख रही", "लिख रहे", "लिखता है", "लिखती है", "लिखने लग", "होमवर्क कर", "चिट्ठी लिख", "पत्र लिख", "writes a", "writes in", "writing a",
-            "is writing", "does her homework", "does his homework", "doing homework"};
-    static final String[] PHONE = {"फ़ोन पर बात", "फोन पर बात", "फ़ोन उठा", "फोन उठा", "फ़ोन करता", "फ़ोन करती", "फोन करता", "फोन करती", "मोबाइल पर बात", "on the phone",
+            "is writing", "does her homework", "does his homework", "doing homework",
+            // v45: on the board in class
+            "writes on", "writes the", "writes down", "बोर्ड पर लिख", "ब्लैकबोर्ड पर", "blackboard", "whiteboard"};
+    static final String[] PHONE = {"फ़ोन पर बात", "फोन पर बात", "फ़ोन उठा", "फोन उठा", "फ़ोन करता", "फ़ोन करती", "फोन करता", "फोन करती", "मोबाइल पर बात", "on the phone", "on his phone", "on her phone", "orders food", "orders online", "मोबाइल पर ऑर्डर", "फ़ोन पर ऑर्डर", "फोन पर ऑर्डर",
             "answers the phone", "picks up the phone", "makes a call", "phone call", "calls on the phone",
             // v43: a call made or taken with words between ("फ़ोन पर पापा से बात करता है", "दादी को फ़ोन लगाता है")
             "फ़ोन लगा", "फोन लगा", "फ़ोन मिला", "फोन मिला", "answers the call", "dials"};
@@ -6500,7 +6547,9 @@ public final class Director {
     static final String[] BATHE = {"नहाता", "नहाती", "नहाते", "नहा रहा", "नहा रही", "नहा रहे", "नहाने", "नहाया", "नहाई", "स्नान कर", "स्नान करत",
             "takes a bath", "has a bath", "bathes", "bathing", "takes a shower", "showers", "having a bath",
             // v43
-            "quick bath", "a quick shower", "takes a dip"};
+            "quick bath", "a quick shower", "takes a dip",
+            // v45: a holy dip in the river
+            "डुबकी", "a dip in"};
     static final String[] HUG = {"गले लगा", "गले लगात", "गले मिल", "गले से लगा", "hugs", "hug", "embraces", "embrace", "लिपट", "clings to"};
     static final String[] KISS = {"चूम", "पप्पी", "पुच्ची", "kisses", "kiss", "peck"};
 
@@ -6704,7 +6753,7 @@ public final class Director {
             "fires", "lets fly", "releases", "hits the", "strikes the"};
     static final String[] HUNT_WORDS = {"शिकार", "हिरण", "हिरन", "खरगोश", "जंगली सूअर", "hunt", "deer", "rabbit", "boar", "prey", "stag"};
     static final String[] SWORD_WORDS = {"तलवार", "तलवारबाज़", "तलवारबाज", "खड्ग", "कटार", "sword", "swords", "fencing", "swordplay", "sabre", "saber", "blade"};
-    static final String[] SWORD_USE = {"चला", "घुमा", "वार", "लड़", "लड़ा", "भांज", "भाँज", "अभ्यास", "टकरा", "मुकाबला", "द्वंद्व", "भिड़", "practi", "swings", "swing", "slash",
+    static final String[] SWORD_USE = {"charges", "lunges", "धावा", "चला", "घुमा", "वार", "लड़", "लड़ा", "भांज", "भाँज", "अभ्यास", "टकरा", "मुकाबला", "द्वंद्व", "भिड़", "practi", "swings", "swing", "slash",
             "fight", "duel", "parr", "strikes", "attack", "clash", "spar", "lunges", "thrust", "train"};
     static final String[] SHIELD_WORDS = {"ढाल", "shield"};
     static final String[] SPEAR_WORDS = {"भाला", "भाले", "बरछी", "spear", "javelin", "lance"};
@@ -6791,6 +6840,25 @@ public final class Director {
                 }
                 swordPlays++;
             } else d = Math.max(d, 1.0f);
+            // v45: "ढाल से वार रोकता है", "blocks the blow with his shield": the shield comes up against the blows
+            if (shield && Txt.has(s, "रोक", "बचाव", "block", "fends", "parr", "deflect", "wards off")) {
+                for (Film.Actor a : who) for (int i = 0; i < 2; i++) {
+                    float b0 = t + 0.3f + i * 0.9f;
+                    a.acts.add(new Film.Act(b0, b0 + 0.8f, Film.G_BLOCK));
+                    film.sfx.add(sfxAt(Film.SFX_SWORD, b0 + 0.35f, 0.4f, 0.35f, a));
+                }
+                d = Math.max(d, 2.2f);
+            }
+            // v45: a charge — forward at a run, the blade up
+            if (sword && Txt.has(s, "charges", "lunges", "धावा", "टूट पड़", "हमला कर")) {
+                for (Film.Actor a : who) {
+                    if (a.stateAt(t).body != Pose.STAND) continue;
+                    float x = xAt(a, t), dir = a.stateAt(t).facing >= 0 ? 1 : -1;
+                    float to = Math.max(160, Math.min(1120, x + dir * 260));
+                    if (Math.abs(to - x) < 120) { dir = -dir; to = Math.max(160, Math.min(1120, x + dir * 260)); }
+                    Film.Key k = keyAt(a, t + 0.2f); k.x = to; k.moveDur = 0.9f; k.run = true; k.facing = dir;
+                }
+            }
         }
         if (spear) {
             for (Film.Actor a : who) {
@@ -6894,6 +6962,301 @@ public final class Director {
         archeryActs++;
         frameAround(t, Math.min(x, mx) - 60, Math.max(x, mx) + 60);
         return dur + 0.3f + (last > 0 && last > act.t1 ? last - act.t1 : 0);
+    }
+
+    // ================================================================== v45: wounds and deaths
+
+    static final String[] BLOOD_WORDS = {"खून", "ख़ून", "लहू", "रक्त", "लहूलुहान", "bleed", "bleeds", "bleeding", "blood", "bloody"};
+    static final String[] WOUND_WORDS = {"घायल", "ज़ख़्म", "ज़ख्म", "जख्म", "जख़्म", "चोट लग", "चोट आ", "चोटिल", "घाव", "ज़ख़्मी", "ज़ख्मी", "जख्मी", "चोट खा", "wound", "wounded", "injured", "gets hurt", "is hurt", "badly hurt"};
+    static final String[] CUT_WORDS = {"कट जा", "कट गय", "कट गई", "कट गयी", "कट जाती", "कट जाता", "छिल जा", "छिल ग", "cuts his", "cuts her", "cut his", "cut her", "grazes", "scrapes", "gashes"};
+    static final String[] PART_HEAD = {"सिर", "माथ", "चेहर", "head", "forehead", "face", "brow"};
+    static final String[] PART_LEG = {"पैर", "पाँव", "पांव", "टांग", "टाँग", "घुटन", "एड़ी", "leg", "knee", "foot", "ankle", "shin"};
+    static final String[] PART_CHEST = {"सीने", "छाती", "पेट", "कंधे", "chest", "stomach", "belly", "shoulder", "side"};
+    static final String[] PART_ARM = {"हाथ", "उंगली", "उँगली", "बाँह", "बांह", "कलाई", "हथेली", "hand", "finger", "arm", "wrist", "palm", "thumb"};
+    static final String[] DEATH_WORDS = {"मर जा", "मर गय", "मर गई", "मर गयी", "मारा जा", "मारा गय", "मारी गई", "मृत्यु", "मौत हो", "दम तोड़", "प्राण त्याग", "प्राण छोड़", "प्राण निकल",
+            "चल बस", "नहीं रहे", "नहीं रही", "स्वर्ग सिधार", "आख़िरी साँस", "आखिरी सांस", "आख़िरी सांस", "अंतिम साँस", "अंतिम सांस", "शहीद हो", "देहांत", "निधन",
+            "dies", "died", "passes away", "passed away", "breathes his last", "breathes her last", "is killed", "was killed", "gets killed", "lies dead", "falls dead", "drops dead",
+            "lifeless", "is dead",
+            // v45: more ways of saying it — a hero's death, the breath that stops, drowned, gone from the world
+            "वीरगति", "साँसें थम", "सांसें थम", "साँस थम", "सांस थम", "साँसें रुक", "सांसें रुक", "धड़कन रुक", "धड़कनें रुक", "दुनिया छोड़", "दुनिया से चल", "दुनिया से विदा",
+            "हमेशा के लिए सो", "हमेशा के लिए आँखें", "हमेशा के लिए आंखें", "फिर कभी नहीं उठ", "फिर कभी नहीं खोल", "डूबकर मर", "drowns", "drowned", "never wakes up", "never woke up",
+            "never opens his eyes again", "never opens her eyes again", "is no more", "slips away", "loses his life", "loses her life", "dead on the spot"};
+    /** v45: death said with a "not" in it ("फिर कभी नहीं उठता", "never wakes up") — no negation of the death. */
+    static final String[] DEATH_IDIOM = {"फिर कभी नहीं", "never wakes", "never woke", "never opens", "is no more"};
+    /** v45: "गुज़र जाता है" — passing away, unless it is passing by (the street, beside someone) or time passing. */
+    static boolean passesAway(String s) {
+        if (!Txt.has(s, "गुज़र जा", "गुजर जा", "गुज़र गय", "गुजर गय", "गुज़र गई", "गुजर गई")) return false;
+        if (Txt.has(s, "दुनिया", "बुढ़ापे", "बीमारी", "बीमार", "इस संसार")) return true;
+        return !Txt.has(s, "से गुज़र", "से गुजर", "पास", "सामने", "बीच", "रास्ते", "गली", "सड़क", "समय", "वक़्त", "वक्त", "दिन", "साल", "ऊपर", "नीचे", "होकर");
+    }
+    static boolean deathSaid(String s) { return (Txt.has(s, DEATH_WORDS) || passesAway(s)) && !Txt.has(s, NOT_DEATH); }
+    static final String[] NOT_DEATH = {"बच गय", "बच जा", "बच गई", "बाल-बाल", "बाल बाल", "मरते-मरते", "मरते मरते", "almost died", "nearly died", "almost dies", "nearly dies", "survives",
+            "pretends to be dead", "plays dead", "मरने का नाटक", "dead tired", "dead end", "dead of night", "deadline",
+            // v45: things that die that are no one (a phone, a battery, the fire, the wind), and the figures of speech
+            "phone dies", "phone died", "battery dies", "battery died", "engine dies", "engine died", "dies down", "died down", "dies out", "died out", "dies away",
+            "fire dies", "wind dies", "light dies", "music dies", "dying to", "dies laughing", "die laughing", "dies of laughter", "dies of embarrassment", "dies of shame",
+            "drowns out", "drowned out", "मरा जा रहा", "मरी जा रही", "मरे जा रहे", "हँसते-हँसते", "हंसते-हंसते", "मर मिट"};
+    static final String[] SHROUD_WORDS = {"चादर से ढक", "चादर ओढ़ा", "चादर डाल", "कफ़न", "कफन", "सफ़ेद चादर", "सफेद चादर", "covers him with a sheet", "covers her with a sheet",
+            "covers the body", "with a white sheet", "draws a sheet over", "pulls a sheet over"};
+    static final String[] BANDAGE_WORDS = {"पट्टी बाँध", "पट्टी बांध", "पट्टी कर", "पट्टी लगा", "मरहम", "दवा लगा", "bandage", "bandages", "dresses the wound", "dresses his wound", "dresses her wound"};
+
+    /** v45: "तलवार के वार से घायल होता है", "is hit by an arrow": the wound is done to them, not by them. */
+    static boolean woundedBy(String s) {
+        return Txt.has(s, "से घायल", "लगने से", "से चोट", "से ज़ख़्म", "से जख्म", "के वार से", "में लगता", "में लगती", "में लग जा", "में धँस", "में धंस", "को लगता", "को लगती",
+                "hit by", "struck by", "wounded by", "injured by", "by an arrow", "by a sword", "by a bullet", "pierces", "strikes him", "strikes her", "hits him", "hits her");
+    }
+
+    static int bodyPart(String s) {
+        return Txt.has(s, PART_HEAD) ? Film.BLOOD_HEAD : Txt.has(s, PART_CHEST) ? Film.BLOOD_CHEST : Txt.has(s, PART_LEG) ? Film.BLOOD_LEG : Film.BLOOD_ARM;
+    }
+
+    public int wounds, deaths, mournings, shrouds, bandaged;
+
+    /**
+     * v45: a wound — a wince and a hand to it; where the words name blood (or a weapon, a fall or an accident did it) a
+     * small trickle and a stain at the part named, drops to the ground, until it is bandaged. Those near look round in
+     * alarm. Never more than a film for a family would show.
+     */
+    private float woundFrom(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        if (subj == null || seg == null || negated(s)) return 0;
+        // a bandage stops the bleeding of the one it is put on (the look's bandage is drawn by the look's change)
+        if (Txt.has(s, BANDAGE_WORDS)) {
+            float d = 0;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_BLOOD && f.t0 < t && f.t1 > t) {
+                if (f.a == null || !(who.contains(f.a) || Txt.has(s, f.a.c.displayName) || Txt.has(s, "उसके", "उसकी", "his ", "her "))) continue;
+                // the one who bandages goes to them and binds it
+                if (subj != f.a && subj.look != null && subj.look.isHumanoid() && subj.stateAt(t).visible) {
+                    if (Math.abs(xAt(subj, t) - xAt(f.a, t)) > 140) moveNear(subj, f.a, t, 0.8f);
+                    subj.acts.add(new Film.Act(t + 0.9f, t + 2.4f, Film.G_REACH));
+                    f.t1 = t + 2.2f; d = 2.6f;
+                } else { f.t1 = t + 1.0f; d = Math.max(d, 1.6f); }
+                bandaged++;
+            }
+            if (d > 0) return d;
+        }
+        boolean blood = Txt.has(s, BLOOD_WORDS);
+        boolean wound = blood || Txt.has(s, WOUND_WORDS) || (Txt.has(s, CUT_WORDS) && (Txt.has(s, PART_ARM) || Txt.has(s, PART_LEG) || Txt.has(s, PART_HEAD)));
+        if (!wound) return 0;
+        boolean violent = blood || woundedBy(s) || Txt.has(s, "घायल", "ज़ख़्म", "ज़ख्म", "जख्म", "wounded", "गोली", "bullet", "तीर", "arrow", "तलवार", "sword", "चाकू", "knife",
+                "दुर्घटना", "accident", "कट ", "cuts", "gash");
+        int part = bodyPart(s);
+        List<Film.Actor> hurtOnes = new ArrayList<Film.Actor>();
+        for (Film.Actor a : who) if (a.look != null && a.look.isHumanoid() && a.stateAt(t).visible && !a.stateAt(t).dead) hurtOnes.add(a);
+        // "राहुल के हाथ से खून बहने लगता है" — the one whose hand it is ("X के …"), when the subject was read as someone else
+        if (hurtOnes.isEmpty()) return 0;
+        for (Film.Actor a : hurtOnes) {
+            Film.Key k = keyAt(a, t + 0.1f); k.emotion = Pose.PAIN;
+            a.acts.add(new Film.Act(t + 0.15f, t + 1.9f, Film.G_CLUTCH));
+            if (violent) {
+                Film.Fx f = fx(Film.FX_BLOOD, t + 0.2f, 1e6f, xAt(a, t), 0, a, null);
+                f.kind = part;
+                if (Txt.has(s, "तीर", "arrow") && woundedBy(s)) { f.color = 1; if (part == Film.BLOOD_ARM && !Txt.has(s, PART_ARM)) f.kind = Film.BLOOD_CHEST; }
+            }
+            wounds++;
+        }
+        // the others near turn to them, alarmed
+        for (Film.Actor o : seg.actors) {
+            if (hurtOnes.contains(o) || o.look == null || !o.look.isHumanoid() || !o.stateAt(t).visible || o.stateAt(t).dead) continue;
+            Film.Key ok = keyAt(o, t + 0.5f); ok.emotion = Pose.SCARED; ok.facing = xAt(hurtOnes.get(0), t) >= xAt(o, t) ? 1 : -1;
+            spread(o, ok);
+        }
+        return 2.2f;
+    }
+
+    /**
+     * v45: a death, by its cause — in bed of illness or old age the breath stops and the eyes close; a heart attack
+     * clutches the chest and collapses; an arrow, a sword or a bullet: a stagger, the knees, down, a wound; a snake's
+     * bite: the leg seized, down; any other: down. From then they lie still (no breath, no blink, no lips) and those
+     * nearest kneel beside them and weep; the others stand in grief. A white sheet is drawn over when the words say so.
+     */
+    private float deathFrom(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        if (seg == null) return 0;
+        // a sheet over the dead
+        if (Txt.has(s, SHROUD_WORDS) && !deathSaid(s)) {
+            Film.Actor dead = null;
+            for (Film.Actor a : seg.actors) if (a.stateAt(t).dead && (dead == null || Txt.has(s, a.c.displayName))) dead = a;
+            // v45: "राहुल माँ के शव पर चादर ओढ़ा देता है" with no death before it — the body named is hers: she is laid down dead first
+            if (dead == null && Txt.has(s, "शव", "लाश", "पार्थिव", "मृत", "body", "corpse", "dead"))
+                for (Film.Actor a : seg.actors) if (a != subj && a.c != null && a.look != null && a.look.isHumanoid() && Txt.has(s, a.c.displayName) && a.stateAt(t).visible) {
+                    List<Film.Actor> one = new ArrayList<Film.Actor>(); one.add(a);
+                    float e = deathOne("dies", t, a, one);
+                    if (a.stateAt(t + e).dead) {
+                        float d2 = deathFrom(s.replace(a.c.displayName, ""), t + Math.min(e, 2.4f), subj, who);
+                        return Math.max(e, Math.min(e, 2.4f) + d2);
+                    }
+                }
+            if (dead != null) {
+                Film.Fx f = fx(Film.FX_SHROUD, t + 0.6f, 1e6f, xAt(dead, t), 0, dead, null);
+                f.color = (int) (dead.stateAt(t).facing >= 0 ? 1 : -1);
+                if (subj != null && subj != dead && subj.look != null && subj.look.isHumanoid()) {
+                    moveNear(subj, dead, t, 0.6f);
+                    subj.acts.add(new Film.Act(t + 0.5f, t + 1.6f, Film.G_REACH));
+                }
+                shrouds++;
+                return 2.0f;
+            }
+        }
+        if (subj == null) return 0;
+        if (!deathSaid(s) || (negated(s) && !Txt.has(s, DEATH_IDIOM))) return collapseFrom(s, t, subj, who);
+        // v45: "माँ की मौत हो जाती है और राहुल रोता है" — the death is the clause that says it, its own subject
+        List<String> cl = clauses(s);
+        boolean inOne = false;
+        for (String c : cl) if (deathSaid(c)) inOne = true;
+        if (cl.size() > 1 && inOne) {
+            float used = 0;
+            for (String c : cl) {
+                if (!deathSaid(c) && !Txt.has(c, SHROUD_WORDS)) continue;
+                List<Story.CharacterDef> cm = mentionsWithGroups(c, null);
+                Film.Actor own = cm.isEmpty() ? subj : actor(cm.get(subjectIndex(c, cm)));
+                if (own == null) own = subj;
+                List<Film.Actor> w = new ArrayList<Film.Actor>();
+                if (cm.size() > 1 && Txt.has(c, "दोनों", "both", "सब", "all of them", "तीनों", "चारों")) { for (Story.CharacterDef cd : cm) { Film.Actor x = actor(cd); if (x != null) w.add(x); } }
+                else w.add(own);
+                if (deathSaid(c)) used = Math.max(used, deathOne(c, t, own, w));
+                else used = Math.max(used, deathFrom(c, t + Math.min(used, 2.6f), own, w));
+            }
+            return used;
+        }
+        float e = deathOne(s, t, subj, who);
+        // "Mother passes away, and Rahul covers her body with a white sheet" (one clause to the reader): the sheet after
+        if (e > 0 && Txt.has(s, SHROUD_WORDS)) {
+            Film.Actor by = null;
+            for (Film.Actor a : seg.actors) if (!who.contains(a) && a.c != null && a.look != null && a.look.isHumanoid() && Txt.has(s, a.c.displayName)) by = a;
+            String rest = s;
+            for (Film.Actor a : who) if (a.c != null) rest = rest.replace(a.c.displayName, "");
+            for (String w : DEATH_WORDS) rest = rest.replace(w, "");
+            if (!deathSaid(rest)) e = Math.max(e, Math.min(e, 2.6f) + deathFrom(rest, t + Math.min(e, 2.6f), by, by == null ? new ArrayList<Film.Actor>() : java.util.Collections.singletonList(by)));
+        }
+        return e;
+    }
+
+    private float deathOne(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        List<Film.Actor> dying = new ArrayList<Film.Actor>();
+        for (Film.Actor a : who) if (a.look != null && a.look.isHumanoid() && !a.stateAt(t).dead) dying.add(a);
+        if (dying.isEmpty()) return 0;
+        boolean heart = Txt.has(s, "दिल का दौरा", "हार्ट अटैक", "सीने में दर्द", "सीना पकड़", "heart attack", "clutches his chest", "clutches her chest", "chest pain");
+        boolean weapon = Txt.has(s, "तीर", "तलवार", "गोली", "भाला", "बरछी", "युद्ध", "लड़ाई में", "शहीद", "arrow", "sword", "bullet", "shot", "spear", "battle", "war", "stabbed");
+        boolean snake = Txt.has(s, "साँप", "सांप", "नाग", "snake", "cobra", "viper");
+        boolean drown = Txt.has(s, "डूब", "drown");
+        float end = 0;
+        for (Film.Actor a : dying) {
+            Film.Key now = a.stateAt(t);
+            if (!now.visible) { Film.Key in = a.at(t); in.visible = true; }
+            float x = xAt(a, t), dir = now.facing >= 0 ? 1 : -1;
+            float td;
+            if (now.body == Pose.LIE) {
+                // in bed (illness, old age): a last breath, the head eases, the eyes close
+                Film.Key k = keyAt(a, t + 0.3f); k.emotion = Pose.SAD;
+                td = t + 1.6f;
+            } else if (heart) {
+                a.acts.add(new Film.Act(t + 0.1f, t + 1.4f, Film.G_CLUTCH));
+                Film.Key p = keyAt(a, t + 0.1f); p.emotion = Pose.PAIN;
+                a.acts.add(new Film.Act(t + 1.2f, t + 2.0f, Film.G_STAGGER));
+                Film.Key kn = keyAt(a, t + 2.0f); kn.body = Pose.KNEEL; kn.seat = -1;
+                Film.Key ly = keyAt(a, t + 2.7f); ly.body = Pose.LIE; ly.seat = -1;
+                td = t + 3.3f;
+            } else if (weapon || snake) {
+                Film.Key p = keyAt(a, t + 0.1f); p.emotion = Pose.PAIN;
+                Film.Fx f = fx(Film.FX_BLOOD, t + 0.2f, 1e6f, x, 0, a, null);
+                f.kind = snake ? Film.BLOOD_LEG : Txt.has(s, PART_HEAD) ? Film.BLOOD_HEAD : Film.BLOOD_CHEST;
+                if (Txt.has(s, "तीर", "arrow")) f.color = 1;
+                a.acts.add(new Film.Act(t + 0.1f, t + 1.2f, snake ? Film.G_CLUTCH : Film.G_STAGGER));
+                Film.Key kn = keyAt(a, t + 1.2f); kn.body = Pose.KNEEL; kn.seat = -1;
+                Film.Key ly = keyAt(a, t + 1.9f); ly.body = Pose.LIE; ly.seat = -1;
+                td = t + 2.5f;
+            } else {
+                // any other cause (an accident, a fall, the water): they are down, and still
+                Film.Key p = keyAt(a, t + 0.1f); p.emotion = Pose.PAIN;
+                if (now.body == Pose.STAND) { Film.Key kn = keyAt(a, t + 0.6f); kn.body = Pose.KNEEL; kn.seat = -1; }
+                Film.Key ly = keyAt(a, t + 1.2f); ly.body = Pose.LIE; ly.seat = now.body == Pose.SIT ? -1 : now.seat;
+                td = t + 1.8f;
+            }
+            Film.Key dk = keyAt(a, td); dk.dead = true; dk.eyesShut = true; dk.emotion = Pose.NEUTRAL; dk.body = Pose.LIE; dk.facing = dir;
+            if (dk.seat != Film.SEAT_BED && dk.seat != Film.SEAT_SOFA) dk.seat = -1;
+            deaths++;
+            end = Math.max(end, td - t);
+            // the mourners: the two nearest kneel beside them and weep, the rest stand in grief
+            List<Film.Actor> others = new ArrayList<Film.Actor>();
+            for (Film.Actor o : seg.actors) if (o != a && o.look != null && o.look.isHumanoid() && o.stateAt(td).visible && !o.stateAt(td).dead && !dying.contains(o)) others.add(o);
+            final float xx = x, tt = td;
+            java.util.Collections.sort(others, new java.util.Comparator<Film.Actor>() { public int compare(Film.Actor p, Film.Actor q) { return Float.compare(Math.abs(xAt(p, tt) - xx), Math.abs(xAt(q, tt) - xx)); } });
+            for (int i = 0; i < others.size(); i++) {
+                Film.Actor o = others.get(i);
+                Film.Key sh = keyAt(o, td - 0.6f); sh.emotion = Pose.SCARED; sh.facing = xx >= xAt(o, td) ? 1 : -1; spread(o, sh);
+                if (i < 2) {
+                    // beside the head (where they lie, the head is away from the way they face) and past the feet
+                    float hd = heightOf(a);
+                    float[] cands = {xx - dir * (0.5f * hd + 50), xx + dir * (0.6f * hd + 50), xx + dir * (0.6f * hd + 170), xx - dir * (0.5f * hd + 170)};
+                    float spot = Float.NaN;
+                    int k2 = 0;
+                    for (float c : cands) if (c >= 150 && c <= 1130) { if (k2 == i) { spot = c; break; } k2++; }
+                    if (Float.isNaN(spot)) spot = Math.max(150, Math.min(1130, cands[i]));
+                    Film.Key go = keyAt(o, td + 0.2f); go.x = spot; go.moveDur = Math.max(0.5f, Math.min(1.6f, Math.abs(spot - xAt(o, td)) / 220f)); go.run = true;
+                    go.facing = xx >= spot ? 1 : -1;
+                    float at = td + 0.3f + go.moveDur;
+                    Film.Key kn = keyAt(o, at); kn.body = Pose.KNEEL; kn.seat = -1; kn.emotion = Pose.SAD; kn.tears = true; kn.facing = xx >= spot ? 1 : -1;
+                    o.acts.add(new Film.Act(at + 0.2f, at + 3.4f, Film.G_CRY));
+                    end = Math.max(end, at + 3.4f - t);
+                } else {
+                    Film.Key gk = keyAt(o, td + 0.4f); gk.emotion = Pose.SAD; gk.tears = true; spread(o, gk);
+                }
+                mournings++;
+            }
+        }
+        frameAround(t, xAt(dying.get(0), t) - 260, xAt(dying.get(0), t) + 260);
+        return end + 0.4f;
+    }
+
+    /**
+     * v45: a collapse that is not a death — a heart attack, a faint: a hand to the chest (or the head), a stagger, the
+     * knees, down on the ground; the eyes shut for a faint. The nearest one runs to them and kneels beside them.
+     */
+    private float collapseFrom(String s, float t, Film.Actor subj, List<Film.Actor> who) {
+        if (negated(s)) return 0;
+        boolean heart = Txt.has(s, "दिल का दौरा", "हार्ट अटैक", "heart attack", "cardiac");
+        boolean faint = Txt.has(s, "faints", "fainted", "passes out", "passed out", "blacks out", "collapses", "collapsed", "बेहोश हो", "गश खा", "चक्कर खाकर गिर", "बेहोश होकर");
+        if (!heart && !faint) return 0;
+        if (Txt.has(s, "बेहोश") && Txt.has(s, "गिर")) return 0;      // (the v1 faint takes it)
+        float end = 0;
+        for (Film.Actor a : who) {
+            if (a.look == null || !a.look.isHumanoid() || a.stateAt(t).dead) continue;
+            Film.Key now = a.stateAt(t);
+            if (heart) { a.acts.add(new Film.Act(t + 0.1f, t + 1.4f, Film.G_CLUTCH)); Film.Key p = keyAt(a, t + 0.1f); p.emotion = Pose.PAIN; }
+            else { Film.Key p = keyAt(a, t + 0.1f); p.emotion = Pose.DIZZY; }
+            a.acts.add(new Film.Act(t + 0.6f, t + 1.5f, Film.G_STAGGER));
+            if (now.body == Pose.STAND) { Film.Key kn = keyAt(a, t + 1.5f); kn.body = Pose.KNEEL; kn.seat = -1; }
+            Film.Key ly = keyAt(a, t + 2.1f); ly.body = Pose.LIE; ly.seat = -1; ly.eyesShut = faint || heart; ly.emotion = Pose.PAIN;
+            film.sfx.add(sfxAt(Film.SFX_THUD, t + 2.1f, 0.4f, 0.4f, a));
+            Film.Actor near = null;
+            for (Film.Actor o : seg.actors) if (o != a && !who.contains(o) && o.look != null && o.look.isHumanoid() && o.stateAt(t).visible && !o.stateAt(t).dead
+                    && (near == null || Math.abs(xAt(o, t) - xAt(a, t)) < Math.abs(xAt(near, t) - xAt(a, t)))) near = o;
+            if (near != null) {
+                Film.Key sc = keyAt(near, t + 1.0f); sc.emotion = Pose.SCARED; sc.facing = xAt(a, t) >= xAt(near, t) ? 1 : -1;
+                moveNear(near, a, t + 2.2f, 0.6f);
+                Film.Key kn = keyAt(near, t + 3.4f); kn.body = Pose.KNEEL; kn.seat = -1; kn.emotion = Pose.SCARED;
+            }
+            wounds++;
+            end = Math.max(end, 3.6f);
+        }
+        return end;
+    }
+
+    /**
+     * v45: the dead stay dead — from the moment of death they lie where they fell, still, the eyes shut (a story that
+     * has them "speak" again is a voice from memory: no lips move); nothing staged for them after it is kept.
+     */
+    private void keepDead() {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            Film.Key first = null;
+            for (Film.Key k : a.keys) if (k.dead) { first = k; break; }
+            if (first == null) continue;
+            float td = first.t, x = first.x;
+            for (Film.Key k : a.keys) if (k.t > td) {
+                k.dead = true; k.eyesShut = true; k.body = Pose.LIE; k.x = x; k.moveDur = 0; k.run = false; k.facing = first.facing;
+                k.seat = first.seat; k.emotion = Pose.NEUTRAL; k.anchor = first.anchor; k.holdR = Pose.I_NONE; k.holdL = Pose.I_NONE;
+            }
+            for (java.util.Iterator<Film.Act> it = a.acts.iterator(); it.hasNext(); ) { Film.Act x0 = it.next(); if (x0.t0 > td + 0.05f) it.remove(); else if (x0.t1 > td + 0.3f && x0.type != Film.G_RIDE) x0.t1 = td + 0.3f; }
+        }
     }
 
     /** v44: how many others stand between x0 and x1 (exclusive of the ends) at t. */

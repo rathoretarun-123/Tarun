@@ -51,6 +51,8 @@ public final class Pose {
     public int toMouthItem;
     public int holdColor = 0xFFC62828;
     public boolean disguised, noHeadwear, wearsTurban, redFace, tears, sweat, eyesClosed, fist, glowWand;
+    /** v45: dead — still, no breath. */
+    public boolean dead;
     public int turbanColor = 0xFF2F5DB5, turbanBand = 0;
     public boolean carrying;           // arms up holding something on shoulder
     public float time;                 // seconds, for idle motion (hair, cloak)
@@ -90,7 +92,7 @@ public final class Pose {
     /** v34: a copy of this pose with another body state (a rider seated on the mount). */
     public Pose copyFor(int bodyState) {
         Pose q = new Pose();
-        q.body = bodyState; q.emotion = emotion; q.facing = facing; q.mouth = mouth; q.mouthWide = mouthWide; q.blink = blink;
+        q.body = bodyState; q.dead = dead; q.emotion = emotion; q.facing = facing; q.mouth = mouth; q.mouthWide = mouthWide; q.blink = blink;
         q.armL = armL; q.armR = armR; q.elbowL = elbowL; q.elbowR = elbowR; q.walk = 0; q.walkAmt = 0; q.tilt = tilt; q.headTilt = headTilt;
         q.bob = 0; q.squash = 1f; q.mountMouth = mountMouth; q.holdR = holdR; q.holdL = holdL; q.holdColor = holdColor;
         q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
@@ -104,7 +106,7 @@ public final class Pose {
     }
 
     public void reset() {
-        body = STAND; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; swing = false; turbanOwner = null; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
+        body = STAND; dead = false; emotion = NEUTRAL; facing = 1; mouth = 0; mouthWide = 0.5f; swing = false; turbanOwner = null; blink = 0; armL = 8; armR = 8; elbowL = 10; elbowR = 10;
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;

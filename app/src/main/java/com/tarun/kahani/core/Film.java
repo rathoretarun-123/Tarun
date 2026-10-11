@@ -131,6 +131,8 @@ public final class Film {
         public int anchor = A_GROUND;
         public Actor anchorActor;
         public boolean visible = true, run, disguised, noHeadwear, wearsTurban, redFace, tears, netted, sweat, eyesShut;
+        /** v45: dead — lying still from here on: no breath, no blink, no lips, the eyes shut. */
+        public boolean dead;
         /** v34: the back is to the camera (turns away, walks away, leaves): the back picture is drawn. */
         public boolean backTurned;
         public int holdR = Pose.I_NONE, holdL = Pose.I_NONE;
@@ -143,7 +145,7 @@ public final class Film {
             Key k = new Key();
             k.t = t; k.moveDur = 0; k.x = x; k.depth = depth; k.body = body; k.facing = facing; k.emotion = emotion; k.anchor = anchor;
             k.anchorActor = anchorActor; k.visible = visible; k.run = false; k.disguised = disguised; k.noHeadwear = noHeadwear;
-            k.wearsTurban = wearsTurban; k.redFace = redFace; k.tears = tears; k.netted = netted; k.sweat = sweat; k.eyesShut = eyesShut;
+            k.wearsTurban = wearsTurban; k.redFace = redFace; k.tears = tears; k.netted = netted; k.sweat = sweat; k.eyesShut = eyesShut; k.dead = dead;
             k.holdR = holdR; k.holdL = holdL; k.seat = seat; k.backTurned = backTurned; k.costume = costume;
             return k;
         }
@@ -195,6 +197,8 @@ public final class Film {
     public static final int ARCH_TARGET = 0, ARCH_HUNT = 1, ARCH_SKY = 2, ARCH_ENEMY = 3;
     /** v44: a G_SNOW_PLAY act: a snowball made and thrown, a snowman built, snowflakes caught on the hands, a slide down a slope. */
     public static final int SNOW_BALL = 1, SNOW_MAN = 2, SNOW_CATCH = 3, SNOW_SLIDE = 4;
+    /** v45: where a wound bleeds. */
+    public static final int BLOOD_HEAD = 0, BLOOD_ARM = 1, BLOOD_LEG = 2, BLOOD_CHEST = 3;
     /** v44: a ride's mishap (Act.mishap): a two-wheeler skids and falls on its side, the rider thrown off; a car or a
      *  horse hits something and stops dead (the jolt, the crash, smoke from the bonnet); a car swerves and brakes hard in time. */
     public static final int MISHAP_NONE = 0, MISHAP_SKID = 1, MISHAP_CRASH = 2, MISHAP_SWERVE = 3;
@@ -374,7 +378,9 @@ public final class Film {
             FX_SNOWMAN = 52,      // v44: a snowman built at x from t0 (rolled, stacked, the face and the scarf by t2), sized for actor a
             FX_WRECK = 53,        // v44: what an accident leaves at x from t0 (kind: MISHAP_*; color: facing): the bike
                                   //      on its side, the car's crumpled bumper and smoke from its bonnet, the dust
-            FX_ANIMAL = 54;       // v44: an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2
+            FX_ANIMAL = 54,
+            FX_BLOOD = 55,        // v45: a wound bleeding on actor a (kind: BLOOD_*), from t0 until t1 (bandaged, or the scene's end)
+            FX_SHROUD = 56;       // v45: a white sheet over the one lying dead (a), from t0       // v44: an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2
                                   //      it lifts its head and bolts off the edge of the picture (hunting), or stays
     /** v44: FX_INSERT kinds and the moves of a driver's feet and hands (FX_INSERT.color bits). */
     public static final int INS_STEER = 0, INS_PEDALS = 1, INS_CYCLE_FEET = 2, INS_ARROW = 3, INS_BOW = 4;

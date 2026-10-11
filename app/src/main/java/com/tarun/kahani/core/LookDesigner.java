@@ -148,7 +148,7 @@ public final class LookDesigner {
     public static boolean changesClothes(String s) {
         if (bodyChange(s)) return true;
         return Txt.has(s, "कपड़े बदल", "ड्रेस बदल", "पोशाक बदल", "वेशभूषा बदल", "वस्त्र बदल", "पहनकर", "पहन कर", "पहन लेत", "पहन लिय", "पहन ली", "पहने हुए", "पहनती है", "पहनता है",
-                "चश्मा लगा", "चश्मा पहन", "चश्मा उतार", "चश्मा हटा", "changes into", "changed into", "change into", "changes her clothes", "changes his clothes", "puts on", "put on",
+                "चश्मा लगा", "चश्मा पहन", "चश्मा उतार", "चश्मा हटा", "tries on", "trying on", "changes into", "changed into", "change into", "changes her clothes", "changes his clothes", "puts on", "put on",
                 "now wearing", "now in a", "dressed in", "dresses up", "dressed up", "wearing", "takes off his glasses", "takes off her glasses", "removes his glasses", "removes her glasses");
     }
 

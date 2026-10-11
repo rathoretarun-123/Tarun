@@ -1,0 +1,270 @@
+# v45 probe: injuries (a cut, a wound, blood flowing, a bandage), deaths from various causes (an arrow, a sword, a
+# snakebite, the heart, an illness in bed, an accident, old age) with mourning and the white sheet, and places and
+# situations the director was never told about — modern (the hospital, the office, the metro, the mall, the airport,
+# the gym, the classroom, the restaurant, a video call, a delivery) and old (the village well, the fields, the potter's
+# wheel, the temple, the river ghat, the battlefield, the old bazaar, a letter by pigeon, a bullock cart).
+# Run by tools/jvm/com/tarun/kahani/jvm/PhenomenaProbe.java (v45 codes: DEAD — the main character dies in the window;
+# MOURN — someone else on the stage weeps in it).
+
+# ============================================================ small injuries
+
+#@ cat=cut place=kitchen age=adult
+hi	सब्ज़ी काटते हुए राहुल की उँगली कट जाती है और खून निकलने लगता है।	FX:BLOOD&EMO:PAIN
+hi	चाकू से राहुल का हाथ कट जाता है; वह दर्द से कराहता है।	FX:BLOOD&EMO:PAIN
+hi	राहुल की उँगली से खून बहता है और वह उसे दबाकर पकड़ता है।	FX:BLOOD
+en	Rahul cuts his finger while chopping onions and it starts to bleed.	FX:BLOOD&EMO:PAIN
+en	The knife slips and Rahul's hand is cut; blood drips onto the floor.	FX:BLOOD&EMO:PAIN
+en	Rahul winces as blood trickles from the cut on his thumb.	FX:BLOOD
+
+#@ cat=cut place=out
+hi	राहुल गिर जाता है और उसके घुटने से खून निकलने लगता है।	FX:BLOOD&ACT:FALL|FX:BLOOD&EMO:PAIN
+hi	काँच के टुकड़े से राहुल के पैर में चोट लगती है और खून बहता है।	FX:BLOOD&EMO:PAIN
+hi	राहुल का सिर दरवाज़े से टकराता है और माथे से खून निकलता है।	FX:BLOOD&EMO:PAIN
+en	Rahul trips on the step and scrapes his knee; it bleeds.	FX:BLOOD
+en	A shard of glass cuts Rahul's foot and blood flows.	FX:BLOOD&EMO:PAIN
+en	Rahul bumps his head on the door frame and his forehead bleeds.	FX:BLOOD&EMO:PAIN
+
+#@ cat=bandage place=room age=adult
+hi	माँ राहुल के घाव पर पट्टी बाँधती हैं।	ANY
+hi	राहुल अपनी कटी उँगली पर पट्टी बाँधता है।	ANY
+en	Rahul wraps a bandage around his bleeding hand.	ANY
+en	Rahul presses a cloth to the wound to stop the bleeding.	ANY
+
+# ============================================================ wounds in a fight or a battle
+
+#@ cat=battle place=camp age=adult
+hi	दुश्मन का तीर राहुल के सीने में लगता है और खून बहने लगता है।	FX:BLOOD&EMO:PAIN|FX:BLOOD&ACT:CLUTCH
+hi	तलवार का वार राहुल की बाँह पर लगता है; खून टपकता है।	FX:BLOOD&EMO:PAIN|FX:BLOOD&ACT:CLUTCH
+hi	घायल राहुल अपना कंधा पकड़कर लड़खड़ाता है।	ACT:CLUTCH|ACT:STAGGER|EMO:PAIN
+hi	राहुल घायल होकर ज़मीन पर गिर पड़ता है।	BODY:LIE|ACT:FALL|EMO:PAIN
+en	An arrow strikes Rahul in the chest and he clutches the wound.	FX:BLOOD&ACT:CLUTCH|FX:BLOOD&EMO:PAIN
+en	A sword slashes Rahul's arm and blood runs down to his wrist.	FX:BLOOD&EMO:PAIN|FX:BLOOD&ACT:CLUTCH
+en	Wounded, Rahul staggers and drops to one knee.	ACT:STAGGER|BODY:KNEEL|EMO:PAIN
+en	Rahul is hit in the leg and limps away bleeding.	FX:BLOOD
+
+#@ cat=street-fight place=street age=adult
+hi	गुंडे के चाकू से राहुल के पेट में घाव हो जाता है।	FX:BLOOD&EMO:PAIN|FX:BLOOD&ACT:CLUTCH
+hi	राहुल की नाक से खून बहने लगता है।	FX:BLOOD
+en	The thug's knife wounds Rahul in the stomach; he doubles over.	FX:BLOOD&EMO:PAIN|FX:BLOOD&ACT:CLUTCH
+en	Rahul's nose is bleeding after the punch.	FX:BLOOD
+
+# ============================================================ death — the battlefield, the sword, the arrow
+
+#@ cat=death-battle place=camp age=adult
+hi	तीर लगने के बाद राहुल ज़मीन पर गिरता है और दम तोड़ देता है।	DEAD
+hi	राहुल तलवार के घाव से वहीं मर जाता है।	DEAD
+hi	राहुल युद्ध में वीरगति को प्राप्त होता है।	DEAD
+hi	राहुल की साँसें थम जाती हैं और माँ फूट-फूटकर रोती हैं।	DEAD&MOURN
+en	Struck by the arrow, Rahul falls and dies.	DEAD
+en	Rahul dies of his sword wound on the battlefield.	DEAD
+en	Rahul breathes his last as Mother holds his hand.	DEAD
+en	Rahul is killed in the battle and Mother weeps over him.	DEAD&MOURN
+
+#@ cat=death-snake place=fields age=adult
+hi	साँप के काटने से राहुल की मौत हो जाती है।	DEAD
+en	A cobra bites Rahul and he dies in the fields.	DEAD
+
+#@ cat=death-heart place=office age=adult
+hi	राहुल को अचानक दिल का दौरा पड़ता है और वह गिर पड़ता है।	ACT:CLUTCH|BODY:LIE|ACT:FALL
+hi	दिल का दौरा पड़ने से राहुल की मृत्यु हो जाती है।	DEAD
+en	Rahul clutches his chest, collapses with a heart attack and dies.	DEAD
+en	Rahul has a heart attack at his desk.	ACT:CLUTCH|BODY:LIE|ACT:FALL|EMO:PAIN
+
+#@ cat=death-illness place=hospital start=bed age=adult
+hi	लंबी बीमारी के बाद राहुल अस्पताल के बिस्तर पर चल बसता है।	DEAD
+hi	राहुल शांति से आँखें मूँद लेता है और फिर कभी नहीं खोलता।	DEAD|EYES
+hi	राहुल का देहांत हो जाता है; माँ रोने लगती हैं।	DEAD&MOURN
+en	After a long illness Rahul passes away in his hospital bed.	DEAD
+en	Rahul dies peacefully in his sleep.	DEAD
+en	Rahul passes away and Mother bursts into tears.	DEAD&MOURN
+
+#@ cat=death-old place=bedroom start=bed age=adult
+hi	बूढ़ा राहुल बुढ़ापे के कारण गुज़र जाता है।	DEAD
+en	Rahul, very old now, passes away quietly.	DEAD
+
+#@ cat=death-accident place=road age=adult
+hi	सड़क हादसे में राहुल की मौत हो जाती है।	DEAD
+en	Rahul is killed when a truck hits him.	DEAD
+
+#@ cat=death-drown place=ghat age=adult
+hi	राहुल नदी में डूबकर मर जाता है।	DEAD
+en	Rahul drowns in the river.	DEAD
+
+# ============================================================ the not-death sentences (must not kill)
+
+#@ cat=not-death place=room age=adult
+hi	राहुल हँसते-हँसते लोटपोट हो जाता है।	!DEAD
+hi	राहुल डर के मारे मरा जा रहा है।	!DEAD
+en	Rahul is dying to see the new film.	!DEAD
+en	Rahul nearly dies laughing at the joke.	!DEAD
+en	Rahul plays dead to fool his sister.	!DEAD
+en	Rahul's phone dies in the middle of the call.	!DEAD
+hi	राहुल मरने का नाटक करता है।	!DEAD
+
+# ============================================================ after death: the sheet, the mourning
+
+#@ cat=mourning place=hospital age=adult
+hi	राहुल माँ के शव पर सफ़ेद चादर ओढ़ा देता है।	FX:SHROUD|ACT:REACH
+hi	राहुल माँ की मौत पर फूट-फूटकर रोता है।	TEARS|ACT:CRY|EMO:SAD
+hi	राहुल सिर झुकाकर चुपचाप श्रद्धांजलि देता है।	ACT:BOW|EMO:SAD
+en	Mother passes away, and Rahul covers her body with a white sheet.	FX:SHROUD&TEARS
+en	Rahul weeps beside the body.	TEARS|ACT:CRY
+en	Rahul folds his hands and prays for the departed soul.	ACT:BOW|ANY
+
+# ============================================================ the hospital (modern)
+
+#@ cat=hospital place=hospital age=adult
+hi	राहुल माँ की नब्ज़ देखता है।	ACT:REACH
+en	Rahul checks Mother's pulse.	ACT:REACH
+hi	राहुल अस्पताल के बिस्तर पर लेटता है।	BODY:LIE
+hi	राहुल व्हीलचेयर पर बैठता है।	SEAT:WHEELCHAIR
+hi	नर्स राहुल को इंजेक्शन लगाती है और वह दर्द से आँखें बंद कर लेता है।	EMO:PAIN|EYES
+en	Rahul lies down on the hospital bed.	BODY:LIE
+en	Rahul sits in a wheelchair.	SEAT:WHEELCHAIR
+en	Rahul walks to the reception desk and asks for the doctor.	MOVE
+en	Rahul coughs and holds his chest.	ACT:COUGH
+
+#@ cat=hospital-bed place=hospital start=bed age=adult
+hi	राहुल धीरे-धीरे आँखें खोलता है और होश में आता है।	AWAKE
+en	Rahul opens his eyes and slowly sits up in bed.	AWAKE|BODY:SIT
+en	Rahul groans in pain.	EMO:PAIN
+
+# ============================================================ the office (modern)
+
+#@ cat=office place=office age=adult
+hi	राहुल अपनी कुर्सी पर बैठकर लैपटॉप पर काम करता है।	BODY:SIT|SEAT:CHAIR
+hi	राहुल फ़ोन पर बॉस से बात करता है।	TASK:PHONE
+hi	राहुल फ़ाइलें पढ़ता है।	TASK:READ|TASK:PAPER
+hi	राहुल गुस्से में मेज़ पर मुक्का मारता है।	EMO:ANGRY|ACT:FIST
+en	Rahul sits down at his desk and starts typing.	BODY:SIT|SFX:TYPING
+en	Rahul answers the phone at his desk.	TASK:PHONE
+en	Rahul stretches after hours at the computer.	ACT:STRETCH
+en	Rahul presents the chart and points at the screen.	ACT:POINT
+en	Rahul shakes hands with the new client.	ACT:HOLD_HAND|ACT:REACH|ANY
+
+#@ cat=video-call place=room age=adult
+hi	राहुल वीडियो कॉल पर माँ से बात करता है और हाथ हिलाता है।	TASK:PHONE|ACT:WAVE
+en	Rahul waves at his sister on a video call.	ACT:WAVE|TASK:PHONE
+en	Rahul takes a selfie with Mother.	TASK:PHONE|ANY
+
+#@ cat=delivery place=room age=adult
+hi	दरवाज़े की घंटी बजती है और राहुल दरवाज़ा खोलकर पार्सल लेता है।	SFX:BELL|SFX:DOOR|ACT:REACH
+en	The doorbell rings; Rahul opens the door and takes the parcel.	SFX:BELL|SFX:DOOR|ACT:REACH
+en	Rahul orders food on his phone.	TASK:PHONE
+
+# ============================================================ the metro, the mall, the airport (modern)
+
+#@ cat=metro place=metro age=adult
+hi	राहुल प्लेटफ़ॉर्म पर मेट्रो का इंतज़ार करता है और घड़ी देखता है।	ANY
+hi	राहुल भीड़ में धक्का खाकर गिरते-गिरते बचता है।	ACT:STAGGER|EMO:SURPRISED|EMO:SCARED
+hi	राहुल सीढ़ियों से भागकर नीचे आता है।	RUN|MOVE
+en	Rahul runs to catch the train.	RUN
+en	Rahul is pushed in the crowd and nearly falls.	ACT:STAGGER|EMO:SURPRISED|EMO:SCARED
+en	Rahul offers his seat to an old woman.	ACT:OFFER|BODY:STAND|ANY
+
+#@ cat=mall place=mall age=adult
+hi	राहुल दुकान में कपड़े देखता है।	ANY
+hi	राहुल नए जूते पहनकर देखता है।	COSTUME|ANY
+en	Rahul tries on a new jacket.	COSTUME
+en	Rahul pays at the counter.	ACT:GIVE|ACT:REACH
+en	Rahul carries the shopping bags out.	MOVE|ANY
+
+#@ cat=airport place=airport age=adult
+hi	राहुल अपना सूटकेस खींचते हुए आगे बढ़ता है।	MOVE|ACT:PULL
+hi	राहुल माँ को गले लगाकर विदा करता है।	ACT:HUG
+en	Rahul drags his suitcase to the gate.	MOVE|ACT:PULL
+en	Rahul hugs Mother goodbye at the airport.	ACT:HUG
+en	Rahul waves goodbye as he goes through security.	ACT:WAVE
+
+# ============================================================ the gym, the classroom, the restaurant (modern)
+
+#@ cat=gym place=gym age=adult
+hi	राहुल डंबल उठाता है।	EX:DUMBBELL|ACT:EXERCISE|ANY
+hi	राहुल पसीने से तर होकर दौड़ता है।	RUN|SWEAT
+en	Rahul lifts weights and grunts.	ACT:EXERCISE|ANY
+en	Rahul does push-ups on the mat.	ACT:EXERCISE|ANY
+en	Rahul wipes the sweat off his forehead.	SWEAT|ANY
+
+#@ cat=school place=school
+hi	राहुल बोर्ड पर कुछ लिखता है।	TASK:WRITE
+hi	राहुल हाथ उठाकर सवाल का जवाब देता है।	ACT:REACH|ACT:WAVE|ANY
+hi	राहुल अपनी कॉपी में लिखता है।	TASK:WRITE
+en	Rahul raises his hand to answer.	ACT:REACH|ACT:WAVE|ANY
+en	Rahul writes on the blackboard.	TASK:WRITE
+en	Rahul reads his book at his desk.	TASK:READ
+en	Rahul yawns in the class.	ACT:STRETCH|ACT:RUB_EYES|ANY
+
+#@ cat=restaurant place=cafe age=adult
+hi	राहुल मेज़ पर बैठकर खाना खाता है।	ACT:EAT
+hi	राहुल कॉफ़ी पीता है।	DRINK:CUP|ACT:DRINK
+hi	राहुल वेटर को बिल देता है।	ACT:GIVE|ACT:REACH
+en	Rahul sits at the table and eats.	ACT:EAT
+en	Rahul sips his coffee.	DRINK:CUP|ACT:DRINK
+en	Rahul raises his glass of wine for a toast.	DRINK:WINE|ACT:DRINK|HOLD:WINE
+
+# ============================================================ the village well, the fields, the bullock cart (old)
+
+#@ cat=well place=village age=adult
+hi	राहुल कुएँ से रस्सी खींचकर पानी निकालता है।	ACT:PULL_ROPE|ACT:PULL
+hi	माँ के साथ राहुल सिर पर मटका रखकर चलता है।	MOVE|ANY
+hi	राहुल कुएँ के पास बैठकर पानी पीता है।	ACT:DRINK|BODY:SIT
+en	Rahul draws water from the well with the rope.	ACT:PULL_ROPE|ACT:PULL
+en	Rahul drinks water from his cupped hands.	ACT:DRINK
+en	Rahul splashes water on his face at the well.	ACT:SPLASH|ACT:BATHE|ANY
+
+#@ cat=fields place=fields age=adult
+hi	राहुल खेत में हल चलाता है।	MOVE|ANY
+hi	राहुल फसल काटता है।	ANY
+hi	राहुल बैलगाड़ी में बैठकर खेत की ओर जाता है।	MOVE|ANY
+hi	राहुल पेड़ की छाँव में आराम करता है।	BODY:SIT|BODY:LIE
+en	Rahul ploughs the field.	MOVE|ANY
+en	Rahul harvests the wheat with a sickle.	ANY
+en	Rahul rests under the tree in the shade.	BODY:SIT|BODY:LIE
+en	Rahul wipes his brow in the hot sun.	SWEAT|ANY
+
+#@ cat=potter place=potter age=adult
+hi	राहुल चाक पर मिट्टी का घड़ा बनाता है।	ANY
+hi	राहुल ज़मीन पर बैठकर दीये रंगता है।	BODY:SIT|TASK:PAINT
+en	Rahul shapes a clay pot on the potter's wheel.	ANY
+en	Rahul paints the clay lamps.	TASK:PAINT
+
+# ============================================================ the temple, the ghat (old)
+
+#@ cat=temple place=temple age=adult
+hi	राहुल मंदिर की घंटी बजाता है।	SFX:BELL
+hi	राहुल हाथ जोड़कर प्रार्थना करता है।	ACT:BOW|ANY
+hi	राहुल भगवान के आगे दीया जलाता है।	ANY
+en	Rahul rings the temple bell.	SFX:BELL
+en	Rahul folds his hands and prays.	ACT:BOW|ANY
+en	Rahul kneels before the idol.	BODY:KNEEL
+
+#@ cat=ghat place=ghat age=adult
+hi	राहुल नदी में डुबकी लगाता है।	ACT:BATHE|ACT:SPLASH
+hi	राहुल घाट की सीढ़ियों पर बैठता है।	BODY:SIT
+en	Rahul takes a dip in the river.	ACT:BATHE|ACT:SPLASH
+en	Rahul sits on the steps of the ghat.	BODY:SIT
+
+# ============================================================ the battlefield camp, the old bazaar (old)
+
+#@ cat=camp place=camp age=adult
+hi	राहुल तलवार निकालकर हमला करता है।	ACT:SWORD
+hi	राहुल ढाल से वार रोकता है।	ACT:BLOCK|ACT:SWORD
+hi	राहुल घोड़े पर सवार होकर आगे बढ़ता है।	RIDE:HORSE
+hi	राहुल शंख बजाता है।	ANY
+en	Rahul draws his sword and charges.	ACT:SWORD
+en	Rahul blocks the blow with his shield.	ACT:BLOCK|ACT:SWORD
+en	Rahul mounts his horse and rides into battle.	RIDE:HORSE
+en	Rahul salutes the general.	ACT:SALUTE
+
+#@ cat=bazaar place=bazaar age=adult
+hi	राहुल दुकानदार से मोल-भाव करता है।	ANY
+hi	राहुल फल वाले को पैसे देता है।	ACT:GIVE|ACT:REACH
+hi	राहुल भीड़ में चलता है।	MOVE
+en	Rahul haggles with the shopkeeper.	ANY
+en	Rahul pays the fruit seller.	ACT:GIVE|ACT:REACH
+en	Rahul walks through the crowded bazaar.	MOVE
+
+#@ cat=pigeon place=terrace age=adult
+hi	राहुल कबूतर के पैर में चिट्ठी बाँधकर उसे उड़ा देता है।	ANY
+en	Rahul ties a letter to the pigeon and lets it fly.	ANY
+en	Rahul reads the letter the pigeon brought.	TASK:READ|TASK:PAPER

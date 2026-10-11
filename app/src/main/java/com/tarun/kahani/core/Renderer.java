@@ -1625,6 +1625,12 @@ public final class Renderer {
             }
         }
 
+        // v45: the dead lie still — eyes shut, no breath, no lips, no feeling on the face, no idle sway
+        if (k.dead) {
+            p.dead = true; p.eyesClosed = true; p.blink = 0; p.mouth = 0; p.emotion = Pose.NEUTRAL; p.tears = false; p.walkAmt = 0;
+            mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
+        }
+
         // ---- placement by anchor
         g.save();
         switch (k.anchor) {
@@ -3335,7 +3341,7 @@ public final class Renderer {
         if (weapon(p.holdL) || p.holdR == Pose.I_BOW) st.armL = armReach(8 + (p.armL - 8) * en);
         st.headRot = p.headTilt * 0.8f + (float) Math.sin(t * 0.7f * en + p.seed) * 0.6f * en;
         st.lean = p.tilt;
-        st.breathe = (float) Math.sin(t * 2.1f + p.seed);
+        st.breathe = p.dead ? 0 : (float) Math.sin(t * 2.1f + p.seed);
         if (p.mouth > 0.02f) {
             // a speaker's head stays almost still: a slow, small accent of the phrase, never a shake with every syllable
             st.headRot += (float) Math.sin(t * 1.3f + p.seed) * 0.45f * en;
@@ -4614,6 +4620,8 @@ public final class Renderer {
                 case Film.FX_SNOWMAN: if (behind) { float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 300; ActionProps.snowman(g, f.x, s.ground, hh, (t - f.t0) / Math.max(0.1f, f.t2 - f.t0), t); } break;
                 case Film.FX_WRECK: wreck(g, s, f, t, behind); break;
                 case Film.FX_ANIMAL: if (behind) animalFx(g, s, f, t); break;
+                case Film.FX_BLOOD: if (!behind) bloodFx(g, s, f, t); break;
+                case Film.FX_SHROUD: if (!behind) shroudFx(g, s, f, t); break;
                 case Film.FX_VEHICLE: if (behind && f.a != null) hiredVehicle(g, s, f, t); break;
                 case Film.FX_KITCHEN: if (!behind && f.a != null && currentKitchen(s, f, t)) kitchen(g, s, f, t); break;
                 case Film.FX_DOOR: if (f.kind == 0) roomDoor(g, s, f, t, !behind); break;
@@ -4793,6 +4801,78 @@ public final class Renderer {
         float y0 = s.ground - hh * 0.62f - lift;
         float u = f.t2 > f.t0 ? (t - f.t0) / (f.t2 - f.t0) : 1;
         ActionProps.arrow(g, x0, y0, f.x, f.y, Math.min(1, u), hh * 0.36f, t - f.t2);
+    }
+
+    /**
+     * v45: a wound bleeding: a dark-red stain at the part (the head, an arm, a leg, the chest) that grows for a second
+     * and a half, a thin trickle running down from it, a drop now and then to the ground, a small pool where they lie —
+     * fading out once it is bandaged. Kept small: a family film shows that someone is hurt, not the wound.
+     */
+    private void bloodFx(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        Film.Actor a = f.a;
+        if (a == null || a.look == null) return;
+        Film.Key k = a.stateAt(t);
+        if (!k.visible) return;
+        float h = actorHeight(a.look, a.c, art, s), x = Director.xAt(a, t), face = k.facing >= 0 ? 1 : -1;
+        float grow = Math.min(1, (t - f.t0) / 1.5f), fade = f.t1 < 1e5f ? Math.max(0, 1 - (t - f.t1) / 0.8f) : 1;
+        if (fade <= 0 || grow <= 0) return;
+        boolean lying = k.body == Pose.LIE || lieAmount(a, t) > 0.6f;
+        float px, py;
+        if (lying) {
+            // along the ground: the head away from where they face (as they are laid), the legs towards it
+            float along = f.kind == Film.BLOOD_HEAD ? -0.42f : f.kind == Film.BLOOD_LEG ? 0.3f : f.kind == Film.BLOOD_CHEST ? -0.2f : -0.05f;
+            px = x + face * along * h; py = s.ground - h * 0.1f;
+        } else {
+            float sit = k.body == Pose.SIT || k.body == Pose.KNEEL ? 0.2f : 0;
+            float up = f.kind == Film.BLOOD_HEAD ? 0.86f : f.kind == Film.BLOOD_CHEST ? 0.66f : f.kind == Film.BLOOD_LEG ? 0.26f : 0.5f;
+            px = x + (f.kind == Film.BLOOD_ARM ? face * 0.17f * h : f.kind == Film.BLOOD_HEAD ? face * 0.05f * h : 0);
+            py = s.ground - (up - sit * up * 0.5f) * h;
+        }
+        float r = h * 0.022f * (0.4f + 0.6f * grow);
+        g.save();
+        g.setAlpha(fade);
+        g.color(0xCC7F0000); g.oval(px, py, r * 1.2f, r);
+        g.color(0xE0B71C1C); g.oval(px - r * 0.15f, py - r * 0.1f, r * 0.75f, r * 0.6f);
+        g.color(0x55FFFFFF); g.oval(px - r * 0.35f, py - r * 0.3f, r * 0.18f, r * 0.12f);         // the wet glint
+        if (f.color == 1) {
+            // an arrow in the wound: its shaft out from it, the fletching at the end
+            float ax = px - face * h * 0.13f, ay = py - h * 0.05f;
+            if (lying) { ax = px; ay = py - h * 0.16f; }
+            g.color(0xFF6D4C41); g.line(px, py, ax, ay, Math.max(2f, h * 0.008f));
+            g.color(0xFFE53935); g.line(ax, ay, ax - face * h * 0.025f, ay - h * 0.012f, Math.max(2f, h * 0.012f));
+        }
+        if (!lying) {
+            // a thin trickle down from it, and now and then a drop falling to the ground
+            float len = Math.min(h * 0.09f, (t - f.t0) * h * 0.035f);
+            g.color(0xD09A0E0E); g.line(px + r * 0.2f, py + r * 0.5f, px + r * 0.25f, py + r * 0.5f + len, Math.max(1.5f, r * 0.28f));
+            for (int i = 0; i < 2; i++) {
+                float ph = ((t - f.t0) * 0.8f + i * 0.5f) % 1f, y0 = py + r * 0.5f + len, y1 = s.ground - 2;
+                if (y1 > y0) { g.color(0xCC9A0E0E); g.oval(px + r * 0.25f, y0 + (y1 - y0) * ph * ph, r * 0.16f, r * 0.24f); }
+            }
+        }
+        // the little pool below, growing slowly
+        float pool = Math.min(1, (t - f.t0) / 8f);
+        g.color(0x997F0000); g.oval(px + (lying ? 0 : r * 0.25f), s.ground - 1, h * (lying ? 0.07f : 0.03f) * pool, h * 0.008f * pool + 0.5f);
+        g.restore();
+    }
+
+    /** v45: a white sheet drawn over the one lying dead, from the chest to past the feet, laid on over half a second. */
+    private void shroudFx(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        Film.Actor a = f.a;
+        if (a == null || a.look == null || !a.stateAt(t).visible) return;
+        float h = actorHeight(a.look, a.c, art, s), x = Director.xAt(a, t), face = a.stateAt(t).facing >= 0 ? 1 : -1;
+        float u = Math.min(1, (t - f.t0) / 0.6f);
+        float yT = s.ground - (seatOf(a, t) == Film.SEAT_BED ? h * BED_TOP : 0);
+        // (the whole body, the face too — as a sheet is drawn over the dead — high enough to cover the lying picture)
+        float x1 = x - face * 0.52f * h, x2 = x1 + (x + face * 0.58f * h - x1) * u;
+        g.save();
+        g.linear(0, yT - h * 0.3f, 0, yT, 0xFFFAFAFA, 0xFFD5D5D5);
+        g.begin(); g.moveTo(x1, yT + h * 0.02f); g.lineTo(x1 - face * h * 0.02f, yT - h * 0.16f);
+        g.quadTo(x1 + face * h * 0.1f, yT - h * 0.31f, x1 + (x2 - x1) * 0.35f, yT - h * 0.27f);
+        g.quadTo(x1 + (x2 - x1) * 0.75f, yT - h * 0.24f, x2, yT - h * 0.16f); g.lineTo(x2 + face * h * 0.03f, yT + h * 0.02f); g.close(); g.fillPath();
+        g.color(0x28000000);
+        for (int i = 1; i < 5; i++) { float xx = x1 + (x2 - x1) * i / 5f; g.line(xx, yT, xx + face * h * 0.025f, yT - h * 0.22f, h * 0.003f); }
+        g.restore();
     }
 
     /** v44: an animal of the place: grazing (its head down to the grass), walking across, bolting off when startled. */

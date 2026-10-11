@@ -535,6 +535,37 @@ public final class Director {
      * shot list: jump cuts become smooth reframes, every part opens on a wide shot, close-ups stay rare, strong
      * performances keep a still camera, reactions get time, and the pacing of each part is measured.
      */
+    /**
+     * Two cuts within a few frames of each other would flash one frame of the first (a planned cut and the lip-sync
+     * cut at the line's start): the later one is the shot, the earlier is dropped (the opening cut of a part stays;
+     * then the later one goes). A cut to almost the same framing jars (a jump cut): the shot runs on instead (with
+     * a locked camera), or glides there. Returns the jump cuts taken out.
+     */
+    private int cleanCuts(Film.Seg sg) {
+        int jump = 0;
+        List<Film.Cam> flash = new ArrayList<Film.Cam>();
+        Film.Cam prevC = null;
+        for (Film.Cam c : sg.cams) {
+            if (c.ease > 0) continue;
+            if (prevC != null && c.t - prevC.t < 0.3f) {
+                if (prevC.t <= sg.t0 + 0.01f) { flash.add(c); continue; }
+                flash.add(prevC);
+            }
+            prevC = c;
+        }
+        sg.cams.removeAll(flash);
+        Film.Cam prevCut = null;
+        List<Film.Cam> drop = new ArrayList<Film.Cam>();
+        for (Film.Cam c : sg.cams) {
+            if (c.ease > 0) continue;
+            if (!c.keep && prevCut != null && Math.abs(c.zoom - prevCut.zoom) < 0.1f && Math.abs(c.cx - prevCut.cx) < 55 && Math.abs(c.cy - prevCut.cy) < 40
+                    && c.t - prevCut.t > 0.3f) { if (opt.technical) drop.add(c); else c.ease = 0.8f; jump++; }
+            else prevCut = c;
+        }
+        sg.cams.removeAll(drop);
+        return jump;
+    }
+
     private String qualityCheck() {
         int jump = 0, estab = 0, still = 0;
         for (Film.Seg sg : film.segs) {
@@ -548,31 +579,7 @@ public final class Director {
                 sg.cams.add(0, w);
                 estab++;
             }
-            // two cuts within a few frames of each other would flash one frame of the first (a planned cut and
-            // the lip-sync cut at the line's start): the later one is the shot, the earlier is dropped (the
-            // opening cut of a part stays; then the later one goes)
-            List<Film.Cam> flash = new ArrayList<Film.Cam>();
-            Film.Cam prevC = null;
-            for (Film.Cam c : sg.cams) {
-                if (c.ease > 0) continue;
-                if (prevC != null && c.t - prevC.t < 0.3f) {
-                    if (prevC.t <= sg.t0 + 0.01f) { flash.add(c); continue; }
-                    flash.add(prevC);
-                }
-                prevC = c;
-            }
-            sg.cams.removeAll(flash);
-            Film.Cam prevCut = null;
-            List<Film.Cam> drop = new ArrayList<Film.Cam>();
-            for (Film.Cam c : sg.cams) {
-                if (c.ease > 0) continue;
-                // a cut to almost the same framing jars (a jump cut): keep the shot running instead
-                // (with a locked camera), or glide there
-                if (!c.keep && prevCut != null && Math.abs(c.zoom - prevCut.zoom) < 0.1f && Math.abs(c.cx - prevCut.cx) < 55 && Math.abs(c.cy - prevCut.cy) < 40
-                        && c.t - prevCut.t > 0.3f) { if (opt.technical) drop.add(c); else c.ease = 0.8f; jump++; }
-                else prevCut = c;
-            }
-            sg.cams.removeAll(drop);
+            jump += cleanCuts(sg);
         }
         if (opt.technical) {
             // the protocol's passes again until nothing changes (a reframed shot has a different frame width)
@@ -592,6 +599,14 @@ public final class Director {
             limitShotLength(TechnicalDirector.CUT_SECONDS);
         }
         playFrames();
+        // v41: the passes above add cuts of their own (a shot cut in two, a play framed): no flash or jump cut may
+        // come back with them
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) {
+            java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
+                public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
+            });
+            jump += cleanCuts(sg);
+        }
         shotsFromCuts();
         if (opt.technical) validateShots();
         int longest = 0;
@@ -879,6 +894,8 @@ public final class Director {
 
     /** Time for "state" facts (sitting, caged, hiding): the start of the part when it is the opening description. */
     private float ts(float t) { return estab ? seg.t0 : t; }
+    /** v41: as ts, for one character: the part's start only while nothing has been staged for them after it. */
+    private float tsFor(Film.Actor a, float t) { return estab && a.last().t <= seg.t0 + 0.3f ? seg.t0 : t; }
     private Story.CharacterDef lastSubject;
     private List<Story.CharacterDef> lastGroup = new ArrayList<Story.CharacterDef>();
     /** v39: the last group named together anywhere in the story (kept from scene to scene). */
@@ -1411,6 +1428,28 @@ public final class Director {
         // speaker must be visible (and facing us again to speak: a turned back turns round)
         if (!mountLine && sp.stateAt(tc).backTurned) { Film.Key kb = sp.at(tc); kb.backTurned = false; }
         Film.Key cur = sp.stateAt(tc);
+        // v41: one who went off (rode away, walked out) and now speaks comes back in first, from the side they left by,
+        // to a free spot — never a voice from beyond the edge of the picture, nor a figure popping up out there
+        float sx0 = xAt(sp, tc);
+        if (!mountLine && cur.anchor == Film.A_GROUND && (sx0 < 40 || sx0 > 1240)) {
+            float from = sx0 < 640 ? -120 : 1400, to = from < 0 ? 260 : 1020;
+            for (int tries = 0; tries < 6; tries++) {
+                boolean free = true;
+                for (Film.Actor o : seg.actors) if (o != sp && o.stateAt(tc).visible && Math.abs(xAt(o, tc) - to) < 130) free = false;
+                if (free) break;
+                to += from < 0 ? 150 : -150;
+            }
+            Film.Key in = sp.at(tc);
+            in.visible = true; in.x = from; in.moveDur = 0; in.facing = from < 0 ? 1 : -1; in.backTurned = false;
+            if (in.body == Pose.SIT || in.body == Pose.LIE) { in.body = Pose.STAND; in.seat = -1; }
+            Film.Key go = sp.at(tc + 0.05f);
+            go.x = to; go.moveDur = Math.max(1.0f, Math.min(2.2f, Math.abs(to - from) / 330f)); go.run = false;
+            if (indoors(seg.set)) door(tc - 0.15f, from < 0 ? -0.6f : 0.6f);
+            leftFrom.remove(sp);
+            cameBackToSpeak++;
+            film.notes.add(String.format(java.util.Locale.US, "  ↳ %s comes back in to speak (%.1f s)", sp.c.shown(), tc));
+            cur = sp.stateAt(tc);
+        }
         if (!cur.visible) { Film.Key k = sp.at(tc); k.visible = true; }
         if (cur.anchor == Film.A_HIDDEN) { Film.Key k = sp.at(tc); k.anchor = Film.A_GROUND; }
 
@@ -2045,6 +2084,7 @@ public final class Director {
         if (headTop < cy - fh / 2 + 0.06f * fh) cy = headTop - 0.06f * fh + fh / 2;
         float hw = 360f / zoom * TechnicalDirector.ratio(opt.aspect);
         Film.Cam c = new Film.Cam(t, Math.max(hw, Math.min(1280 - hw, fb[0])), cy, zoom, 0);
+        c.subject = a;
         c.still = true;
         c.light = light;
         return c;
@@ -2263,6 +2303,9 @@ public final class Director {
                     if (Math.abs(x - c.cx) < intent / 2) subj.add(a);
                     if (Math.abs(x - c.cx) < bd) { bd = Math.abs(x - c.cx); main = a; }
                 }
+                // v41: a face shot stays on the one it was made for (nudged once, the nearest to its centre may be a
+                // neighbour, and the next pass would frame them instead)
+                if (c.subject != null && c.subject.stateAt(t).visible && sg.actors.contains(c.subject)) main = c.subject;
                 if (main == null) continue;
                 if (faceShot) {
                     // a face shot is framed on its face already; keep the face inside the centre 60%, and nobody
@@ -3214,12 +3257,17 @@ public final class Director {
         if (Txt.has(s, "खेल रही", "खेल रहा", "खेलना") && subj != null && !Txt.has(s, "छोड़")) subj.acts.add(new Film.Act(t, t + 3f, Film.G_PLAY));
         if (Txt.has(s, "खेलना छोड़") && subj != null) { Film.Key k = subj.at(t); k.emotion = Pose.CURIOUS; }
         if (Txt.has(s, "आँखें") && Txt.has(s, "उत्सुकता", "चमक उठ") && subj != null && subj.look.hero) { camOn(subj, t, 1.8f); focusSet = true; }
-        if (Txt.has(s, "तरफ बढ़", "ओर बढ़", "की तरफ चल") && subj != null) {
+        // (v41: "घर की तरफ चल पड़ते हैं" is going home — the walk off of travelFrom, after a hug if there is one — not
+        // a step toward someone; one sitting gets up first)
+        if (Txt.has(s, "तरफ बढ़", "ओर बढ़", "की तरफ चल") && subj != null && !Txt.has(s, "घर की तरफ", "घर की ओर")) {
             Film.Actor dest = target;
             if (dest == null) for (Film.Actor a : seg.actors) if (!a.look.hero && a.stateAt(t).visible) dest = a;
             float x = dest != null ? xAt(dest, t) - Math.signum(xAt(dest, t) - xAt(subj, t)) * 150 : Math.min(1100, xAt(subj, t) + 260);
-            Film.Key k = subj.at(t); k.x = x; k.moveDur = 2.2f; k.facing = x > xAt(subj, t) ? 1 : -1;
-            d = Math.max(d, 2.4f);
+            Film.Key b0 = subj.stateAt(t);
+            float tw = t;
+            if ((b0.body == Pose.SIT || b0.body == Pose.LIE) && subj.look.isHumanoid()) { Film.Key up = subj.at(t); up.body = Pose.STAND; up.seat = -1; tw = t + 0.6f; stoodToWalk++; }
+            Film.Key k = subj.at(tw); k.x = x; k.moveDur = 2.2f; k.facing = x > xAt(subj, t) ? 1 : -1;
+            d = Math.max(d, 2.4f + (tw - t));
         }
         if (Txt.has(s, "टिमटिमा")) fx(Film.FX_LADDOO_GLOW, t, t + 3, 0, 0, null, null);
         if (Txt.has(s, "छुआ", "छूते")) {
@@ -4759,7 +4807,9 @@ public final class Director {
             // v39: "पास आकर बैठती है" — they come first (the walk is staged after this rule) and sit there: never at the scene's start
             boolean comeThenSit = Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat");
             for (Film.Actor a : who) {
-                Film.Key k = a.at(comeThenSit ? t : ts(t));
+                // v41: "from the start" only for one with nothing staged yet in this part (not under a run already made)
+                float ta = comeThenSit ? t : tsFor(a, t);
+                Film.Key k = a.at(ta);
                 k.body = Pose.SIT;
                 int st = seat;
                 if (st == -2) {
@@ -4771,13 +4821,13 @@ public final class Director {
                 k.seat = st;
                 // v35: the furniture is heard as they sit (a chair's creak, a sofa's soft thump, a bed's frame)
                 if (st == Film.SEAT_CHAIR || st == Film.SEAT_SOFA || st == Film.SEAT_BED || st == Film.SEAT_STOOL)
-                    film.sfx.add(sfxAt(st == Film.SEAT_SOFA ? Film.SFX_SOFA : st == Film.SEAT_BED ? Film.SFX_BED : Film.SFX_CHAIR, ts(t) + 0.45f, 0.7f, 0.3f, a));
+                    film.sfx.add(sfxAt(st == Film.SEAT_SOFA ? Film.SFX_SOFA : st == Film.SEAT_BED ? Film.SFX_BED : Film.SFX_CHAIR, ta + 0.45f, 0.7f, 0.3f, a));
                 sittings++;
                 // the seat is furniture: it stays in the place after they get up
                 if (st >= Film.SEAT_STOOL) {
                     boolean have = false;
                     for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && f.a == a) have = true;
-                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, ts(t)), 0, a, null); f.kind = st; }
+                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, ta), 0, a, null); f.kind = st; }
                 }
             }
             d = Math.max(d, estab ? 0 : 1.0f);
@@ -5047,7 +5097,7 @@ public final class Director {
     private float playDelay;
     /** v41: how long after the sentence's start a walk it names waits (the hug before it is over). */
     private float travelAfter;
-    int umbrellasTaken;
+    int umbrellasTaken, cameBackToSpeak;
     /** v41: the sentence being staged is one of the playground (playKind): its sitting is on the seat of the swing or the top of the slide. */
     private int playSentence;
     int swingRides, swingChanges, slideClimbs, slideRuns, playProps, emptySwingShots, groundThings, stoodToWalk, familyRides, handsHeld, puddleJumps, groupHugs;
@@ -6024,13 +6074,24 @@ public final class Director {
         float gap = 95 + (a.look.kind == Look.MONSTER || to.look.kind == Look.MONSTER ? 80 : 0);
         float dest = ax < tx ? tx - gap : tx + gap;
         if (Math.abs(dest - ax) < 10) return;
-        Film.Key k = a.at(t);
+        // v41: one sitting or lying gets up first (never slides across the ground seated or lying down)
+        Film.Key st = a.stateAt(t);
+        float tm = t;
+        if ((st.body == Pose.SIT || st.body == Pose.LIE) && st.anchor == Film.A_GROUND && a.look.isHumanoid()) {
+            Film.Key up = a.at(t); up.body = Pose.STAND; up.seat = -1; up.eyesShut = false;
+            tm = t + (st.body == Pose.LIE ? 0.8f : 0.45f);
+            stoodToWalk++;
+        }
+        Film.Key k = a.at(tm);
         k.x = dest; k.moveDur = Math.max(0.3f, dur); k.facing = tx > dest ? 1 : -1;
         if (k.anchor != Film.A_GROUND && k.anchor != Film.A_CAGE) k.anchor = Film.A_GROUND;
     }
 
     private void runBackForth(Film.Actor a, float t, float dur) {
         float x0 = xAt(a, t);
+        // v41: one sitting or lying gets up before running off after it
+        Film.Key st = a.stateAt(t);
+        if ((st.body == Pose.SIT || st.body == Pose.LIE) && a.look.isHumanoid()) { Film.Key up = a.at(t); up.body = Pose.STAND; up.seat = -1; up.eyesShut = false; t += 0.5f; stoodToWalk++; }
         Film.Key k1 = a.at(t); k1.x = x0 + 220; k1.moveDur = dur * 0.45f; k1.run = true; k1.facing = 1;
         Film.Key k2 = a.at(t + dur * 0.5f); k2.x = x0 + 40; k2.moveDur = dur * 0.45f; k2.run = true; k2.facing = -1;
         Film.Key k3 = a.at(t + dur); k3.facing = 1;

@@ -345,6 +345,8 @@ public final class Film {
         public boolean reverse;
         /** v41: a shot of the place itself (the empty swing swaying): the framing passes that keep a character in the frame leave it as it is. */
         public boolean place;
+        /** v41: the one a face shot is about (a line's close-up): the framing passes keep it on them, not on a neighbour. */
+        public Actor subject;
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

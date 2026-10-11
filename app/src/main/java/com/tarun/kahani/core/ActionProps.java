@@ -271,112 +271,175 @@ public final class ActionProps {
     // ------------------------------------------------------------------ the inserts (whole frame)
 
     /**
-     * The driver's view down onto the steering wheel, both hands on it at ten to two, the dashboard and the road
-     * through the windscreen; the wheel turns (moves: Film.INS_MOVE_TURN_L / _R) and comes back. w, h: the frame.
+     * The driver's view: the road ahead through the windscreen, the dashboard with its glowing dials, the steering
+     * wheel with both hands on it at ten to two, the sleeves coming up from below; the wheel turns (moves:
+     * Film.INS_MOVE_TURN_L / _R) and comes back, the hands with it. w, h: the frame.
      */
     public static void insertSteer(Gfx g, float w, float h, float u, float d, int moves, int skin, int sleeve) {
         // the road through the glass, rushing by
-        g.linear(0, 0, 0, h * 0.55f, 0xFF9EC9EB, 0xFFDDEBF3); g.rect(0, 0, w, h * 0.55f);
-        g.color(0xFF7CB342); g.rect(0, h * 0.42f, w, h * 0.2f);
-        g.color(0xFF616161);
-        g.begin(); g.moveTo(w * 0.42f, h * 0.42f); g.lineTo(w * 0.58f, h * 0.42f); g.lineTo(w * 0.95f, h * 0.62f); g.lineTo(w * 0.05f, h * 0.62f); g.close(); g.fillPath();
+        g.linear(0, 0, 0, h * 0.5f, 0xFF8EC3EA, 0xFFE3EEF4); g.rect(0, 0, w, h * 0.5f);
+        g.color(0xFF7CB342); g.rect(0, h * 0.36f, w, h * 0.2f);
+        g.color(0xFF9E9E9E); g.oval(w * 0.2f, h * 0.36f, w * 0.12f, h * 0.03f); g.oval(w * 0.85f, h * 0.37f, w * 0.1f, h * 0.025f);
+        g.color(0xFF5F6366);
+        g.begin(); g.moveTo(w * 0.46f, h * 0.36f); g.lineTo(w * 0.54f, h * 0.36f); g.lineTo(w * 0.98f, h * 0.56f); g.lineTo(w * 0.02f, h * 0.56f); g.close(); g.fillPath();
         g.color(0xFFF5F5F5);
-        for (int i = 0; i < 4; i++) {
-            float k = ((u * 1.4f + i * 0.25f) % 1f), y0 = h * (0.42f + 0.2f * k * k), y1 = h * (0.42f + 0.2f * Math.min(1, (k + 0.08f) * (k + 0.08f)));
-            g.line(w * 0.5f, y0, w * 0.5f, y1, 1 + 6 * k);
+        for (int i = 0; i < 5; i++) {
+            float k = ((u * 1.6f + i * 0.2f) % 1f), y0 = h * (0.36f + 0.2f * k * k), y1 = h * (0.36f + 0.2f * Math.min(1, (k + 0.06f) * (k + 0.06f)));
+            g.line(w * 0.5f, y0, w * 0.5f, y1, 1 + 7 * k);
         }
-        // the dashboard: dark, with the dials glowing
-        g.color(0xFF263238);
-        g.begin(); g.moveTo(0, h * 0.5f); g.quadTo(w * 0.5f, h * 0.43f, w, h * 0.5f); g.lineTo(w, h); g.lineTo(0, h); g.close(); g.fillPath();
-        g.color(0xFF37474F); g.roundRect(w * 0.32f, h * 0.53f, w * 0.36f, h * 0.12f, h * 0.03f);
+        // the windscreen's frame and the mirror
+        g.color(0xFF1E272C); g.rect(0, 0, w, h * 0.05f); g.line(0, h * 0.05f, w * 0.07f, h * 0.48f, h * 0.06f); g.line(w, h * 0.05f, w * 0.93f, h * 0.48f, h * 0.06f);
+        g.color(0xFF263238); g.roundRect(w * 0.45f, h * 0.06f, w * 0.1f, h * 0.05f, h * 0.02f);
+        // the dashboard
+        g.color(0xFF2C3A41);
+        g.begin(); g.moveTo(0, h * 0.5f); g.quadTo(w * 0.5f, h * 0.42f, w, h * 0.5f); g.lineTo(w, h); g.lineTo(0, h); g.close(); g.fillPath();
+        g.color(0xFF1F2A30); g.roundRect(w * 0.36f, h * 0.5f, w * 0.28f, h * 0.15f, h * 0.04f);
         for (int i = 0; i < 2; i++) {
-            float cx = w * (0.42f + i * 0.16f), cy = h * 0.59f, r = h * 0.045f;
-            g.color(0xFF102027); g.oval(cx, cy, r, r);
+            float cx = w * (0.43f + i * 0.14f), cy = h * 0.575f, r = h * 0.055f;
+            g.color(0xFF0D1418); g.oval(cx, cy, r, r);
             g.color(0xFF4FC3F7); g.strokeOval(cx, cy, r, r, 1.5f);
-            float a = (float) Math.toRadians(200 + 120 * Math.min(1, u / d * 1.5f) + i * 20);
-            g.color(0xFFFF7043); g.line(cx, cy, cx + (float) Math.cos(a) * r * 0.85f, cy + (float) Math.sin(a) * r * 0.85f, 2);
+            for (int tk = 0; tk < 7; tk++) { double ta = Math.toRadians(150 + tk * 40); g.line(cx + (float) Math.cos(ta) * r * 0.8f, cy + (float) Math.sin(ta) * r * 0.8f, cx + (float) Math.cos(ta) * r * 0.95f, cy + (float) Math.sin(ta) * r * 0.95f, 1); }
+            float a = (float) Math.toRadians(150 + 160 * Math.min(1, 0.3f + u / Math.max(0.3f, d)) * (i == 0 ? 0.7f : 1f));
+            g.color(0xFFFF7043); g.line(cx, cy, cx + (float) Math.cos(a) * r * 0.8f, cy + (float) Math.sin(a) * r * 0.8f, 2.2f);
         }
         // the wheel, turned and back
         float dir = (moves & Film.INS_MOVE_TURN_L) != 0 ? -1 : (moves & Film.INS_MOVE_TURN_R) != 0 ? 1 : 0;
-        float turn = dir != 0 ? dir * 75 * (float) Math.sin(Math.PI * Math.min(1, u / Math.max(0.3f, d))) : (float) Math.sin(u * 3.1f) * 8;
-        float cx = w * 0.5f, cy = h * 0.93f, R = h * 0.42f;
+        float turn = dir != 0 ? dir * 55 * (float) Math.sin(Math.PI * Math.min(1, u / Math.max(0.3f, d))) : (float) Math.sin(u * 3.1f) * 7;
+        float cx = w * 0.5f, cy = h * 0.8f, R = h * 0.3f;
         g.save(); g.translate(cx, cy); g.rotate(turn);
-        g.color(0xFF1B1B1B); g.strokeOval(0, 0, R, R * 0.92f, h * 0.05f);
-        g.color(0xFF2E2E2E); g.line(-R * 0.95f, 0, R * 0.95f, 0, h * 0.04f); g.line(0, 0, 0, R * 0.9f, h * 0.04f);
-        g.color(0xFF424242); g.oval(0, 0, R * 0.22f, R * 0.2f);
-        g.color(0xFFB0BEC5); g.oval(0, -R * 0.02f, R * 0.07f, R * 0.06f);
-        // the hands round the rim at ten to two, the sleeves coming in from below
-        for (int sdx = -1; sdx <= 1; sdx += 2) {
-            double a = Math.toRadians(sdx < 0 ? 215 : 325);
-            float hx = (float) Math.cos(a) * R, hy = (float) Math.sin(a) * R * 0.92f;
-            g.color(sleeve); g.line(hx, hy, hx + sdx * R * 0.25f, hy + R * 1.2f, h * 0.11f);
-            g.color(skin); g.roundRect(hx - h * 0.055f, hy - h * 0.05f, h * 0.11f, h * 0.1f, h * 0.035f);
-            g.color(Puppet.shade(skin, 0.85f));
-            for (int i = 0; i < 3; i++) g.line(hx - h * 0.035f + i * h * 0.03f, hy - h * 0.045f, hx - h * 0.035f + i * h * 0.03f, hy + h * 0.02f, 1.2f);
-        }
+        g.color(0xFF151515); g.strokeOval(0, 0, R, R * 0.94f, h * 0.045f);
+        g.color(0xFF262626); g.line(-R * 0.96f, R * 0.05f, -R * 0.2f, R * 0.08f, h * 0.035f); g.line(R * 0.96f, R * 0.05f, R * 0.2f, R * 0.08f, h * 0.035f); g.line(0, R * 0.2f, 0, R * 0.9f, h * 0.035f);
+        g.color(0xFF333333); g.roundRect(-R * 0.26f, -R * 0.18f, R * 0.52f, R * 0.4f, R * 0.12f);
+        g.color(0xFFB0BEC5); g.oval(0, 0, R * 0.08f, R * 0.06f);
         g.restore();
+        // the hands round the rim at ten to two (turned with it), the forearms up from the bottom of the frame
+        for (int sdx = -1; sdx <= 1; sdx += 2) {
+            double a = Math.toRadians((sdx < 0 ? 210 : 330) + turn);
+            float hx = cx + (float) Math.cos(a) * R, hy = cy + (float) Math.sin(a) * R * 0.94f;
+            float ex = cx + sdx * w * 0.3f, ey = h * 1.05f;
+            g.color(Puppet.shade(sleeve, 0.9f)); g.line(ex, ey, hx + sdx * h * 0.02f, hy + h * 0.06f, h * 0.1f);
+            g.color(skin); g.line(hx + sdx * h * 0.02f, hy + h * 0.06f, hx, hy, h * 0.075f);
+            g.save(); g.translate(hx, hy); g.rotate((float) Math.toDegrees(a) + 90);
+            g.color(skin); g.roundRect(-h * 0.045f, -h * 0.05f, h * 0.09f, h * 0.085f, h * 0.03f);
+            g.color(Puppet.shade(skin, 0.82f));
+            for (int i = 0; i < 3; i++) g.line(-h * 0.03f + i * h * 0.03f, -h * 0.045f, -h * 0.03f + i * h * 0.03f, h * 0.0f, 1.3f);
+            g.restore();
+        }
     }
 
     /**
-     * The footwell: the brake pedal (wide) and the accelerator (tall), a shoe on them. GO: the foot presses the
-     * accelerator down; BRAKE: it lifts off, moves across and presses the brake (HARD: fast and right down).
+     * The pedals seen from the side, low in the footwell (the car's front to the right): the brake hanging from above,
+     * the accelerator rising from the floor, the shoe on them, the trouser leg up to the seat. GO: the heel on the floor,
+     * the sole pressing the accelerator down; BRAKE: the foot lifts off it, swings back and presses the brake
+     * (HARD: fast and right down, the frame jolting).
      */
     public static void insertPedals(Gfx g, float w, float h, float u, float d, int moves, int shoe, int trouser) {
-        g.linear(0, 0, 0, h, 0xFF1C2328, 0xFF0E1214); g.rect(0, 0, w, h);
-        g.color(0xFF263238); g.rect(0, h * 0.82f, w, h * 0.18f);
-        for (int i = 0; i < 9; i++) { g.color(0xFF1A2126); g.rect(w * 0.08f + i * w * 0.1f, h * 0.84f, w * 0.06f, h * 0.14f); }
+        g.linear(0, 0, 0, h, 0xFF2A353B, 0xFF12181B); g.rect(0, 0, w, h);
+        // the floor with its mat, the firewall sloping up to the right
+        float floor = h * 0.84f;
+        g.color(0xFF1B2226); g.rect(0, floor, w, h - floor);
+        g.color(0xFF262F34); for (int i = 0; i < 14; i++) g.rect(i * w / 14f + 6, floor + 6, w / 14f - 12, h * 0.08f);
+        g.color(0xFF0F1417); g.begin(); g.moveTo(w * 0.86f, floor); g.lineTo(w, h * 0.45f); g.lineTo(w, floor); g.close(); g.fillPath();
         boolean brake = (moves & Film.INS_MOVE_BRAKE) != 0, hard = (moves & Film.INS_MOVE_HARD) != 0;
         float k = u / Math.max(0.3f, d);
-        float bx = w * 0.4f, ax = w * 0.66f;
-        // how far each pedal is pressed, and where the foot is
-        float accel, br, fx;
-        if (!brake) { accel = Rig.smooth(0.1f, 0.45f, k); br = 0; fx = ax; }
+        float accel, br, across;
+        if (!brake) { accel = Rig.smooth(0.1f, 0.45f, k); br = 0; across = 0; }
         else {
-            float lift = Rig.smooth(0.05f, hard ? 0.18f : 0.3f, k), on = Rig.smooth(hard ? 0.18f : 0.3f, hard ? 0.32f : 0.55f, k);
-            accel = 0.5f * (1 - lift); fx = ax + (bx - ax) * Rig.smooth(hard ? 0.12f : 0.2f, hard ? 0.28f : 0.45f, k); br = on * (hard ? 1 : 0.7f);
+            float a1 = hard ? 0.12f : 0.2f, a2 = hard ? 0.26f : 0.45f, b2 = hard ? 0.36f : 0.6f;
+            accel = 0.55f * (1 - Rig.smooth(0.02f, a1, k)); across = Rig.smooth(a1 * 0.6f, a2, k); br = Rig.smooth(a2, b2, k) * (hard ? 1 : 0.7f);
         }
-        // the brake pedal
-        float by0 = h * 0.42f + br * h * 0.12f;
-        g.color(0xFF455A64); g.line(bx, h * 0.05f, bx, by0, w * 0.018f);
-        g.color(0xFF212121); g.roundRect(bx - w * 0.07f, by0 - h * 0.05f, w * 0.14f, h * 0.11f, h * 0.02f);
-        g.color(0xFF424242); for (int i = 0; i < 4; i++) g.line(bx - w * 0.06f, by0 - h * 0.03f + i * h * 0.022f, bx + w * 0.06f, by0 - h * 0.03f + i * h * 0.022f, 1.2f);
-        // the accelerator
-        float ay0 = h * 0.5f + accel * h * 0.1f;
-        g.color(0xFF455A64); g.line(ax, h * 0.1f, ax, ay0, w * 0.014f);
-        g.color(0xFF212121); g.roundRect(ax - w * 0.035f, ay0 - h * 0.1f, w * 0.07f, h * 0.2f, h * 0.02f);
-        // the foot: the trouser leg from above, the shoe pressing
-        float press = brake ? br : accel, lifted = brake ? (1 - Rig.smooth(hard ? 0.18f : 0.3f, hard ? 0.3f : 0.5f, k)) * Rig.smooth(0.05f, 0.2f, k) : 0;
-        float fy = (Math.abs(fx - bx) < Math.abs(fx - ax) ? by0 : ay0) - h * 0.08f - lifted * h * 0.08f + press * h * 0.02f;
-        g.color(trouser);
-        g.begin(); g.moveTo(fx - w * 0.09f, 0); g.lineTo(fx + w * 0.07f, 0); g.lineTo(fx + w * 0.06f, fy - h * 0.12f); g.lineTo(fx - w * 0.07f, fy - h * 0.12f); g.close(); g.fillPath();
-        g.color(shoe); g.roundRect(fx - w * 0.075f, fy - h * 0.16f, w * 0.15f, h * 0.26f, w * 0.05f);
-        g.color(Puppet.shade(shoe, 1.3f)); g.oval(fx - w * 0.02f, fy - h * 0.1f, w * 0.03f, h * 0.05f);
-        if (brake && hard && k > 0.3f) { g.color(alpha(0xFFFFFFFF, 0.12f * (1 - Rig.smooth(0.3f, 0.6f, k)))); g.rect(0, 0, w, h); }
+        if (brake && hard && k > 0.3f && k < 0.5f) g.translate((float) Math.sin(k * 90) * 6, 0);
+        // the brake: an arm hanging from its pivot under the dash, its pad facing back at the driver — pressed, it swings forward
+        float bpx = w * 0.7f, bpy = h * 0.06f, L = h * 0.5f;
+        double ba = Math.toRadians(-14 + 18 * br);          // from straight down; + swings the pad forward (right)
+        float bx = bpx + (float) Math.sin(ba) * L, by = bpy + (float) Math.cos(ba) * L;
+        g.color(0xFF546E7A); g.line(bpx, bpy, bx, by, h * 0.025f);
+        g.color(0xFF37474F); g.oval(bpx, bpy, h * 0.028f, h * 0.028f);
+        g.save(); g.translate(bx, by); g.rotate((float) Math.toDegrees(-ba));
+        g.color(0xFF111111); g.roundRect(-h * 0.035f, -h * 0.07f, h * 0.05f, h * 0.15f, h * 0.015f);
+        g.color(0xFF333333); for (int i = 0; i < 4; i++) g.line(-h * 0.03f, -h * 0.045f + i * h * 0.03f, h * 0.0f, -h * 0.045f + i * h * 0.03f, 1.5f);
+        g.restore();
+        // the accelerator: hinged on the floor at the heel's end, its pad rising forward — pressed, it goes down flat
+        float apx = w * 0.56f, apy = floor - h * 0.015f, AL = h * 0.3f;
+        double aa = Math.toRadians(40 - 16 * accel);
+        float ax = apx + (float) Math.cos(aa) * AL, ay = apy - (float) Math.sin(aa) * AL;
+        g.color(0xFF151515); g.line(apx, apy, ax, ay, h * 0.045f);
+        g.color(0xFF2E2E2E); for (int i = 1; i < 5; i++) { float q = i / 5f; g.oval(apx + (ax - apx) * q, apy + (ay - apy) * q - h * 0.012f, h * 0.008f, h * 0.004f); }
+        // the foot: the heel by the hinge, the sole along the accelerator — or lifted across onto the brake's pad
+        float heelX = apx - h * 0.03f + (bx - h * 0.27f - (apx - h * 0.03f)) * across, heelY = floor - h * 0.04f - across * h * 0.2f;
+        float toeX = across < 0.5f ? ax : bx - h * 0.035f, toeY = across < 0.5f ? ay - h * 0.035f : by;
+        if (across > 0.05f && across < 0.95f) toeY -= h * 0.1f * (float) Math.sin(Math.PI * across);
+        float fdx = toeX - heelX, fdy = toeY - heelY, fl = (float) Math.sqrt(fdx * fdx + fdy * fdy);
+        float ang = (float) Math.toDegrees(Math.atan2(fdy, fdx));
+        // the shin from the ankle up and back to the knee, the thigh out of the top of the frame towards the seat
+        double ar = Math.toRadians(ang);
+        float ankX = heelX + (float) Math.cos(ar) * fl * 0.22f + (float) Math.sin(ar) * h * 0.09f, ankY = heelY + (float) Math.sin(ar) * fl * 0.22f - (float) Math.cos(ar) * h * 0.09f;
+        float kneeX = ankX - w * 0.2f, kneeY = h * 0.06f;
+        g.color(Puppet.shade(trouser, 0.85f)); g.line(kneeX, kneeY, kneeX - w * 0.3f, -h * 0.08f, h * 0.17f);
+        g.color(trouser); g.line(ankX, ankY, kneeX, kneeY, h * 0.12f);
+        g.color(Puppet.shade(trouser, 0.75f)); g.line(ankX - h * 0.035f, ankY - h * 0.01f, kneeX - h * 0.03f, kneeY + h * 0.01f, h * 0.012f);
+        g.save(); g.translate(heelX, heelY); g.rotate(ang);
+        float sl = Math.max(fl, h * 0.24f);
+        g.color(0xFF1A1A1A); g.roundRect(-h * 0.02f, h * 0.0f, sl + h * 0.03f, h * 0.035f, h * 0.015f);                 // the sole
+        g.color(0xFF141414); g.rect(-h * 0.02f, h * 0.02f, h * 0.06f, h * 0.035f);                                         // the heel block
+        g.color(shoe);
+        g.begin(); g.moveTo(-h * 0.02f, h * 0.005f); g.lineTo(-h * 0.02f, -h * 0.09f); g.quadTo(sl * 0.3f, -h * 0.12f, sl * 0.55f, -h * 0.075f);
+        g.quadTo(sl * 0.92f, -h * 0.06f, sl + h * 0.01f, h * 0.005f); g.close(); g.fillPath();
+        g.color(Puppet.shade(shoe, 1.35f)); g.oval(sl * 0.7f, -h * 0.045f, sl * 0.1f, h * 0.012f);
+        g.color(0xFFEEEEEE); for (int i = 0; i < 3; i++) g.line(sl * (0.3f + i * 0.07f), -h * 0.092f + i * h * 0.007f, sl * (0.35f + i * 0.07f), -h * 0.08f + i * h * 0.007f, 1.4f);
+        g.restore();
+        if (brake && hard && k > 0.3f) { g.color(alpha(0xFFFFFFFF, 0.1f * (1 - Rig.smooth(0.3f, 0.6f, k)))); g.rect(0, 0, w, h); }
     }
 
-    /** A cyclist's feet on the pedals, close and low: the chain ring and the cranks going round, the road streaming below. */
+    /**
+     * A cyclist's feet on the pedals, low and close from the side: the chain ring and the cranks going round with the
+     * ride, each shoe on its pedal and the legs bending at the knee as it rises and falls (the far one half a turn on,
+     * darker), the road streaming by below. hard: faster, out of the saddle.
+     */
     public static void insertCycleFeet(Gfx g, float w, float h, float u, float t, boolean hard, int shoe, int trouser, int frame) {
-        g.linear(0, 0, 0, h, 0xFFB9D7E8, 0xFFE8F1F5); g.rect(0, 0, w, h * 0.7f);
-        g.color(0xFF757575); g.rect(0, h * 0.7f, w, h * 0.3f);
-        g.color(0xFFBDBDBD);
-        for (int i = 0; i < 6; i++) { float x = w - ((u * (hard ? 900 : 600) + i * w / 5f) % (w * 1.2f)); g.rect(x, h * 0.84f, w * 0.08f, 4); }
-        float cx = w * 0.5f, cy = h * 0.55f, R = h * 0.2f, ang = u * (hard ? 9f : 6f);
-        // the frame tubes into the bottom bracket, the chain ring with its teeth, the chain back to the wheel
-        g.color(frame); g.line(cx, cy, cx - w * 0.45f, cy - h * 0.2f, h * 0.05f); g.line(cx, cy, cx + w * 0.2f, cy - h * 0.6f, h * 0.05f); g.line(cx, cy, cx - w * 0.15f, cy - h * 0.7f, h * 0.045f);
-        g.color(0xFF9E9E9E); g.strokeOval(cx, cy, R * 0.7f, R * 0.7f, h * 0.02f);
-        for (int i = 0; i < 20; i++) { double a = ang + i * Math.PI / 10; g.oval(cx + (float) Math.cos(a) * R * 0.72f, cy + (float) Math.sin(a) * R * 0.72f, 2, 2); }
-        g.color(0xFF616161); g.line(cx, cy - R * 0.7f, 0, cy - R * 0.3f, 3); g.line(cx, cy + R * 0.7f, 0, cy + R * 0.2f, 3);
-        for (int sdx = 0; sdx < 2; sdx++) {
-            double a = ang + sdx * Math.PI;
+        g.linear(0, 0, 0, h, 0xFFAFD3E8, 0xFFE6F0F4); g.rect(0, 0, w, h * 0.72f);
+        g.color(0xFF8BC34A); g.rect(0, h * 0.6f, w, h * 0.12f);
+        g.color(0xFF6B6F72); g.rect(0, h * 0.72f, w, h * 0.28f);
+        g.color(0xFFCFD8DC);
+        float speed = hard ? 1100 : 700;
+        for (int i = 0; i < 7; i++) { float x = w - ((u * speed + i * w / 6f) % (w * 1.2f)); g.rect(x, h * 0.86f, w * 0.07f, 5); }
+        for (int i = 0; i < 9; i++) { float x = w - ((u * speed * 0.5f + i * w / 8f) % (w * 1.15f)); g.color(0xFF7CB342); g.oval(x, h * 0.62f, w * 0.03f, h * 0.02f); }
+        float cx = w * 0.52f, cy = h * 0.6f, R = h * 0.16f, ang = u * (hard ? 10f : 6.5f);
+        // the frame: the chain stay back to the rear wheel, the down tube and the seat tube up out of the frame
+        g.color(Puppet.shade(frame, 0.8f)); g.line(cx, cy, -w * 0.05f, cy - h * 0.06f, h * 0.035f);
+        g.color(frame); g.line(cx, cy, cx + w * 0.42f, -h * 0.1f, h * 0.05f); g.line(cx, cy, cx - w * 0.12f, -h * 0.1f, h * 0.045f);
+        // the far crank, pedal, foot and leg first (darker), then the chain ring, then the near ones
+        for (int pass = 0; pass < 2; pass++) {
+            boolean near = pass == 1;
+            if (near) {
+                g.color(0xFF9E9E9E); g.strokeOval(cx, cy, R * 0.75f, R * 0.75f, h * 0.022f);
+                g.color(0xFF757575);
+                for (int i = 0; i < 24; i++) { double a = ang + i * Math.PI / 12; g.oval(cx + (float) Math.cos(a) * R * 0.78f, cy + (float) Math.sin(a) * R * 0.78f, 2.2f, 2.2f); }
+                g.color(0xFF555555); g.line(cx, cy - R * 0.75f, -w * 0.05f, cy - h * 0.1f, 3); g.line(cx, cy + R * 0.75f, -w * 0.05f, cy - h * 0.02f, 3);
+            }
+            double a = ang + (near ? 0 : Math.PI);
             float px = cx + (float) Math.cos(a) * R, py = cy + (float) Math.sin(a) * R;
-            g.color(sdx == 0 ? 0xFF9E9E9E : 0xFF757575); g.line(cx, cy, px, py, h * 0.03f);
-            // the leg from above the frame to the foot on the pedal
-            float kx = px - w * 0.04f, ky = py - h * 0.45f;
-            g.color(Puppet.shade(trouser, sdx == 0 ? 1f : 0.8f)); g.line(kx, -h * 0.05f, kx + w * 0.03f, ky, h * 0.1f); g.line(kx + w * 0.03f, ky, px, py - h * 0.04f, h * 0.085f);
-            g.color(0xFF212121); g.roundRect(px - w * 0.05f, py - h * 0.012f, w * 0.1f, h * 0.024f, 2);
-            g.color(sdx == 0 ? shoe : Puppet.shade(shoe, 0.8f)); g.roundRect(px - w * 0.065f, py - h * 0.07f, w * 0.13f, h * 0.065f, h * 0.025f);
+            float dim = near ? 1f : 0.72f;
+            g.color(Puppet.shade(0xFFB0BEC5, dim)); g.line(cx, cy, px, py, h * 0.03f);
+            // the leg: hip above the frame, knee out in front, ankle just above the pedal (two-bone reach)
+            float hx = cx - w * 0.1f - (hard ? -w * 0.03f : 0), hy = -h * 0.42f;
+            float ax = px - h * 0.02f, ay = py - h * 0.07f;
+            float L1 = h * 0.62f, L2 = h * 0.6f, dx = ax - hx, dy = ay - hy, dd = (float) Math.sqrt(dx * dx + dy * dy);
+            dd = Math.min(dd, L1 + L2 - 1);
+            double base = Math.atan2(dy, dx), k = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + dd * dd - L2 * L2) / (2 * L1 * dd))));
+            double th = base - k;                                     // the knee bends forward (to the right)
+            float kx = hx + (float) Math.cos(th) * L1, ky = hy + (float) Math.sin(th) * L1;
+            int leg = Puppet.shade(trouser, dim);
+            g.color(leg); g.line(hx, hy, kx, ky, h * 0.15f); g.line(kx, ky, ax, ay, h * 0.12f);
+            g.color(Puppet.shade(trouser, dim * 0.8f)); g.oval(kx, ky, h * 0.065f, h * 0.065f);
+            // the pedal and the shoe on it
+            g.color(0xFF212121); g.roundRect(px - h * 0.07f, py - h * 0.015f, h * 0.14f, h * 0.03f, h * 0.01f);
+            g.color(Puppet.shade(shoe, dim));
+            g.begin(); g.moveTo(px - h * 0.09f, py - h * 0.015f); g.lineTo(px - h * 0.09f, py - h * 0.085f); g.quadTo(px, py - h * 0.11f, px + h * 0.06f, py - h * 0.06f);
+            g.quadTo(px + h * 0.12f, py - h * 0.04f, px + h * 0.12f, py - h * 0.015f); g.close(); g.fillPath();
+            g.color(Puppet.shade(0xFF1A1A1A, dim)); g.rect(px - h * 0.09f, py - h * 0.02f, h * 0.21f, h * 0.012f);
         }
-        g.color(0xFF424242); g.oval(cx, cy, R * 0.12f, R * 0.12f);
+        g.color(0xFF424242); g.oval(cx, cy, R * 0.14f, R * 0.14f);
     }
 
     /** The target close: the rings, an arrow just struck into the gold, quivering. */

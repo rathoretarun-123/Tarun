@@ -3516,9 +3516,11 @@ public final class Director {
         if (after.startsWith("को ") || after.startsWith("को,") || after.equals("को") || after.startsWith("से ") || after.startsWith("पर ")) return true;
         // the one gone up to, or towards ("माँ के पास जाता है", "की ओर", "की तरफ़")
         if (after.startsWith("के पास") || after.startsWith("की ओर") || after.startsWith("की तरफ") || after.startsWith("के करीब") || after.startsWith("के निकट")
-                || after.startsWith("के पीछे") || after.startsWith("के सामने") || after.startsWith("के लिए") || after.startsWith("के साथ")) return true;
+                || after.startsWith("के पीछे") || after.startsWith("के सामने") || after.startsWith("के लिए") || after.startsWith("के साथ")
+                || after.startsWith("के बगल") || after.startsWith("के बाजू") || after.startsWith("के बाज़ू")) return true;
         String before = n.substring(0, Math.max(0, p)).trim();
-        return before.endsWith(" to") || before.endsWith(" from") || before.endsWith(" at") || before.endsWith(" with") || before.endsWith(" for")
+        return before.endsWith(" to") || before.endsWith(" from") || before.endsWith(" at") || before.endsWith(" with") || before.endsWith(" for") || before.endsWith(" beside")
+                || before.endsWith(" next to") || before.endsWith(" behind")
                 || before.endsWith(" of") || before.endsWith(" on") || before.equals("to") || before.equals("from");
     }
 
@@ -3966,7 +3968,9 @@ public final class Director {
             Film.Actor v = subj;
             if (v != null) v.acts.add(new Film.Act(t, t + 0.8f, Film.G_REACH));
         }
-        if (Txt.has(s, "धुएँ", "धुआँ", "धुआं", "smoke") && Txt.has(s, "फट", "गुबार", "फूँक", "छोड़", "निकल", "उठ", "burst", "puff")) {
+        // (v44: smoke from a crashed car's bonnet, or a fire, is no magic puff: the wreck draws its own)
+        if (Txt.has(s, "धुएँ", "धुआँ", "धुआं", "smoke") && Txt.has(s, "फट", "गुबार", "फूँक", "छोड़", "निकल", "उठ", "burst", "puff")
+                && !Txt.has(s, CRASH_WORDS) && !Txt.has(s, "बोनट", "इंजन", "bonnet", "hood", "engine", "गाड़ी", "कार", "car ", "आग", "fire", "चूल्ह", "chimney", "चिमनी")) {
             Film.Actor at = subj;
             if (Txt.has(s, "गायब") || at == null) at = null;
             if (at != null && !Txt.has(s, "गायब")) {
@@ -4402,7 +4406,9 @@ public final class Director {
      */
     private float cuesFrom(String s, float t, Film.Actor subj, Film.Actor target, List<Film.Actor> group) {
         float d = 0;
+        boolean crashing = Txt.has(s, CRASH_WORDS);
         for (Cues.Cue c : Cues.read(s)) {
+            if (crashing && (c.visual == Cues.V_STEAM || c.sfx == Film.SFX_HISS_SHORT || c.sfx == Film.SFX_BOOM)) continue;      // (v44: the wreck's own steam and bang)
             // the same cue is not repeated within a second (a manner and its line, two sentences about one thing)
             Float last = cueAt.get(c.word);
             if (last != null && Math.abs(last - t) < 1f) continue;
@@ -6433,11 +6439,12 @@ public final class Director {
         // ---- the driver's hands and feet, close
         if (car && go + 1.0f < stop) {
             boolean said = false;
-            if (Txt.has(s, ACCEL_WORDS)) { insert(Film.INS_PEDALS, go + 0.15f, go + 1.3f, lead, Film.INS_MOVE_GO); said = true; }
-            if (Txt.has(s, STEER_WORDS) || (Txt.has(s, "स्टार्ट", "starts the car", "starts the engine") && !said)) {
-                float a0 = Math.min(stop - 1.4f, go + (said ? 1.5f : 0.4f));
-                if (a0 > go) { insert(Film.INS_STEER, a0, a0 + 1.3f, lead, dir > 0 ? Film.INS_MOVE_TURN_R : Film.INS_MOVE_TURN_L); said = true; }
+            float at = go + 0.15f;
+            // (in the order a driver does it: the hands on the wheel, then the foot down)
+            if (Txt.has(s, STEER_WORDS) || (Txt.has(s, "स्टार्ट", "starts the car", "starts the engine") && !Txt.has(s, ACCEL_WORDS))) {
+                if (at + 1.2f < stop) { insert(Film.INS_STEER, at, at + 1.25f, lead, dir > 0 ? Film.INS_MOVE_TURN_R : Film.INS_MOVE_TURN_L); at += 1.35f; said = true; }
             }
+            if (Txt.has(s, ACCEL_WORDS) && at + 1.0f < stop) { insert(Film.INS_PEDALS, at, at + 1.15f, lead, Film.INS_MOVE_GO); said = true; }
             if (mishap == Film.MISHAP_NONE && Txt.has(s, BRAKE_WORDS)) {
                 float hard = Txt.has(s, "ज़ोर", "जोर", "अचानक", "hard", "slams", "suddenly") ? Film.INS_MOVE_HARD : 0;
                 insert(Film.INS_PEDALS, stop - 1.0f, stop - 0.1f, lead, Film.INS_MOVE_BRAKE | (int) hard);
@@ -6495,7 +6502,8 @@ public final class Director {
         Film.Act f = new Film.Act(t, t + 2.4f, Film.G_FALL);
         f.item = dir > 0 ? 1 : -1;
         a.acts.add(f);
-        Film.Key k = keyAt(a, t); k.x = Math.max(120, Math.min(1160, x)); k.moveDur = 0.35f; k.body = Pose.LIE; k.seat = -1; k.emotion = Pose.PAIN; k.facing = dir; k.run = false;
+        // (thrown down as it goes over — a short slide on the road, never a long one lying)
+        Film.Key k = keyAt(a, t); k.x = Math.max(120, Math.min(1160, x)); k.moveDur = 0.3f; k.body = Pose.LIE; k.seat = -1; k.emotion = Pose.PAIN; k.facing = dir; k.run = false;
         Film.Key up = keyAt(a, t + 1.5f); up.body = Pose.STAND; up.emotion = Pose.PAIN;
         Film.Key ok = keyAt(a, t + 3.2f); ok.emotion = Pose.SAD;
     }
@@ -6784,6 +6792,7 @@ public final class Director {
             if (cast) continue;
             if (sp == Look.SP_HORSE && subj != null && subj.look != null && vehicleIn(s, subj.look.isChild()) == Film.V_HORSE) continue;
             if (sp == Look.SP_PEACOCK && !Txt.has(s, "मोर ", "मोर।", "मोर,", "peacock")) continue;
+            if (subj != null && subj.look != null && vehicleIn(s, subj.look.isChild()) != 0 && mishapIn(s, vehicleIn(s, subj.look.isChild())) != 0) continue;   // (the ride's own)
             boolean feed = Txt.has(s, "खिला", "चारा", "दाना", "feeds", "feeding", "gives food", "रोटी डाल"), pat = Txt.has(s, "सहला", "पुचकार", "pats", "strokes", "pets ", "cuddles");
             boolean milk = Txt.has(s, "दुह", "दूध निकाल", "milks", "milking");
             boolean near = subj != null && (feed || pat || milk) && subj.look != null && subj.look.isHumanoid();
@@ -6825,6 +6834,26 @@ public final class Director {
             } else d = Math.max(d, 1.6f);
         }
         return d;
+    }
+
+    /**
+     * v44: whether one who got off a ride has done anything since but talk, listen or nod (a walk, another act, sitting
+     * down): if not, a later ride of the same vehicle carries straight on from the first.
+     */
+    private boolean busySince(Film.Actor a, Film.Act r, float t) {
+        List<Object[]> outs = outKeys.get(r);
+        for (Film.Act x : a.acts)
+            if (x != r && x.t0 > r.t1 - 0.05f && x.t0 < t && x.type != Film.G_TALK && x.type != Film.G_LISTEN && x.type != Film.G_SIGN && !gestureOnSeat(x.type)) return true;
+        Film.Key prev = null;
+        for (Film.Key k : a.keys) {
+            if (k.t > r.t1 + 0.05f && k.t < t && prev != null) {
+                boolean out = false;
+                if (outs != null) for (Object[] o : outs) if (o[1] == k) out = true;
+                if (!out && (k.moveDur > 0 || k.body != prev.body || k.visible != prev.visible)) return true;
+            }
+            prev = k;
+        }
+        return false;
     }
 
     /** v44: the grown-up on the stage who would drive the family's car (a father first, then a mother), or null. */
@@ -7492,7 +7521,9 @@ public final class Director {
                     && !Txt.has(s, "चला", "चलाते", "चलाती", "चलाता", "drive", "drives", "driving", "drove", "ड्राइव");
             // v43: "प्रिया स्कूटर पर पीछे बैठती है", "sits behind him on the bike": a pillion rider, on the one who rides it
             boolean pillion = (v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE || v == Film.V_HORSE || v == Film.V_ELEPHANT)
-                    && Txt.has(s, "पीछे बैठ", "पीछे सवार", "sits behind", "seated behind", "behind him on", "behind her on", "pillion");
+                    && Txt.has(s, "पीछे बैठ", "पीछे सवार", "sits behind", "seated behind", "behind him on", "behind her on", "pillion",
+                    // v44: on a cycle's carrier or its crossbar
+                    "कैरियर", "डंडे पर", "डंडे पे", "आगे डंडे", "carrier", "crossbar", "front bar", "handlebar seat");
             // v43: only getting on — "तरुण स्कूटर पर बैठता है और किक मारकर स्टार्ट करता है", "gets on his bike": they sit on it (the
             // engine running) and wait, until a later direction rides it on, or they do something else and get off first
             boolean stay = !away && Txt.has(s, MOUNT_ONLY) && !Txt.has(s, RIDE_MOVES);
@@ -7501,37 +7532,52 @@ public final class Director {
             Film.Actor driver = null;
             boolean again = false;
             // (v43: getting into a car another drives just now — "प्रिया, वृंदा और वनुशा कार में बैठते हैं" — joins it)
-            boolean joinsCar = v == Film.V_CAR && !hired && Txt.has(s, "में बैठ", "अंदर बैठ", "में चढ़", "gets in", "get in", "got in", "sit in", "sits in", "climb in", "climbs in")
+            boolean joinsCar = v == Film.V_CAR && !hired && (Txt.has(s, "में बैठ", "अंदर बैठ", "में चढ़", "gets in", "get in", "got in", "sit in", "sits in", "climb in", "climbs in")
+                    || carSeat(s) != Film.CAR_AUTO)           // (v44: a seat named — "आगे की सीट पर बैठती है" — is a seat in the car being driven)
                     && !Txt.has(s, "चला", "चलाते", "चलाती", "चलाता", "drive", "drives", "driving", "drove", "ड्राइव");
             if (((passenger || joinsCar) && (v == Film.V_CAR || v == Film.V_SCOOTER || v == Film.V_MOTORBIKE)) || pillion) {
                 for (Film.Actor o : seg.actors) {
-                    if (riders.contains(o) || o.look == null || !o.look.isHumanoid() || !o.stateAt(t).visible) continue;
+                    // (v44: the one at the wheel may be named too — "प्रिया तरुण के बगल वाली सीट पर बैठती है")
+                    if ((riders.contains(o) && !(v == Film.V_CAR && joinsCar)) || o.look == null || !o.look.isHumanoid() || !o.stateAt(t).visible) continue;
                     for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.item == v && x.t1 >= t - 4f && x.t0 < t) driver = o;
                 }
+                if (driver != null) riders.remove(driver);
                 // v43: one getting on behind a rider who got off a while ago: the rider gets on again first
                 if (driver == null && pillion) for (Film.Actor o : seg.actors) {
                     if (riders.contains(o) || o.look == null || !o.look.isHumanoid() || !o.stateAt(t).visible) continue;
                     for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.item == v && x.t1 < t && !rideAway(o, x)) { driver = o; again = true; }
                 }
             }
+            List<Film.Actor> already = new ArrayList<Film.Actor>();
             if (driver != null) {
                 riders.add(0, driver);
                 familyRides++;
-                if (passenger || joinsCar) stay = false;          // (the family getting into his car: he drives them on)
+                // (the family getting into his car: he drives them on — v44: but one only taking a seat waits there
+                // with him, unless the sentence goes somewhere)
+                if ((passenger || joinsCar) && !(carSeat(s) != Film.CAR_AUTO && !Txt.has(s, RIDE_MOVES))) stay = false;
                 passenger = false;
+                // v44: whoever already sits in his car stays in it (they got out each time another got in)
+                for (Film.Actor o : seg.actors) {
+                    if (riders.contains(o)) continue;
+                    for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.target == driver && x.item == -v && x.t0 < t && x.t1 >= t - 2f) { riders.add(o); already.add(o); break; }
+                }
             }
             // v43: a hired auto, bus or taxi does not wait: it takes them on (away, unless they are arriving in it)
             if (passenger) { stay = false; if (!arrives) away = true; }
             // v43: riding on — the one who just got on (or stopped a moment ago) rides on, with whoever got on with them
             Film.Act cont = null;
-            List<Film.Actor> carried = new ArrayList<Film.Actor>();
+            List<Film.Actor> carried = new ArrayList<Film.Actor>(already);
             if (driver == null && !passenger && !riders.isEmpty() && riders.get(0).stateAt(t).visible) {
                 Film.Actor l0 = riders.get(0);
                 cont = lastRide(l0, v, t);
-                if (cont != null && (cont.t1 < t - 4f || rideAway(l0, cont))) cont = null;
+                // (v44: a while ago, but nothing done since — they talked by it: still the same ride, they ride on)
+                if (cont != null && ((cont.t1 < t - 4f && (cont.t1 < t - 14f || busySince(l0, cont, t))) || rideAway(l0, cont))) cont = null;
                 if (cont != null) for (Film.Actor o : seg.actors) {
-                    if (riders.contains(o)) continue;
-                    for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.target == l0 && x.item < 0 && Math.abs(x.t0 - cont.t0) < 0.05f) { riders.add(o); carried.add(o); break; }
+                    if (o == l0 || carried.contains(o)) continue;
+                    boolean named = riders.contains(o);          // (v44: named again — "दोनों" — still the one behind: rides on, not on again)
+                    // (v44: everyone in the car rides on — those who got in later as well as those who got in with the driver)
+                    for (Film.Act x : o.acts) if (x.type == Film.G_RIDE && x.target == l0 && x.item < 0
+                            && (Math.abs(x.t0 - cont.t0) < 0.05f || ((Film.cabin(v) || named) && x.t0 < t && x.t1 >= Math.min(cont.t1, t) - 2f))) { if (!named) riders.add(o); carried.add(o); break; }
                 }
             }
             boolean joined = (driver != null && !again) || cont != null;            // it is already under its rider
@@ -7572,7 +7618,9 @@ public final class Director {
             boolean behindSeat = false;
             for (Film.Actor o : carried) if (!Film.cabin(v)) behindSeat = true;
             if (joined || parked != null || waiting != null) {
-                if (away || behindSeat || waiting != null || (x0 + faces * 300 >= 170 && x0 + faces * 300 <= 1110)) dir = faces;
+                // (v44: a mishap needs a run up — it turns round first when the road ahead is too short)
+                float room = mishap != Film.MISHAP_NONE ? 520 : 300;
+                if (away || behindSeat || waiting != null || (x0 + faces * room >= 170 && x0 + faces * room <= 1110)) dir = faces;
             }
             float to;
             if (stay) to = x0;
@@ -7630,6 +7678,11 @@ public final class Director {
             if (!away && !stay) { to = inFrame(to, dir, v, vs); if ((to - x0) * dir < 40 && !enters) to = x0 + dir * 40; }
             float dur = stay ? 0 : Math.max(2.2f, Math.min(5.5f, Math.abs(to - x0) / speed));
             if (stay) mishap = Film.MISHAP_NONE;
+            // v44: a drive with the driver's hands and feet shown close lasts long enough for each insert
+            if (v == Film.V_CAR && !stay && !passenger && mishap == Film.MISHAP_NONE) {
+                int ins = (Txt.has(s, STEER_WORDS) ? 1 : 0) + (Txt.has(s, ACCEL_WORDS) ? 1 : 0) + (Txt.has(s, BRAKE_WORDS) ? 1 : 0);
+                if (ins > 0) dur = Math.max(dur, 1.35f * ins + 1.0f);
+            }
             // v44: a hard brake stops it for a moment before it goes on; after a crash they sit stunned a moment
             float pause = mishap == Film.MISHAP_SWERVE ? 0.9f : 0, extraTime = mishap == Film.MISHAP_SWERVE ? 1.2f : mishap == Film.MISHAP_CRASH ? 1.0f : 0;
             boolean skid = mishap == Film.MISHAP_SKID;
@@ -7716,9 +7769,11 @@ public final class Director {
                 // rides on with him; it is not also parked under them meanwhile, and they do not get off and walk apart
                 List<Film.Actor> ext = new ArrayList<Film.Actor>();
                 ext.add(lead); ext.addAll(carried);
+                float contEnd = cont != null ? cont.t1 : t;
                 for (Film.Actor a : ext) {
                     Film.Act x = a == lead ? (cont != null ? cont : lastRide(a, v, t)) : null;
-                    if (x == null) for (Film.Act y : a.acts) if (y.type == Film.G_RIDE && y.target == lead && cont != null && Math.abs(y.t0 - cont.t0) < 0.05f) x = y;
+                    if (x == null) for (Film.Act y : a.acts) if (y.type == Film.G_RIDE && y.target == lead && y.item < 0 && y.t0 < t && (x == null || y.t0 > x.t0)
+                            && ((cont != null && Math.abs(y.t0 - cont.t0) < 0.05f) || y.t1 >= Math.min(t, contEnd) - 2f)) x = y;
                     if (x == null) continue;
                     float was = x.t1;
                     x.t1 = t0;                        // (it runs straight on into this one: no getting off, no fading)

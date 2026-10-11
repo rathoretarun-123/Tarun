@@ -1686,7 +1686,15 @@ public final class Renderer {
         if (ride != null) {
             int v = Math.abs(ride.item) % Film.V_PASSENGER;
             vS = v == Film.V_BICYCLE ? h : (a.look.isChild() ? h / 0.78f : h);
+            // v44: one riding behind (on a cycle's carrier, a scooter's back seat, a horse's rump) sits on the rider's vehicle:
+            // its size is the rider's, not the passenger's own (a child on her father's cycle stood beside it)
+            if (ride.item < 0 && ride.target != null && Film.astride(ride.item) && ride.target.look != null) {
+                float th = actorHeight(ride.target.look, ride.target.c, art, s);
+                vS = v == Film.V_BICYCLE ? th : (ride.target.look.isChild() ? th / 0.78f : th);
+            }
             float lift = Props.seatOf(Math.abs(ride.item))[1] * vS - Math.max(0, hip);
+            // v44: in a car the faces sit in the windows — a grown-up a little up on the cushion, a child on a booster
+            if (Film.cabin(ride.item) && Math.abs(ride.item) % Film.V_PASSENGER == Film.V_CAR) lift += (a.look.isChild() ? 0.15f : 0.06f) * vS;
             // (v43: the engine's shiver only while it runs; a pillion rider sits where the director put them)
             boolean running = t - ride.t0 > Director.rideMount(ride) - 0.6f && t - ride.t0 < Director.rideStop(ride) + 0.5f;
             // v44: the rider's feet go round with the pedals while the cycle moves (the crank turns with the ground covered)

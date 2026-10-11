@@ -27,7 +27,19 @@ the library, lips and eyes, the mesh, driving, every button — with new test st
   people left on top of each other (54 → 8), quick double cuts, a rainbow at night.
 * **The director against your documents** — every film is now scored the way the handbook's approval card scores it:
   the place's opening wide is held (0 → 229 of 245 parts), every part where someone listens shows a reaction (38 films
-  failing → 2), still no shot over 4 s and no lip-sync shot over six words.
+  failing → 0), still no shot over 4 s and no lip-sync shot over six words.
+* **20 more stories written your way** — characters, places and things listed at the start, every line in double
+  quotes, in twenty different layouts: all 20 read exactly right (59 of 59 lines; none did before), directed and
+  drawn without an error. How to write a script so it is read right: [`docs/script-format.md`](docs/script-format.md).
+* **The script reader knows many more words** — more headings for the cast, places, things and the start of the
+  script; scene headings as words, ordinals or Roman numerals; every kind of double quote; a line running on to the
+  next; screenplay form; voices heard but not seen.
+* **Everyday words** — 126 of 189 everyday directions ("राहुल रोता है", "सिर खुजाता है", "माँ के पैर छूता है",
+  "छींकता है" …) staged nothing; now all 189 give at least a face and a gesture, many a move, a task or a sound.
+* **Your pictures as reference** — a picture of a moment is no longer shown in place of the moment: the rig acts it.
+  The mesh is as fine as the screen (one cell per pixel for bodies and places).
+* **Blocking** — a run across, a walk up to someone and a ride now end on free ground, never on someone standing
+  there. The full app test run found three failures; all three are fixed.
 * Details and numbers: [`docs/testing-v41.md`](docs/testing-v41.md).
 * **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
   quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.

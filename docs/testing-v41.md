@@ -93,15 +93,15 @@ shots, reactions to loud sounds) and the Pixar-style guide (reactions after line
 | Lip-sync shots over six words | 0 / 0 | 0 / 0 |
 | Shots the validator could not correct | 0 / 0 | 0 / 0 |
 | Establishing shot of a place held (≥ 2.4 s) | 0 of 167 / 0 of 79 | 158 of 167 / 71 of 78 |
-| Gate 2 (performance: a reaction where someone listens) not passed | 29 / 9 | 2 / 0 |
-| Reaction shots | 142 / 152 | 245 / 202 |
+| Gate 2 (performance: a reaction where someone listens) not passed | 29 / 9 | 0 / 0 |
+| Reaction shots | 142 / 152 | 258 / 203 |
 | Average approval score | 4.68 / 4.71 | 4.64 / 4.72 |
 
 * The place's opening wide is held whole for about 3 s (under the 4-s cap) before the shot-length, motion and
   one-action passes may cut into it; the action in it is seen wide (the manual's table).
 * Every part with someone listening shows at least one reaction: after the first line said with feeling, a question
-  or an exclamation. A film of one character is not failed for having no listener. The two films still failing have
-  only calm lines.
+  or an exclamation. A film of one character is not failed for having no listener. (Two films of calm lines alone
+  failed this gate at first; with the everyday words staged they now pass too.)
 * (The average score moved by a few hundredths: films with more reactions also have more shots to score.)
 
 ## 5. Frames drawn from the films
@@ -110,7 +110,82 @@ shots, reactions to loud sounds) and the Pixar-style guide (reactions after line
 things seen and fixed: a rainbow drawn in a night sky (a rainbow now needs the sun: not at night; stars only in an
 evening or night sky), and two girls standing on one spot in a close-up (the blocking rules above).
 
-## 6. Said plainly
+## 6. Your last message: 20 more stories, the script reader, the everyday words, the rig first
+
+### 20 stories written your way (`tools/testdata/v41stories`)
+
+Twenty stories with the characters, places and things listed at the start and every line in double quotes — in
+twenty layouts: numbered and bulleted lists, Hindi and English headings, "Name: …" and "Name (manner): …" lines, curly,
+low („…“), angle («…») and doubled quotes, a line broken over two lines, screenplay form, scene headings as words
+("दृश्य एक", "Scene three", "Act I"). `expected.tsv` holds what each must give.
+
+| Check | before the reader's v41 changes | now |
+|---|---|---|
+| Stories read exactly right (cast, places, things, scenes, every line and its speaker) | 0 of 20 | 20 of 20 |
+| Spoken lines read right | — | 59 of 59 |
+| Directed without a crash, every speaker speaking in the film | — | 20 of 20 |
+| The director's own checks (SoakCheck) | — | no issue |
+| Approval card | — | average 4.77 / 5, every gate passed |
+
+Eight frames each of four of them drawn with your pictures: no error, no blank frame. A guide to the layout is in
+[`script-format.md`](script-format.md). Robolectric `v41TwentyStoriesInTheUsersFormatAreReadAndDirected` checks all
+of this on the phone.
+
+### The script reader: more words
+
+Headings for the cast (`कलाकार`, `चरित्र परिचय`, `भूमिका`, `अभिनेता`, `Starring`, `Roles`, `Who's who` …), the places
+(`स्थल`, `जगहें`, `पृष्ठभूमि`, `सेट्स`, `Sets`, `Backgrounds`, `Scenery` …), the things (`वस्तु`, `चीज़ें`, `सामग्री`,
+`उपकरण`, `Equipment` …) and the start of the script (`आरंभ`, `प्रारंभ`, `FADE IN` …); scene headings in every spelling
+of दृश्य, `सीन`, `अंक`, `भाग`, `अध्याय`, `एपिसोड`, `Scene`, `Act`, `Part`, `Chapter`, with numbers as digits, Hindi and
+English words, ordinals or Roman numerals; every kind of double quote; a line of dialogue that runs on to the next
+line; the name and the words on separate lines; `(V.O.)` / `(O.S.)` as a voice heard but not seen; "Location:",
+"Setting:", "समय:" lines inside a scene.
+
+### Everyday words in the directions (`tools/testdata/v41vocab`)
+
+A probe puts 189 everyday direction sentences (130 Hindi: "राहुल रोता है", "मुस्कुराता है", "सिर खुजाता है", "माँ के
+पैर छूता है", "छींकता है", "पतंग उड़ाता है", "दरवाज़ा खोलता है" …; 59 English) each into a small story and looks at
+what was staged: on the build before this change **126 of them staged nothing** — the character just stood there.
+The director now has a table of everyday words it falls back
+on when a sentence gave nothing else: a face and a gesture at least, and for some a move (a fall to the floor and up
+again, hiding behind someone, a slow walk, running after someone, the stairs), a task (mopping, washing clothes,
+chopping, reading a letter), a sound (a door, a thud) or an umbrella opened. The names are taken out before the
+words are matched (a girl called पूजा or आरती is not a prayer), and short words that hide inside longer ones are
+matched whole (the probe caught "ख़त", a letter, inside "देखता").
+
+| | before | now |
+|---|---|---|
+| Hindi everyday sentences that stage something | 47 of 130 | 130 of 130 |
+| English everyday sentences that stage something | 16 of 59 | 59 of 59 |
+
+("Stands up" for one already standing, "comes in" for one already in: nothing is right, and nothing is staged.)
+A dance is now a happy face (it was a villain's grin for everyone; a villain keeps it). Robolectric
+`v41EverydayWordsAllStageSomething` checks all 189 on the phone. Frames of a family story using them (crying, falling,
+scratching the head, hiding by her mother, touching the feet, sneezing, the slow walk, blushing) drew cleanly.
+
+### Blocking fixed on the way
+
+* A run across the stage that would end on someone goes on past them to free ground; walking up to someone takes the
+  free side of them; a ride stops on free ground and still rides across (the other way when the ground ahead is
+  taken). The overlap counts stay at 3 of 100 and 5 of 34 stories (the sample story's animals, the fire circle).
+* The cut to the ones left behind when someone walks out is kept by the clean-up passes.
+
+### Your pictures as reference, the rig first
+
+* A picture you upload of a *moment* (not of a thing) is no longer shown over the scene in place of the moment: the
+  characters act it, and the picture stays in your library. Pictures of things are still shown once as an insert when
+  the story first brings the thing in. Your pose pictures were already only what the rig is made from (v40).
+* The mesh is as fine as the screen: one cell per drawn pixel of a body (up to 1,024 rows, the face 512), one per
+  pixel of a place (up to 1920 × 1080). "Faster drawing" in Settings makes the cells 2 pixels (off unless you turn it
+  on).
+
+### The whole app on the phone emulator (Robolectric)
+
+Run 1 (72 tests, before the last changes): 3 failed — "Maya runs to Kabir" (her friend's run across ended on her
+spot, so she had no run left), the cut after Riya walks out (taken out by the v41 clean-up), an auto ride that stopped
+after 168 pixels. All three fixed (above); run 2 on the final code: running (its result goes in with the v41 APK).
+
+## 7. Said plainly
 
 The rig is a flat picture turned and bent on a fine mesh, not a 3D model: it turns to about a three-quarter view,
 never to a full profile, and cannot show a side the picture does not have. Nothing here makes the film Pixar or

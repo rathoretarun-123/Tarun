@@ -83,7 +83,7 @@ final class SheetSaver {
         List<com.tarun.kahani.core.Angles.Piece> parts;
         try {
             parts = panels ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h, false), w, h)
-                    : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h), w, h);
+                    : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h), w, h, "object".equals(kind));
             if (!panels && kind.length() == 0 && parts.size() >= 2 && panelsLike(px, w, h, parts)) {
                 panels = true;
                 parts = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px.clone(), w, h, false), w, h);
@@ -391,7 +391,7 @@ final class SheetSaver {
             // figure-sized pieces; a photo with a real background does not), never a camera tag in the file
             try {
                 parts = kind.equals("scene") ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, false), w, h)
-                        : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h);
+                        : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h, kind.equals("obj"));
             } catch (OutOfMemoryError oom) {
                 // v30: a large sheet on a phone with little heap left: read again smaller and split that
                 parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>();
@@ -402,7 +402,7 @@ final class SheetSaver {
                         px = new int[w * h];
                         System.arraycopy(dec2, 2, px, 0, px.length);
                         parts = kind.equals("scene") ? com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h, false), w, h)
-                                : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h);
+                                : com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h, kind.equals("obj"));
                     }
                 } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
@@ -638,6 +638,12 @@ final class SheetSaver {
                     it.setMeta("ofName", shown);
                     haveRev = true;
                     done.append("the reverse angle (behind the reverse shots); ");
+                } else if (com.tarun.kahani.core.Nature.fromAbove(ppx, (Integer) o[1], (Integer) o[2])) {
+                    // v40: a view straight down on the place (the fire from above): no one can stand in it — kept in
+                    // the library, never drawn behind a character
+                    Library.Item it = library.addBytes(Library.PIC, "place", shown + " (from above)", "from above", b, ".jpg", "angles");
+                    it.setMeta("ofName", shown);
+                    done.append("a view from above (library only); ");
                 } else {
                     newViews.add(f);
                     Library.Item it = library.addBytes(Library.PIC, "place", shown + " (view " + (newViews.size() + 2) + ")", "", b, ".jpg", "angles");

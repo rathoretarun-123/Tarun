@@ -1051,6 +1051,7 @@ public final class Director {
         if (seg.inBoat) { if (wOpen[Film.W_SEA] < 0) open(Film.W_SEA, seg.t0, 0.8f); film.notes.add("  ↳ in a boat on the water"); }
         ambience(where, t);
         weatherFrom(where + " । " + sc.title + (pi == 0 && sc.cues.length() > 0 ? " । " + sc.cues : ""), seg.t0, true);
+        campfire(sc);
         if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
             // natural night: stars in the sky, fireflies in the woods
             if (wOpen[Film.W_STARS] < 0) open(Film.W_STARS, seg.t0, 0.9f);
@@ -1148,6 +1149,7 @@ public final class Director {
             comicBeat(b0 < b1 ? tc : t, mood);
             if ((mood == Film.M_HAPPY || mood == Film.M_PLAYFUL || mood == Film.M_CELEBRATE) && storyHasVillain() && tc - t > 6) shadowPass(t + (tc - t) * 0.55f);
         }
+        paceTracks(tc + 0.8f);
         seg.t1 = tc + 0.8f;
         for (Film.Fx f : seg.fx) if (f.type == Film.FX_LIGHTS_OFF && f.t1 > seg.t1) f.t1 = seg.t1;
         if (pi == nParts - 1) closeAllWeather(seg.t1);
@@ -1651,7 +1653,7 @@ public final class Director {
             s.t0 = 0; s.t1 = 2;
             s.set = sg.set; s.tod = sg.tod; s.scene = sg.scene;
             s.backdrop = sg.backdrop; s.ground = sg.ground;
-            s.mood = sg.mood; s.act = sg.act; s.charScale = sg.charScale; s.festive = sg.festive;
+            s.mood = sg.mood; s.act = sg.act; s.charScale = sg.charScale; s.festive = sg.festive; s.midground = sg.midground;
             s.fadeIn = 0; s.fadeOut = 0;
             Film.Cam cam = new Film.Cam(0, 640, 360, 1f, 0);
             cam.still = true; cam.light = 0.3f;
@@ -2779,6 +2781,10 @@ public final class Director {
 
     private void mannerActions(Film.Actor a, Film.Actor to, String m, float t0, float t1, int emo) {
         if (m == null || m.length() == 0) return;
+        // v40: one who walks round the fire: what the line's words say about the walk (from behind to the front, the
+        // other way round, a short sit on the empty log) shapes the path, and is taken out of the rest of the manner
+        if (pacers.containsKey(a)) m = paceEvents(a, m, t0, t1);
+        if (m.length() == 0) return;
         List<Film.Actor> me = new ArrayList<Film.Actor>();
         me.add(a);
         postureFrom(m, t0, a, me);
@@ -2799,7 +2805,7 @@ public final class Director {
         if (Txt.has(m, "दहाड़")) { a.acts.add(new Film.Act(t0, t0 + 1.4f, Film.G_ROAR)); film.sfx.add(new Film.Sfx(Film.SFX_ROAR, t0, 1.6f, 0.55f)); shake(t0, t0 + 0.8f); }
         if (Txt.has(m, "टोकरी")) { Film.Key k = a.at(t0); k.holdR = Pose.I_BASKET; a.acts.add(new Film.Act(t0, t1, Film.G_OFFER)); }
         if (Txt.has(m, "भेष")) { Film.Key k = a.at(t0); k.disguised = true; if (k.holdR == Pose.I_NONE) k.holdR = Pose.I_BASKET; }
-        if (Txt.has(m, "कदम पीछे", "पीछे खींच", "step back")) {
+        if (Txt.has(m, "कदम पीछे", "पीछे कदम", "पीछे खींच", "step back")) {
             a.acts.add(new Film.Act(t0, t0 + 0.8f, Film.G_STEP_BACK));
             Film.Key k = a.at(t0); k.x = xAt(a, t0) - a.stateAt(t0).facing * 70; k.moveDur = 0.7f;
         }
@@ -2814,7 +2820,8 @@ public final class Director {
         if (Txt.has(m, "काँप", "कांप")) a.acts.add(new Film.Act(t0, t1, Film.G_TREMBLE));
         if (Txt.has(m, "रिबन") && Txt.has(m, "छाती", "लगा")) { Film.Key k = a.at(t0); k.holdR = Pose.I_RIBBON; a.acts.add(new Film.Act(t0, t1, Film.G_CLUTCH)); }
         if (Txt.has(m, "पोटली")) a.acts.add(new Film.Act(t0, t1, Film.G_CLUTCH));
-        if (Txt.has(m, "हाथ") && Txt.has(m, "पकड़") && to != null) {
+        // (v40: "कुल्हड़ को दोनों हाथों से पकड़ कर" holds a cup, nobody's hand)
+        if (Txt.has(m, "हाथ पकड़", "का हाथ", "के हाथ", "की हाथ", "हाथ थाम") && !Txt.has(m, "हाथों से", "हाथ से") && to != null) {
             moveNear(a, to, t0, 0.6f);
             a.acts.add(new Film.Act(t0, t1, Film.G_HOLD_HAND)); a.acts.get(a.acts.size() - 1).target = to;
         }
@@ -3627,6 +3634,240 @@ public final class Director {
     private final float[] wOpen = new float[Film.W_KINDS];   // start of weather in progress (-1 = none)
     private final float[] wStr = new float[Film.W_KINDS];
     private float fireX = 640;
+
+    // ------------------------------------------------------------------ v40: round a campfire
+
+    /** v40: those who walk round the fire, with what their lines say about the walk: {t, PACE_*, seconds}. */
+    private final java.util.Map<Film.Actor, List<float[]>> pacers = new java.util.LinkedHashMap<Film.Actor, List<float[]>>();
+    /** v40: the fire's middle and base on the stage, the seats' ring and the walkers' ring (their half-widths), the rings' depth. */
+    private float fireCx, fireCy, fireRs, fireRw, fireRy;
+    static final int PACE_WALK = 1, PACE_FRONT = 2, PACE_REVERSE = 3, PACE_SIT = 4, PACE_STOP = 5;
+    static final String[] PACING = {"गोल गोल घूम", "गोल-गोल घूम", "चारों तरफ घूम", "चारों ओर घूम", "चक्कर लगा", "चक्कर काट", "टिक ही नहीं", "टिकता नहीं",
+            "टिक नहीं सकता", "टिक नहीं सकती", "paces", "pacing", "walks round", "walks around", "circles the", "can't sit still", "cannot sit still"};
+
+    /**
+     * v40: a fire burning from the start of the part (the place has it: "बीच में अलाव जल रहा है") is the middle of the
+     * stage: in the user's picture it is where the picture's own flames are; those the lists seat ("दो पर अर्जुन और समीर
+     * बैठे हैं", "बैठे बैठे … पैर हिलाता है") sit on logs on either side of it, facing it; one who cannot keep still
+     * ("अलाव के चारों तरफ … गोल गोल घूम रहा है") walks round it, behind it and in front of it.
+     */
+    private void campfire(Story.Scene sc) {
+        pacers.clear();
+        if (seg == null || wOpen[Film.W_FIRE] < 0 || seg.actors.isEmpty()) return;
+        boolean picFire = seg.backdrop != null && seg.backdrop.scan != null && seg.backdrop.scan.fireU >= 0;
+        float cx = 640, cy = 0;
+        if (picFire) {
+            Art.Backdrop b = seg.backdrop;
+            float px = (b.scan.fireU - b.x0) / Math.max(1e-3f, b.x1 - b.x0) * 1280, py = (b.scan.fireV - b.y0) / Math.max(1e-3f, b.y1 - b.y0) * 720;
+            // the place is drawn at the stage's own depth (Seg.midground): its fire is where the picture has it on the
+            // stage. (The people keep to the stage's ground line at their own size: a picture taken close to the fire
+            // shows its far side high up, and taking that depth for the ring made them tiny.)
+            if (px > 120 && px < 1160) { cx = px; seg.midground = true; }
+        }
+        fireX = cx;
+        fireCx = cx; fireCy = cy;
+        float scale = seg.charScale;
+        fireRs = 330 * scale; fireRw = 430 * scale; fireRy = 45 * scale;
+        // who sits: the lists name them seated (a clause with their name and "बैठे हैं"), or their own description
+        // has them sitting the whole time ("बैठे बैठे")
+        List<Film.Actor> sit = new ArrayList<Film.Actor>(), walk = new ArrayList<Film.Actor>();
+        StringBuilder lists = new StringBuilder();
+        for (Story.PlaceDef th : story.things) lists.append(th.name).append(" । ").append(th.description).append(" । ");
+        for (Film.Actor a : seg.actors) {
+            if (a.look == null || !a.look.isHumanoid() || a.c.voiceOnly || !a.keys.get(0).visible) continue;
+            String own = a.c.description == null ? "" : a.c.description;
+            if (Txt.has(own, PACING)) { walk.add(a); continue; }
+            boolean seated = Txt.has(own, "बैठे बैठे", "बैठे-बैठे", "बैठा रहता", "बैठी रहती");
+            for (String clause : (lists + " । " + own).split("[।.,;!?]")) {
+                if (!Txt.has(clause, SIT_DOWN) || Txt.has(clause, "नहीं", "not ")) continue;
+                for (Story.CharacterDef c : ScriptParser.mentions(story, clause)) if (c == a.c) seated = true;
+            }
+            if (seated) sit.add(a);
+        }
+        if (sit.isEmpty() && walk.isEmpty()) return;
+        // the seats: the first on the left, the second on the right, a little toward the camera; more round the back
+        float[] seatTh = {(float) Math.PI + 0.3f, -0.3f, (float) Math.PI * 0.5f + 0.9f, (float) Math.PI * 0.5f - 0.9f};
+        int si = 0;
+        for (Film.Actor a : sit) {
+            float th = seatTh[Math.min(si++, seatTh.length - 1)];
+            float x = cx + fireRs * (float) Math.cos(th), lift = cy - fireRy * 0.7f * (float) Math.sin(th);
+            for (Film.Key k : a.keys) { k.x = x; k.body = Pose.SIT; k.seat = Film.SEAT_LOG; k.facing = cx > x ? 1 : -1; }
+            Film.Track tr = new Film.Track();
+            tr.t0 = seg.t0; tr.t1 = 1e6f; tr.x = x; tr.lift = lift; tr.facing = cx > x ? 1 : -1;
+            a.track.add(tr);
+            Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, x, lift, a, null); f.kind = Film.SEAT_LOG;
+            sittings++;
+        }
+        // an empty log (the lists count three logs, two taken) behind the fire, for the walker's short sit
+        for (Film.Actor a : walk) {
+            List<float[]> ev = new ArrayList<float[]>();
+            pacers.put(a, ev);
+            float th = (float) Math.PI * 0.5f + 0.5f;
+            for (Film.Key k : a.keys) { k.x = cx + fireRw * (float) Math.cos(th); k.body = Pose.STAND; k.facing = -1; }
+        }
+        // (the walker's short sit is on the far log of the ring — the place's picture has its own logs there; a drawn one
+        // would stand over the picture's fire)
+        if (!walk.isEmpty() && !picFire) {
+            Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, cx, cy - fireRy, walk.get(0), null); f.kind = Film.SEAT_LOG;
+        }
+        film.notes.add("  ↳ round the fire" + (picFire ? " (where your picture has it)" : "") + ": " + sit.size() + " seated on logs, " + walk.size() + " walking round it");
+    }
+
+    /**
+     * v40: what a walker's line says about the walk — "अलाव के पीछे से सामने आते हुए" (from behind the fire to the front),
+     * "अलाव के चारों तरफ उल्टा घूमते हुए" (the other way round), "दो सेकंड के लिए खाली लट्ठे पर बैठता है, फिर … खड़ा हो जाता
+     * है और फिर से घूमना शुरू कर देता है" (a short sit, up again, walking on). Returns the rest of the manner.
+     */
+    private String paceEvents(Film.Actor a, String m, float t0, float t1) {
+        List<float[]> ev = pacers.get(a);
+        StringBuilder rest = new StringBuilder();
+        boolean sat = false;
+        for (String clause : m.split(",|،|\\s+फिर\\s+|\\s+और\\s+|।")) {
+            String c = clause.trim();
+            if (c.length() == 0) continue;
+            if (Txt.has(c, "बैठ") && !Txt.has(c, "नहीं")) {
+                float secs = 2.5f;
+                java.util.regex.Matcher mm = java.util.regex.Pattern.compile("([0-9]+|एक|दो|तीन|चार|पाँच|पांच)\\s*(सेकंड|सेकेंड|second)").matcher(c);
+                if (mm.find()) {
+                    String n = mm.group(1);
+                    secs = n.matches("[0-9]+") ? Integer.parseInt(n) : n.equals("एक") ? 1 : n.equals("दो") ? 2 : n.equals("तीन") ? 3 : n.equals("चार") ? 4 : 5;
+                }
+                ev.add(new float[]{t0, PACE_SIT, Math.max(1f, Math.min(8f, secs))});
+                sat = true;
+                continue;
+            }
+            if (sat && Txt.has(c, "खड़ा हो", "खड़ी हो", "उठ")) continue;            // the getting up belongs to the short sit
+            if (Txt.has(c, "पीछे से") && Txt.has(c, "सामने")) { ev.add(new float[]{t0, PACE_FRONT, t1 - t0}); continue; }
+            // a step back, a stop: the walk halts for the line (the step itself is the step-back gesture)
+            if (Txt.has(c, "पीछे कदम", "कदम पीछे", "रुक जाता", "रुक जाती", "रुककर", "रुक कर", "ठहर")) { ev.add(new float[]{t0, PACE_STOP, t1 - t0}); rest.append(rest.length() > 0 ? ", " : "").append(c); continue; }
+            if (Txt.has(c, "घूम", "चक्कर")) { ev.add(new float[]{t0, Txt.has(c, "उल्टा", "उल्टी", "उलटा") ? PACE_REVERSE : PACE_WALK, t1 - t0}); continue; }
+            if (rest.length() > 0) rest.append(", ");
+            rest.append(c);
+        }
+        return rest.toString();
+    }
+
+    /** v40: the angle after th, going dir, where the ring is at target (mod a full turn). */
+    static float aheadTo(float th, float target, float dir) {
+        float twoPi = (float) (2 * Math.PI);
+        float d = (target - th) % twoPi;
+        if (dir > 0) { if (d < 0.05f) d += twoPi; }
+        else { if (d > -0.05f) d -= twoPi; }
+        return th + d;
+    }
+
+    /**
+     * v40: each walker's path round the fire for the whole part: walks at a changing pace (now quick, now slow) with
+     * sudden stops in between, as the description says ("कभी तेज चलता है, कभी धीरे, कभी अचानक रुक जाता है"), turned by
+     * what the lines say — round to the front, the other way round, to the empty log for a short sit and up again.
+     */
+    private void paceTracks(float tEnd) {
+        for (java.util.Map.Entry<Film.Actor, List<float[]>> en : pacers.entrySet()) {
+            Film.Actor a = en.getKey();
+            List<float[]> ev = en.getValue();
+            java.util.Collections.sort(ev, new java.util.Comparator<float[]>() { public int compare(float[] x, float[] y) { return Float.compare(x[0], y[0]); } });
+            java.util.Random rnd = new java.util.Random(31 + a.order);
+            float th = (float) Math.PI * 0.5f + 0.5f, dir = 1, t = seg.t0;
+            int ei = 0;
+            while (t < tEnd - 0.2f) {
+                float[] e = ei < ev.size() ? ev.get(ei) : null;
+                float limit = e != null ? Math.max(t, Math.min(tEnd, e[0])) : tEnd;
+                // before a walk to the front: end the free walking behind the fire, so the walk comes from behind —
+                // the walks before it share the way at an even pace (a lap more when there is time for it)
+                float aim = e != null && (int) e[1] == PACE_FRONT ? aheadTo(th, (float) Math.PI * 0.5f, dir) : Float.NaN;
+                if (!Float.isNaN(aim) && limit - t > 1.2f) {
+                    float free = limit - t, way = Math.abs(aim - th);
+                    while (way / (free * 0.7f) < 0.3f && (way + 2 * Math.PI) / (free * 0.7f) <= 0.85f) way += 2 * Math.PI;
+                    int n = Math.max(1, Math.round(free / 4.5f));
+                    float pause = n > 1 ? Math.min(1.4f, free * 0.3f / (n - 1)) : 0, walkT = (free - pause * (n - 1)) / n;
+                    for (int i = 0; i < n; i++) {
+                        float to = th + dir * way / n;
+                        walkArc(a, t, t + walkT, th, to); th = to; t += walkT;
+                        if (i < n - 1) { hold(a, t, t + pause, th); t += pause; }
+                    }
+                    t = limit;
+                }
+                while (limit - t > 0.6f) {
+                    float d = Math.min(limit - t, 2.6f + rnd.nextFloat() * 3.4f);
+                    if (limit - t - d < 0.8f) d = limit - t;
+                    float w = rnd.nextFloat() < 0.25f ? 0.8f : 0.3f + rnd.nextFloat() * 0.3f;
+                    float to = th + dir * w * d;
+                    if (!Float.isNaN(aim) && d >= limit - t - 1e-3f) to = aim;               // the last stretch arrives behind
+                    else if (!Float.isNaN(aim) && (aim - to) * dir < 0) to = aim;
+                    if (Math.abs(to - th) > 0.05f) { walkArc(a, t, t + d, th, to); th = to; }
+                    else hold(a, t, t + d, th);
+                    t += d;
+                    if (limit - t > 1.4f && rnd.nextFloat() < 0.75f) { float p = Math.min(limit - t, 0.7f + rnd.nextFloat() * 1.5f); hold(a, t, t + p, th); t += p; }
+                }
+                if (t < limit) { hold(a, t, limit, th); t = limit; }
+                if (e == null) break;
+                ei++;
+                int type = (int) e[1];
+                float len = Math.max(1.5f, Math.min(7f, e[2]));
+                if (type == PACE_REVERSE) dir = -dir;
+                if (type == PACE_FRONT) {
+                    float to = aheadTo(th, (float) Math.PI * 1.5f, dir), d = Math.max(Math.min(len, 6f), Math.abs(to - th) / 0.9f);
+                    walkArc(a, t, t + d, th, to); th = to; t += d;
+                    float p = Math.min(1.5f, Math.max(0, tEnd - t)); hold(a, t, t + p, th); t += p;
+                } else if (type == PACE_STOP) {
+                    hold(a, t, t + len, th); t += len;
+                } else if (type == PACE_WALK || type == PACE_REVERSE) {
+                    float d = len, to = th + dir * 0.55f * d;
+                    walkArc(a, t, t + d, th, to); th = to; t += d;
+                } else if (type == PACE_SIT) {
+                    float to = aheadTo(th, (float) Math.PI * 0.5f, dir), d = Math.max(1.2f, Math.abs(to - th) / 0.8f);
+                    walkArc(a, t, t + d, th, to); th = to; t += d;
+                    float secs = e[2];
+                    Film.Key ks = insertKey(a, t); ks.body = Pose.SIT; ks.seat = Film.SEAT_LOG;
+                    Film.Key ku = insertKey(a, t + secs); ku.body = Pose.STAND; ku.seat = -1;
+                    for (Film.Key k : a.keys) if (k.t > t + secs) { k.body = Pose.STAND; k.seat = -1; }
+                    hold(a, t, t + secs + 0.9f, th);
+                    t += secs + 0.9f;
+                    sittings++; risings++;
+                }
+            }
+            // the keys' own places follow the path (the camera and the others' glances read them)
+            for (Film.Key k : a.keys) { Film.Track r = a.trackAt(k.t); if (r != null) { k.x = r.x(k.t); k.moveDur = 0; } }
+            int walks = 0;
+            for (Film.Track r : a.track) if (r.walking) walks++;
+            film.notes.add("  ↳ " + a.c.shown() + " walks round the fire: " + walks + " stretches, stops in between" + (ev.isEmpty() ? "" : ", " + ev.size() + " turns of the walk from the lines"));
+        }
+        // the seated keep their seats to the end of the part
+        if (seg != null) for (Film.Actor a : seg.actors) for (Film.Track r : a.track) if (r.t1 > 1e5f) r.t1 = tEnd + 2f;
+    }
+
+    private void walkArc(Film.Actor a, float t0, float t1, float th0, float th1) {
+        Film.Track r = new Film.Track();
+        r.t0 = t0; r.t1 = t1; r.walking = true;
+        r.cx = fireCx; r.cy = fireCy; r.rx = fireRw; r.ry = fireRy; r.th0 = th0; r.th1 = th1;
+        a.track.add(r);
+    }
+
+    private void hold(Film.Actor a, float t0, float t1, float th) {
+        if (t1 - t0 < 0.01f) return;
+        Film.Track r = new Film.Track();
+        r.t0 = t0; r.t1 = t1;
+        r.x = fireCx + fireRw * (float) Math.cos(th); r.lift = fireCy - fireRy * (float) Math.sin(th);
+        r.facing = fireCx > r.x ? 1 : -1;
+        if (Math.abs(fireCx - r.x) < 40) r.facing = a.stateAt(t0).facing;
+        a.track.add(r);
+    }
+
+    /** v40: a key at t in its place among the keys (the state there copied), for a path laid after the part was staged. */
+    private static Film.Key insertKey(Film.Actor a, float t) {
+        int i = 0;
+        while (i < a.keys.size() && a.keys.get(i).t <= t) i++;
+        Film.Key k = a.keys.get(Math.max(0, i - 1)).copy();
+        k.t = t; k.moveDur = 0;
+        a.keys.add(i, k);
+        return k;
+    }
+
+    /** v40: how far the feet are above (negative) or below the ground line at t — a walker behind the fire, the seated beside it. */
+    public static float liftAt(Film.Actor a, float t) {
+        Film.Track r = a.trackAt(t);
+        return r != null ? r.lift(t) : 0;
+    }
     private int candleKind;
     private boolean cloudsDark;
 
@@ -3664,6 +3905,20 @@ public final class Director {
     static final String[] RAINBOW = {"इंद्रधनुष", "इन्द्रधनुष", "rainbow"};
     static final String[] SEA = {"समुद्र", "सागर", "समंदर", "ocean", "sea ", "seashore", "beach", "लहरें", "लहरों", "waves", "shore", "तट पर"};
     static final String[] BOAT = {"नाव", "नौका", "किश्ती", "कश्ती", "boat", "ship", "जहाज़", "जहाज", "बेड़ा", "raft"};
+
+    /** v40: a boat named at the start of a word ("नाव में", "boats") — "चुनाव" (an election) holds no boat. */
+    static boolean boatIn(String s) {
+        String t = Txt.norm(s);
+        for (String w : BOAT) {
+            String n = Txt.norm(w);
+            int i = t.indexOf(n);
+            while (i >= 0) {
+                if (i == 0 || !ScriptParser.isWordChar(t.charAt(i - 1))) return true;
+                i = t.indexOf(n, i + 1);
+            }
+        }
+        return false;
+    }
     static final String[] CANDLE = {"मोमबत्ती", "मोमबत्तियाँ", "candle"};
     static final String[] DIYA = {"दीया", "दीये", "दीयों", "दीपक", "दीप जल", "दीपावली", "दिवाली", "diya", "diwali", "oil lamp", "lamps"};
     static final String[] TORCH = {"मशाल", "मशालें", "लालटेन", "torch", "lantern"};
@@ -4901,7 +5156,7 @@ public final class Director {
     /** Scenery named in a line of dialogue: it is there to be seen (no weather starts from talk). */
     private void sceneryFrom(String s, float t) {
         if (s == null) return;
-        if (Txt.has(s, BOAT)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
+        if (boatIn(s)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
         if (Txt.has(s, SEA) && !Txt.has(s, "जाएँगे", "जाएंगे", "चलेंगे", "will go", "let's go")) open(Film.W_SEA, t, 0.8f);
         if (Txt.has(s, RAINBOW)) open(Film.W_RAINBOW, t, 1f);
         if (Txt.has(s, BIRDS_FLY)) open(Film.W_BIRDS, t, 1f);
@@ -4955,7 +5210,7 @@ public final class Director {
         }
         if (!place && Txt.has(s, THUNDER) && !negated(s)) { lightning(t + 0.2f, film.weather.size() + (int) t); d = Math.max(d, 1.8f); }
         if (Txt.has(s, SEA)) open(Film.W_SEA, t, Txt.has(s, "ऊँची लहर", "ऊंची लहर", "big waves", "high waves", "rough sea") ? 1.3f : 0.8f);
-        if (Txt.has(s, BOAT)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
+        if (boatIn(s)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
         if (Txt.has(s, CANDLE) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 0; }
         else if (Txt.has(s, DIYA) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 1; }
         else if (Txt.has(s, TORCH) && !negated(s)) { open(Film.W_CANDLES, t, 1f); candleKind = 2; }
@@ -5041,6 +5296,7 @@ public final class Director {
 
     /** x position of an actor at time t (interpolating walks). */
     public static float xAt(Film.Actor a, float t) {
+        if (!a.track.isEmpty()) { Film.Track r = a.trackAt(t); if (r != null) return r.x(t); }
         Film.Key prev = null, cur = a.keys.get(0);
         for (Film.Key k : a.keys) { if (k.t <= t) { prev = cur; cur = k; } else break; }
         if (cur.moveDur > 0 && t < cur.t + cur.moveDur && prev != null) {

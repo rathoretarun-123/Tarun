@@ -11,6 +11,10 @@ public final class Story {
     public String sceneWord = "दृश्य";
     public final List<CharacterDef> characters = new ArrayList<CharacterDef>();
     public final List<PlaceDef> places = new ArrayList<PlaceDef>();
+    /** v40: the things the script lists ("वस्तुओं का वर्णन": अलाव, लट्ठे, कुल्हड़…) — names and what they look like. */
+    public final List<PlaceDef> things = new ArrayList<PlaceDef>();
+    /** v40: the time the script states before it starts ("समय - रात 11 बजे, ठंड वाली रात"), or "". */
+    public String time = "";
     public final List<Scene> scenes = new ArrayList<Scene>();
     public final List<String> warnings = new ArrayList<String>();
     public boolean hasNarrator;

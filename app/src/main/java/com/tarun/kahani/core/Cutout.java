@@ -885,7 +885,10 @@ public final class Cutout {
 
     /** The same with a known background colour (v26: a piece cut from a sheet whose border may touch a neighbour). */
     public static void removeBackground(int[] px, int w, int h, boolean holes, int bg) {
-        final int TOL = 60, SOFT = 120;
+        // v40: on a clean, even white sheet the background is taken to within a smaller distance — a cream shirt's
+        // light folds (अर्जुन's) are 40 away from the paper's white and were taken with it, leaving holes in the shirt
+        int TOL = cleanWhite(px, w, h, bg) ? 34 : 60;
+        final int SOFT = 120;
         byte[] state = new byte[w * h]; // 0 unknown, 1 background, 2 queued
         int[] queue = new int[w * h];
         int qh = 0, qt = 0;
@@ -938,6 +941,16 @@ public final class Cutout {
                 }
             }
         }
+    }
+
+    /** v40: the sheet's border is white paper and even (JPEG noise only): no shading, no texture, no gradient. */
+    static boolean cleanWhite(int[] px, int w, int h, int bg) {
+        int r = (bg >> 16) & 255, g = (bg >> 8) & 255, b = bg & 255;
+        if (Math.min(r, Math.min(g, b)) < 240) return false;
+        long sum = 0; int n = 0, far = 0;
+        for (int x = 0; x < w; x += Math.max(1, w / 128)) for (int y : new int[]{0, 2, h - 3, h - 1}) { int d = dist(px[y * w + x], bg); sum += d; n++; if (d > 24) far++; }
+        for (int y = 0; y < h; y += Math.max(1, h / 128)) for (int x : new int[]{0, 2, w - 3, w - 1}) { int d = dist(px[y * w + x], bg); sum += d; n++; if (d > 24) far++; }
+        return n > 0 && sum / (float) n < 6 && far <= n / 50;
     }
 
     /** Soft grey floor shadow under a character on a white background. */

@@ -23,6 +23,8 @@ public final class Casting {
         public float angle = Angles.FRONT;
         public int pose = PoseSense.STAND, emotion = PoseSense.NEUTRAL;
         public boolean speaking, ots;
+        /** v40: the shoulder in the foreground of an over-the-shoulder shot (not merely a back turned while leaving). */
+        public boolean shoulder;
         /** v39: the shot is close enough for a picture of the face and shoulders only. */
         public boolean closeOk;
         public String toString() { return Angles.name(angle) + " " + PoseSense.poseName(pose) + " " + PoseSense.emotionName(emotion) + (speaking ? " (speaking)" : ""); }
@@ -82,7 +84,7 @@ public final class Casting {
         for (Film.Key kk : a.keys) if (kk.moveDur > 0 && t >= kk.t && t < kk.t + kk.moveDur) mv = kk;
         // the angle: the back for the shoulder in the foreground, the side while walking, the three-quarter in a
         // two-shot turned to the other, the front otherwise
-        if (sh.ots.length() > 0 && sh.ots.equals(a.c.shown())) { w.angle = Angles.BACK; w.ots = true; }
+        if (sh.ots.length() > 0 && sh.ots.equals(a.c.shown())) { w.angle = Angles.BACK; w.ots = true; w.shoulder = true; }
         else if (k.backTurned) { w.angle = Angles.BACK; w.ots = true; }          // v34: turned away or leaving: the back picture
         else if (mv != null && k.body == Pose.STAND && k.anchor == Film.A_GROUND) w.angle = Angles.SIDE;
         else if (sh.type == ShotPlanner.TWO_SHOT && k.anchor == Film.A_GROUND) {
@@ -161,8 +163,10 @@ public final class Casting {
         // show what the shot needs: the back over the shoulder, or a back turned with no back view.
         // v40 (the user: "use the rigged, animated, finely meshed skeleton for the movements and ignore the pictures I
         // uploaded"): the rig plays every shot without exception — it turns to whoever it talks to and into each walk
-        // through its mesh; the uploaded pictures are only what it is made from (and its back view, turned away)
-        if (rigged(sp)) return MAIN;
+        // through its mesh; the uploaded pictures are only what it is made from (and its back view, turned away).
+        // The one exception the film draws: the back of the head and shoulder in the foreground of an over-the-shoulder
+        // shot is the user's own back picture (Renderer.otsBack) — the record names that picture, as it is drawn
+        if (rigged(sp) && !w.shoulder) return MAIN;
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
         // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the

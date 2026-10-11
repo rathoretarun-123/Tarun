@@ -601,8 +601,17 @@ public final class Renderer {
         if (storm > 0 || rain > 0.5f) { g.color(Puppet.alpha(0xFF101828, Math.min(0.45f, 0.3f * storm + 0.28f * Math.max(0, rain - 0.5f)))); g.rect(0, 0, vw, vh); }
         float snow = film.weather(Film.W_SNOW, t);
         if (snow > 0 && out) Nature.snow(g, vw, vh, t, snow, wind);
-        float leaves = Math.max(film.weather(Film.W_LEAVES, t), out ? (Math.abs(wind) - 0.45f) * 1.4f : 0);
-        if (leaves > 0 && out) Nature.leaves(g, vw, vh, t, leaves, wind, false);
+        // v40: the wind tears leaves only from trees and bushes — an open field of grass has none to give — and at night
+        // they fly in the dark (seen faintly), never bright green confetti over a dark frame
+        Art.Backdrop lb = bd(s);
+        boolean trees = lb != null ? lb.scan != null && Nature.treesIn(lb.scan) : Sets.trees(s.set) != null;
+        float leaves = Math.max(film.weather(Film.W_LEAVES, t), out && trees ? (Math.abs(wind) - 0.45f) * 1.4f : 0);
+        if (leaves > 0 && out) {
+            boolean dark = s.tod == Sets.NIGHT || s.tod == Sets.EVENING;
+            if (dark) { g.save(); g.setAlpha(0.35f); }
+            Nature.leaves(g, vw, vh, t, leaves, wind, false);
+            if (dark) g.restore();
+        }
         float petals = film.weather(Film.W_PETALS, t);
         if (petals > 0) Nature.leaves(g, vw, vh, t, petals, wind, true);
         float dust = film.weather(Film.W_DUST, t);
@@ -793,6 +802,107 @@ public final class Renderer {
         }
     }
 
+    /**
+     * v40: how large something is drawn whose feet are lift pixels below (positive) or above (negative) the ground line —
+     * the ground's perspective toward the horizon (the place picture's sky line, else a third of the frame up).
+     */
+    float perspective(Film.Seg s, float lift) {
+        if (Math.abs(lift) < 0.5f) return 1f;
+        float hz = s.ground - 330;
+        Art.Backdrop b = bd(s);
+        if (b != null && b.scan != null && b.scan.skyBottom > 0.08f) {
+            float fy = (b.scan.skyBottom - b.y0) / Math.max(1e-3f, b.y1 - b.y0) * H;
+            hz = Math.min(s.ground - 160, s.ground + (fy - s.ground) * 1.1f);
+        }
+        return Math.max(0.45f, Math.min(1.6f, (s.ground + lift - hz) / (s.ground - hz)));
+    }
+
+    /** v40: the fire in the place picture behind this shot: {x, flames' base y, flames' height} in the picture's own frame, or null. */
+    private float[] picFire(Film.Seg s) {
+        Art.Backdrop b = bd(s);
+        if (b == null || b.scan == null || b.scan.fireU < 0 || b.fireImg == null) return null;
+        float sx = Math.max(1e-3f, b.x1 - b.x0), sy = Math.max(1e-3f, b.y1 - b.y0);
+        return new float[]{(b.scan.fireU - b.x0) / sx * W, (b.scan.fireV - b.y0) / sy * H, b.scan.fireH / sy * H};
+    }
+
+    /** v40: a fire is burning in this part at t (its flames are drawn over the picture's own). */
+    private float fireNow(Film.Seg s, float t) {
+        if (film == null) return 0;
+        float fire = film.weather(Film.W_FIRE, t);
+        if (fire <= 0) return 0;
+        for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) return fire;
+        return 0;
+    }
+
+    /**
+     * v40: the picture's own fire made to burn (drawn in the picture's frame): its flames, cut out of the picture,
+     * drawn over themselves stretching up and settling, swaying, brightening and dimming — so the photo's own flames
+     * lick and flicker — with a few small sparks rising off them. alpha 1 = the flames whole (over one behind the fire).
+     */
+    private void drawPicFire(Gfx g, Film.Seg s, float t, float fire, float alpha) {
+        Art.Backdrop b = bd(s);
+        if (b == null || b.fireImg == null) return;
+        float sx = Math.max(1e-3f, b.x1 - b.x0), sy = Math.max(1e-3f, b.y1 - b.y0);
+        float X0 = (b.fu0 - b.x0) / sx * W, X1 = (b.fu1 - b.x0) / sx * W, Y0 = (b.fv0 - b.y0) / sy * H, Y1 = (b.fv1 - b.y0) / sy * H;
+        float wind = Sets.outdoorSet(s.set) && film != null ? film.wind(t) : 0;
+        float lick = 1 + 0.07f * (float) Math.sin(t * 8.3f) + 0.045f * (float) Math.sin(t * 13.1f + 1.7f) + 0.03f * fire;
+        float sway = 0.02f * (float) Math.sin(t * 5.9f) + 0.03f * Math.max(-1, Math.min(1, wind));
+        float flick = 0.82f + 0.1f * (float) Math.sin(t * 11.3f) + 0.08f * (float) Math.sin(t * 17.9f + 0.6f);
+        g.save();
+        g.setAlpha(Math.max(0, Math.min(1, alpha * (alpha < 1 ? flick : 1))));
+        float cx = (X0 + X1) / 2;
+        g.translate(cx, Y1);
+        g.scale(1 - 0.03f * (float) Math.sin(t * 7.7f), lick);
+        // the flames lean with the wind and sway: a shear made of a small rotation about their base
+        g.rotate(sway * 40);
+        g.image(b.fireImg, X0 - cx, Y0 - Y1, X1 - X0, Y1 - Y0);
+        g.restore();
+        if (alpha < 1) {
+            // sparks off the tips: small, thrown up, slowed by the air, fading (never big blobs in a close shot)
+            float fw = X1 - X0, top = Y0 + (Y1 - Y0) * 0.35f;
+            for (int i = 0; i < 9; i++) {
+                float life = 1.1f + Nature.rnd(i, 1);
+                float age = (t + Nature.rnd(i, 2) * life) % life;
+                float x = cx + (Nature.rnd(i, 3) - 0.5f) * fw * 0.5f + (float) Math.sin(age * 4 + i) * fw * 0.05f + wind * age * age * 30;
+                float y = top - age * (Y1 - Y0) * (0.35f + Nature.rnd(i, 4) * 0.3f);
+                g.color(Puppet.alpha(0xFFFFD27A, 0.9f * (1 - age / life)));
+                g.oval(x, y, 1.3f, 1.3f);
+            }
+        }
+    }
+
+    /**
+     * v40: where the picture's fire is on the stage now (the place is drawn at the far layer's depth): {x, base y, half
+     * width}, for who is behind it and who is in front of it.
+     */
+    private float[] picFireOnStage(Film.Seg s) {
+        float[] f = picFire(s);
+        if (f == null) return null;
+        Art.Backdrop b = bd(s);
+        if (s.midground) return new float[]{f[0], f[1], b.scan.fireW / Math.max(1e-3f, b.x1 - b.x0) * W * 0.5f};
+        float d = 0.78f, k = (1 + (camZ - 1) * d) / camZ * 1.1f, lag = (camX - 640) * (1 - d) * 0.8f;
+        float x = camX + lag + (f[0] - camX) * k, y = s.ground + camAngle * 34 * (1 - d) / camZ + (f[1] - s.ground) * k;
+        float hw = b.scan.fireW / Math.max(1e-3f, b.x1 - b.x0) * W * 0.5f * k;
+        return new float[]{x, y, hw};
+    }
+
+    /** v40: someone stands behind (side &lt; 0) or in front of (side &gt; 0) the picture's fire and overlaps it on the screen. */
+    private boolean someoneAtFire(Film.Seg s, float t, float[] fs, int side) {
+        if (fs == null) return false;
+        for (Film.Actor a : s.actors) {
+            Film.Key k = a.stateAt(t);
+            if (!k.visible || a.track.isEmpty()) continue;
+            float feet = s.ground + Director.liftAt(a, t), x = Director.xAt(a, t);
+            float half = actorHeight(a.look, a.c, art, s) * 0.17f;
+            if (Math.abs(x - fs[0]) > fs[2] + half) continue;
+            if (side < 0 ? feet < fs[1] - 2 : feet > fs[1] + 2) return true;
+        }
+        return false;
+    }
+
+    /** v40: the depth the place picture is drawn at: the far background's, or the stage's own for a midground place. */
+    private static float bdDepth(Film.Seg s) { return s.midground ? 1f : 0.78f; }
+
     /** The part being drawn (for its light). */
     private Film.Seg curSeg;
     /** v35: the feet line and scale of the character being drawn. */
@@ -808,7 +918,7 @@ public final class Renderer {
         if (vw < W * 0.9f && !camStill) followSpeaker(s, t);
         // ---- far layer: the background (parallax)
         g.save();
-        applyCam(g, 0.78f, s.ground);
+        applyCam(g, bdDepth(s), s.ground);
         float wind = film == null ? 0 : film.wind(t);
         if (s.solid != 0) {
             // a solid colour (the thumbnail and the poster): the hero's palette, nothing behind to distract
@@ -832,6 +942,9 @@ public final class Renderer {
                 Nature.backdropMesh(sc, b.x0, b.y0, b.x1, b.y1, W, H, t, wind, film == null ? 0 : film.weather(Film.W_SEA, t), mesh, ms[0], ms[1], Sets.outdoorSet(s.set));
                 g.imageMesh(b.img, ms[0], ms[1], mesh);
                 if (sc != null) Nature.waterLife(g, sc, b.x0, b.y0, b.x1, b.y1, W, H, t);
+                // v40: the fire in the picture burns: live flames over its own, in the picture's frame (they move with it)
+                float pf = fireNow(s, t);
+                if (pf > 0) drawPicFire(g, s, t, pf, 0.55f);
             }
             // a close-up softens the place behind the face, never melts it: a half-size layer, at most two thirds in,
             // only once the shot is a real close-up
@@ -876,6 +989,9 @@ public final class Renderer {
                 Film.Key ka = a.stateAt(tt), kb = b.stateAt(tt);
                 int la = layerOf(ka), lb = layerOf(kb);
                 if (la != lb) return la - lb;
+                // v40: on the ground the one further away is drawn first (behind the fire before the one in front of it)
+                float da = a.track.isEmpty() ? 0 : Director.liftAt(a, tt), db = b.track.isEmpty() ? 0 : Director.liftAt(b, tt);
+                if (Math.abs(da - db) > 6) return da < db ? -1 : 1;
                 if (front != null) {
                     boolean fa = a.c.shown().equals(front), fb = b.c.shown().equals(front);
                     if (fa != fb) return fa ? 1 : -1;
@@ -884,6 +1000,13 @@ public final class Renderer {
             }
         });
         for (Film.Actor a : list) drawActor(g, s, a, t);
+        // v40: one walking behind the picture's fire is seen through its flames: they are drawn over them again
+        float pfire = fireNow(s, t);
+        if (pfire > 0 && someoneAtFire(s, t, picFireOnStage(s), -1)) {
+            g.restore(); g.save(); applyCam(g, bdDepth(s), s.ground);
+            drawPicFire(g, s, t, pfire, 1f);
+            g.restore(); g.save(); applyCam(g, 1f, s.ground);
+        }
         drawFxLayer(g, s, t, false);
         if (film != null) {
             float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t));
@@ -915,7 +1038,7 @@ public final class Renderer {
             float fire = film.weather(Film.W_FIRE, t);
             float fwind = Sets.outdoorSet(s.set) ? film.wind(t) : 0;
             // v36: a fire or a lamp belongs to the part it was lit in (its fade-out never burns on into the next place)
-            if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
+            if (fire > 0 && picFire(s) == null) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
             float cand = film.weather(Film.W_CANDLES, t);
             if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) candles(g, s, t, w.kind, cand);
             float ff = film.weather(Film.W_FIREFLIES, t);
@@ -959,10 +1082,14 @@ public final class Renderer {
         if (fire <= 0 && cand <= 0) return;
         boolean dark = s.tod == Sets.NIGHT || s.tod == Sets.EVENING || !Sets.outdoorSet(s.set);
         float fwind = Sets.outdoorSet(s.set) ? film.wind(t) : 0;
+        // v40: the picture's own fire glows in the picture's frame — not over one standing in front of it
+        if (fire > 0 && picFire(s) != null && fireNow(s, t) > 0 && !someoneAtFire(s, t, picFireOnStage(s), 1)) {
+            g.save(); applyCam(g, bdDepth(s), s.ground); drawPicFire(g, s, t, fire, dark ? 0.6f : 0.35f); g.restore();
+        }
         g.save();
         applyCam(g, 1f, s.ground);
         g.setAlpha(dark ? 0.72f : 0.4f);
-        if (fire > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
+        if (fire > 0 && picFire(s) == null) for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) Nature.fire(g, w.x, s.ground + 6, t, 1.5f * fire, fwind);
         if (cand > 0) for (Film.Weather w : film.weather) if (w.type == Film.W_CANDLES && t >= w.t0 && t <= w.t1 + 1.5f && inPart(w, s)) candles(g, s, t, w.kind, cand);
         g.restore();
     }
@@ -1237,6 +1364,9 @@ public final class Renderer {
         float y = s.ground;
         float scale = 1f;
         if (k.depth > 0) { y -= 26; scale = 0.88f; }
+        // v40: on a path (round a fire): behind it further up and smaller, in front lower and larger (the ground's perspective)
+        final Film.Track trk = a.track.isEmpty() ? null : a.trackAt(t);
+        if (trk != null) { float lf = trk.lift(t); y += lf; scale *= perspective(s, lf); }
         pxPerUnit = g.height() / (float) H * camZ * scale;      // how big the picture is on screen: how fine its mesh
 
         // ---- pose
@@ -1244,7 +1374,7 @@ public final class Renderer {
         p.reset();
         p.time = tp;
         p.seed = a.order * 13 + 5;
-        p.facing = k.facing;
+        p.facing = trk != null ? trk.facing(t) : k.facing;
         p.body = k.body;
         p.emotion = k.emotion;
         p.disguised = k.disguised;
@@ -1307,29 +1437,33 @@ public final class Renderer {
         Film.Key mv = moving(a, t);
         mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
         boolean rigWalk = sp != null && sp.rig != null && !sp.rig.still && !sp.rig.animal;
-        if (mv != null) {
-            float speed = mv.run ? 15f : 9f;
+        // v40: walking a path (round the fire) steps like any walk, along the curve
+        boolean pathWalk = mv == null && trk != null && trk.walking;
+        if (mv != null || pathWalk) {
+            boolean run = mv != null ? mv.run : trk.run;
+            float m0 = mv != null ? mv.t : trk.t0, m1 = mv != null ? mv.t + mv.moveDur : trk.t1;
+            float speed = run ? 15f : 9f;
             // the steps start and stop gently (no snap into a stride), over a fifth of a second
-            float amt = Rig.smooth(0, 0.2f, tp - mv.t) * Rig.smooth(0, 0.25f, mv.t + mv.moveDur - tp);
-            p.walk = (tp - mv.t) * speed;
+            float amt = Rig.smooth(0, 0.2f, tp - m0) * Rig.smooth(0, 0.25f, m1 - tp);
+            p.walk = (tp - m0) * speed;
             if (rigWalk) {
                 // v40: the steps keep pace with the ground (one step per stride length covered, slower as the walk
                 // eases in and out): the planted foot stays where it is — no gliding, no floating
-                float dist = Math.abs(Director.xAt(a, tp) - Director.prevX(a, mv));
-                p.walk = (float) Math.PI * dist / Math.max(1f, (mv.run ? 0.42f : 0.3f) * h);
+                float dist = mv != null ? Math.abs(Director.xAt(a, tp) - Director.prevX(a, mv)) : trk.walked(tp) / Math.max(0.3f, scale);
+                p.walk = (float) Math.PI * dist / Math.max(1f, (run ? 0.42f : 0.3f) * h);
             }
             p.walkAmt = amt;
-            p.facing = mv.facing;
+            p.facing = mv != null ? mv.facing : trk.facing(tp);
             // a calm, weighted step: a small rise and fall (no hopping) and a slight sway of the body
-            mo.dy = -bump(p.walk) * (mv.run ? 6 : 3.5f) * amt;
-            mo.rot = (float) Math.sin(p.walk) * (mv.run ? 1.8f : 1.1f) * amt;
+            mo.dy = -bump(p.walk) * (run ? 6 : 3.5f) * amt;
+            mo.rot = (float) Math.sin(p.walk) * (run ? 1.8f : 1.1f) * amt;
             p.armL = 8 + (17 + (float) Math.sin(p.walk) * 25) * amt;
             p.armR = 8 + (17 - (float) Math.sin(p.walk) * 25) * amt;
             if (rigWalk) {
                 // v40: the rig's own walk (Renderer.rigState): the body is highest as the legs pass each other and
                 // comes down onto each step (the rig lowers it so the planted foot stays on the floor); the arms swing
                 // against the legs there, so they rest here
-                mo.dy = -(1 - bump(p.walk)) * h * (mv.run ? 0.022f : 0.011f) * amt;
+                mo.dy = -(1 - bump(p.walk)) * h * (run ? 0.022f : 0.011f) * amt;
                 mo.rot = 0;
                 p.armL = 8; p.armR = 8;
             }
@@ -2487,7 +2621,7 @@ public final class Renderer {
             case Film.SEAT_CHAIR: return 0.30f;
             case Film.SEAT_BED: return BED_TOP;
             case Film.SEAT_THRONE: return 0.335f;
-            case Film.SEAT_STOOL: case Film.SEAT_ROCK: return 0.24f;
+            case Film.SEAT_STOOL: case Film.SEAT_ROCK: case Film.SEAT_LOG: return 0.24f;
             default: return 0;
         }
     }
@@ -2652,6 +2786,20 @@ public final class Renderer {
                     g.rect(-w * 0.36f, top, h * 0.035f, -top); g.rect(w * 0.36f - h * 0.035f, top, h * 0.035f, -top);
                     g.linear(0, top, 0, top + h * 0.06f, 0xFFA1887F, 0xFF6D4C41);
                     g.roundRect(-w * 0.42f, top, w * 0.84f, h * 0.055f, h * 0.02f);
+                }
+                break;
+            case Film.SEAT_LOG:
+                if (!front) {
+                    // v40: a log stood on end — bark down its sides with cracks, a lighter cut top with its rings
+                    float lw = h * 0.16f, lt = top + h * 0.012f;
+                    g.linear(-lw, 0, lw, 0, 0xFF4E3524, 0xFF7A5634);
+                    g.rect(-lw, lt, lw * 2, -lt);
+                    g.color(0x40000000);
+                    for (int i = -2; i <= 2; i++) g.line(i * lw * 0.38f, lt + h * 0.02f, i * lw * 0.38f + h * 0.004f, -h * 0.01f, h * 0.006f);
+                    g.color(0xFF3E2A1C); g.oval(0, 0, lw, h * 0.02f);
+                    g.linear(0, lt - h * 0.025f, 0, lt + h * 0.025f, 0xFFD2B48C, 0xFFA67C52);
+                    g.oval(0, lt, lw, h * 0.03f);
+                    g.color(0x55704C2C); g.oval(0, lt, lw * 0.6f, h * 0.018f); g.oval(0, lt, lw * 0.25f, h * 0.008f);
                 }
                 break;
             case Film.SEAT_ROCK:
@@ -3595,7 +3743,8 @@ public final class Renderer {
                     float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a) : 400;
                     float fc = f.a != null ? f.a.stateAt(t).facing : 1;
                     seatSpan = f.kind == Film.SEAT_SOFA ? sofaSpan(s, f, hh) : null;
-                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
+                    float ps = perspective(s, f.y);
+                    g.save(); g.translate(f.x, s.ground + f.y); if (ps != 1f) g.scale(ps, ps); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
                     seatSpan = null;
                 } break;
                 case Film.FX_STONE: if (!behind) {

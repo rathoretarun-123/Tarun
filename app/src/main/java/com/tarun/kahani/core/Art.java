@@ -156,6 +156,13 @@ public final class Art {
         public int avgLow;
         /** v32: a picture (the user's own, or one made for the place) rather than a painted set: it carries its own light and mood. */
         public boolean picture;
+        /**
+         * v40: the picture's own flames cut out (their colour kept, everything else see-through, soft at the edges) and
+         * the box they were cut from (fractions of the picture): drawn flickering over the picture's fire, and over one
+         * who walks behind it. Null when the picture shows no fire.
+         */
+        public Object fireImg;
+        public float fu0, fv0, fu1, fv1;
     }
 
     public static final class Shot {
@@ -675,10 +682,40 @@ public final class Art {
                 b.scan = Nature.scan(px, d[0], d[1]);
                 b.ground = findGround(px, d[0], d[1], b);
                 b.avgLow = averageLow(px, d[0], d[1]);
+                if (b.scan.fireU >= 0) fireCut(L, file, b);
             }
         } catch (RuntimeException ignored) {
         }
         return b;
+    }
+
+    /** v40: the flames of a place picture cut out of it (Backdrop.fireImg). */
+    static void fireCut(Loader L, String file, Backdrop b) {
+        Nature.Scan s = b.scan;
+        int[] d = L.decode(file, 900);
+        if (d == null) return;
+        int w = d[0], h = d[1];
+        float u0 = Math.max(0, s.fireU - s.fireW * 0.75f), u1 = Math.min(1, s.fireU + s.fireW * 0.75f);
+        float v0 = Math.max(0, s.fireV - s.fireH * 1.35f), v1 = Math.min(1, s.fireV + s.fireH * 0.06f);
+        int x0 = Math.round(u0 * w), x1 = Math.round(u1 * w), y0 = Math.round(v0 * h), y1 = Math.round(v1 * h);
+        int cw = x1 - x0, ch = y1 - y0;
+        if (cw < 4 || ch < 4) return;
+        int[] out = new int[cw * ch];
+        float[] hsv = new float[3];
+        for (int y = 0; y < ch; y++) for (int x = 0; x < cw; x++) {
+            int c = d[2 + (y + y0) * w + x + x0];
+            Nature.hsv(c, hsv);
+            float hh = hsv[0], ss = hsv[1], vv = hsv[2];
+            // flame: bright orange to yellow, and the white-yellow core; soft toward the box's edges
+            float f = hh >= 0 && hh <= 62 ? Rig.smooth(0.25f, 0.55f, ss) * Rig.smooth(0.55f, 0.85f, vv) : 0;
+            if (hh >= 22 && hh <= 66 && vv > 0.88f && ss > 0.08f) f = Math.max(f, Rig.smooth(0.88f, 0.97f, vv));
+            float ex = Math.min(x, cw - 1 - x) / (cw * 0.12f), ey = Math.min(y, ch - 1 - y) / (ch * 0.08f);
+            f *= Math.min(1, Math.min(ex, ey));
+            int a = Math.max(0, Math.min(255, Math.round(f * 255)));
+            out[y * cw + x] = a == 0 ? 0 : (a << 24) | (c & 0xFFFFFF);
+        }
+        b.fireImg = L.create(out, cw, ch);
+        b.fu0 = x0 / (float) w; b.fu1 = x1 / (float) w; b.fv0 = y0 / (float) h; b.fv1 = y1 / (float) h;
     }
 
     /**

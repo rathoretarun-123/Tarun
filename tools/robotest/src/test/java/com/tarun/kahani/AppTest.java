@@ -5482,13 +5482,126 @@ public class AppTest {
         ac.pause().stop().destroy();
     }
 
+    /**
+     * v40: the user's story "अलाव के पास" with their five pictures — three men's turnaround sheets (अर्जुन in a white
+     * shirt with an iron rod, कबीर in a green jacket, समीर in a yellow sweater with a kulhad), a sheet of things (a log
+     * stool, firewood and upla, the rod, kulhads and a kettle, a bottle and a blanket, a matchbox, a lighter) and the
+     * night field with the fire in six views. Uploaded as on the phone; the script read (a title with a dash, the time,
+     * the cast "नाम - …", the place paragraph, the things, the lines "नाम [what they do] - "…""); the film directed:
+     * the night, the fire where the picture has it, अर्जुन and समीर seated on logs from the start, कबीर walking round
+     * the fire (behind it and in front), reversing, sitting two seconds and getting up again. The project is kept for
+     * the desktop film (build/v40alav).
+     */
+    @Test
+    public void v40AlavFireStoryWithTheUsersSheets() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets40b");
+        String script = new String(Files.readAllBytes(new File(root, "tools/testdata/v40stories/alav_ke_paas.txt").toPath()), "UTF-8");
+        Story st = ScriptParser.parse(script);
+        assertEquals("अलाव के पास", st.title);
+        assertEquals("three men from the list", 3, st.characters.size());
+        assertEquals("the field is the place", 1, st.places.size());
+        assertEquals("seven things listed", 7, st.things.size());
+        assertTrue("the night from the time line: " + st.scenes.get(0).setting, Sets.detectTime(st.scenes.get(0).setting, -1) == Sets.NIGHT || st.scenes.get(0).setting.contains("रात"));
+        int lines = 0;
+        for (Story.Beat b : st.scenes.get(0).beats) if (b.type == Story.Beat.DIALOGUE && b.speaker != null) lines++;
+        assertEquals("eleven lines, each with its speaker", 11, lines);
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        Story.CharacterDef arjun = null, kabir = null, sameer = null;
+        for (Story.CharacterDef x : st.cast()) { if (x.fullName.equals("अर्जुन")) arjun = x; if (x.fullName.equals("कबीर")) kabir = x; if (x.fullName.equals("समीर")) sameer = x; }
+        assertNotNull(arjun); assertNotNull(kabir); assertNotNull(sameer);
+        StringBuilder rep = new StringBuilder();
+        String[][] men = {{(String) keyFor.invoke(a, arjun), arjun.shown(), "01_arjun_shirt_rod_6views.jpg"}, {(String) keyFor.invoke(a, kabir), kabir.shown(), "02_kabir_jacket_6views.jpg"},
+                {(String) keyFor.invoke(a, sameer), sameer.shown(), "03_sameer_sweater_kulhad_6views.jpg"}};
+        for (String[] m : men) rep.append(m[1]).append(": ").append(upload(a, onResult, tf, "angles:char:" + m[0] + ":" + m[1], dir, new String[]{m[2]})).append('\n');
+        rep.append("place: ").append(upload(a, onResult, tf, "angles:scene:1:मैदान", dir, new String[]{"05_alav_maidan_6views.jpg"})).append('\n');
+        rep.append("things: ").append(upload(a, onResult, tf, "angles:obj:लट्ठे:लकड़ी के लट्ठे", dir, new String[]{"04_alav_things.jpg"})).append('\n');
+        File keep = new File(OUT.getParentFile(), "v40alav");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        String cast = p.read("cast.txt");
+        java.util.Map<String, java.util.Set<String>> angles = new java.util.HashMap<String, java.util.Set<String>>();
+        java.util.Map<String, Integer> pics = new java.util.HashMap<String, Integer>();
+        for (String l : cast.split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length > 3 && (f[0].equals("pose") || f[0].equals("view"))) {
+                pics.put(f[1], (pics.containsKey(f[1]) ? pics.get(f[1]) : 0) + 1);
+                if (!angles.containsKey(f[1])) angles.put(f[1], new java.util.TreeSet<String>());
+                angles.get(f[1]).add(com.tarun.kahani.core.Angles.name(Float.parseFloat(f[f[0].equals("pose") ? 3 : 2].trim())));
+            }
+        }
+        Method pp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("placePictures", Project.class, String.class);
+        pp.setAccessible(true);
+        Method tp = Class.forName("com.tarun.kahani.app.SheetSaver").getDeclaredMethod("thingPictures", Project.class, String.class);
+        tp.setAccessible(true);
+        int placeN = (Integer) pp.invoke(null, p, "1"), thingN = (Integer) tp.invoke(null, p, "लट्ठे");
+        for (String[] m : men) rep.append(String.format("%s: %d pictures, angles %s%n", m[1], pics.containsKey(m[0]) ? pics.get(m[0]) : 0, angles.get(m[0])));
+        rep.append(String.format("place %d views, things %d%n", placeN, thingN));
+        Art art = Art.fromManifest(cast, st, p.loader());
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(art);
+        Film.Seg seg = null;
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) { seg = sg; break; }
+        assertNotNull(seg);
+        Film.Actor ka = null, aa = null, sa = null;
+        for (Film.Actor x : seg.actors) { if (x.c == kabir) ka = x; if (x.c == arjun) aa = x; if (x.c == sameer) sa = x; }
+        int orbits = 0, kSits = 0, kStands = 0;
+        boolean wasSit = false;
+        for (Film.Track r : ka.track) if (r.walking) orbits++;
+        for (Film.Key k : ka.keys) {
+            if (k.body == com.tarun.kahani.core.Pose.SIT && !wasSit) kSits++;
+            if (k.body == com.tarun.kahani.core.Pose.STAND && wasSit) kStands++;
+            wasSit = k.body == com.tarun.kahani.core.Pose.SIT;
+        }
+        float fireX = -1;
+        for (Film.Weather w : film.weather) if (w.type == Film.W_FIRE) { fireX = w.x; break; }
+        rep.append(String.format("night=%b fire at %.0f; अर्जुन %s, समीर %s at the start; कबीर: %d walks round the fire, sat %d, stood %d%n", seg.tod == Sets.NIGHT, fireX,
+                com.tarun.kahani.core.Pose.class.getSimpleName() + aa.keys.get(0).body, "" + sa.keys.get(0).body, orbits, kSits, kStands));
+        System.out.println("V40 ALAV:\n" + rep);
+        for (String[] m : men) {
+            assertTrue(m[1] + " has the six pictures of the sheet: " + pics.get(m[0]), pics.containsKey(m[0]) && pics.get(m[0]) >= 5);
+            assertTrue(m[1] + "'s front and back read: " + angles.get(m[0]), angles.get(m[0]).contains("back"));
+        }
+        assertTrue("the place sheet splits into its views (one from above kept in the library): " + placeN, placeN >= 5);
+        assertEquals("all seven things — the matchbox and the lighter are two", 7, thingN);
+        assertEquals("a night scene", Sets.NIGHT, seg.tod);
+        assertTrue("the fire burns", fireX > 0);
+        assertEquals("अर्जुन is seated from the start", com.tarun.kahani.core.Pose.SIT, aa.keys.get(0).body);
+        assertEquals("समीर is seated from the start", com.tarun.kahani.core.Pose.SIT, sa.keys.get(0).body);
+        assertTrue("कबीर walks round the fire, again and again: " + orbits, orbits >= 4);
+        assertTrue("कबीर sits on the empty log and gets up again: " + kSits + "/" + kStands, kSits >= 1 && kStands >= 1);
+        assertEquals("the last key of कबीर stands", com.tarun.kahani.core.Pose.STAND, ka.last().body);
+        assertEquals(0, posePictures(film, art));
+        ac.pause().stop().destroy();
+    }
+
     /** v40: how many shot appearances of a rigged character use one of the uploaded pose pictures instead of the rig. */
     static int posePictures(Film film, Art art) {
         int n = 0;
         for (Film.Shot sh : film.shots) for (java.util.Map.Entry<String, Integer> e : sh.pictures.entrySet()) {
             Art.Sprite sp = art.sprites.get(e.getKey());
             if (sp == null || sp.rig == null || sp.rig.animal || sp.rig.still) continue;
-            if (e.getValue() >= 0) n++;
+            // (the one exception: the back of the head and shoulder in the foreground of an over-the-shoulder shot is
+            // the user's own back picture — a front rig has no back to turn to)
+            int idx = e.getValue();
+            if (sh.ots.length() > 0 && sp.poses != null && idx >= 0 && idx < sp.poses.size() && Math.abs(Math.abs(sp.poses.get(idx).angle) - 180) < 1) continue;
+            if (idx >= 0) n++;
         }
         return n;
     }

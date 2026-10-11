@@ -25,6 +25,11 @@ public final class Nature {
         public float skyBottom;              // fraction of the picture height
         public float waterTop = -1, waterBottom = -1;   // fractions of the height where the water lies
         public boolean anyWater, anyFall, anyPlants;
+        /**
+         * v40: a fire burning in the picture (a campfire, a bonfire, a hearth): the middle of its flames across (fireU),
+         * the bottom of the flames (fireV), the flames' width and height — fractions of the picture; fireU < 0 = none.
+         */
+        public float fireU = -1, fireV = -1, fireW, fireH;
         public float at(float[] m, float u, float v) {
             float x = u * GW - 0.5f, y = v * GH - 0.5f;
             int x0 = (int) Math.floor(x), y0 = (int) Math.floor(y);
@@ -59,6 +64,7 @@ public final class Nature {
         s.skyBottom = skyRow / (float) h;
         int GW = Scan.GW, GH = Scan.GH, N = GW * GH;
         float[] cnt = new float[N], wat = new float[N], foam = new float[N], grn = new float[N], gx = new float[N], gy = new float[N], blue = new float[N], gtex = new float[N];
+        float[] flame = new float[N];
         float minWaterY = Math.max(s.skyBottom + 0.03f, 0.3f) * h;
         for (int y = 0; y + 2 < h; y += 2) {
             int by = Math.min(GH - 1, y * GH / h);
@@ -71,6 +77,8 @@ public final class Nature {
                 hsv(c, hsv);
                 float hh = hsv[0], ss = hsv[1], vv = hsv[2];
                 if (hh >= 175 && hh <= 240 && ss > 0.2f) blue[g]++;
+                // v40: flames — bright orange to yellow, a white-yellow core (never in the top tenth: a sunset)
+                if (y > h / 10 && ((hh >= 5 && hh <= 55 && ss >= 0.45f && vv >= 0.82f) || (hh >= 25 && hh <= 62 && ss >= 0.15f && vv >= 0.94f))) flame[g]++;
                 // v35: the crowns of trees stand against the sky: foliage is read in the sky's rows too
                 boolean leafy = hh >= 60 && hh <= 168 && ss > 0.18f && vv > 0.12f;
                 if (y <= skyRow + h / 40) { if (leafy) { grn[g]++; gtex[g] += dxl + dyl; } continue; }
@@ -93,6 +101,7 @@ public final class Nature {
             float yb = (i / GW + 0.5f) / GH;
             s.fall[i] = streaks && yb > s.skyBottom + 0.02f ? Math.min(1, foam[i] / cnt[i] * 1.3f) : 0;
         }
+        fireIn(s, flame, cnt);
         keepBig(s.water, 10);
         keepBig(s.fall, 4);
         reach(s);
@@ -112,6 +121,69 @@ public final class Nature {
     }
 
     static float lum(int c) { return (((c >> 16) & 255) * 0.3f + ((c >> 8) & 255) * 0.59f + (c & 255) * 0.11f) / 255f; }
+
+    /**
+     * v40: a picture looking straight down on a place: its top band, like its bottom, is grass — a
+     * picture taken standing has sky, walls or the far distance at its top.
+     */
+    public static boolean fromAbove(int[] px, int w, int h) {
+        if (px == null || w < 8 || h < 8) return false;
+        float[] hsv = new float[3];
+        int band = Math.max(1, h / 8);
+        int top = 0, bot = 0, n = 0;
+        for (int y = 0; y < band; y++) for (int x = 0; x < w; x += 2) {
+            n++;
+            hsv(px[y * w + x], hsv);
+            if (hsv[0] >= 45 && hsv[0] <= 170 && hsv[1] >= 0.2f && hsv[2] >= 0.1f) top++;
+            hsv(px[(h - 1 - y) * w + x], hsv);
+            if (hsv[0] >= 45 && hsv[0] <= 170 && hsv[1] >= 0.2f && hsv[2] >= 0.1f) bot++;
+        }
+        // (grass at the top and the bottom: a wooden wall or a brown floor is never taken for it)
+        if (n == 0 || top < n * 0.7f || bot < n * 0.5f) return false;
+        // (and no sky anywhere in its upper half — by day or by night: leaves overhead with sky between them are a
+        // view up, not down)
+        int sky = 0, m = 0;
+        for (int y = 0; y < h / 2; y += 2) for (int x = 0; x < w; x += 3) {
+            m++;
+            hsv(px[y * w + x], hsv);
+            if (hsv[0] >= 190 && hsv[0] <= 255 && hsv[1] >= 0.25f) sky++;
+        }
+        return sky < m * 0.02f;
+    }
+
+    /**
+     * v40: the fire in a picture — the cell richest in flame colour and the flame cells joined to it; kept when it is a
+     * real blaze (a fifth of its richest cell is flame) and no wider than half the picture (a sunset, an orange wall
+     * is not a fire).
+     */
+    static void fireIn(Scan s, float[] flame, float[] cnt) {
+        int GW = Scan.GW, GH = Scan.GH, N = GW * GH;
+        int best = -1; float bestF = 0, all = 0, total = 0;
+        for (int i = 0; i < N; i++) {
+            total += cnt[i]; all += flame[i];
+            float f = cnt[i] > 0 ? flame[i] / cnt[i] : 0;
+            if (f > bestF) { bestF = f; best = i; }
+        }
+        if (best < 0 || bestF < 0.2f || all < total * 0.002f) return;
+        boolean[] in = new boolean[N];
+        int[] stack = new int[N];
+        int sp = 0, x0 = GW, x1 = -1, y0 = GH, y1 = -1;
+        float got = 0;
+        stack[sp++] = best; in[best] = true;
+        while (sp > 0) {
+            int i = stack[--sp], x = i % GW, y = i / GW;
+            got += flame[i];
+            x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+            int[] nb = {x > 0 ? i - 1 : -1, x < GW - 1 ? i + 1 : -1, y > 0 ? i - GW : -1, y < GH - 1 ? i + GW : -1};
+            for (int j : nb) if (j >= 0 && !in[j] && cnt[j] > 0 && flame[j] / cnt[j] >= 0.06f) { in[j] = true; stack[sp++] = j; }
+        }
+        float wFrac = (x1 - x0 + 1) / (float) GW;
+        if (wFrac > 0.5f || got < all * 0.4f) return;
+        s.fireU = (x0 + x1 + 1) / 2f / GW;
+        s.fireV = (y1 + 1) / (float) GH;
+        s.fireW = wFrac;
+        s.fireH = (y1 - y0 + 1) / (float) GH;
+    }
 
     /**
      * v35: how much the wind moves each point of foliage. Each column's runs of foliage are read from the bottom up: a
@@ -433,6 +505,14 @@ public final class Nature {
     }
 
     /** Leaves (or petals) blown by the wind: they tumble, fall slowly and travel with the gusts. */
+    /** v40: the picture has trees or bushes (foliage in its top quarter, where the sky or the far distance is), not only grass on the ground. */
+    public static boolean treesIn(Scan s) {
+        if (s == null || !s.anyPlants) return false;
+        float sum = 0; int n = 0;
+        for (int y = 0; y < Scan.GH / 4; y++) for (int x = 0; x < Scan.GW; x++) { sum += s.plants[y * Scan.GW + x]; n++; }
+        return n > 0 && sum / n > 0.08f;
+    }
+
     public static void leaves(Gfx g, float w, float h, float t, float amount, float wind, boolean petals) {
         int n = (int) ((petals ? 120 : 75) * Math.min(1.5f, amount));
         int[] cols = petals ? new int[]{0xFFF48FB1, 0xFFE91E63, 0xFFFFD54F, 0xFFFFFFFF, 0xFFFF7043}
@@ -571,11 +651,16 @@ public final class Nature {
     public static void fire(Gfx g, float x, float ground, float t, float size) { fire(g, x, ground, t, size, 0); }
 
     /** v36: wind bends the flames, the sparks and the smoke away from where it blows from. */
-    public static void fire(Gfx g, float x, float ground, float t, float size, float wind) {
+    public static void fire(Gfx g, float x, float ground, float t, float size, float wind) { fire(g, x, ground, t, size, wind, true); }
+
+    /** v40: logs = false: the flames, sparks and smoke only, over a fire a picture already shows (its own logs and stones). */
+    public static void fire(Gfx g, float x, float ground, float t, float size, float wind, boolean logs) {
         float s = size, lean = Math.max(-0.7f, Math.min(0.7f, wind * 0.6f));
         g.color(0xFF4E342E);
-        g.save(); g.translate(x, ground - 6 * s); g.rotate(14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
-        g.save(); g.translate(x, ground - 6 * s); g.rotate(-14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
+        if (logs) {
+            g.save(); g.translate(x, ground - 6 * s); g.rotate(14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
+            g.save(); g.translate(x, ground - 6 * s); g.rotate(-14); g.roundRect(-38 * s, -6 * s, 76 * s, 12 * s, 5 * s); g.restore();
+        }
         // glow on the ground
         g.radial(x, ground - 20 * s, 160 * s, 0x60FF9A30, 0x00FF9A30);
         g.rect(x - 160 * s, ground - 180 * s, 320 * s, 340 * s);

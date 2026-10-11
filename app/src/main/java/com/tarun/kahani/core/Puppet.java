@@ -108,7 +108,7 @@ public final class Puppet {
             case Film.SEAT_CHAIR: case Film.SEAT_STOOL: case Film.SEAT_WHEELCHAIR: return 0.30f;
             case Film.SEAT_THRONE: return 0.335f;
             case Film.SEAT_SOFA: return 0.27f;
-            case Film.SEAT_BED: case Film.SEAT_ROCK: return 0.28f;
+            case Film.SEAT_BED: case Film.SEAT_ROCK: case Film.SEAT_LOG: return 0.28f;
             default: return -1;
         }
     }

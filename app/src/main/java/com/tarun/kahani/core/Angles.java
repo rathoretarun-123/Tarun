@@ -62,7 +62,73 @@ public final class Angles {
         boolean ta = tinyPiece(fa), tb = tinyPiece(fb);
         List<Piece> best = ta != tb ? (ta ? b : a) : fa.size() >= fb.size() ? a : b;
         if (figures(best, w, h).size() >= 2) return order(best, h);
+        // v40: panels that run to the sheet's edge, parted only by thin white gutters (the fire-place sheet: six night
+        // views, no margin round them) — the border is the pictures' own dark sky, so nothing was background
+        if (!cutOut && !alpha) {
+            List<Piece> g = gutterPanels(src, w, h);
+            if (g != null) return g;
+        }
         return splitByGroups(src, w, h);
+    }
+
+    /**
+     * v40: a sheet of pictures parted by light gutters that run right across it (rows and columns nearly all white):
+     * the rectangles between them, whole. Null when there are no such gutters or fewer than two pictures.
+     */
+    static List<Piece> gutterPanels(int[] src, int w, int h) {
+        boolean[] gc = new boolean[w], gr = new boolean[h];
+        for (int x = 0; x < w; x++) {
+            int n = 0;
+            for (int y = 0; y < h; y++) if (light(src[y * w + x])) n++;
+            gc[x] = n >= h * 0.9f;
+        }
+        for (int y = 0; y < h; y++) {
+            int n = 0;
+            for (int x = 0; x < w; x++) if (light(src[y * w + x])) n++;
+            gr[y] = n >= w * 0.9f;
+        }
+        List<int[]> cs = spans(gc, w), rs = spans(gr, h);
+        if (cs == null || rs == null || cs.size() * rs.size() < 2) return null;
+        List<Piece> out = new ArrayList<Piece>();
+        for (int[] r : rs) for (int[] c : cs) {
+            Piece p = new Piece();
+            p.x0 = c[0]; p.y0 = r[0]; p.w = c[1] - c[0]; p.h = r[1] - r[0];
+            p.px = new int[p.w * p.h];
+            for (int y = 0; y < p.h; y++) for (int x = 0; x < p.w; x++) p.px[y * p.w + x] = src[(y + p.y0) * w + x + p.x0] | 0xFF000000;
+            out.add(p);
+        }
+        return out;
+    }
+
+    /** v40: near white (a gutter's paper). */
+    private static boolean light(int c) {
+        int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        return Math.min(r, Math.min(g, b)) >= 215 && Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b)) <= 30;
+    }
+
+    /**
+     * v40: the stretches between gutters (each at least a tenth of the length; the gutters thin, under 4% of it, and
+     * at least one inside the sheet); null when the line has no inner gutter.
+     */
+    private static List<int[]> spans(boolean[] gut, int n) {
+        List<int[]> out = new ArrayList<int[]>();
+        int inner = 0, i = 0, maxGut = Math.max(3, Math.round(n * 0.04f));
+        while (i < n) {
+            if (gut[i]) {
+                int j = i;
+                while (j < n && gut[j]) j++;
+                if (j - i > maxGut && i > 0 && j < n) return null;      // a wide white band inside: not a gutter
+                if (i > 0 && j < n) inner++;
+                i = j;
+                continue;
+            }
+            int j = i;
+            while (j < n && !gut[j]) j++;
+            // a sliver of the picture at the edge beside a gutter is trimmed with it
+            if (j - i >= n * 0.1f) out.add(new int[]{i, j});
+            i = j;
+        }
+        return inner == 0 ? (out.size() == 1 ? java.util.Collections.singletonList(out.get(0)) : null) : out;
     }
 
     /** The sheet's background colour: the mean of its border pixels. */
@@ -461,14 +527,20 @@ public final class Angles {
      * v34: a part that came loose from a figure (a raised sword with the tip of a braid, a foot in a leap) is joined
      * back to the figure it touches instead of being dropped.
      */
-    public static List<Piece> figures(List<Piece> parts, int w, int h) {
+    public static List<Piece> figures(List<Piece> parts, int w, int h) { return figures(parts, w, h, false); }
+
+    /**
+     * v40: things = a sheet of things (a stool, a kettle, a matchbox and a lighter): every piece is a thing of its own,
+     * so a small one is kept (a lighter beside a matchbox was dropped as "a prop come loose from a figure").
+     */
+    public static List<Piece> figures(List<Piece> parts, int w, int h, boolean things) {
         parts = joinStacked(parts, w, h);
         List<Piece> out = new ArrayList<Piece>();
         int tallest = 0;
         for (Piece pc : parts) tallest = Math.max(tallest, pc.h);
         for (Piece pc : parts) if (pc.h >= tallest * 0.3f && pc.h >= h * 0.12f && pc.w >= w * 0.04f && opaqueShare(pc) > 0.04f) out.add(pc);
         // a prop that came loose from a figure (a sword, a hat, a bone) is far smaller than the figures: under 30% of their median area
-        if (out.size() >= 3) {
+        if (out.size() >= 3 && !things) {
             List<Long> areas = new ArrayList<Long>();
             for (Piece pc : out) areas.add((long) pc.w * pc.h);
             java.util.Collections.sort(areas);
@@ -738,8 +810,17 @@ public final class Angles {
         float faceW = inter / 0.4f;
         float hairAbove = (r.faceTop - r.headTop) / Math.max(0.01f, r.chinY - r.faceTop);
         float skin = skinShare(r, r.eyeLX - inter * 0.5f, r.eyeY - inter * 0.3f, r.eyeRX + inter * 0.5f, r.mouthY + inter * 0.25f);
+        // v40: how far the face's skin lies to one side of the head (Art.facingOf): a profile's face is far to one
+        // side, a back's "face" (the neck, the ears) is in the middle
+        float side0 = beast ? Float.NaN : Art.facingOffset(r);
+        boolean profile = !Float.isNaN(side0) && Math.abs(side0) >= 0.12f;
         if (beast) { if (dark > 0.42f || faceW > 1.0f || (hairAbove > 2.2f && skin < 0.3f)) return BACK; }
-        else if (skin < 0.42f || (faceW > 1.0f && skin < 0.6f) || hairAbove > 1.6f || (dark > 0.42f && skin < 0.55f)) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
+        // (v40: a profile has half the face box empty and an eye no darker than its shadowed cheek: not a back —
+        // अर्जुन's and कबीर's profiles, a girl's profile and सिया's turned view were read as backs)
+        // (and the forehead: a face found with skin right above its eyes is a face, whatever its "eyes" landed on — a
+        // raised hand, an ear; the back of a head has hair there)
+        else if (skin < 0.42f || (faceW > 1.0f && skin < 0.6f) || hairAbove > 1.6f
+                || (dark > 0.42f && skin < 0.55f && !profile && !(foreheadSkin(r) >= 0.6f && Math.abs(side0) < 0.1f))) return BACK;   // a "face" found far below the head's top is a hand, not a face; dark "eyes" on little skin are hair
         // v40: brown hair passes for skin (the boy's back of the head read as a front): "eyes" no darker than the
         // "skin" round them, and that "skin" far darker than the figure's own arms and legs, are hair — a back
         if (!beast && dark >= 0.85f) {
@@ -759,9 +840,35 @@ public final class Angles {
         float turn = beast ? Float.NaN : Math.abs(Art.facingOffset(r));
         boolean known = !Float.isNaN(turn);
         if (inter < 0.05f || off > 0.16f) return known && turn < 0.10f && turn >= 0.06f ? THREE_QUARTER : SIDE;
+        // v40: a whole standing figure's face is small in its picture, so its eyes are close together in it — with the
+        // face's skin centred on the head and the eyes centred in the picture it is a front (अर्जुन's, कबीर's and
+        // समीर's full-length fronts were read as three-quarters)
+        boolean centred = known && turn < 0.04f && off < 0.04f;
+        if (centred && foreheadSkin(r) < 0.05f) return BACK;   // the "eyes" are the hairline at the nape: hair above them, no forehead (समीर's back)
+        if (centred && skin >= 0.7f) return FRONT;
         if (off > 0.06f || inter < 0.085f) return THREE_QUARTER;
         if (known && turn >= 0.085f) return THREE_QUARTER;
         return FRONT;
+    }
+
+    /**
+     * v40: the share of skin just above the eyes (the brows and the forehead, between the eyes' columns): a face has
+     * it; the back of a head whose hairline was taken for eyes has only hair there. NaN when it cannot be read.
+     */
+    static float foreheadSkin(Cutout.Result r) {
+        if (r.px == null || r.w <= 0 || !r.faceFound) return Float.NaN;
+        int[] px = r.read();
+        float ip = (r.eyeRX - r.eyeLX) * r.w;
+        int x0 = Math.max(0, Math.round(r.eyeLX * r.w)), x1 = Math.min(r.w - 1, Math.round(r.eyeRX * r.w));
+        int y0 = Math.max(0, Math.round(r.eyeY * r.h - 0.6f * ip)), y1 = Math.min(r.h - 1, Math.max(0, Math.round(r.eyeY * r.h - 0.2f * ip)));
+        int n = 0, sk = 0;
+        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+            int c = px[y * r.w + x];
+            if ((c >>> 24) < 100) continue;
+            n++;
+            if (Cutout.isSkin(c)) sk++;
+        }
+        return n < 4 ? Float.NaN : sk / (float) n;
     }
 
     /** v40: the mean brightness of the skin below the chin (arms, hands, legs); 0 when too little shows. */

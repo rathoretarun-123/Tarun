@@ -101,6 +101,11 @@ public final class Film {
         public int solid;
         /** The characters of this part are in a boat on the water (they stand on its deck and move with it). */
         public boolean inBoat;
+        /**
+         * v40: the place picture is at the people's own depth (they sit round the fire it shows): drawn with the stage,
+         * without the far background's slower drift, so the fire stays where they sit in every shot.
+         */
+        public boolean midground;
         public Actor find(Story.CharacterDef c) {
             for (Actor a : actors) if (a.c == c) return a;
             return null;
@@ -165,7 +170,8 @@ public final class Film {
 
     /** Seats under a sitting character. */
     public static final int SEAT_FLOOR = 0, SEAT_STOOL = 1, SEAT_THRONE = 2, SEAT_ROCK = 3, SEAT_WHEELCHAIR = 4,   // v34: a wheelchair goes where its sitter goes
-            SEAT_CHAIR = 5, SEAT_SOFA = 6, SEAT_BED = 7;     // v35: a chair with a back, a cushioned sofa, a bed (sat on, lain and slept in)
+            SEAT_CHAIR = 5, SEAT_SOFA = 6, SEAT_BED = 7,     // v35: a chair with a back, a cushioned sofa, a bed (sat on, lain and slept in)
+            SEAT_LOG = 8;     // v40: a log or a tree stump stood on end (round a campfire)
 
     /** v36: the everyday tasks a G_TASK act shows. */
     public static final int T_COOK = 1, T_SWEEP = 2, T_WASH = 3, T_READ = 4, T_WRITE = 5, T_PHONE = 6, T_BRUSH = 7, T_COMB = 8, T_WATER = 9, T_PAPER = 10,
@@ -195,6 +201,37 @@ public final class Film {
         public boolean mount;
     }
 
+    /**
+     * v40: a stretch of a character's path. walking: round an ellipse on the ground about (cx, cy) — x = cx + rx·cos θ,
+     * the feet ry·sin θ further up (behind, positive sin) or down (in front) — θ from th0 to th1 at an even pace that
+     * eases in and out; not walking: standing (or sitting) still at x, lift.
+     */
+    public static final class Track {
+        public float t0, t1, cx, cy, rx, ry, th0, th1, x, lift, facing = 1;
+        public boolean walking, run;
+        public float u(float t) {
+            float d = Math.max(1e-3f, t1 - t0), u = Math.max(0, Math.min(1, (t - t0) / d));
+            float r = Math.min(0.3f, 0.45f / d);                  // the pace builds up and slows down over about half a second
+            if (u < r) return u * u / (2 * r * (1 - r));
+            if (u > 1 - r) return 1 - (1 - u) * (1 - u) / (2 * r * (1 - r));
+            return (u - r / 2) / (1 - r);
+        }
+        public float theta(float t) { return th0 + (th1 - th0) * u(t); }
+        public float x(float t) { return walking ? cx + rx * (float) Math.cos(theta(t)) : x; }
+        /** How far the feet are above (negative: further away) or below the ground line, in the stage's pixels. */
+        public float lift(float t) { return walking ? cy - ry * (float) Math.sin(theta(t)) : lift; }
+        /** The ground covered since the stretch began (for the steps). */
+        public float walked(float t) { return walking ? Math.abs(theta(t) - th0) * rx : 0; }
+        /** Which way the body faces: along the walk (where the path heads when it runs into or out of the picture). */
+        public float facing(float t) {
+            if (!walking) return facing;
+            float dir = Math.signum(th1 - th0), th = theta(t);
+            float s = (float) Math.sin(th);
+            if (Math.abs(s) < 0.15f) s = (float) Math.sin(th + dir * 0.3f);
+            return -s * dir >= 0 ? 1 : -1;
+        }
+    }
+
     public static final class Actor {
         public Story.CharacterDef c;
         public Look look;
@@ -204,6 +241,17 @@ public final class Film {
         public int order;
         /** Spider-Verse: the frame rate this character's poses step on (24 experts, 12 learners, 8 rebels; 0 = smooth, every frame). */
         public int stepFps;
+        /**
+         * v40: where the character is over stretches of time, when that is a path rather than a step from key to key —
+         * walking round a fire on an ellipse on the ground (behind it smaller and higher up, in front larger), or
+         * standing still at a spot of it. While a stretch covers t it decides the place; the keys decide the rest.
+         */
+        public final List<Track> track = new ArrayList<Track>();
+        /** v40: the stretch of the track at t, or null. */
+        public Track trackAt(float t) {
+            for (Track r : track) if (t >= r.t0 && t < r.t1) return r;
+            return null;
+        }
         public Key last() { return keys.get(keys.size() - 1); }
         /** Starts a new key at time t copying the current state. */
         public Key at(float t) {

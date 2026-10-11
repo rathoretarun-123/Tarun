@@ -63,6 +63,8 @@ public final class Sets {
     /** v34: words of open land (a battlefield, mountains, a valley, a desert, fields) — a place of its own, though drawn as the open place. */
     public static boolean openLand(String text) {
         return Txt.has(text, "युद्ध का मैदान", "युद्धभूमि", "युद्ध भूमि", "रणभूमि", "रणक्षेत्र", "पहाड़", "पर्वत", "घाटी", "रेगिस्तान", "मरुस्थल", "खेत")
+                // v40: an open, empty field out of town ("शहर से बाहर एकदम खुला और सुनसान मैदान") is open land, not a courtyard
+                || (Txt.has(text, "मैदान") && Txt.has(text, "खुला", "खुले", "सुनसान", "वीरान", "शहर से बाहर", "दूर दूर तक", "दूर-दूर तक"))
                 || Txt.hasWord(text, "battlefield", "battleground", "mountain", "mountains", "hill", "hills", "valley", "desert", "meadow", "field", "fields");
     }
 

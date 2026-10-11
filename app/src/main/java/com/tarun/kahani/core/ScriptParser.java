@@ -17,6 +17,8 @@ public final class ScriptParser {
     private static final Pattern SCENE = Pattern.compile(
             "^\\s*[#*]*\\s*(दृश्य|द्रश्य|सीन|Scene|SCENE|scene|अंक|भाग)\\s*[-–]?\\s*([0-9]+)\\s*[:：.\\-–—)]*\\s*(.*)$");
     private static final Pattern NUMBERED = Pattern.compile("^\\s*([0-9]+)\\s*[.)]\\s*(.+)$");
+    /** v40: अर्जुन [छड़ी से आग में लकड़ी धकेलते हुए] - "…": a name, what they do while saying it (in brackets), a dash, the line. */
+    private static final Pattern DASH_LINE = Pattern.compile("^(.{1,40}?)\\s*(?:[\\[(]([^\\])]{0,400})[\\])])?\\s*[-–—:：]\\s*([\"“].+)$");
     private static final Pattern AGE = Pattern.compile("([0-9]+)\\s*(वर्ष|साल|बरस|years?|yrs?|yo)", Pattern.CASE_INSENSITIVE);
 
     static final String[] TITLE_WORDS = {"बड़ी", "छोटी", "बड़ा", "छोटा", "बाकी", "राजकुमारी", "राजकुमार", "गार्ड", "गार्ड्स",
@@ -63,13 +65,18 @@ public final class ScriptParser {
         }
         if (firstScene < 0) {
             // No scene headings: treat the whole thing as one scene.
-            story.warnings.add("No 'Scene 1' / 'दृश्य 1' heading found — the whole story is treated as one scene.");
-            firstScene = 0;
-            parsePreamble(story, new String[0]);
+            // v40: lists before the script ("पात्रों का वर्णन -", "जगह का वर्णन -") end where the script starts ("पटकथा -",
+            // "Script:"): they are read as the cast and the place, the rest is the one scene
+            int start = scriptStart(lines);
+            String[] pre = new String[Math.max(0, start)];
+            if (start > 0) System.arraycopy(lines, 0, pre, 0, start);
+            if (start < 0) story.warnings.add("No 'Scene 1' / 'दृश्य 1' heading found — the whole story is treated as one scene.");
+            parsePreamble(story, pre);
+            if (start >= 0) buildAliases(story);
             Story.Scene sc = new Story.Scene();
             sc.number = 1; sc.heading = "दृश्य 1";
             story.scenes.add(sc);
-            parseSceneLines(story, sc, lines, 0, lines.length);
+            parseSceneLines(story, sc, lines, start >= 0 ? start + 1 : 0, lines.length);
         } else {
             String[] pre = new String[firstScene];
             System.arraycopy(lines, 0, pre, 0, firstScene);
@@ -102,6 +109,7 @@ public final class ScriptParser {
         }
         resolveSpeakers(story);
         placesOfScenes(story);
+        timeOfScenes(story);
         genderFromVerbs(story);
         LookDesigner.designAll(story);
         linkMounts(story);
@@ -210,6 +218,8 @@ public final class ScriptParser {
                 for (Story.Beat b : sc.beats) if (b.type == Story.Beat.DIRECTION) { first = b.text; break; }
                 String head = sc.title + " । " + (first.length() > 240 ? first.substring(0, 240) : first);
                 Story.PlaceDef p = placeNamedIn(st, head);
+                // v40: the one place a story lists is where its first scene happens when the scene names none
+                if (p == null && sc == st.scenes.get(0) && st.places.size() == 1) p = st.places.get(0);
                 if (p != null) sc.setting = p.name + (p.description.length() > 0 ? "। " + p.description : "");
                 else if (prev.length() > 0 && Sets.detect(head) == Sets.GENERIC_OUT && !Sets.openLand(head) && !Txt.has(head, "बाहर", "outside", "सड़क", "street", "रास्त", "road", "सफ़र", "journey"))
                     sc.setting = prev;
@@ -271,6 +281,50 @@ public final class ScriptParser {
     }
 
     // ------------------------------------------------------------------ preamble
+
+    /**
+     * v40: in a script without scene headings, the line where the script itself starts after the lists — a heading
+     * "पटकथा -", "स्क्रिप्ट:", "Screenplay", "Script starts" — when lists (a cast or a place heading) come before it; -1
+     * when there is none.
+     */
+    static int scriptStart(String[] lines) {
+        boolean lists = false;
+        for (int i = 0; i < lines.length; i++) {
+            String l = Txt.clean(lines[i]);
+            if (l.length() == 0) continue;
+            if (isCharHeader(l) || isPlaceHeader(l)) { lists = true; continue; }
+            String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
+            if (!lists || h.length() > 30) continue;
+            if (h.matches("^(पटकथा|स्क्रिप्ट|स्क्रीनप्ले|कहानी शुरू|स्क्रिप्ट शुरू|पटकथा शुरू)$")
+                    || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|screenplay|story)( (starts|begins))?$")) return i;
+        }
+        return -1;
+    }
+
+    /** v40: "समय - रात 11 बजे, ठंड वाली रात" / "Time: night" before the script: the time it states, else null. */
+    static String timeLine(String l) {
+        Matcher m = Pattern.compile("^[#*\\s]*(समय|वक़्त|वक्त|टाइम|Time|TIME|time)\\s*[-–—:：]\\s*(.+)$").matcher(l);
+        return m.matches() && m.group(2).trim().length() <= 160 ? m.group(2).trim() : null;
+    }
+
+    /** v40: a heading over a list of things ("वहाँ इस्तेमाल हो रही वस्तुओं का वर्णन -", "Props:", "सामान"). */
+    static boolean isThingsHeader(String l) {
+        if (NUMBERED.matcher(l).matches() || l.length() > 80) return false;
+        String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").trim();
+        return !h.contains("।") && (Txt.has(h, "वस्तुओं", "वस्तुएँ", "वस्तुएं", "सामान", "प्रॉप्स", "चीज़ों का", "चीजों का") || Txt.hasWord(h, "props", "objects", "things", "items"));
+    }
+
+    /**
+     * v40: the time the script states before it starts is every scene's hour unless the scene says its own: it is
+     * added to the scene's place as a sentence of its own ("समय: रात 11 बजे…"), which the director reads as the hour.
+     */
+    static void timeOfScenes(Story st) {
+        if (st.time.length() == 0) return;
+        for (Story.Scene sc : st.scenes) {
+            if (Sets.detectTime(sc.title + " " + sc.setting, -1) >= 0) continue;
+            sc.setting = sc.setting.length() == 0 ? "समय: " + st.time : sc.setting.replaceAll("[।.\\s]+$", "") + "। समय: " + st.time;
+        }
+    }
 
     private static boolean isCharHeader(String l) {
         return !NUMBERED.matcher(l).matches() && Txt.has(l, "पात्र", "किरदार", "character", "cast") && l.length() < 120;
@@ -337,7 +391,7 @@ public final class ScriptParser {
             break;
         }
         if (titleIdx >= 0) {
-            String t = Txt.clean(pre[titleIdx]).replaceFirst("^(शीर्षक|Title|TITLE)\\s*[:：]\\s*", "");
+            String t = Txt.clean(pre[titleIdx]).replaceFirst("^(शीर्षक|Title|TITLE)\\s*[-–—:：]\\s*", "");
             t = t.replaceAll("^[#*\\s]+", "").replaceAll("[*\\s]+$", "");
             int p = t.indexOf('(');
             if (p > 0 && t.endsWith(")")) {
@@ -371,6 +425,10 @@ public final class ScriptParser {
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
             if (listsEnd(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 0; numbered = false; continue; }
+            // v40: "समय - रात 11 बजे, ठंड वाली रात, आसमान में तारे": the hour of the story (never a character or a place)
+            String time = mode == 0 || header == null ? timeLine(l) : null;
+            if (time != null) { flushEntry(story, entryMode, header, desc); header = null; mode = 0; story.time = time; continue; }
+            if (isThingsHeader(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 3; numbered = false; continue; }
             if (isPlaceHeader(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 2; continue; }
             if (isCharHeader(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 1; continue; }
             Matcher m = NUMBERED.matcher(l);
@@ -383,6 +441,15 @@ public final class ScriptParser {
                 if (colon > 0) {
                     desc.append(header.substring(colon + 1).trim()).append('\n');
                     header = header.substring(0, colon).trim();
+                } else {
+                    // v40: "अर्जुन - 32 साल का, ऑफिस की शर्ट अब मुड़ी हुई है। थका हुआ लगता है।": the name, then a dash, then a
+                    // long description (a short one after the dash is a role: "तारा - The Coder Didi", "वृंदा - 11 साल")
+                    Matcher dm = Pattern.compile("^(.{2," + (mode == 3 ? 70 : 40) + "}?)\\s+[-–—]\\s+(.+)$").matcher(header);
+                    if (dm.matches() && Txt.withoutParens(dm.group(1)).trim().split("\\s+").length <= (mode == 3 ? 10 : 5) && !dm.group(1).contains("।")
+                            && (dm.group(2).length() > 60 || dm.group(2).contains("।") || dm.group(2).trim().split("\\s+").length > 6)) {
+                        desc.append(dm.group(2).trim()).append('\n');
+                        header = dm.group(1).trim();
+                    }
                 }
                 entryMode = mode == 0 ? 1 : mode;
                 numbered = true;
@@ -410,6 +477,9 @@ public final class ScriptParser {
                     continue;
                 }
             }
+            // v40: a place heading followed by a paragraph and no name ("जगह का वर्णन -" / "शहर से बाहर एकदम खुला और सुनसान
+            // मैदान। चारों तरफ अंधेरा…"): the paragraph is the place, named by its first sentence
+            if (header == null && mode == 2) { header = "जगह"; entryMode = 2; }
             if (header != null) desc.append(l.replaceFirst("^[*•\\-]\\s*", "")).append('\n');
         }
         flushEntry(story, entryMode, header, desc);
@@ -431,12 +501,21 @@ public final class ScriptParser {
         if (header == null) { desc.setLength(0); return; }
         String d = desc.toString().trim();
         desc.setLength(0);
+        if (mode == 3) {
+            // v40: a thing of the script's list (its name and look) — never a character or a place
+            Story.PlaceDef t = new Story.PlaceDef();
+            t.name = header;
+            t.description = d;
+            story.things.add(t);
+            return;
+        }
         if (mode == 2) {
             Story.PlaceDef p = new Story.PlaceDef();
             p.name = header;
             // v39: "मुख्य जगह: एक मॉडर्न फ्लैट का लिविंग रूम" — the label is no name; the words after it are
             if (Txt.has(header, "मुख्य जगह", "मुख्य स्थान", "जगह", "स्थान", "लोकेशन") && header.split("\\s+").length <= 2 || Txt.hasWord(header, "main location", "main place", "location", "place")) {
                 String first = d.split("\n")[0].trim();
+                if (first.length() > 80) first = Director.firstSentence(first).trim();     // v40: a paragraph: its first sentence
                 if (first.length() > 0 && first.length() <= 80) p.name = first;
             }
             p.description = d;
@@ -582,6 +661,21 @@ public final class ScriptParser {
                 }
                 sc.beats.add(Story.Beat.direction(inner));
                 continue;
+            }
+            // v40: अर्जुन [छड़ी से आग में एक लकड़ी को धकेलते हुए, माथे पर शिकन लाते हुए] - "हर चुनाव से पहले…" — the bracket is
+            // what he does while he says it (the manner), the dash brings the line
+            Matcher dl = DASH_LINE.matcher(l);
+            if (dl.matches()) {
+                String who = dl.group(1).trim();
+                Story.CharacterDef dc = who.length() > 0 && !who.contains("।") ? resolve(story, who) : null;
+                if (dc != null && (aliasEquals(dc, who) || Txt.norm(dc.fullName).contains(Txt.norm(who)))) {
+                    Story.Beat b = new Story.Beat();
+                    b.type = Story.Beat.DIALOGUE;
+                    b.speakerRaw = who;
+                    b.manner = dl.group(2) == null ? "" : dl.group(2).trim();
+                    b.text = Txt.stripQuotes(dl.group(3).trim());
+                    if (b.text.length() > 0) { sc.beats.add(b); lastSpeaker = who; continue; }
+                }
             }
             int colon = colonOutsideParens(l);
             if (colon > 0 && colon <= 260) {
@@ -1110,7 +1204,7 @@ public final class ScriptParser {
         return out;
     }
 
-    private static boolean isWordChar(char c) {
+    static boolean isWordChar(char c) {
         if (Character.isLetterOrDigit(c) && !Txt.isDevanagari(c)) return true;
         // Devanagari letters (not punctuation like danda)
         return c >= 'ऀ' && c <= 'ॣ' && c != '।' && c != '॥';

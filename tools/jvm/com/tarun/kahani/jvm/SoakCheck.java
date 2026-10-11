@@ -12,6 +12,9 @@ import java.util.*;
 public class SoakCheck {
     static boolean playing(Film.Actor a, float t) { for (Film.Act x : a.acts) if (x.type == Film.G_PLAYGROUND && t >= x.t0 - 0.3f && t <= x.t1 + 0.3f) return true; return false; }
     static boolean bad(float f) { return Float.isNaN(f) || Float.isInfinite(f); }
+    static int scored, shotsTotal, over6, overMotion, multi, stillWrong, corrected, reactions, povs, loud, estabHeld, estabTotal, longest, longShots;
+    static float scoreSum;
+    static Map<String, Integer> gatesFailed = new TreeMap<String, Integer>();
     public static void main(String[] a) throws Exception {
         File[] fs = new File(a[0]).listFiles((d, n) -> n.endsWith(".txt"));
         Arrays.sort(fs);
@@ -41,6 +44,25 @@ public class SoakCheck {
                 d.prepare();
                 Film film = d.direct(art);
                 filmTime += film.duration;
+                // the documents' measurable rules, as the director scores itself (Handbook ch. 13)
+                if (film.stats != null) {
+                    Handbook.Stats hs = film.stats;
+                    Handbook.Card card = Handbook.score(film, hs, -1, -1, -1);
+                    int sum = 0;
+                    for (int v : card.score) sum += v;
+                    scoreSum += sum / (float) card.score.length;
+                    scored++;
+                    for (int g = 0; g < card.gate.length; g++) if (!card.gate[g]) {
+                        gatesFailed.merge(Handbook.GATES[g], 1, Integer::sum);
+                        if (System.getenv("GATES") != null) System.out.println("GATE " + f.getName() + " " + Handbook.GATES[g] + " cast=" + st.cast().size() + " lines=" + film.lines.size() + " reactions=" + hs.reactions);
+                    }
+                    if (!card.critical.isEmpty()) { issues.merge("protocol critical", 1, Integer::sum); notes.addAll(card.critical); }
+                    shotsTotal += hs.shots; over6 += hs.over6; overMotion += hs.overMotion; multi += hs.multi; stillWrong += hs.stillWrong;
+                    corrected += hs.corrected; reactions += hs.reactions; povs += hs.pov; loud += hs.loudReactions;
+                    estabHeld += hs.estabHeld; estabTotal += hs.estabTotal;
+                    longest = Math.max(longest, hs.longest);
+                }
+                for (Film.Shot sh : film.shots) if (sh.dur > TechnicalDirector.MAX_SHOT_SECONDS + 0.05f) longShots++;
                 if (film.duration < 5 || film.duration > 3600 || bad(film.duration)) issues.merge("film length", 1, Integer::sum);
                 if (film.shots.isEmpty()) issues.merge("no shots", 1, Integer::sum);
                 float prevEnd = -1;
@@ -54,8 +76,8 @@ public class SoakCheck {
                             if (bad(k.t) || bad(k.x) || bad(k.moveDur) || bad(k.facing)) issues.merge("NaN key", 1, Integer::sum);
                             if (i > 0 && k.t < ac.keys.get(i - 1).t - 1e-3f) issues.merge("key out of order", 1, Integer::sum);
                             if (k.moveDur < 0) issues.merge("negative move", 1, Integer::sum);
-                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !playing(ac, k.t)) { issues.merge("moves while lying", 1, Integer::sum); if (notes.size() < 6) notes.add(ac.c.fullName + " moves lying at " + k.t); }
-                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.SIT && Math.abs(k.x - (i > 0 ? ac.keys.get(i - 1).x : k.x)) > 40) {
+                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !playing(ac, k.t) && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) { issues.merge("moves while lying", 1, Integer::sum); if (notes.size() < 6) notes.add(ac.c.fullName + " moves lying at " + k.t); }
+                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.SIT && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) {
                                 boolean riding = false;
                                 for (Film.Act x : ac.acts) if ((x.type == Film.G_RIDE || x.type == Film.G_PLAYGROUND) && k.t >= x.t0 - 0.5f && k.t <= x.t1 + 0.5f) riding = true;
                                 if (!riding && ac.look != null && ac.look.aid != Look.AID_WHEELCHAIR) { issues.merge("walks seated", 1, Integer::sum); if (notes.size() < 6) notes.add(ac.c.fullName + " walks seated at " + k.t); }
@@ -122,5 +144,9 @@ public class SoakCheck {
             if (!issues.isEmpty()) System.out.println(f.getName() + ": " + issues + (notes.isEmpty() ? "" : "  " + notes));
         }
         System.out.printf(Locale.US, "SOAK %d stories, %d crashed, %.0f s of film; issues: %s%n", stories, crashed, filmTime, totals);
+        System.out.printf(Locale.US, "PROTOCOL %d films scored, average %.2f / 5; gates not passed: %s; %d shots (%d over %.0f s), lip-sync shots over six words %d, "
+                + "over the motion limit %d, two actions in a shot %d, corrected %d, still wrong %d, reactions %d, POV shots %d, reactions to loud sounds %d, "
+                + "establishing shots held %d of %d%n", scored, scored == 0 ? 0 : scoreSum / scored, gatesFailed, shotsTotal, longShots, TechnicalDirector.MAX_SHOT_SECONDS,
+                over6, overMotion, multi, corrected, stillWrong, reactions, povs, loud, estabHeld, estabTotal);
     }
 }

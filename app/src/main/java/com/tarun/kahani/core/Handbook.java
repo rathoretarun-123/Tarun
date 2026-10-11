@@ -293,7 +293,10 @@ public final class Handbook {
         c.score[8] = s.jumpRemoved >= 0 ? 5 : 4;                   // the ledger is written, the axis kept, jump cuts removed
         c.score[9] = s.estabFixed == 0 && s.durationsDistinct >= 3 ? 5 : 4;
         c.gate[0] = s.spine;
-        c.gate[1] = s.reactions > 0 || s.speech == 0;
+        // (v41: a film of one character has nobody to react: the gate asks for reactions where someone listens)
+        java.util.Set<Story.CharacterDef> people = new java.util.HashSet<Story.CharacterDef>();
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) if (a.c != null && !a.c.voiceOnly) people.add(a.c);
+        c.gate[1] = s.reactions > 0 || s.speech == 0 || people.size() <= 1;
         c.gate[2] = s.stillWrong == 0 && (!qcRan || boiling + shaking + floating == 0);
         c.gate[3] = true;
         if (s.over6 > 0) c.critical.add("dialogue synchronization: " + s.over6 + " lip-sync shot(s) over six words");

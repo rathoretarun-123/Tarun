@@ -420,12 +420,22 @@ public final class Director {
                 Film.Cam c = sg.cams.get(i);
                 float next = i + 1 < sg.cams.size() ? sg.cams.get(i + 1).t : sg.t1;
                 if (next - c.t <= max) continue;
-                int n = (int) Math.ceil((next - c.t) / max);      // v34: every piece under the cut (2.2 s), not under the 3-s nominal shot
-                float step = (next - c.t) / n;
-                for (int k = 1; k < n; k++) {
+                // v41: the place's opening wide is held whole up to the cap (the manual's establishing shot), not cut
+                // in two at the editing length
+                boolean open = openingWide(sg, i);
+                if (open && next - c.t <= TechnicalDirector.MAX_SHOT_SECONDS - 0.05f) continue;
+                // ... and a longer one keeps its first stretch whole (the hold), the rest is cut at the editing length
+                float base = c.t;
+                if (open && next - c.t - (ESTAB_HOLD + 0.4f) >= 0.8f) base = c.t + ESTAB_HOLD + 0.4f;
+                int n = (int) Math.ceil((next - base) / max);      // v34: every piece under the cut (2.2 s), not under the 3-s nominal shot
+                float step = (next - base) / n;
+                List<Float> times = new ArrayList<Float>();
+                if (base > c.t) times.add(base);
+                for (int k = 1; k < n; k++) times.add(base + k * step);
+                for (int k = 1; k <= times.size(); k++) {
                     boolean tight = k % 2 == 1;
                     // v41: never a cut-in in the middle of a jump (a puddle's splash at the feet): after it lands, or none
-                    float tk = c.t + k * step;
+                    float tk = times.get(k - 1);
                     if (tight) {
                         for (Film.Actor a : sg.actors) for (Film.Act x : a.acts)
                             if (x.type == Film.G_JUMP && tk > x.t0 - 0.2f && tk < x.t1 + 0.6f && a.stateAt(tk).visible) tk = x.t1 + 0.6f;
@@ -541,7 +551,9 @@ public final class Director {
      * then the later one goes). A cut to almost the same framing jars (a jump cut): the shot runs on instead (with
      * a locked camera), or glides there. Returns the jump cuts taken out.
      */
-    private int cleanCuts(Film.Seg sg) {
+    private int cleanCuts(Film.Seg sg) { return cleanCuts(sg, true); }
+
+    private int cleanCuts(Film.Seg sg, boolean jumps) {
         int jump = 0;
         List<Film.Cam> flash = new ArrayList<Film.Cam>();
         Film.Cam prevC = null;
@@ -554,6 +566,7 @@ public final class Director {
             prevC = c;
         }
         sg.cams.removeAll(flash);
+        if (!jumps) return 0;
         Film.Cam prevCut = null;
         List<Film.Cam> drop = new ArrayList<Film.Cam>();
         for (Film.Cam c : sg.cams) {
@@ -599,13 +612,13 @@ public final class Director {
             limitShotLength(TechnicalDirector.CUT_SECONDS);
         }
         playFrames();
-        // v41: the passes above add cuts of their own (a shot cut in two, a play framed): no flash or jump cut may
-        // come back with them
-        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) {
-            java.util.Collections.sort(sg.cams, new java.util.Comparator<Film.Cam>() {
-                public int compare(Film.Cam a, Film.Cam b) { return Float.compare(a.t, b.t); }
-            });
-            jump += cleanCuts(sg);
+        // v41: the passes above add cuts of their own (a shot cut in two, a play framed): no flash cut may come back
+        // with them — and the shots stay under the cap with one action each after the clean-up
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) { sortCams(sg); jump += cleanCuts(sg); }
+        if (opt.technical) {
+            oneActionPerShot();
+            limitShotLength(TechnicalDirector.CUT_SECONDS);
+            for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) { sortCams(sg); cleanCuts(sg, false); }
         }
         shotsFromCuts();
         if (opt.technical) validateShots();
@@ -894,6 +907,13 @@ public final class Director {
 
     /** Time for "state" facts (sitting, caged, hiding): the start of the part when it is the opening description. */
     private float ts(float t) { return estab ? seg.t0 : t; }
+    /** v41: when a walk under way at t (or set off within half a second of it) ends; t when none is. */
+    static float arrivalAfter(Film.Actor a, float t) {
+        float end = t;
+        for (Film.Key k : a.keys) if (k.moveDur > 0 && k.visible && k.t <= t + 0.5f && k.t + k.moveDur > end) end = k.t + k.moveDur;
+        return end;
+    }
+
     /** v41: as ts, for one character: the part's start only while nothing has been staged for them after it. */
     private float tsFor(Film.Actor a, float t) { return estab && a.last().t <= seg.t0 + 0.3f ? seg.t0 : t; }
     private Story.CharacterDef lastSubject;
@@ -908,12 +928,15 @@ public final class Director {
     private Film.Shot lastDlgShot;
     private Film.Actor lastDlgA, lastDlgB;
     private int dlgCount;
+    /** v41: lines and reaction shots in the part being staged (one reaction at least where someone listens). */
+    private int dlgInPart, partReactions, forcedReactions;
     private Film.Actor lastSpeaker;
 
     private boolean leading;
 
     private float stagePart(int si, Story.Scene sc, int pi, int nParts, int b0, int b1, String where, int prevTod, float t) {
         leading = true;
+        dlgInPart = 0; partReactions = 0;
         seg = new Film.Seg();
         seg.type = Film.S_SCENE;
         seg.scene = si;
@@ -1573,8 +1596,17 @@ public final class Director {
         if (to != null && plan != null && to.stateAt(start).visible) {
             listenerPerformance(sp, to, start, end, line, plan);
             // the reaction is often more important than the line: show it and let it breathe (§9, §31)
-            if (plan.reaction && to.stateAt(end).visible && reactionShot(to, sp, end, line, plan)) after += plan.breathe;
+            // v41: and every part with someone listening shows at least one (the handbook's performance gate): after
+            // the first line said with feeling, or a question or an exclamation, if the plan chose none so far
+            boolean force = !plan.reaction && partReactions == 0
+                    && (line.emotion != Pose.NEUTRAL || line.text.contains("!") || line.text.contains("?"));
+            if ((plan.reaction || force) && to.stateAt(end).visible && reactionShot(to, sp, end, line, plan)) {
+                after += plan.reaction ? plan.breathe : 0.9f;
+                partReactions++;
+                if (force) forcedReactions++;
+            }
         }
+        dlgInPart++;
         lastSpeaker = sp;
         lastSubject = b.speaker;
         dlgCount++;
@@ -2215,12 +2247,22 @@ public final class Director {
                         }
                     }
                 }
+                // v41: the place's opening wide is held (the manual's establishing shot): the movement in it is seen wide
+                if (cut != null && openingWide(sg, i) && cut.t < t0 + ESTAB_HOLD) {
+                    if (shotEnd(sg, i) - (t0 + ESTAB_HOLD) >= 0.5f) cut.t = t0 + ESTAB_HOLD; else cut = null;
+                }
                 if (cut != null && cut.t - t0 >= 0.39f) { sg.cams.add(i + 1, cut); motionCuts++; }
             }
         }
     }
 
     private int motionCuts, actionCuts, framed;
+    /** v41: how long the opening wide of a place is held before the protocol's passes may cut into it (the manual 3.6). */
+    static final float ESTAB_HOLD = 2.5f;
+    private static boolean openingWide(Film.Seg sg, int i) {
+        Film.Cam c = sg.cams.get(i);
+        return i == 0 && c.t <= sg.t0 + 0.6f && c.zoom <= 1.3f;
+    }
     /** PixarLead counters: ma pauses (Miyazaki), comic beats (Russo / Gunn), shadow passes (Gunn), first-frame reframes (head, feet). */
     private int maPauses, comicBeats, shadowPasses, framedHead, framedFeet, framedFace;
     /** The handbook's beats: thought before action (ch. 6), Dutch angles used (ch. 5: sparingly, at most one per scene). */
@@ -2258,6 +2300,8 @@ public final class Director {
                 float first = starts.get(0), second = -1;
                 for (float x : starts) if (x - first > 0.3f) { second = x; break; }
                 if (second < 0 || second - t0 < 0.5f || t1 - second < 0.5f) continue;
+                // v41: not inside the held opening wide of a place (the action is seen wide there)
+                if (openingWide(sg, i) && second < t0 + ESTAB_HOLD) continue;
                 Film.Actor who = null;
                 for (Film.Actor a : sg.actors) for (Film.Act ac : a.acts) if (isAction(ac.type) && Math.abs(ac.t0 - second) < 0.001f) who = a;
                 if (who == null) continue;
@@ -4809,6 +4853,9 @@ public final class Director {
             for (Film.Actor a : who) {
                 // v41: "from the start" only for one with nothing staged yet in this part (not under a run already made)
                 float ta = comeThenSit ? t : tsFor(a, t);
+                // v41: one still walking in or across ("ट्रे लेकर आती है और … बैठ जाती है") sits once there, never on the way
+                float arrive = arrivalAfter(a, ta);
+                if (arrive > ta) ta = arrive + 0.1f;
                 Film.Key k = a.at(ta);
                 k.body = Pose.SIT;
                 int st = seat;

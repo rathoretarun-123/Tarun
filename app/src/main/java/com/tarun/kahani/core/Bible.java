@@ -249,6 +249,8 @@ public final class Bible {
             if (sc.setting.length() == 0) continue;
             String first = firstClause(sc.setting, "।.!?");
             String name = firstClause(first, ",;—-(");
+            // v43: "समय: शाम", "Time: night" is the hour, not a place to ask a picture for
+            if (timeOnly(name)) continue;
             if (name.length() > 50) name = name.substring(0, 50) + "…";
             boolean known = false;
             for (String[] p : out) if (similar(name, p[0])) { known = true; break; }
@@ -256,6 +258,15 @@ public final class Bible {
             out.add(new String[]{name, first});
         }
         return out;
+    }
+
+    /** v43: a setting that only names the hour ("समय: शाम", "Time: morning", "रात", "दोपहर") — no place in it. */
+    static boolean timeOnly(String name) {
+        String n = Txt.norm(name).trim().replaceAll("[:：\\-–]+", " ").replaceAll("\\s+", " ").trim();
+        if (n.startsWith(Txt.norm("समय")) || n.startsWith("time ") || n.equals("time") || n.startsWith(Txt.norm("वक़्त")) || n.startsWith(Txt.norm("वक्त"))) return true;
+        String[] hours = {"सुबह", "दोपहर", "शाम", "रात", "आधी रात", "भोर", "morning", "noon", "afternoon", "evening", "night", "midnight", "dawn", "dusk", "day"};
+        for (String h : hours) if (n.equals(Txt.norm(h))) return true;
+        return false;
     }
 
     public static String firstClauseOf(String s) { return firstClause(firstClause(s, "।.!?"), ",;—-("); }

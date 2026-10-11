@@ -1,4 +1,4 @@
-# Kahani Film — v42
+# Kahani Film — v43
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,53 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v43
+
+You asked for a Pixar- or Disney-level film from a script and a few uploads, without errors: the director asking for
+any prop, object or place it has no picture of, smooth uploads, a smarter script reader and director, wheels turning
+on cars and cycles, car doors opening and closing, getting on and off a bike or cycle and putting the stand, the
+everyday activities of every character and the everyday things of nature (wind, rain, umbrella, make-up) smooth, room
+doors opening and closing, a meal cooked in the kitchen, and a 300 MB limit.
+
+* **Vehicles:** the wheels turn the way the vehicle goes, by the ground it covers (they turned backwards going left).
+  A car's doors open (towards the camera) and shut as its people get in and out, one by one, the family seen in the
+  back window; a two-wheeler's rider swings a leg over and sits astride in profile (your side picture, or the
+  three-quarter one), a pillion behind; the kickstand goes down when they stop and up when they ride; a vehicle left
+  stays parked where it was left. An auto or a taxi hailed drives up and waits; a bus or a car arrives with someone in
+  it when they "get off" it ("स्कूल बस से उतरता है"). A U-turn turns the vehicle round, not a flip in one frame.
+* **Room doors:** the room's door is drawn at the side of the picture people come and go by. A knock is heard at it
+  ("कोई दरवाज़े पर दस्तक देता है" — nobody in the room walks over to knock); the one who opens it gets up, goes to it,
+  opens it and steps back to let the visitor in, who stops before them (not walking through them); it stands open
+  until someone shuts it; anyone standing in the doorway makes way.
+* **The kitchen:** cooking is done at a counter with a hob — the cook behind it, their hands seen at the work: the
+  knife rocking on the board, the ladle round the kadhai, the belan rolling the roti, the chimta turning it on the
+  tawa, the cooker whistling, the tea poured into cups, the tadka spluttering and poured on the dal. "दाल बनाती है और
+  फिर तड़का लगाती है" cooks both, in turn. The counter stands at the height of the cook's hands in your picture.
+  Outdoors it is a street stall.
+* **Everyday activities and nature — the director and the script reader trained again:** 405 test sentences of
+  everyday life and nature (waking, washing, eating, cooking, chores, study, the phone, lying down, running, gestures,
+  feelings, doors, vehicles, carrying things, play, festivals, falls and hurts, the umbrella, rain, hail, wind, fog,
+  thunder, sunrise and sunset, night and the moon, petals, birds, smoke) — **405 of 405 now staged right** (280 at v42).
+  Words are read where words begin ("लगाती" is no singing, "कराहता" no relief, "घुटने" no bell, a rainbow and showered
+  flowers no rain, a window no wind, waves on the shore no waving hand); the one a sentence is about is found after a
+  participle ("माँ की आवाज़ सुनकर राहुल…"); two people doing two things in one sentence each do theirs; the sun rises
+  and sets and night falls within a scene, the full moon is seen; things carried (a tray of tea, a basket, a book) are
+  in the hand until given or put down; one lying down on the sofa lies on it; make-up is no change of clothes.
+* **Smooth:** the umbrella opens over 0.7 s (it popped open), as the rain comes on; the make-up mirror and brush come
+  into the hands as they rise; wind and rain as before.
+* **The director asks for what it has no picture of:** the things your script lists ("वस्तुओं का वर्णन") are asked for
+  first, with what the script says they look like, and every thing a direction names — the whole word only ("key" is
+  not in "monkey", "फल" not in "सफल"), never a name of a person or a place. "समय: शाम" is the hour, not a place to
+  ask for. A place picture given for one scene is the picture of every scene in that place (the film waited for the
+  others forever). The make-film window lists the things still without a picture.
+* **Uploads:** any picture up to **300 MB** is taken — a large one is read straight at the film's working size, never
+  whole into memory (a big file used to fail the whole batch); a picture that cannot be read is named in the result
+  instead of being dropped silently; the window shows "reading picture 12 of 40". A file over 300 MB is refused with a note.
+* Checked on the final code: TESTS_LINE. Details: [`docs/testing-v43.md`](docs/testing-v43.md).
+* **Sorry — said plainly:** this is not Pixar or Disney level, and I cannot make it so: the characters are your flat
+  pictures on a fine mesh, not 3D models, and the director works from rules, not understanding. I also cannot promise
+  "no bug at all": testing finds and fixes the kinds of mistakes it looks for, and some will remain.
 
 ## New in v42
 

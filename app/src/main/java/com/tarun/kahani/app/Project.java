@@ -287,6 +287,63 @@ public final class Project {
         return new String(readAll(am.open(name)), "UTF-8");
     }
 
+    /** v43: the largest file taken from the phone as a picture or a sound (anything bigger is skipped, with a note). */
+    static final long MAX_UPLOAD = 300L * 1024 * 1024;
+
+    /**
+     * v43: a picture from the phone, of any size up to MAX_UPLOAD (300 MB), read without ever holding a huge file whole in
+     * memory: up to 24 MB as it is; a larger one decoded straight from the file at the film's working size (every
+     * second row and column dropped until it fits) and saved again as a JPG (a PNG keeps its clear background).
+     * null when it is too big or cannot be read as a picture.
+     */
+    static byte[] readPicture(android.content.ContentResolver cr, android.net.Uri u) {
+        long size = -1;
+        try {
+            android.os.ParcelFileDescriptor pfd = cr.openFileDescriptor(u, "r");
+            if (pfd != null) { size = pfd.getStatSize(); pfd.close(); }
+        } catch (Throwable ignored) { }
+        if (size > MAX_UPLOAD) return null;
+        try {
+            if (size >= 0 && size <= 24L * 1024 * 1024) {
+                InputStream in = cr.openInputStream(u);
+                if (in == null) return null;
+                try { return readAll(in); } finally { try { in.close(); } catch (Exception ignored) { } }
+            }
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            InputStream in = cr.openInputStream(u);
+            if (in == null) return null;
+            try { BitmapFactory.decodeStream(in, null, o); } finally { try { in.close(); } catch (Exception ignored) { } }
+            if (o.outWidth <= 0 || o.outHeight <= 0) return null;
+            int big = Math.max(o.outWidth, o.outHeight), want = bigSide(), sample = 1;
+            while (big / (sample * 2) >= want) sample *= 2;
+            BitmapFactory.Options d = new BitmapFactory.Options();
+            d.inSampleSize = sample;
+            in = cr.openInputStream(u);
+            if (in == null) return null;
+            android.graphics.Bitmap bm;
+            try { bm = BitmapFactory.decodeStream(in, null, d); } finally { try { in.close(); } catch (Exception ignored) { } }
+            if (bm == null) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            bm.compress(bm.hasAlpha() ? android.graphics.Bitmap.CompressFormat.PNG : android.graphics.Bitmap.CompressFormat.JPEG, 92, out);
+            bm.recycle();
+            return out.toByteArray();
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /** v43: the size of a file on the phone in bytes (-1 when it cannot be told). */
+    static long sizeOf(android.content.ContentResolver cr, android.net.Uri u) {
+        try {
+            android.os.ParcelFileDescriptor pfd = cr.openFileDescriptor(u, "r");
+            if (pfd == null) return -1;
+            long n = pfd.getStatSize();
+            pfd.close();
+            return n;
+        } catch (Throwable e) { return -1; }
+    }
+
     static byte[] readAll(InputStream in) throws IOException {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         byte[] buf = new byte[65536];

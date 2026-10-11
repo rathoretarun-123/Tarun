@@ -160,11 +160,30 @@ final class AutoLibrary {
             if (f.length >= 4 && f[0].equals("shot")) for (String k : f[2].split(",")) haveShot.add(f[1] + ":" + k.trim());
         }
         Set<String> objSeen = new HashSet<String>();
+        // v43: the names of the story's people and places are never things to ask for ("दीपक" the boy is no lamp)
+        Set<String> names = new HashSet<String>();
+        for (Story.CharacterDef c : st.characters) { names.add(Txt.norm(c.displayName)); for (String a : c.aliases) names.add(Txt.norm(a)); }
+        for (String[] pl : Bible.places(st)) names.add(Txt.norm(pl[0]));
+        // v43: the things the script itself lists ("वस्तुओं का वर्णन": the kite, the cake, the old radio) are asked for
+        // first, once for the whole story, with what the script says they look like
+        for (Story.PlaceDef th : st.things) {
+            String nm = th.name.trim();
+            if (nm.length() < 2 || names.contains(Txt.norm(nm)) || haveShot.contains(":" + nm) || !objSeen.add("*:" + Txt.norm(nm))) continue;
+            boolean have = false;
+            for (String hs : haveShot) if (hs.endsWith(":" + nm)) have = true;
+            if (have) continue;
+            t.add(new String[]{"shot:0:" + nm, nm + " (a thing of the story)", "the " + nm + (th.description.length() > 0 ? ": " + Bible.oneLine(th.description) : "")});
+        }
         for (Story.Scene sc : st.scenes) {
             for (Story.Beat bt : sc.beats) {
                 if (bt.type != Story.Beat.DIRECTION) continue;          // what is done, not what is said
                 for (String o : ShotBook.OBJECTS) {
-                    if (!Txt.has(bt.text, o) || haveShot.contains(sc.number + ":" + o) || haveShot.contains(":" + o) || !objSeen.add(sc.number + ":" + o)) continue;   // v34: a picture of the thing itself covers every scene
+                    // v43: the whole word only ("key" is not in "monkey", "ring" not in "bring", "फल" not in "सफल")
+                    if (!com.tarun.kahani.core.Director.term(bt.text, o) || names.contains(Txt.norm(o)) || objSeen.contains("*:" + Txt.norm(o))) continue;
+                    // (an hour, a defeat, a name — not the bell, the necklace, the lamp)
+                    if (o.equals("हार") && Txt.has(bt.text, "हार गय", "हार जा", "हार मान", "हार ग")) continue;
+                    if (o.equals("घंटा") && Txt.has(bt.text, "एक घंटा", "घंटा भर", "घंटे ", "घंटों")) continue;
+                    if (haveShot.contains(sc.number + ":" + o) || haveShot.contains(":" + o) || haveShot.contains("0:" + o) || !objSeen.add(sc.number + ":" + o)) continue;   // v34: a picture of the thing itself covers every scene
                     t.add(new String[]{"shot:" + sc.number + ":" + o, o + " (scene " + sc.number + ")", "close-up insert shot of the " + o + ": " + Bible.oneLine(bt.text)});
                 }
             }
@@ -326,7 +345,8 @@ final class AutoLibrary {
                 String[] sk = t[0].split(":", 3);
                 // v39: a thing's own picture (an object on a clear background) is an insert of the thing, as when it is uploaded
                 boolean object = "object".equals(it.kind) || it.path.toLowerCase(java.util.Locale.US).endsWith(".png") && SheetSaver.isCutOut(data);
-                project.setManifest("shot", sk[1] + ":" + sk[2], "shot|" + sk[1] + "|" + sk[2] + "|" + f + (object ? "|object" : ""));
+                String scn = "0".equals(sk[1]) ? "" : sk[1];           // v43: a thing of the story's own list: every scene
+                project.setManifest("shot", scn + ":" + sk[2], "shot|" + scn + "|" + sk[2] + "|" + f + (object ? "|object" : ""));
             } else if (t[0].equals("title") || t[0].equals("end")) {
                 project.setManifest(t[0], t[0], t[0] + "|" + f + "|1");
             } else {

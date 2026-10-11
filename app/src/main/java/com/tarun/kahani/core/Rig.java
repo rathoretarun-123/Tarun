@@ -68,6 +68,10 @@ public final class Rig {
         public float stride;
         public float legScale = 1;           // < 1 when kneeling / crouching
         public float sit;                    // 0 standing .. 1 seated: thighs fold towards the viewer, shins stay
+        /** v43: a side picture seated in profile (astride a bike, a scooter): the way it faces in the picture (+1 its
+         *  right, -1 its left); its thighs swing forward to the horizontal and the shins hang from the knees. 0: a
+         *  front picture's sit (the thighs shorten towards the viewer). */
+        public float sitSide;
         /** v35: seated on the floor, cross-legged: the shins fold under too and the knees spread. */
         public boolean floor;
         public boolean twirl;                // the raised hand fidgets (twirling a moustache)
@@ -99,7 +103,7 @@ public final class Rig {
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = stride = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
             lipWide = lipRound = 0;
-            legScale = 1; sit = 0; twirl = false; floor = false;
+            legScale = 1; sit = 0; sitSide = 0; twirl = false; floor = false;
             smile = frown = innerUp = browUp = browUpR = anger = wide = squint = 0;
         }
         /** Moves the face part of this state towards target (k = 0..1 per frame). */
@@ -740,7 +744,19 @@ public final class Rig {
         float hy = f.T0 + hipY * f.H0;
         // sitting: the thighs come towards the viewer (they shorten), the shins stay and the knees part a little
         float sx2 = x, sy2 = y;
-        if (s.sit > 0) {
+        if (s.sit > 0 && s.sitSide != 0) {
+            // v43: seated in profile: the thighs swing forward about the hip to the horizontal (their front comes up),
+            // the shins are carried by the knee and hang straight down from it; across the knee the two are blended
+            float knee = hipY + (bottom - hipY) * 0.5f, ky = f.T0 + knee * f.H0;
+            double th = Math.toRadians(84 * Math.min(1, s.sit));
+            float c = (float) Math.cos(th), sn = -(float) Math.sin(th) * (s.sitSide > 0 ? 1 : -1);
+            float jx = f.L0 + cx * f.W0, dx = x - jx, dy = y - hy;
+            float tx = jx + c * dx - sn * dy, ty = hy + sn * dx + c * dy;                 // the point on the swung thigh
+            float kdy = ky - hy, shx = x - sn * kdy, shy = y + (c - 1) * kdy;              // carried by the knee, upright
+            float w = smooth(knee - 0.05f, knee + 0.05f, v);
+            sx2 = tx + (shx - tx) * w;
+            sy2 = ty + (shy - ty) * w;
+        } else if (s.sit > 0) {
             float knee = hipY + (bottom - hipY) * 0.5f;
             // v35: on the floor the shins fold under as well (three quarters) and the knees part wider
             float shin = s.floor ? 0.75f * s.sit : 0, ky = f.T0 + knee * f.H0;
@@ -1014,7 +1030,8 @@ public final class Rig {
             float fl = L * (float) Math.cos(Math.toRadians(s.legLAng)) * (1 - s.legLLift), fr = L * (float) Math.cos(Math.toRadians(s.legRAng)) * (1 - s.legRLift);
             rise += L - Math.max(fl, fr);
         }
-        if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
+        if (s.sit > 0 && s.sitSide != 0) rise += (1 - (float) Math.cos(Math.toRadians(84 * Math.min(1, s.sit)))) * 0.5f * (bottom - hipY) * h;   // v43: the thighs swung up
+        else if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
         if (s.sit > 0 && s.floor) rise += 0.75f * 0.5f * s.sit * (bottom - hipY) * h;     // v35: and on the floor the shins fold under
         return rise;
     }

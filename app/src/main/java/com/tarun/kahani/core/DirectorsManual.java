@@ -397,6 +397,12 @@ public final class DirectorsManual {
             case Film.SFX_CREAK: return "a swing creaking";
             case Film.SFX_ROPE: return "a skipping rope";
             case Film.SFX_KISS: return "a soft peck";
+            case Film.SFX_CAR_DOOR: return "a car door opening";
+            case Film.SFX_CAR_SHUT: return "a car door shutting";
+            case Film.SFX_KNOCK: return "a knock at the door";
+            case Film.SFX_CHOP: return "chopping";
+            case Film.SFX_BOIL: return "something boiling";
+            case Film.SFX_WHISTLE: return "a pressure cooker whistle";
             default: return "effect " + type;
         }
     }

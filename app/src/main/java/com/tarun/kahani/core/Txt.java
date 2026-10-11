@@ -55,6 +55,32 @@ public final class Txt {
         return false;
     }
 
+    /**
+     * v43: true if any needle begins a word of the text (a stem may go on into its endings: "गिर" in "गिरता"), never
+     * from inside another word — "गाता" is not in "लगाता", "राहत" not in "कराहता", "टन" not in "घुटने", "wind" not
+     * in "window" is not caught (it begins the word); spaces round a needle are ignored.
+     */
+    public static boolean hasStart(String hay, String... needles) {
+        String h = norm(hay);
+        for (String n : needles) {
+            String x = norm(n).trim();
+            if (x.isEmpty()) continue;
+            int i = h.indexOf(x);
+            while (i >= 0) {
+                if (i == 0 || !wordChar(h.charAt(i - 1))) return true;
+                i = h.indexOf(x, i + 1);
+            }
+        }
+        return false;
+    }
+
+    /** v43: a letter of a word (Devanagari letters and their vowel signs included; the danda is not). */
+    static boolean wordChar(char c) {
+        if (c >= '\u0900' && c <= '\u0963') return true;
+        if (c == '\u0964' || c == '\u0965') return false;
+        return Character.isLetterOrDigit(c);
+    }
+
     public static int firstIndex(String hay, String... needles) {
         String h = norm(hay);
         int best = -1;

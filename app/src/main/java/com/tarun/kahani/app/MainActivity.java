@@ -261,10 +261,23 @@ public class MainActivity extends Activity {
     interface Work { Object run() throws Exception; }
     interface Done { void done(Object result, Exception error); }
 
+    /** v43: the dialog of the work under way (its title tells how far it has got), or null. */
+    private volatile AlertDialog busyDlg;
+
+    /** v43: tells how far the work under way has got ("Reading picture 12 of 40…") in its dialog's title. */
+    void progress(final String msg) {
+        ui.post(new Runnable() {
+            public void run() {
+                try { AlertDialog b = busyDlg; if (b != null && b.isShowing()) b.setTitle(msg); } catch (Exception ignored) { }
+            }
+        });
+    }
+
     private void background(String title, final Work w, final Done d) {
         final ProgressBar pb = new ProgressBar(this);
         pb.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 16));
         final AlertDialog dlg = title == null ? null : new AlertDialog.Builder(this).setTitle(title).setView(pb).setCancelable(false).show();
+        if (dlg != null) busyDlg = dlg;
         new Thread(new Runnable() {
             public void run() {
                 Object r = null;
@@ -275,6 +288,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     public void run() {
                         try { if (dlg != null) dlg.dismiss(); } catch (Exception ignored) {}
+                        if (busyDlg == dlg) busyDlg = null;
                         if (!isFinishing() && !isDestroyed()) d.done(fr, fe);
                     }
                 });
@@ -733,16 +747,14 @@ public class MainActivity extends Activity {
     static final class UriPictures extends java.util.AbstractList<byte[]> {
         final android.content.ContentResolver cr;
         final List<Uri> uris;
+        MainActivity act;            // v43: told how far the reading has got (shown in the dialog)
         UriPictures(android.content.ContentResolver cr, List<Uri> uris) { this.cr = cr; this.uris = new ArrayList<Uri>(uris); }
         public int size() { return uris.size(); }
         public byte[] get(int i) {
-            try {
-                InputStream in = cr.openInputStream(uris.get(i));
-                if (in == null) return new byte[0];
-                try { return Project.readAll(in); } finally { try { in.close(); } catch (Exception ignored) { } }
-            } catch (Throwable e) {
-                return new byte[0];
-            }
+            if (act != null && uris.size() > 1) act.progress("The director is reading picture " + (i + 1) + " of " + uris.size() + "…");
+            // v43: any picture up to 300 MB, a large one read straight at the film's working size (never whole into memory)
+            byte[] b = Project.readPicture(cr, uris.get(i));
+            return b == null ? new byte[0] : b;
         }
     }
 
@@ -2993,7 +3005,9 @@ public class MainActivity extends Activity {
             final String tgt = anglesTarget != null ? anglesTarget : Prefs.get(this, "angles.target", "").length() > 0 ? Prefs.get(this, "angles.target", "") : null;
             if (tgt == null) { toast("Please tap the angles button again and choose the pictures"); return; }
             if (uris.isEmpty()) { toast("No picture was chosen"); return; }
-            saveAngles(tgt, new UriPictures(getContentResolver(), uris));
+            UriPictures up = new UriPictures(getContentResolver(), uris);
+            up.act = this;
+            saveAngles(tgt, up);
             return;
         }
         if (code == REQ_BULK) {
@@ -3014,9 +3028,10 @@ public class MainActivity extends Activity {
             } else if (code == REQ_IMAGE) {
                 background("Opening the picture…", new Work() {
                     public Object run() throws Exception {
-                        InputStream in = getContentResolver().openInputStream(uri);
-                        if (in == null) throw new Exception("Could not open the picture");
-                        return new Object[]{Project.readAll(in), displayName(uri)};
+                        if (Project.sizeOf(getContentResolver(), uri) > Project.MAX_UPLOAD) throw new Exception("it is larger than 300 MB");
+                        byte[] pic = Project.readPicture(getContentResolver(), uri);
+                        if (pic == null) throw new Exception("it is not a picture this phone can read");
+                        return new Object[]{pic, displayName(uri)};
                     }
                 }, new Done() {
                     public void done(Object r, Exception e) {
@@ -3028,6 +3043,8 @@ public class MainActivity extends Activity {
                 final String name = displayName(uri);
                 background("Adding the sound…", new Work() {
                     public Object run() throws Exception {
+                        // v43: a sound up to 300 MB
+                        if (Project.sizeOf(getContentResolver(), uri) > Project.MAX_UPLOAD) throw new Exception("This file is larger than 300 MB");
                         byte[] b = Project.readAll(getContentResolver().openInputStream(uri));
                         String ext = name.contains(".") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.US) : ".m4a";
                         boolean voice = target != null && (target.startsWith("voice:") || target.equals("lib:voice"));
@@ -3244,7 +3261,8 @@ public class MainActivity extends Activity {
                 List<Placement> ps = new ArrayList<Placement>();
                 for (Uri u : uris) {
                     byte[] data;
-                    try { data = Project.readAll(getContentResolver().openInputStream(u)); } catch (Exception e) { continue; }
+                    data = Project.readPicture(getContentResolver(), u);         // v43: up to 300 MB, never whole into memory
+                    if (data == null) continue;
                     Placement p = new Placement();
                     p.fileName = displayName(u);
                     List<Library.Item> fam = new ArrayList<Library.Item>();
@@ -3651,14 +3669,18 @@ public class MainActivity extends Activity {
                 else if (t[0].startsWith("shot:")) { String[] sk = t[0].split(":", 3); if (sk.length == 3) tgt = "angles:obj:" + sk[2] + ":" + t[1]; }
                 if (tgt != null) uploadable.add(new String[]{tgt, t[1]});
             }
-            StringBuilder m = new StringBuilder(), opt = new StringBuilder();
-            int shown = 0;
+            StringBuilder m = new StringBuilder(), opt = new StringBuilder(), objs = new StringBuilder();
+            int shown = 0, objN = 0;
             for (String[] t : miss) {
-                if (t[0].startsWith("shot:")) continue;
+                // v43: the things the story names (its own list first) are asked for too — optional: the director draws
+                // the everyday ones itself (a cup, a kite, a car) when no picture is given
+                if (t[0].startsWith("shot:")) { if (objN++ < 12) objs.append(objs.length() > 0 ? ", " : "").append(t[1].replaceAll(" \\((scene [0-9]+|a thing of the story)\\)$", "")); continue; }
                 if (AutoLibrary.optional(t)) { opt.append(opt.length() > 0 ? ", " : "").append(t[1]); continue; }     // v35
                 if (shown++ < 10) m.append(m.length() > 0 ? ", " : "").append(t[1]);
             }
             if (opt.length() > 0) body.addView(Ui.text(this, "\n🪑 Better with (optional): " + opt + ". Without them the director lowers the standing picture onto the seat or turns it to lie down.", 14, Ui.SUB, false));
+            if (objN > 0) body.addView(Ui.text(this, "\n🧸 Things in the story with no picture yet: " + objs + (objN > 12 ? " and " + (objN - 12) + " more" : "")
+                    + ". Tap \"Pictures first\" to add your own (up to 100 each) — without them the director draws the everyday ones itself.", 14, Ui.SUB, false));
             if (shown > 10) m.append(" and ").append(shown - 10).append(" more");
             List<com.tarun.kahani.core.ScenePlan.Extra> extras = com.tarun.kahani.core.ScenePlan.extras(st);
             StringBuilder xs = new StringBuilder();

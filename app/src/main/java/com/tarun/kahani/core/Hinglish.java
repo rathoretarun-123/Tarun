@@ -217,11 +217,21 @@ public final class Hinglish {
         }
         if (latin == 0 || dev > latin) return false;
         int words = 0, hindi = 0, eng = 0;
-        for (String w : line.toLowerCase().split("[^a-z]+")) {
-            if (w.length() == 0) continue;
+        String[] ws = line.split("[^A-Za-z]+");
+        int nw = 0;
+        for (String o : ws) if (o.length() > 0) nw++;
+        for (String o : ws) {
+            if (o.length() == 0) continue;
+            String w = o.toLowerCase();
             words++;
-            if (hindiWords.contains(w) && !english.contains(w) && !AMBIGUOUS.contains(w)) hindi++;
+            // (v43: in a line of three words or more, a name written with a capital — "Rahul", "Priya" — says nothing
+            // of the line's language: "Rahul lights a diya." is English)
+            boolean name = nw >= 3 && Character.isUpperCase(o.charAt(0)) && !english.contains(w);
+            if (!name && hindiWords.contains(w) && !english.contains(w) && !AMBIGUOUS.contains(w)) hindi++;
             else if (english.contains(w)) eng++;
+            // (v43: an English word by its ending — "lights", "opened", "running", "slowly" — or an article)
+            else if (!hindiWords.contains(w) && ((w.length() > 3 && (w.endsWith("s") || w.endsWith("ed") || w.endsWith("ing") || w.endsWith("ly")))
+                    || w.equals("a") || w.equals("an") || w.equals("the"))) eng++;
         }
         // v42: an English line with one Hindi-looking word in it ("In your hand, Papa.") stays English
         if ((hindi <= 1 && eng >= 2 && words >= 4) || (eng >= 3 && eng > 2 * hindi)) return false;

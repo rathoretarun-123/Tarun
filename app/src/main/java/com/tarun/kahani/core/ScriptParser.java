@@ -276,8 +276,8 @@ public final class ScriptParser {
             if (b.type != Story.Beat.DIRECTION) continue;
             for (String sent : b.text.split("[।.!?]")) {
                 List<Story.CharacterDef> who = mentions(story, sent);
-                // v34: an umbrella carried in the action ("मीरा छाता लेकर निकलती है") opens over her head in the rain
-                if (who.size() == 1 && who.get(0).look != null && who.get(0).look.isHumanoid() && Txt.has(sent, "छाता", "छतरी", "umbrella")) who.get(0).look.umbrella = true;
+                // (v34 gave an umbrella named in the action to the character for the whole story; v43: the director
+                // gives it from the sentence that takes it up — Film.Actor.umbrellaFrom — so it is not there before)
                 // v35: a limp, a missing arm or leg, blindness or deafness told only by the action ("राजू लंगड़ाता हुआ आता है")
                 if (who.size() == 1 && who.get(0).look != null && who.get(0).look.isHumanoid()) {
                     int cond = LookDesigner.conditionIn(sent) & (Look.C_LIMP | Look.C_NO_ARM | Look.C_RIGHT_ARM | Look.C_NO_LEG | Look.C_RIGHT_LEG | Look.C_ARTIFICIAL_LEG | Look.C_DEAF | Look.C_SIGNS);
@@ -303,6 +303,11 @@ public final class ScriptParser {
             if (b.type != Story.Beat.DIRECTION) continue;
             for (String sent : b.text.split("[।.!?]")) {
                 if (!LookDesigner.changesClothes(sent) || Txt.has(sent, "पगड़ी", "टोपी", "turban", " cap", "मुकुट", "crown")) continue;
+                // v43: make-up is not a change of clothes ("puts on red lipstick" made her clothes red)
+                if (Txt.has(sent, "लिपस्टिक", "lipstick", "काजल", "kajal", "बिंदी", "bindi", "मेकअप", "मेक-अप", "makeup", "make-up", "पाउडर", "powder",
+                        "नेल पॉलिश", "nail polish", "मेहंदी", "मेंहदी", "mehndi", "eyeliner", "blush", "सिंदूर", "sindoor", "लाली", "lip gloss")
+                        && !Txt.has(sent, "साड़ी", "कपड़े", "कुर्ता", "लहंगा", "ड्रेस", "फ्रॉक", "शर्ट", "dress", "shirt", "kurta", "lehenga", "saree", "sari", "frock", "uniform", "यूनिफ़ॉर्म"))
+                    continue;
                 List<Story.CharacterDef> who = mentions(story, sent);
                 // v34: "डॉक्टर रोहन के पैर पर पट्टी बाँधते हैं", "the nurse puts Asha's arm in a sling": the hurt one is the
                 // one whose arm, leg or head it is

@@ -416,8 +416,9 @@ public final class Art {
             for (String k : s.keys) {
                 k = k.trim();
                 if (k.length() == 0) continue;
-                // an English key is a whole word ("key" is not in "monkey"); a Hindi key is a stem
-                if (k.charAt(0) < 0x0900 ? Txt.hasWord(text, k) : Txt.has(text, k)) return s;
+                // an English key is a whole word ("key" is not in "monkey"); a Hindi key is a stem at the start of a
+                // word (v43: "फल" is not in "सफल")
+                if (k.charAt(0) < 0x0900 ? Txt.hasWord(text, k) : Txt.hasStart(text, k)) return s;
             }
         }
         return null;

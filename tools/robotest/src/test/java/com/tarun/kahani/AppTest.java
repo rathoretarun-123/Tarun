@@ -6097,6 +6097,243 @@ public class AppTest {
         assertTrue("sentences tried: " + n, n >= 180);
     }
 
+    // ================================================================== v43
+
+    /** v43: a sentence directed in the two-character story of vocabSig (राहुल / Rahul and माँ / Mother in the courtyard). */
+    static Film v43Film(String sentence, boolean en, String place) {
+        String s = en
+                ? "Title: Check\n\nCharacters\n1. Rahul - 10, a boy\n2. Mother - 38, his mother\n\nPlaces\n1. " + place + "\n\nScript begins\n\nScene 1: " + place + " - day\n\n[Rahul stands there. Mother stands near him.]\n\nMother: \"Rahul!\"\n\n[" + sentence + "]\n\nRahul: \"Yes, mother.\"\n"
+                : "शीर्षक: जाँच\n\nपात्र परिचय\n1. राहुल - 10 साल, बेटा\n2. माँ - 38 साल, माँ\n\nजगह का परिचय\n1. " + place + "\n\nस्क्रिप्ट शुरू\n\nदृश्य 1: " + place + " - दिन\n\n[राहुल खड़ा है। माँ पास में खड़ी है।]\n\nमाँ: \"राहुल!\"\n\n[" + sentence + "]\n\nराहुल: \"हाँ माँ।\"\n";
+        Director d = new Director(ScriptParser.parse(s), new Director.Options());
+        d.prepare();
+        return d.direct(new Art());
+    }
+
+    static Film.Actor v43Actor(Film f, String name) {
+        for (Film.Seg sg : f.segs) if (sg.type == Film.S_SCENE) for (Film.Actor a : sg.actors) if (a.c.fullName.equals(name) || a.c.displayName.equals(name)) return a;
+        return null;
+    }
+
+    static boolean v43Acted(Film.Actor a, int type) { if (a != null) for (Film.Act x : a.acts) if (x.type == type) return true; return false; }
+    static boolean v43Weather(Film f, int type) { for (Film.Weather w : f.weather) if (w.type == type) return true; return false; }
+    static boolean v43Sfx(Film f, int type) { for (Film.Sfx x : f.sfx) if (x.type == type) return true; return false; }
+
+    /**
+     * v43 (the user: "are tyres moving of the car, cycle?", "door opening and closing for car, getting up on bike or
+     * cycle and getting down and putting the stand"): the ten vehicle stories — every one has a ride; a car's doors
+     * are heard opening and shutting as its riders get in and out; a two-wheeler is left parked where its rider got
+     * off; a rider going left moves left (the wheels turn with the ground covered); no shot longer than 4 s.
+     */
+    @Test
+    public void v43VehiclesRideParkAndOpenTheirDoors() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File[] fs = new File(root, "tools/testdata/v43vehicles").listFiles();
+        java.util.Arrays.sort(fs);
+        int stories = 0, doorsOpen = 0, doorsShut = 0, parked = 0, leftRides = 0;
+        for (File f : fs) {
+            if (!f.getName().endsWith(".txt")) continue;
+            stories++;
+            Story st = ScriptParser.parse(new String(Files.readAllBytes(f.toPath()), "UTF-8"));
+            Director d = new Director(st, new Director.Options());
+            d.prepare();
+            Film film = d.direct(new Art());
+            boolean rode = false;
+            for (Film.Seg sg : film.segs) {
+                for (Film.Actor a : sg.actors) for (Film.Act x : a.acts) {
+                    if (x.type != Film.G_RIDE) continue;
+                    rode = true;
+                    // the ground covered is the way it goes: a ride to the left moves left all the way (no wheel turning back)
+                    float x0 = Director.xAt(a, x.t0 + Director.rideMount(x) + 0.05f), x1 = Director.xAt(a, x.t0 + Director.rideStop(x) - 0.05f);
+                    if (x1 < x0 - 50) {
+                        leftRides++;
+                        float prev = x0;
+                        for (float t = x.t0 + Director.rideMount(x) + 0.1f; t < x.t0 + Director.rideStop(x) - 0.05f; t += 0.1f) {
+                            float xt = Director.xAt(a, t);
+                            assertTrue(f.getName() + ": going left, it never rolls back right (" + prev + " -> " + xt + " at " + t + ")", xt <= prev + 0.5f);
+                            prev = xt;
+                        }
+                    }
+                }
+                for (Film.Fx x : sg.fx) if (x.type == Film.FX_PARKED) parked++;
+            }
+            assertTrue(f.getName() + ": someone rides", rode);
+            for (Film.Sfx x : film.sfx) { if (x.type == Film.SFX_CAR_DOOR) doorsOpen++; if (x.type == Film.SFX_CAR_SHUT) doorsShut++; }
+            for (Film.Shot sh : film.shots) assertTrue(f.getName() + ": a shot of " + sh.dur + " s", sh.dur <= TechnicalDirector.MAX_SHOT_SECONDS + 0.05f);
+        }
+        System.out.println("V43 VEHICLES stories=" + stories + " doorsOpen=" + doorsOpen + " doorsShut=" + doorsShut + " parked=" + parked + " leftRides=" + leftRides);
+        assertEquals("ten vehicle stories", 10, stories);
+        assertTrue("car doors are heard opening: " + doorsOpen, doorsOpen >= 4);
+        assertTrue("and shutting: " + doorsShut, doorsShut >= 4);
+        assertTrue("vehicles stay parked where they were left: " + parked, parked >= 5);
+    }
+
+    /**
+     * v43 (the user: "door opening of any room, closing it, meal created in the kitchen"): the room's door is knocked
+     * at (nobody in the room walks to it for a knock from outside), opened by the one who goes to it, who steps back
+     * to let the other in; it is shut later — and never do two people stand on one spot by it. The kitchen: four
+     * sentences cook six dishes in their turn at one counter, the cook behind it.
+     */
+    @Test
+    public void v43RoomDoorsAndTheKitchen() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        Story st = ScriptParser.parse(new String(Files.readAllBytes(new File(root, "tools/testdata/v43home/home_02.txt").toPath()), "UTF-8"));
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        Film film = d.direct(new Art());
+        assertTrue("the knock is heard", v43Sfx(film, Film.SFX_KNOCK));
+        Film.Seg sg = null;
+        for (Film.Seg x : film.segs) if (x.type == Film.S_SCENE) sg = x;
+        int frames = 0, swings = 0;
+        Film.Fx frame = null, swing = null;
+        for (Film.Fx f : sg.fx) if (f.type == Film.FX_DOOR) { if (f.kind == 0) { frames++; frame = f; } else { swings++; swing = f; } }
+        assertEquals("one door in the room", 1, frames);
+        Film.Actor vrinda = v43Actor(film, "वृंदा"), tarun = v43Actor(film, "तरुण");
+        // opened by वृंदा before तरुण comes in, it stands open (प्रिया goes out through it) until तरुण shuts it
+        float tarunIn = -1;
+        for (Film.Key k : tarun.keys) if (k.visible && tarunIn < 0) tarunIn = k.t;
+        assertTrue("the door swings open: " + swings, swings >= 1);
+        assertTrue("open before तरुण comes in (" + swing.t0 + " vs " + tarunIn + ")", swing.t0 < tarunIn);
+        assertTrue("and shut before the scene ends (" + swing.t2 + ")", swing.t2 < sg.t1);
+        float doorX = frame.x < 0 ? 150 : 1130;
+        // वृंदा sits reading through the knock (a knock from outside does not walk her to the door)
+        float knockT = -1;
+        for (Film.Sfx x : film.sfx) if (x.type == Film.SFX_KNOCK) knockT = x.t;
+        assertTrue("the knock comes while she still sits", vrinda.stateAt(knockT).body == Pose.SIT);
+        // she goes to the door, then stands back from it when तरुण comes in; he stops before her
+        boolean atDoor = false;
+        for (float t = sg.t0; t < sg.t1; t += 0.1f) if (Math.abs(Director.xAt(vrinda, t) - doorX) < 30) atDoor = true;
+        assertTrue("वृंदा goes to the door", atDoor);
+        // never on one spot: wherever both stand still, they are apart
+        for (float t = sg.t0; t < sg.t1; t += 0.1f) {
+            if (!vrinda.stateAt(t).visible || !tarun.stateAt(t).visible) continue;
+            if (Director.xAt(vrinda, t) != Director.xAt(vrinda, t + 0.1f) || Director.xAt(tarun, t) != Director.xAt(tarun, t + 0.1f)) continue;
+            assertTrue("two on one spot at " + t, Math.abs(Director.xAt(vrinda, t) - Director.xAt(tarun, t)) > 60);
+        }
+        // the kitchen
+        Story ks = ScriptParser.parse(new String(Files.readAllBytes(new File(root, "tools/testdata/v43home/home_01.txt").toPath()), "UTF-8"));
+        Director kd = new Director(ks, new Director.Options());
+        kd.prepare();
+        Film kf = kd.direct(new Art());
+        java.util.List<Integer> dishes = new java.util.ArrayList<Integer>();
+        java.util.Set<Float> counters = new java.util.HashSet<Float>();
+        Film.Actor cook = v43Actor(kf, "प्रिया");
+        for (Film.Seg x : kf.segs) for (Film.Fx f : x.fx) if (f.type == Film.FX_KITCHEN) {
+            dishes.add(f.kind);
+            counters.add(f.x);
+            // the cook stands behind the counter while the dish is made
+            assertTrue("the cook at the counter (" + Director.xAt(cook, (f.y + f.t2) / 2) + " vs " + f.x + ")", Math.abs(Director.xAt(cook, (f.y + f.t2) / 2) - f.x) < 45);
+        }
+        System.out.println("V43 KITCHEN dishes=" + dishes + " counters=" + counters);
+        assertEquals("six dishes: " + dishes, 6, dishes.size());
+        assertTrue("one counter", counters.size() == 1);
+        assertTrue("chopped, a meal, tea, rotis, dal and its tadka: " + dishes, dishes.contains(Film.COOK_CHOP) && dishes.contains(Film.COOK_MEAL) && dishes.contains(Film.COOK_TEA)
+                && dishes.contains(Film.COOK_ROTI) && dishes.contains(Film.COOK_DAL) && dishes.contains(Film.COOK_TADKA));
+    }
+
+    /**
+     * v43 (the user: "all the normal activities of every character and all the normal natural phenomena … train the
+     * director and the script reader"): words read where words begin (no singing in "लगाती", no relief in
+     * "कराहता", no rain in a rainbow or in flowers showered, no wind in a window, no waving in the waves), the subject
+     * after a participle, two subjects in one sentence, getting off a bus nobody was seen riding, lying on the sofa,
+     * a thing carried, the sun going down, the umbrella opening.
+     */
+    @Test
+    public void v43EverydayWordsAndNature() throws Exception {
+        Film f = v43Film("राहुल दाल में तड़का लगाती है।", false, "घर की रसोई");
+        assertTrue("the tadka is cooked, nobody sings", !v43Acted(v43Actor(f, "राहुल"), Film.G_BOUNCE));
+        boolean cooked = false;
+        for (Film.Act x : v43Actor(f, "राहुल").acts) if (x.type == Film.G_TASK && x.item == Film.T_COOK) cooked = true;
+        assertTrue("a cooking task", cooked);
+        f = v43Film("राहुल दर्द से कराहता है।", false, "घर का आँगन");
+        boolean pain = false, relief = false;
+        for (Film.Key k : v43Actor(f, "राहुल").keys) { if (k.emotion == Pose.PAIN) pain = true; if (k.emotion == Pose.RELIEVED) relief = true; }
+        assertTrue("pain, not relief", pain && !relief);
+        f = v43Film("Waves crash against the shore.", true, "The sea shore");
+        assertTrue("the sea", v43Weather(f, Film.W_SEA));
+        assertTrue("nobody waves", !v43Acted(v43Actor(f, "Rahul"), Film.G_WAVE) && !v43Acted(v43Actor(f, "Mother"), Film.G_WAVE));
+        f = v43Film("राहुल माँ पर फूल बरसाता है।", false, "घर का आँगन");
+        assertTrue("petals, no rain", v43Weather(f, Film.W_PETALS) && !v43Weather(f, Film.W_RAIN));
+        f = v43Film("A rainbow appears in the sky.", true, "The courtyard");
+        assertTrue("a rainbow, no rain", v43Weather(f, Film.W_RAINBOW) && !v43Weather(f, Film.W_RAIN));
+        f = v43Film("Rahul opens the window.", true, "The courtyard");
+        assertTrue("no wind from a window", !v43Weather(f, Film.W_WIND));
+        f = v43Film("माँ की आवाज़ सुनकर राहुल की आँख खुल जाती है।", false, "घर का आँगन");
+        assertTrue("the one who wakes is राहुल, not माँ", v43Acted(v43Actor(f, "राहुल"), Film.G_RUB_EYES) && !v43Acted(v43Actor(f, "माँ"), Film.G_RUB_EYES));
+        f = v43Film("माँ फिसल जाती हैं और राहुल उनका हाथ पकड़कर उन्हें उठाता है।", false, "घर का आँगन");
+        assertTrue("माँ slips", v43Acted(v43Actor(f, "माँ"), Film.G_FLAIL));
+        assertTrue("राहुल helps her up", v43Acted(v43Actor(f, "राहुल"), Film.G_HOLD_HAND) || v43Acted(v43Actor(f, "राहुल"), Film.G_REACH));
+        f = v43Film("राहुल स्कूल बस से उतरता है।", false, "घर के बाहर की सड़क");
+        assertTrue("the bus brings him (a ride)", v43Acted(v43Actor(f, "राहुल"), Film.G_RIDE));
+        f = v43Film("राहुल थककर सोफ़े पर ही सो जाता है।", false, "घर का कमरा");
+        boolean sofaLie = false;
+        for (Film.Key k : v43Actor(f, "राहुल").keys) if (k.body == Pose.LIE && k.seat == Film.SEAT_SOFA) sofaLie = true;
+        assertTrue("asleep on the sofa (not a bed from nowhere)", sofaLie);
+        f = v43Film("राहुल फूलों की टोकरी लेकर माँ के पास आता है।", false, "घर का आँगन");
+        boolean basket = false;
+        for (Film.Key k : v43Actor(f, "राहुल").keys) if (k.holdR == Pose.I_BASKET || k.holdL == Pose.I_BASKET) basket = true;
+        assertTrue("the basket is in his hands", basket);
+        f = v43Film("सूरज ढल रहा है।", false, "घर का आँगन");
+        boolean sunset = false;
+        for (Film.Seg sg : f.segs) for (Film.Fx x : sg.fx) if (x.type == Film.FX_SKY && x.kind == Film.SKY_SUNSET) sunset = true;
+        assertTrue("the sun goes down", sunset);
+        f = v43Film("Rahul lights a diya.", true, "The courtyard");
+        assertTrue("a short English line stays English: the diya burns", v43Weather(f, Film.W_CANDLES));
+        // the umbrella opens over 0.7 s (it does not pop open), as the rain comes on
+        Pose p = new Pose();
+        assertEquals("a pose's umbrella is open unless told", 1f, p.umbrellaAmt, 1e-6);
+    }
+
+    /**
+     * v43 (the user: "the director should ask for any prop, object or place to be uploaded if not available, uploading
+     * should be smooth"): the things the script lists are asked for; a word inside another is not ("key" in
+     * "monkey"); the hour of a scene ("समय: शाम") is no place; a place picture given for one scene is the picture of
+     * every scene in that place; a picture bigger than 300 MB is refused, a large one is read at the film's size.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void v43TheDirectorAsksForThingsAndPlacesRight() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        String script = "शीर्षक: पतंग\n\nपात्र परिचय\n1. राहुल - 10 साल, बेटा\n\nजगह का परिचय\n1. घर की छत - खुली छत\n\nवस्तुओं का वर्णन\n1. पतंग - लाल रंग की बड़ी पतंग\n\n"
+                + "स्क्रिप्ट शुरू\n\nदृश्य 1: घर की छत - सुबह\n\n[राहुल छत पर पतंग उड़ाता है।]\n\nराहुल: \"वाह!\"\n\n"
+                + "दृश्य 2: समय: शाम\n\n[A monkey sits on the wall.]\n\nराहुल: \"बंदर!\"\n\n"
+                + "दृश्य 3: घर की छत - शाम\n\n[राहुल फिर से छत पर आता है।]\n\nराहुल: \"फिर से!\"\n";
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        Story st = ScriptParser.parse(script);
+        List<String[]> asked = (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingTargets", p, st);
+        StringBuilder all = new StringBuilder();
+        boolean kite = false, key = false, hour = false;
+        for (String[] t : asked) {
+            all.append(t[0]).append(" = ").append(t[1]).append('\n');
+            if (t[0].startsWith("shot:") && t[0].endsWith(":पतंग")) kite = true;
+            if (t[0].startsWith("shot:") && t[0].endsWith(":key")) key = true;
+            if (t[0].startsWith("place:") && t[0].contains("समय")) hour = true;
+        }
+        System.out.println("ASKED v43:\n" + all);
+        assertTrue("the kite of the script's list is asked for:\n" + all, kite);
+        assertTrue("no key in a monkey:\n" + all, !key);
+        assertTrue("the hour is no place:\n" + all, !hour);
+        // a picture of the roof for scene 1 is the roof of scene 3 too
+        Bitmap bm = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        int[] px = new int[640 * 360];
+        for (int y = 0; y < 360; y++) for (int x = 0; x < 640; x++) px[y * 640 + x] = 0xFF000000 | ((x * 255 / 640) << 16) | ((y * 255 / 360) << 8) | 120;
+        bm.setPixels(px, 0, 640, 0, 0, 640, 360);
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        bm.compress(Bitmap.CompressFormat.JPEG, 90, out);
+        List<byte[]> one = new ArrayList<byte[]>();
+        one.add(out.toByteArray());
+        com.tarun.kahani.app.Library lib = com.tarun.kahani.app.Library.get(ctx);
+        call("com.tarun.kahani.app.SheetSaver", "save", p, lib, st, "angles:scene:1:घर की छत", one, null);
+        assertNotNull("scene 1 has its picture", p.manifestLine("scene", "1"));
+        assertNotNull("scene 3, the same roof, has it too", p.manifestLine("scene", "3"));
+        for (String[] t : (List<String[]>) call("com.tarun.kahani.app.AutoLibrary", "missingTargets", p, st))
+            assertTrue("the roof is no longer asked for: " + t[0], !t[0].startsWith("place:"));
+        // uploads: up to 300 MB
+        java.lang.reflect.Field mx = com.tarun.kahani.app.Project.class.getDeclaredField("MAX_UPLOAD");
+        mx.setAccessible(true);
+        assertEquals(300L * 1024 * 1024, mx.getLong(null));
+    }
+
     /** What the director staged for a sentence in a two-character story (acts, body, place, face, hands, effects, sounds). */
     static String vocabSig(String sentence, boolean en) {
         String s = en

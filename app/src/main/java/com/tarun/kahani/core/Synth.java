@@ -168,6 +168,23 @@ public final class Synth {
             case Film.SFX_ROPE: { for (float t = 0.05f; t < dur - 0.1f; t += 0.55f) { sweepNoise(o, t, 0.18f, 0.4f, 0.7f, 0.05f); burst(o, t + 0.22f, 0.025f, 0.5f, 0.12f); } fadeEnds(o, 0.05f); break; }
             // v37: a soft peck
             case Film.SFX_KISS: { burst(o, 0.02f, 0.035f, 0.85f, 0.12f); tone(o, 0.03f, 0.06f, 900, 1300, 0.04f, 0); break; }
+            // v43: a car door — opening: the handle's click and the rubber seal letting go; shut: a solid, low thunk with the
+            // latch's click on top (not a room door's hinge creak)
+            case Film.SFX_CAR_DOOR: { knock(o, 0.02f, 2900, 0.14f); knock(o, 0.045f, 1800, 0.09f); burst(o, 0.07f, 0.09f, 0.45f, 0.05f); break; }
+            case Film.SFX_CAR_SHUT: { thump(o, 0.02f, 72, 0.5f); thump(o, 0.024f, 150, 0.22f); knock(o, 0.03f, 1650, 0.13f); burst(o, 0.02f, 0.05f, 0.35f, 0.1f); break; }
+            // v43: knocking — three knuckle raps on a wooden door, the last a little softer
+            case Film.SFX_KNOCK: { for (int i = 0; i < 3; i++) { float kt = 0.03f + i * 0.21f; knock(o, kt, 420 + rnd() * 30, i == 2 ? 0.36f : 0.46f); thump(o, kt, 110, 0.18f); } break; }
+            // v43: chopping — quick dull knife taps on a board, a few to a burst
+            case Film.SFX_CHOP: { float ct = 0.05f; int k = 0; while (ct < dur - 0.05f) { knock(o, ct, 1100 + rnd() * 200, 0.2f); thump(o, ct, 180, 0.08f); ct += (k % 5 == 4) ? 0.45f : 0.17f; k++; } break; }
+            // v43: boiling — small bubbles bursting over a low simmer
+            case Film.SFX_BOIL: { noiseBedRange(o, 0, dur, 0.12f, 0.05f); float bt = 0.05f; while (bt < dur - 0.05f) { tone(o, bt, 0.03f, 500 + Math.abs(rnd()) * 900, 300 + Math.abs(rnd()) * 300, 0.05f, 0); bt += 0.04f + Math.abs(rnd()) * 0.09f; } fadeEnds(o, 0.3f); break; }
+            // v43: a pressure cooker's whistle — the steam rising into a shrill hiss, then falling away
+            case Film.SFX_WHISTLE: {
+                float wl = Math.min(dur, 1.8f);
+                for (float wt = 0; wt < wl; wt += 0.02f) { float u = wt / wl, a = (float) Math.sin(Math.PI * Math.min(1, u * 1.4f)) * 0.22f; tone(o, wt, 0.025f, 1700 + 1100 * u, 1720 + 1100 * u, a, 0); }
+                noiseBedRange(o, 0, wl, 0.5f, 0.1f); fadeEnds(o, 0.15f);
+                break;
+            }
             case Film.SFX_BOOM: { thump(o, 0, 40, 1.0f); burst(o, 0, 0.6f, 0.2f, 0.7f); noiseBed(o, 0.05f, 0.4f, 1.5f, 0.3f); fadeEnds(o, 0.4f); break; }
             case Film.SFX_WHOOSH: case Film.SFX_WHOOSH_CARD: { sweepNoise(o, 0, dur, 0.02f, 0.4f, type == Film.SFX_WHOOSH ? 0.6f : 0.35f); break; }
             case Film.SFX_BELL: { bellTone(o, 0, 196, Math.min(dur, 4f), 0.7f); bellTone(o, 0, 196 * 2.76f, Math.min(dur, 2.5f), 0.2f); break; }

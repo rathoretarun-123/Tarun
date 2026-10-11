@@ -89,6 +89,14 @@ public class MakeFilm {
             }
         }
         film = dir.direct(art);
+        // WIDE=1: every scene seen whole by one still camera — for looking at the staging itself (who stands where,
+        // vehicles, doors), not at the film's shots
+        if (System.getenv("WIDE") != null) for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) {
+            sg.cams.clear();
+            Film.Cam wc = new Film.Cam(sg.t0, 640, 360, 1f, 0);
+            wc.still = true;
+            sg.cams.add(wc);
+        }
         // CAMS=a,b: the camera moves between a and b seconds (time, centre, zoom, ease)
         if (System.getenv("CAMS") != null) {
             String[] r = System.getenv("CAMS").split(",");

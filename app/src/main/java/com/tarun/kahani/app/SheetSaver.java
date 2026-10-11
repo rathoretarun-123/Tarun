@@ -378,7 +378,12 @@ final class SheetSaver {
             if (d == null || d.length < 16) { unreadable++; continue; }
             // v28: a sheet is read at up to 2600 px wide where the heap allows, so every figure cut from it
             // (a tenth of the sheet) is sharp enough for a close-up and its face large enough to read
-            int[] dec = MainActivity.decodeBytes(d, Project.bigSide());
+            int[] dec;
+            try { dec = MainActivity.decodeBytes(d, Project.bigSide()); }
+            catch (OutOfMemoryError oom) {
+                // v43: a very large picture on a phone with little memory left: read it smaller (never the whole batch lost)
+                try { dec = MainActivity.decodeBytes(d, 1600); } catch (Throwable e) { dec = null; }
+            }
             if (dec == null) { unreadable++; continue; }
             int w = dec[0], h = dec[1];
             int[] px = new int[w * h];
@@ -416,7 +421,7 @@ final class SheetSaver {
             px = null;
             if (pics.size() >= 100) break;
         }
-        if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG) or a smaller picture" : "No picture could be read";
+        if (pics.isEmpty()) return unreadable > 0 ? "These pictures could not be read (" + unreadable + "). Try another format (JPG or PNG), or a picture under 300 MB" : "No picture could be read";
         if (pics.size() > 100) pics = pics.subList(0, 100);
         StringBuilder done = new StringBuilder();
         if (kind.equals("char")) {
@@ -687,6 +692,27 @@ final class SheetSaver {
             if (!newViews.isEmpty()) done.append(newViews.size()).append(" more views (behind the close shots); ");
             if (things > 0) done.append(things).append(" things of the place (library); ");
             done.append("— ").append(placePictures(project, key)).append(" pictures of this place in the film ");
+            // v43: the same place in other scenes ("घर का कमरा" in scenes 1, 3 and 5): its wide view and reverse angle go to
+            // each of them that has none yet (only the first scene got them, and the film waited for the others forever)
+            if (haveMain && st != null) {
+                Story.Scene me = null;
+                for (Story.Scene sc : st.scenes) if (String.valueOf(sc.number).equals(key)) me = sc;
+                if (me != null) {
+                    String main = project.manifestLine("scene", key), rev = project.manifestLine("scene", key + "r");
+                    int shared = 0;
+                    for (String[] pl : com.tarun.kahani.core.Bible.places(st)) {
+                        if (!AutoLibrary.placeOf(me, pl[0])) continue;
+                        for (Story.Scene sc : st.scenes) {
+                            String k2 = String.valueOf(sc.number);
+                            if (sc == me || !AutoLibrary.placeOf(sc, pl[0]) || project.manifestLine("scene", k2) != null) continue;
+                            if (main != null) { String[] mf = main.split("\\|"); if (mf.length >= 3) project.setManifest("scene", k2, "scene|" + k2 + "|" + mf[2].trim()); }
+                            if (rev != null) { String[] rf = rev.split("\\|"); if (rf.length >= 3) project.setManifest("scene", k2 + "r", "scene|" + k2 + "r|" + rf[2].trim()); }
+                            shared++;
+                        }
+                    }
+                    if (shared > 0) done.append("(also for ").append(shared).append(" more scene(s) in the same place) ");
+                }
+            }
         } else {
             // a thing: its first picture is the insert of the thing itself; v39: every other angle stays in the story
             // too (objview lines, counted on its card) and in the library
@@ -714,6 +740,7 @@ final class SheetSaver {
             done.append("— ").append(thingPictures(project, key)).append(" pictures of this thing in the film ");
         }
         library.save();
-        return "✅ " + shown + ": " + done + (split > 0 ? "(" + split + " figures split from a sheet) " : "") + "— all in the library";
+        return "✅ " + shown + ": " + done + (split > 0 ? "(" + split + " figures split from a sheet) " : "") + "— all in the library"
+                + (unreadable > 0 ? " (" + unreadable + " could not be read and were left out — a JPG or PNG under 300 MB works)" : "");     // v43: never silent
     }
 }

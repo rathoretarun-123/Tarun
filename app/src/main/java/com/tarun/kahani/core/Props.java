@@ -13,6 +13,475 @@ public final class Props {
 
     static int alpha(int c, float a) { return Puppet.alpha(c, a); }
 
+    // ================================================================== v43: a room's door
+
+    /**
+     * v43: a room's door in the side wall at the edge of the picture (side -1 the left edge, +1 the right; ground the
+     * floor line; dh the door's height). Seen steeply, the doorway is narrow; open 0..1 swings the door away into the
+     * passage (its free edge going back to the hinge) and the lit passage behind it shows. front = false: the doorway and the door
+     * (behind the people); front = true: the near post of its frame (in front of whoever goes through it).
+     */
+    public static void roomDoor(Gfx g, float side, float ground, float dh, float open, boolean front) {
+        g.save();
+        if (side > 0) { g.translate(1280, 0); g.scale(-1, 1); }       // the right edge: the left one mirrored
+        float nx = 12, fx = 74;                                         // the near and the far post of the doorway
+        float nTop = ground - dh * 1.03f, nBot = ground + 6, fTop = ground - dh * 0.95f, fBot = ground - 6;
+        if (front) {
+            g.color(0xFF6D4C3D); g.rect(0, nTop - 16, nx, nBot - nTop + 20);
+            g.color(alpha(0xFFFFFFFF, 0.12f)); g.rect(nx - 4, nTop - 16, 3, nBot - nTop + 20);
+            g.restore();
+            return;
+        }
+        // the passage behind the doorway, lit from the next room (seen as the door swings away)
+        g.color(0xFF4A3A2E);
+        g.begin(); g.moveTo(nx, nTop); g.lineTo(fx, fTop); g.lineTo(fx, fBot); g.lineTo(nx, nBot); g.close(); g.fillPath();
+        g.color(alpha(0xFFFFE0B2, 0.28f));
+        g.begin(); g.moveTo(nx + (fx - nx) * 0.35f, nTop + (fTop - nTop) * 0.35f + 20); g.lineTo(fx, fTop + 20); g.lineTo(fx, fBot - 30); g.lineTo(nx + (fx - nx) * 0.35f, nBot + (fBot - nBot) * 0.35f - 30); g.close(); g.fillPath();
+        g.color(alpha(0xFF8D6E63, 0.7f));
+        g.begin(); g.moveTo(nx, nBot - 30); g.lineTo(fx, fBot - 22); g.lineTo(fx, fBot); g.lineTo(nx, nBot); g.close(); g.fillPath();
+        // the far post and the lintel
+        g.color(0xFF6D4C3D);
+        g.rect(fx, fTop - 10, 9, fBot - fTop + 10);
+        g.begin(); g.moveTo(0, nTop - 16); g.lineTo(fx + 9, fTop - 12); g.lineTo(fx + 9, fTop - 2); g.lineTo(0, nTop - 4); g.close(); g.fillPath();
+        // the door, hinged on the far post: shut it lies across the doorway; opening, it swings away into the passage —
+        // its free edge going back to the hinge, the doorway opening up beside it
+        float o = Math.max(0, Math.min(1, open));
+        double th = Math.toRadians(88 * o);
+        float c = (float) Math.cos(th), sn = (float) Math.sin(th);
+        float k = 1 - c;                                   // how far the free edge has gone back towards the far post
+        float freeX = nx + (fx - nx) * k, freeTop = nTop + (fTop - nTop) * k, freeBot = nBot + (fBot - nBot) * k;
+        g.color(Puppet.shade(0xFF8D5A3B, 1f - 0.35f * sn));
+        g.begin(); g.moveTo(fx, fTop); g.lineTo(freeX, freeTop); g.lineTo(freeX, freeBot); g.lineTo(fx, fBot); g.close(); g.fillPath();
+        // its edge, seen as it turns
+        if (o > 0.05f) { g.color(0xFF4E342E); g.line(freeX, freeTop, freeX, freeBot, 2 + 3 * sn); }
+        // its panels and its handle near the free edge (fading as the door turns away)
+        if (fx - freeX > 8) {
+            g.color(alpha(0xFF4E342E, 0.55f * (1 - sn)));
+            for (int i = 0; i < 2; i++) {
+                float a0 = 0.18f + i * 0.42f, a1 = a0 + 0.32f;
+                float x0 = fx + (freeX - fx) * 0.22f, x1 = fx + (freeX - fx) * 0.8f;
+                float y00 = fTop + (fBot - fTop) * a0, y01 = freeTop + (freeBot - freeTop) * a0, y10 = fTop + (fBot - fTop) * a1, y11 = freeTop + (freeBot - freeTop) * a1;
+                g.begin(); g.moveTo(x0, y00 + (y01 - y00) * 0.22f); g.lineTo(x1, y00 + (y01 - y00) * 0.8f); g.lineTo(x1, y10 + (y11 - y10) * 0.8f); g.lineTo(x0, y10 + (y11 - y10) * 0.22f); g.close(); g.strokePath(2);
+            }
+            float hx = fx + (freeX - fx) * 0.86f, hy = fTop + (fBot - fTop) * 0.52f + ((freeTop + (freeBot - freeTop) * 0.52f) - (fTop + (fBot - fTop) * 0.52f)) * 0.86f;
+            g.color(alpha(0xFFFFD54F, 1 - 0.8f * sn)); g.oval(hx, hy, 4, 4);
+        }
+        g.restore();
+    }
+
+    // ================================================================== v43: the kitchen
+
+    /**
+     * v43: what a cook does at this point of the cooking (kind Film.COOK_*, done 0..1): 0 chops on the board, 1 stirs the
+     * pot, 2 rolls a roti, 3 serves (pours, plates), 4 tends the stove (the cooker whistling, the roti on the tawa).
+     */
+    public static int cookPhase(int kind, float done) {
+        switch (kind) {
+            case Film.COOK_MEAL: return done < 0.3f ? 0 : done < 0.85f ? 1 : 3;
+            case Film.COOK_DAL: return done < 0.75f ? 4 : 3;
+            case Film.COOK_TEA: return done < 0.75f ? 1 : 3;
+            case Film.COOK_ROTI: return done < 0.4f ? 2 : done < 0.8f ? 4 : 3;
+            case Film.COOK_CHOP: return done < 0.85f ? 0 : 3;
+            case Film.COOK_TADKA: return done < 0.65f ? 1 : 3;
+            default: return done < 0.85f ? 1 : 3;
+        }
+    }
+
+    /**
+     * v43: a kitchen counter with a gas hob (its centre at the origin, the floor at y = 0; s = the cook's height, who
+     * stands on the side -f): the meal made on it in stages — vegetables chopped on the board, the kadhai or the
+     * pressure cooker or the tea pan on the flame, rotis rolled and puffed on the tawa — then the dish served on the
+     * counter. done 0..1 is how far the cooking has gone; after it (since >= 0, seconds since it was done) the dish
+     * stays there, the flame off, its steam dying away.
+     */
+    public static void kitchen(Gfx g, float s, float f, float t, int kind, float done, float since) { kitchen(g, s, f, t, kind, done, since, false, 0, false); }
+
+    /** v43: the same; idle: the counter before anything is cooked on it (the hob cold, the kadhai empty on it). */
+    public static void kitchen(Gfx g, float s, float f, float t, int kind, float done, float since, boolean idle) { kitchen(g, s, f, t, kind, done, since, idle, 0, false); }
+
+    /**
+     * v43: the same, the cook standing behind the counter (it hides them from the hips down, as at a real kitchen
+     * counter or a cooking show): hand != 0 is the cook's skin, and their hands are seen at the work on the counter
+     * top — the knife rocking on the board, the ladle going round the kadhai, the belan rolling the roti, the chimta
+     * turning it on the tawa, the serving spoon to the plate; outdoor: a wooden stall with a gas cylinder under it.
+     */
+    public static void kitchen(Gfx g, float s, float f, float t, int kind, float done, float since, boolean idle, int hand, boolean outdoor) {
+        kitchen(g, s, f, t, kind, done, since, idle, hand, outdoor, 0.54f);
+    }
+
+    /** v43: the same, the counter's top at topFrac of the cook's height (just above where their hands hang). */
+    public static void kitchen(Gfx g, float s, float f, float t, int kind, float done, float since, boolean idle, int hand, boolean outdoor, float topFrac) {
+        f = f < 0 ? -1 : 1;
+        boolean cooking = since < 0 && !idle;
+        if (since >= 0) done = 1;
+        float top = -Math.max(0.34f, Math.min(0.58f, topFrac)) * s, w = 0.56f * s, sx = f * 0.12f * s, bx = -f * 0.14f * s;
+        int phase = cookPhase(kind, done);
+        if (outdoor) {
+            // a street stall: a plank top on four legs, a cloth skirt at the front, the red gas cylinder beneath
+            g.color(0xFF6D4C41); g.rect(-w / 2 + 0.02f * s, top, 0.03f * s, -top); g.rect(w / 2 - 0.05f * s, top, 0.03f * s, -top);
+            float cyl = Math.min(0.24f * s, -top - 0.17f * s);
+            g.color(0xFFC62828); g.roundRect(-0.07f * s, -cyl, 0.12f * s, cyl, 0.04f * s);
+            g.color(0xFF8E1B1B); g.rect(-0.03f * s, -cyl - 0.03f * s, 0.04f * s, 0.035f * s);
+            g.color(0xFF5D4037); g.rect(-w / 2, -0.12f * s, w, 0.02f * s);
+            g.color(0xFFE6B85C); g.rect(-w / 2, top, w, 0.16f * s);
+            g.color(alpha(0xFF8D6E63, 0.5f)); for (int i = 0; i < 6; i++) g.rect(-w / 2 + (i + 0.5f) * w / 6 - 0.004f * s, top, 0.008f * s, 0.16f * s);
+            g.color(0xFF8D6E63); g.rect(-w / 2 - 0.012f * s, top - 0.022f * s, w + 0.024f * s, 0.026f * s);
+            g.color(alpha(0xFFFFFFFF, 0.2f)); g.rect(-w / 2 - 0.012f * s, top - 0.022f * s, w + 0.024f * s, 0.005f * s);
+        } else {
+            // the cabinet: two doors with their knobs, a drawer, a plinth
+            g.color(0xFF8D6E63); g.rect(-w / 2, top, w, -top);
+            g.color(0xFF7B5E52);
+            g.rect(-w / 2 + 0.015f * s, top + 0.1f * s, w / 2 - 0.022f * s, -top - 0.13f * s);
+            g.rect(0.007f * s, top + 0.1f * s, w / 2 - 0.022f * s, -top - 0.13f * s);
+            g.rect(-w / 2 + 0.015f * s, top + 0.02f * s, w - 0.03f * s, 0.065f * s);
+            g.color(0xFFD7CCC8); g.oval(-0.025f * s, top * 0.45f, 0.008f * s, 0.008f * s); g.oval(0.025f * s, top * 0.45f, 0.008f * s, 0.008f * s);
+            g.roundRect(-0.04f * s, top + 0.045f * s, 0.08f * s, 0.012f * s, 0.005f * s);
+            g.color(0xFF4E342E); g.rect(-w / 2, -0.03f * s, w, 0.03f * s);
+            // the granite top
+            g.color(0xFF78909C); g.rect(-w / 2 - 0.012f * s, top - 0.022f * s, w + 0.024f * s, 0.026f * s);
+            g.color(alpha(0xFFFFFFFF, 0.25f)); g.rect(-w / 2 - 0.012f * s, top - 0.022f * s, w + 0.024f * s, 0.005f * s);
+        }
+        float ct = top - 0.022f * s;                       // the counter's surface
+        // the hob: two burners, the near one lit while something cooks on it
+        g.color(0xFF263238); g.roundRect(sx - 0.12f * s, ct - 0.022f * s, 0.24f * s, 0.022f * s, 0.006f * s);
+        g.color(0xFF9E9E9E); g.oval(sx - 0.085f * s, ct - 0.011f * s, 0.008f * s, 0.006f * s); g.oval(sx + 0.085f * s, ct - 0.011f * s, 0.008f * s, 0.006f * s);
+        float hob = ct - 0.022f * s;
+        boolean flameOn = cooking && phase != 0 && phase != 2 && !(phase == 3 && done > 0.92f);
+        if (flameOn) Nature.flame(g, sx, hob, t, s / 1000f, 0, 0, 7);
+        if (idle) { kadhai(g, sx, hob, s, f, 0, 0, t, false); return; }
+        switch (kind) {
+            case Film.COOK_TEA: {
+                // a pan of milk on the flame: the tea leaves and sugar go in, it turns brown, boils up; poured into two cups
+                float boil = Rig.smooth(0.45f, 0.6f, done) * (1 - Rig.smooth(0.72f, 0.78f, done));
+                int col = mix(0xFFF5F5F0, 0xFFB07A4A, Rig.smooth(0.1f, 0.5f, done));
+                float level = cooking ? 1 - 0.7f * Rig.smooth(0.78f, 0.95f, done) : 0.3f;
+                pan(g, sx, hob, s, f, col, level, boil, t);
+                if (done > 0.75f) cups(g, bx, ct, s, f, col, Rig.smooth(0.78f, 0.95f, done), t, since);
+                break;
+            }
+            case Film.COOK_DAL: {
+                // the pressure cooker on the flame: it whistles; then dal in a steel bowl
+                float whistle = cooking ? Rig.smooth(0.5f, 0.53f, done) * (1 - Rig.smooth(0.6f, 0.64f, done)) : 0;
+                cooker(g, sx, hob, s, f, t, whistle);
+                if (done > 0.75f) bowl(g, bx, ct, s, 0xFFF2B33D, Rig.smooth(0.75f, 0.85f, done), t, since, false);
+                break;
+            }
+            case Film.COOK_ROTI: {
+                // a ball of dough rolled out on the chakla, then on the tawa: brown spots, it puffs up; a stack on a plate
+                tawa(g, sx, hob, s);
+                float roll = Rig.smooth(0.0f, 0.38f, done);
+                if (done < 0.42f) chakla(g, bx, ct, s, roll);
+                else if (done < 0.82f) {
+                    chakla(g, bx, ct, s, -1);
+                    float cookU = (done - 0.42f) / 0.4f;
+                    roti(g, sx, hob - 0.012f * s, s, Rig.smooth(0.15f, 0.7f, cookU), Rig.smooth(0.5f, 0.85f, cookU) * (1 - Rig.smooth(0.92f, 1f, cookU)));
+                }
+                if (done >= 0.8f) {
+                    chakla(g, bx, ct, s, -1);
+                    rotiStack(g, bx + f * 0.02f * s, ct, s, 1 + (int) (Rig.smooth(0.8f, 1f, done) * 4), t, since);
+                }
+                break;
+            }
+            case Film.COOK_CHOP: {
+                board(g, bx, ct, s, f, Rig.smooth(0, 0.85f, done), done < 0.85f);
+                if (done > 0.85f) bowl(g, bx + f * 0.06f * s, ct, s, 0xFFE57373, Rig.smooth(0.85f, 0.95f, done), t, -1, true);
+                break;
+            }
+            case Film.COOK_TADKA: {
+                // a small pan of hot oil: the mustard seeds splutter; poured over the dal in its bowl
+                bowl(g, bx, ct, s, 0xFFF2B33D, 1, t, since, false);
+                float pour = Rig.smooth(0.65f, 0.85f, done);
+                tadkaPan(g, sx, hob, s, f, t, cooking && done < 0.7f, pour);
+                if (done > 0.8f) {
+                    // the tadka on the dal: red chillies and seeds on top
+                    g.color(0xFFB71C1C); g.oval(bx - 0.02f * s, ct - 0.052f * s, 0.008f * s, 0.003f * s);
+                    g.color(0xFF3E2723); for (int i = 0; i < 6; i++) g.oval(bx + (i - 3) * 0.009f * s, ct - 0.05f * s - (i % 2) * 0.002f * s, 0.0025f * s, 0.0025f * s);
+                }
+                break;
+            }
+            default: {
+                // a sabzi: vegetables chopped on the board (a whole meal starts there), into the kadhai and stirred on the
+                // flame, turning from raw green to a cooked orange-brown; served on a steel plate
+                boolean meal = kind == Film.COOK_MEAL;
+                float c0 = meal ? 0.3f : 0f;
+                if (meal && done < 0.34f) board(g, bx, ct, s, f, Rig.smooth(0, 0.3f, done), true);
+                float cookU = Math.max(0, (done - c0) / (0.85f - c0));
+                int col = mix(0xFF9CCC65, 0xFFD2691E, Rig.smooth(0.1f, 0.85f, cookU));
+                boolean inPot = done >= c0;
+                kadhai(g, sx, hob, s, f, inPot ? col : 0, inPot ? (cooking ? 1 - 0.75f * Rig.smooth(0.86f, 0.97f, done) : 0.25f) : 0, t, cooking && inPot && done < 0.9f);
+                if (done > 0.85f) plate(g, bx, ct, s, col, Rig.smooth(0.86f, 0.97f, done), t, since);
+            }
+        }
+        if (cooking && hand != 0) cookHands(g, kind, phase, done, sx, bx, hob, ct, s, f, t, hand);
+    }
+
+    /**
+     * v43: the cook's hands at the work on the counter (the cook behind it): each with its forearm coming from the
+     * body behind the counter's far edge, holding the tool of the moment.
+     */
+    static void cookHands(Gfx g, int kind, int phase, float done, float sx, float bx, float hob, float ct, float s, float f, float t, int skin) {
+        float elbowY = ct - 0.075f * s, el = 0.15f * s;           // the elbows at the body's sides, a little above the top
+        switch (phase) {
+            case 0: {
+                // chopping: one hand steadies the vegetables on the board, the other rocks the knife on its tip
+                float lift = 8 + 24 * (float) Math.abs(Math.sin(t * 9));
+                float tx = bx + f * 0.02f * s, ty = ct - 0.018f * s;
+                hand(g, bx + f * 0.06f * s, ct - 0.03f * s, s, skin, f * el * 0.4f, elbowY, false);
+                g.save(); g.translate(tx, ty); g.rotate(f * lift);
+                g.color(0xFFCFD8DC);
+                g.begin(); g.moveTo(0, 0); g.lineTo(-f * 0.085f * s, 0); g.lineTo(-f * 0.085f * s, -0.02f * s); g.lineTo(-f * 0.02f * s, -0.014f * s); g.close(); g.fillPath();
+                g.color(0xFF90A4AE); g.line(0, 0, -f * 0.085f * s, 0, 0.003f * s);
+                g.color(0xFF3E2723); g.roundRect(f > 0 ? -0.135f * s : 0.085f * s, -0.017f * s, 0.05f * s, 0.013f * s, 0.005f * s);
+                float hx = -f * 0.11f * s, hy = -0.011f * s;
+                g.restore();
+                // the knife hand at the handle (where the handle is after the rock)
+                double a = Math.toRadians(f * lift);
+                float wx = tx + (float) (hx * Math.cos(a) - hy * Math.sin(a)), wy = ty + (float) (hx * Math.sin(a) + hy * Math.cos(a));
+                hand(g, wx, wy, s, skin, -f * el, elbowY, true);
+                break;
+            }
+            case 1: case 3: {
+                if (kind == Film.COOK_TADKA) {
+                    // the small pan held by its handle (tipped over the dal as it is poured)
+                    float pour = Rig.smooth(0.65f, 0.85f, done);
+                    float r = 0.05f * s, top = hob - 0.05f * s, px = sx - f * (r + 0.07f * s), py = top + 0.006f * s;
+                    double a = Math.toRadians(-f * 50 * pour);
+                    float ox = sx, oy = hob - 0.03f * s, rx = px - ox, ry = py - oy;
+                    hand(g, ox + (float) (rx * Math.cos(a) - ry * Math.sin(a)), oy + (float) (rx * Math.sin(a) + ry * Math.cos(a)), s, skin, f * el * 0.3f, elbowY, true);
+                    break;
+                }
+                // stirring round the pot (or, serving, the spoon carried from the pot to the plate or the bowl)
+                boolean serve = phase == 3;
+                float u = serve ? Rig.smooth(0, 1, (float) ((t * 0.7f) % 1f)) : 0;
+                float px = serve ? sx + (bx - sx) * u : sx + 0.05f * s * (float) Math.cos(t * 4.6f);
+                float py = serve ? hob - 0.07f * s - 0.06f * s * (float) Math.sin(Math.PI * u) : hob - 0.05f * s + 0.008f * s * (float) Math.sin(t * 4.6f);
+                if (kind == Film.COOK_TEA && !serve) py = hob - 0.06f * s;
+                float ex = px - f * 0.045f * s, ey = py - 0.1f * s;          // the handle's end, towards the cook
+                g.color(0xFF8D6E63); g.line(px, py, ex, ey, 0.009f * s);
+                g.color(0xFFB0BEC5); g.oval(px, py + 0.004f * s, 0.016f * s, 0.008f * s);
+                hand(g, ex, ey + 0.012f * s, s, skin, f * el, elbowY, true);
+                if (!serve && kind != Film.COOK_TEA) hand(g, sx - f * 0.13f * s, hob - 0.05f * s, s, skin, -f * el, elbowY, true);   // the other steadies the kadhai's handle
+                break;
+            }
+            case 2: {
+                // rolling: the belan rolls back and forth over the roti, a hand at each end
+                float rx = bx + 0.028f * s * (float) Math.sin(t * 4.5f), ry = ct - 0.034f * s;
+                g.color(0xFFD7A86E); g.roundRect(rx - 0.065f * s, ry - 0.007f * s, 0.13f * s, 0.014f * s, 0.007f * s);
+                g.color(0xFFA1887F); g.rect(rx - 0.085f * s, ry - 0.004f * s, 0.02f * s, 0.008f * s); g.rect(rx + 0.065f * s, ry - 0.004f * s, 0.02f * s, 0.008f * s);
+                hand(g, rx - 0.075f * s, ry - 0.004f * s, s, skin, -el, elbowY, true);
+                hand(g, rx + 0.075f * s, ry - 0.004f * s, s, skin, el, elbowY, true);
+                break;
+            }
+            case 4: {
+                if (kind == Film.COOK_ROTI) {
+                    // the chimta (tongs) turning the roti on the tawa
+                    float jx = sx - f * 0.04f * s + 0.01f * s * (float) Math.sin(t * 3), jy = hob - 0.016f * s;
+                    float ex = jx - f * 0.08f * s, ey = jy - 0.07f * s;
+                    g.color(0xFF78909C); g.line(jx, jy, ex, ey, 0.004f * s); g.line(jx + 0.008f * s, jy, ex + 0.003f * s, ey, 0.004f * s);
+                    hand(g, ex, ey, s, skin, -f * el, elbowY, true);
+                } else {
+                    // the cooker: a hand on its long handle, waiting for the whistle
+                    hand(g, sx - f * 0.13f * s, hob - 0.135f * s, s, skin, -f * el, elbowY, true);
+                }
+                break;
+            }
+            default:
+        }
+    }
+
+    /**
+     * v43: a hand at (x, y) of a cook seen from the front, gripping (a fist round a handle) or flat (steadying), with
+     * its forearm going back to the elbow at (ex, ey) — the body behind the counter.
+     */
+    static void hand(Gfx g, float x, float y, float s, int skin, float ex, float ey, boolean grip) {
+        int dark = Puppet.shade(skin, 0.82f);
+        float fw = 0.025f * s;
+        // the forearm, a little narrower at the wrist
+        float dx = ex - x, dy = ey - y, len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len > 1) {
+            float nx = -dy / len, ny = dx / len;
+            g.color(dark);
+            g.begin(); g.moveTo(x + nx * fw * 0.8f, y + ny * fw * 0.8f); g.lineTo(ex + nx * fw * 1.1f, ey + ny * fw * 1.1f);
+            g.lineTo(ex - nx * fw * 1.1f, ey - ny * fw * 1.1f); g.lineTo(x - nx * fw * 0.8f, y - ny * fw * 0.8f); g.close(); g.fillPath();
+            g.color(skin);
+            g.begin(); g.moveTo(x + nx * fw * 0.6f, y + ny * fw * 0.6f); g.lineTo(ex + nx * fw * 0.9f, ey + ny * fw * 0.9f);
+            g.lineTo(ex - nx * fw * 0.9f, ey - ny * fw * 0.9f); g.lineTo(x - nx * fw * 0.6f, y - ny * fw * 0.6f); g.close(); g.fillPath();
+        }
+        g.color(dark); g.oval(x, y, 0.022f * s, (grip ? 0.019f : 0.014f) * s);
+        g.color(skin); g.oval(x, y - 0.001f * s, 0.019f * s, (grip ? 0.016f : 0.012f) * s);
+        g.color(dark);
+        if (grip) for (int i = 0; i < 3; i++) g.line(x - 0.012f * s + i * 0.009f * s, y + 0.004f * s, x - 0.01f * s + i * 0.009f * s, y + 0.011f * s, 0.0025f * s);
+        else for (int i = 0; i < 3; i++) g.line(x - 0.01f * s + i * 0.009f * s, y + 0.002f * s, x - 0.012f * s + i * 0.01f * s, y + 0.012f * s, 0.0025f * s);
+    }
+
+    /** v43: steam rising (strength 0..1). */
+    static void steam(Gfx g, float x, float y, float s, float t, float k, int n) {
+        if (k <= 0.01f) return;
+        for (int i = 0; i < n; i++) {
+            float ph = (t * 0.45f + i / (float) n) % 1f;
+            g.color(alpha(0xFFFFFFFF, 0.32f * k * (1 - ph)));
+            g.oval(x + (i - (n - 1) / 2f) * 0.025f * s + (float) Math.sin(t * 2 + i * 1.7f) * 0.012f * s, y - ph * 0.13f * s, (0.014f + ph * 0.02f) * s, (0.012f + ph * 0.016f) * s);
+        }
+    }
+
+    /** v43: the kadhai on the hob, its food (col, 0: empty) to fill (0..1), bubbling and steaming while it cooks. */
+    static void kadhai(Gfx g, float x, float hob, float s, float f, int col, float fill, float t, boolean hot) {
+        float r = 0.105f * s, rim = hob - 0.055f * s;
+        g.color(0xFF37474F); g.line(x - r - 0.018f * s, rim + 0.006f * s, x - r + 0.004f * s, rim + 0.012f * s, 0.012f * s); g.line(x + r + 0.018f * s, rim + 0.006f * s, x + r - 0.004f * s, rim + 0.012f * s, 0.012f * s);
+        g.color(0xFF455A64);
+        g.begin(); g.moveTo(x - r, rim); g.quadTo(x, hob + 0.012f * s, x + r, rim); g.close(); g.fillPath();
+        if (col != 0 && fill > 0.02f) {
+            g.color(col); g.oval(x, rim + 0.004f * s, r * 0.86f, 0.018f * s * fill + 0.004f * s);
+            if (hot) for (int i = 0; i < 4; i++) {
+                float ph = (t * 1.3f + i * 0.31f) % 1f;
+                g.color(alpha(Puppet.shade(col, 1.25f), 0.7f * (1 - ph))); g.oval(x + (i - 1.5f) * 0.04f * s, rim + 0.002f * s - ph * 0.006f * s, 0.006f * s, 0.004f * s);
+            }
+        }
+        g.color(0xFF263238); g.line(x - r, rim, x + r, rim, 0.006f * s);
+        steam(g, x, rim - 0.01f * s, s, t, hot ? 0.9f : 0, 3);
+    }
+
+    /** v43: a steel pan with a long handle (the tea), its liquid col filled to level, boiling up (0..1). */
+    static void pan(Gfx g, float x, float hob, float s, float f, int col, float level, float boil, float t) {
+        float r = 0.075f * s, top = hob - 0.075f * s;
+        g.color(0xFF263238); g.line(x - f * r, top + 0.015f * s, x - f * (r + 0.1f * s), top + 0.005f * s, 0.012f * s);       // the handle, towards the cook
+        g.color(0xFFB0BEC5); g.rect(x - r, top, 2 * r, hob - top);
+        g.color(alpha(0xFFFFFFFF, 0.35f)); g.rect(x - r + 0.01f * s, top + 0.005f * s, 0.012f * s, hob - top - 0.01f * s);
+        if (level > 0.02f) {
+            float ly = top + (1 - level) * 0.045f * s + 0.008f * s - boil * 0.012f * s;
+            g.color(col); g.oval(x, ly, r * 0.92f, 0.012f * s);
+            if (boil > 0.05f) for (int i = 0; i < 6; i++) {
+                float ph = (t * 2.1f + i * 0.17f) % 1f;
+                g.color(alpha(Puppet.shade(col, 1.2f), boil * (1 - ph))); g.oval(x + (i - 2.5f) * 0.022f * s, ly - ph * 0.01f * s, 0.006f * s * (1 + boil), 0.005f * s);
+            }
+        }
+        g.color(0xFF90A4AE); g.line(x - r, top, x + r, top, 0.005f * s);
+        steam(g, x, top - 0.01f * s, s, t, 0.4f + 0.6f * boil, 3);
+    }
+
+    /** v43: two cups on the counter, filled (0..1) with col, steaming. */
+    static void cups(Gfx g, float x, float ct, float s, float f, int col, float fill, float t, float since) {
+        for (int i = 0; i < 2; i++) {
+            float cx = x + (i - 0.5f) * 0.05f * s;
+            g.color(0xFFF5F2EA); g.roundRect(cx - 0.016f * s, ct - 0.036f * s, 0.032f * s, 0.036f * s, 0.006f * s);
+            g.color(0xFFE0DCD0); g.strokeOval(cx + 0.02f * s, ct - 0.02f * s, 0.007f * s, 0.009f * s, 0.003f * s);
+            if (fill > 0.02f) { g.color(col); g.oval(cx, ct - 0.034f * s, 0.014f * s, 0.004f * s * fill + 0.001f * s); }
+        }
+        steam(g, x, ct - 0.05f * s, s, t, fill * (since < 0 ? 1 : Math.max(0, 1 - since / 10f)), 2);
+    }
+
+    /** v43: a steel bowl on the counter with food col (dal: smooth; chopped vegetables: pieces), shown 0..1. */
+    static void bowl(Gfx g, float x, float ct, float s, int col, float shown, float t, float since, boolean pieces) {
+        if (shown <= 0.01f) return;
+        g.save(); g.setAlpha(Math.min(1, shown * 1.5f));
+        float r = 0.045f * s;
+        g.color(0xFFB0BEC5);
+        g.begin(); g.moveTo(x - r, ct - 0.035f * s); g.quadTo(x, ct + 0.008f * s, x + r, ct - 0.035f * s); g.close(); g.fillPath();
+        g.color(col); g.oval(x, ct - 0.037f * s, r * 0.88f, 0.008f * s);
+        if (pieces) { g.color(0xFF7CB342); for (int i = 0; i < 5; i++) g.oval(x + (i - 2) * 0.012f * s, ct - 0.04f * s, 0.004f * s, 0.003f * s); }
+        g.color(0xFF78909C); g.line(x - r, ct - 0.035f * s, x + r, ct - 0.035f * s, 0.003f * s);
+        g.restore();
+        if (!pieces) steam(g, x, ct - 0.05f * s, s, t, shown * (since < 0 ? 0.8f : Math.max(0, 0.8f - since / 12f)), 2);
+    }
+
+    /** v43: a steel plate (thali) with the cooked sabzi, shown 0..1. */
+    static void plate(Gfx g, float x, float ct, float s, int col, float shown, float t, float since) {
+        if (shown <= 0.01f) return;
+        g.save(); g.setAlpha(Math.min(1, shown * 1.5f));
+        g.color(0xFFCFD8DC); g.oval(x, ct - 0.006f * s, 0.07f * s, 0.012f * s);
+        g.color(0xFF90A4AE); g.strokeOval(x, ct - 0.006f * s, 0.07f * s, 0.012f * s, 0.003f * s);
+        g.color(col); g.oval(x - 0.01f * s, ct - 0.014f * s, 0.032f * s, 0.012f * s);
+        g.color(Puppet.shade(col, 0.8f)); g.oval(x - 0.016f * s, ct - 0.016f * s, 0.01f * s, 0.005f * s);
+        g.color(0xFFF3E0C0); g.oval(x + 0.035f * s, ct - 0.012f * s, 0.022f * s, 0.008f * s);       // a roti beside it
+        g.restore();
+        steam(g, x, ct - 0.03f * s, s, t, shown * (since < 0 ? 0.8f : Math.max(0, 0.8f - since / 12f)), 2);
+    }
+
+    /** v43: the pressure cooker: its weight jiggles as the steam builds, then it whistles (a jet of steam). */
+    static void cooker(Gfx g, float x, float hob, float s, float f, float t, float whistle) {
+        float r = 0.07f * s, top = hob - 0.13f * s;
+        g.color(0xFFB0BEC5); g.roundRect(x - r, top, 2 * r, hob - top, 0.012f * s);
+        g.color(alpha(0xFFFFFFFF, 0.35f)); g.rect(x - r + 0.012f * s, top + 0.01f * s, 0.014f * s, hob - top - 0.02f * s);
+        g.color(0xFF90A4AE); g.roundRect(x - r * 0.9f, top - 0.012f * s, 1.8f * r, 0.014f * s, 0.006f * s);
+        // the long handle on the lid towards the cook, the short one on the far side
+        g.color(0xFF212121); g.roundRect(f > 0 ? x - r - 0.09f * s : x + r, top - 0.008f * s, 0.09f * s, 0.012f * s, 0.004f * s);
+        g.roundRect(f > 0 ? x + r : x - r - 0.07f * s, top + 0.03f * s, 0.07f * s, 0.01f * s, 0.004f * s);
+        float jig = (float) Math.sin(t * 40) * 0.004f * s * (0.3f + whistle);
+        g.color(0xFF424242); g.roundRect(x - 0.012f * s, top - 0.04f * s + jig, 0.024f * s, 0.03f * s, 0.006f * s);
+        if (whistle > 0.02f) for (int i = 0; i < 7; i++) {
+            float ph = (t * 3 + i / 7f) % 1f;
+            g.color(alpha(0xFFFFFFFF, 0.5f * whistle * (1 - ph)));
+            g.oval(x + (float) Math.sin(t * 9 + i) * 0.01f * s, top - 0.05f * s - ph * 0.22f * s, (0.01f + ph * 0.03f) * s, (0.01f + ph * 0.025f) * s);
+        }
+        else steam(g, x, top - 0.045f * s, s, t, 0.25f, 2);
+    }
+
+    /** v43: the tawa on the hob. */
+    static void tawa(Gfx g, float x, float hob, float s) {
+        g.color(0xFF212121); g.oval(x, hob - 0.008f * s, 0.1f * s, 0.014f * s);
+        g.color(0xFF424242); g.oval(x, hob - 0.011f * s, 0.085f * s, 0.009f * s);
+    }
+
+    /** v43: the chakla (a round board) with the dough: a ball rolled out flat (roll 0..1); roll < 0: an empty board. */
+    static void chakla(Gfx g, float x, float ct, float s, float roll) {
+        g.color(0xFF8D6E63); g.rect(x - 0.03f * s, ct - 0.014f * s, 0.06f * s, 0.014f * s);
+        g.color(0xFFD7B98E); g.oval(x, ct - 0.018f * s, 0.075f * s, 0.012f * s);
+        if (roll < 0) return;
+        float r = 0.02f + 0.045f * roll, th = 0.018f * (1 - roll) + 0.003f;
+        g.color(0xFFF1DCB4); g.oval(x, ct - 0.022f * s - th * 0.5f * s, r * s, (0.006f + th) * s);
+    }
+
+    /** v43: a roti on the tawa: browning (0..1) with spots, puffed up (0..1). */
+    static void roti(Gfx g, float x, float y, float s, float brown, float puff) {
+        int c = mix(0xFFF1DCB4, 0xFFE0B37A, brown);
+        g.color(c); g.oval(x, y, 0.065f * s, (0.008f + 0.03f * puff) * s);
+        g.color(alpha(0xFF8D5524, 0.7f * brown));
+        for (int i = 0; i < 5; i++) g.oval(x + (i - 2) * 0.022f * s, y - (i % 2) * 0.006f * s * (1 + puff) - puff * 0.012f * s, 0.006f * s, 0.003f * s);
+    }
+
+    /** v43: n rotis stacked on a plate, the top one steaming. */
+    static void rotiStack(Gfx g, float x, float ct, float s, int n, float t, float since) {
+        g.color(0xFFCFD8DC); g.oval(x, ct - 0.005f * s, 0.065f * s, 0.011f * s);
+        for (int i = 0; i < n; i++) {
+            g.color(i % 2 == 0 ? 0xFFE8C38E : 0xFFE0B37A); g.oval(x, ct - 0.01f * s - i * 0.005f * s, 0.055f * s, 0.008f * s);
+            g.color(alpha(0xFF8D5524, 0.5f)); g.oval(x - 0.015f * s + i * 0.004f * s, ct - 0.012f * s - i * 0.005f * s, 0.005f * s, 0.002f * s);
+        }
+        steam(g, x, ct - 0.03f * s - n * 0.005f * s, s, t, since < 0 ? 0.6f : Math.max(0, 0.6f - since / 12f), 2);
+    }
+
+    /** v43: the chopping board with a tomato, an onion and green chillies, cut into pieces as chopped goes 0..1. */
+    static void board(Gfx g, float x, float ct, float s, float f, float chopped, boolean whole) {
+        g.color(0xFFC49A6C); g.roundRect(x - 0.085f * s, ct - 0.016f * s, 0.17f * s, 0.016f * s, 0.004f * s);
+        g.color(0xFFA67C52); g.rect(x - 0.085f * s, ct - 0.004f * s, 0.17f * s, 0.004f * s);
+        float k = 1 - chopped;
+        if (whole && k > 0.05f) {
+            g.color(0xFFE53935); g.oval(x + f * 0.04f * s, ct - 0.016f * s - 0.02f * s * k, 0.02f * s * k, 0.019f * s * k);
+            g.color(0xFFAB47BC); g.oval(x + f * 0.012f * s, ct - 0.016f * s - 0.017f * s * k, 0.017f * s * k, 0.016f * s * k);
+            g.color(0xFF43A047); g.line(x + f * 0.055f * s, ct - 0.02f * s, x + f * 0.075f * s, ct - 0.024f * s, 0.005f * s * Math.max(0.3f, k));
+        }
+        int n = (int) (chopped * 14);
+        for (int i = 0; i < n; i++) {
+            g.color(i % 3 == 0 ? 0xFFE53935 : i % 3 == 1 ? 0xFFCE93D8 : 0xFF66BB6A);
+            g.oval(x - f * 0.06f * s + f * (i % 7) * 0.012f * s, ct - 0.019f * s - (i / 7) * 0.004f * s, 0.005f * s, 0.003f * s);
+        }
+    }
+
+    /** v43: a small pan of hot oil for the tadka: mustard seeds spluttering; tipped over the dal as it is poured (0..1). */
+    static void tadkaPan(Gfx g, float x, float hob, float s, float f, float t, boolean hot, float pour) {
+        g.save();
+        float tilt = -f * 50 * pour;
+        g.translate(x, hob - 0.03f * s); g.rotate(tilt); g.translate(-x, -(hob - 0.03f * s));
+        float r = 0.05f * s, top = hob - 0.05f * s;
+        g.color(0xFF263238); g.line(x - f * r, top + 0.012f * s, x - f * (r + 0.08f * s), top + 0.004f * s, 0.01f * s);
+        g.color(0xFF455A64); g.begin(); g.moveTo(x - r, top); g.quadTo(x, hob + 0.004f * s, x + r, top); g.close(); g.fillPath();
+        g.color(0xFFF9A825); g.oval(x, top + 0.004f * s, r * 0.8f, 0.005f * s);
+        g.restore();
+        if (hot) for (int i = 0; i < 9; i++) {
+            float ph = (t * 2.7f + i * 0.13f) % 1f, jx = (float) Math.sin(i * 7.3f) * r * 0.9f;
+            g.color(alpha(0xFF3E2723, 1 - ph)); g.oval(x + jx, top - ph * (0.03f + (i % 3) * 0.01f) * s, 0.003f * s, 0.003f * s);
+        }
+    }
+
     // ------------------------------------------------------------------ vehicles
 
     /**
@@ -46,6 +515,15 @@ public final class Props {
      * a scooter's apron). s = the drawing height, dist = how far it has gone (the wheels turn with it), t = time.
      */
     public static void vehicle(Gfx g, int kind, float s, float f, float dist, float t, int color, boolean front) {
+        vehicle(g, kind, s, f, dist, t, color, front, 0, 0, 0);
+    }
+
+    /**
+     * v43: the same, with a car's front and rear doors open by doorF / doorR (0 shut .. 1 wide open, swung towards
+     * the camera on their front hinges) and a two-wheeler's stand down by stand (0 up, folded along the frame .. 1
+     * down on the ground).
+     */
+    public static void vehicle(Gfx g, int kind, float s, float f, float dist, float t, int color, boolean front, float doorF, float doorR, float stand) {
         f = f < 0 ? -1 : 1;
         float[] seat = seatOf(kind);
         boolean pass = kind > Film.V_PASSENGER;
@@ -53,10 +531,10 @@ public final class Props {
         g.save();
         g.translate(-seat[0] * s * f, 0);         // the seat over the origin
         switch (kind) {
-            case Film.V_BICYCLE: bicycle(g, s, f, dist, color, front); break;
-            case Film.V_MOTORBIKE: motorbike(g, s, f, dist, t, color, front); break;
-            case Film.V_SCOOTER: scooter(g, s, f, dist, t, color, front); break;
-            case Film.V_CAR: car(g, s, f, dist, t, color, front); break;
+            case Film.V_BICYCLE: if (!front) kickstand(g, s, f, kind, stand); bicycle(g, s, f, dist, color, front); break;
+            case Film.V_MOTORBIKE: if (!front) kickstand(g, s, f, kind, stand); motorbike(g, s, f, dist, t, color, front); break;
+            case Film.V_SCOOTER: if (!front) kickstand(g, s, f, kind, stand); scooter(g, s, f, dist, t, color, front); break;
+            case Film.V_CAR: car(g, s, f, dist, t, color, front, doorF, doorR); break;
             case Film.V_BUS: bus(g, s, f, dist, t, front); break;
             case Film.V_AUTO: auto(g, s, f, dist, t, front); break;
             default:
@@ -77,6 +555,26 @@ public final class Props {
             g.restore();
         }
         g.restore();
+    }
+
+    /**
+     * v43: a two-wheeler's stand: a side stand under a bicycle's or a motorbike's middle, a centre stand under a
+     * scooter's floor — down to the ground at 1 (parked, the rider getting on or off), folded back along the frame
+     * at 0 (riding). Drawn behind the frame.
+     */
+    static void kickstand(Gfx g, float s, float f, int kind, float down) {
+        down = Math.max(0, Math.min(1, down));
+        float px, py;
+        if (kind == Film.V_BICYCLE) { px = -0.07f * s * f; py = -0.14f * s; }
+        else if (kind == Film.V_MOTORBIKE) { px = -0.1f * s * f; py = -0.17f * s; }
+        else { px = -0.04f * s * f; py = -0.12f * s; }
+        // the angle from straight back along the frame (up) to down and a little back onto the ground
+        double up = Math.toRadians(172), dn = Math.toRadians(108);
+        double an = up + (dn - up) * (down * down * (3 - 2 * down));
+        float len = -py / (float) Math.sin(dn);
+        float ex = px + (float) Math.cos(an) * len * f, ey = py + (float) Math.sin(an) * len;
+        g.color(0xFF37474F); g.line(px, py, ex, ey, Math.max(1.5f, 0.016f * s));
+        if (down > 0.6f) { g.color(0xFF263238); g.oval(ex, ey, 0.018f * s, 0.006f * s); }      // its foot on the ground
     }
 
     /** A wheel: the tyre, the rim, spokes (or a hub cap) turned by the distance gone. */
@@ -200,34 +698,62 @@ public final class Props {
         g.color(0xFFE53935); g.oval(-0.42f * s * f, -0.3f * s, 0.012f * s, 0.016f * s);
     }
 
-    static void car(Gfx g, float s, float f, float dist, float t, int color, boolean front) {
+    static void car(Gfx g, float s, float f, float dist, float t, int color, boolean front) { car(g, s, f, dist, t, color, front, 0, 0); }
+
+    static void car(Gfx g, float s, float f, float dist, float t, int color, boolean front, float doorF, float doorR) {
         float L = 0.95f * s;           // half length
         float rw = 0.12f * s;
         float base = -0.045f * s, belt = -0.55f * s, roof = -0.98f * s;      // the sills low: nobody's feet show under the car
         float back = -0.6f * s * f, wsBot = 0.38f * s * f, wsTop = 0.2f * s * f, rearTop = -0.48f * s * f;
+        float bx = -0.2f * s * f;      // v43: the pillar between the front door and the rear door
+        doorF = Math.max(0, Math.min(1, doorF)); doorR = Math.max(0, Math.min(1, doorR));
+        boolean openF = doorF > 0.01f, openR = doorR > 0.01f;
         if (!front) {
             // the dark inside of the cabin, and the seat back behind the driver
             g.color(0xFF263238);
             g.begin(); g.moveTo(back, belt); g.lineTo(rearTop, roof + 0.03f * s); g.lineTo(wsTop, roof + 0.03f * s); g.lineTo(wsBot, belt); g.close(); g.fillPath();
             g.color(0xFF37474F); g.roundRect(-0.14f * s * f - 0.05f * s, -0.82f * s, 0.1f * s, 0.5f * s, 0.03f * s);
+            // v43: through an open door, the seats down to the floor
+            if (openF || openR) {
+                g.color(0xFF2E3B42);
+                if (openF) g.rect(Math.min(bx, 0.36f * s * f), belt, Math.abs(0.36f * s * f - bx), base - belt);
+                if (openR) g.rect(Math.min(back, bx), belt, Math.abs(bx - back), base - belt);
+            }
             return;
         }
-        // the cabin's glass (the driver seen through it), the pillars and the roof
+        // the cabin's glass (the driver seen through it) — the window of an open door goes with its door
         g.color(alpha(0xFFB3E5FC, 0.22f));
-        g.begin(); g.moveTo(back, belt); g.lineTo(rearTop, roof + 0.03f * s); g.lineTo(wsTop, roof + 0.03f * s); g.lineTo(wsBot, belt); g.close(); g.fillPath();
+        if (!openR) { g.begin(); g.moveTo(back, belt); g.lineTo(rearTop, roof + 0.03f * s); g.lineTo(bx, roof + 0.03f * s); g.lineTo(bx - 0.02f * s * f, belt); g.close(); g.fillPath(); }
+        if (!openF) { g.begin(); g.moveTo(bx - 0.02f * s * f, belt); g.lineTo(bx, roof + 0.03f * s); g.lineTo(wsTop, roof + 0.03f * s); g.lineTo(wsBot, belt); g.close(); g.fillPath(); }
+        else { g.begin(); g.moveTo(0.36f * s * f, belt); g.lineTo(wsTop, roof + 0.03f * s); g.lineTo(wsTop + 0.06f * s * f, roof + 0.03f * s); g.lineTo(wsBot, belt); g.close(); g.fillPath(); }
         g.color(alpha(0xFFFFFFFF, 0.18f)); g.line(wsTop - 0.04f * s * f, roof + 0.08f * s, wsBot - 0.1f * s * f, belt - 0.06f * s, 0.03f * s);
         g.color(Puppet.shade(color, 0.85f));
         g.line(back, belt, rearTop, roof + 0.02f * s, 0.05f * s);
         g.line(wsTop, roof + 0.02f * s, wsBot, belt, 0.035f * s);
-        g.line(-0.2f * s * f, roof + 0.02f * s, -0.22f * s * f, belt, 0.03f * s);
+        g.line(bx, roof + 0.02f * s, bx - 0.02f * s * f, belt, 0.03f * s);
         g.color(color); g.line(rearTop, roof + 0.02f * s, wsTop, roof + 0.02f * s, 0.045f * s);
-        // the body below the windows: bonnet, boot, the door and its handle, lamps, bumpers
+        // the body below the windows: bonnet, boot, the doors and their handles, lamps, bumpers — an open door's part
+        // of it is gone with the door (only its sill stays)
         g.color(color);
-        g.begin(); g.moveTo(-L * f, base); g.lineTo(-L * f, belt + 0.12f * s); g.quadTo(-L * f, belt, back - 0.1f * s * f, belt);
-        g.lineTo(wsBot + 0.05f * s * f, belt); g.quadTo(L * f, belt + 0.05f * s, L * f, belt + 0.2f * s); g.lineTo(L * f, base); g.close(); g.fillPath();
+        float[] cuts = {-0.95f, 0.95f};
+        if (openR && openF) cuts = new float[]{-0.95f, -0.6f, 0.36f, 0.95f};
+        else if (openR) cuts = new float[]{-0.95f, -0.6f, -0.2f, 0.95f};
+        else if (openF) cuts = new float[]{-0.95f, -0.2f, 0.36f, 0.95f};
+        for (int i = 0; i + 1 < cuts.length; i += 2) carBody(g, s, f, cuts[i], cuts[i + 1], base, belt);
+        if (openF || openR) {
+            g.color(Puppet.shade(color, 0.8f));
+            if (openF) g.rect(Math.min(bx, 0.36f * s * f), base - 0.07f * s, Math.abs(0.36f * s * f - bx), 0.07f * s);
+            if (openR) g.rect(Math.min(back, bx), base - 0.07f * s, Math.abs(bx - back), 0.07f * s);
+            g.color(color);
+        }
         g.color(alpha(0xFFFFFFFF, 0.22f)); g.rect(Math.min(-L * f, L * f), belt + 0.02f * s, 2 * L, 0.02f * s);
-        g.color(Puppet.shade(color, 0.7f)); g.line(-0.2f * s * f, belt, -0.2f * s * f, base - 0.02f * s, 0.006f * s); g.line(0.36f * s * f, belt + 0.02f * s, 0.36f * s * f, base - 0.02f * s, 0.006f * s);
-        g.color(0xFFE0E0E0); g.roundRect(0.18f * s * f - 0.03f * s, belt + 0.07f * s, 0.06f * s, 0.015f * s, 0.006f * s);
+        g.color(Puppet.shade(color, 0.7f));
+        if (!openF || !openR) g.line(bx, belt, bx, base - 0.02f * s, 0.006f * s);
+        if (!openF) g.line(0.36f * s * f, belt + 0.02f * s, 0.36f * s * f, base - 0.02f * s, 0.006f * s);
+        if (!openR) g.line(back, belt + 0.02f * s, back, base - 0.02f * s, 0.006f * s);
+        g.color(0xFFE0E0E0);
+        if (!openF) g.roundRect(0.18f * s * f - 0.03f * s, belt + 0.07f * s, 0.06f * s, 0.015f * s, 0.006f * s);
+        if (!openR) g.roundRect(-0.42f * s * f - 0.03f * s, belt + 0.07f * s, 0.06f * s, 0.015f * s, 0.006f * s);
         g.color(0xFFFFF59D); g.oval((L - 0.03f * s) * f, belt + 0.12f * s, 0.03f * s, 0.022f * s);
         g.color(0xFFE53935); g.oval(-(L - 0.02f * s) * f, belt + 0.1f * s, 0.02f * s, 0.025f * s);
         g.color(0xFF9E9E9E); g.roundRect(Math.min(-L * f, L * f) - 0.02f * s, base - 0.035f * s, 2 * L + 0.04f * s, 0.04f * s, 0.015f * s);
@@ -237,6 +763,56 @@ public final class Props {
         wheel(g, 0.6f * s * f, -rw, rw, dist, false);
         // the steering wheel in the driver's hands
         g.color(0xFF212121); g.line(0.2f * s * f, belt - 0.1f * s, 0.26f * s * f, belt + 0.02f * s, 0.022f * s);
+        // v43: the open doors, swung out towards the camera on their front hinges (narrower as they turn, their free
+        // edge nearer and so a little larger), in front of whoever gets in or out
+        if (openR) carDoor(g, s, f, -0.2f, -0.6f, -0.48f, -0.2f, doorR, color, base, belt, roof);
+        if (openF) carDoor(g, s, f, 0.36f, -0.2f, -0.2f, 0.2f, doorF, color, base, belt, roof);
+    }
+
+    /** v43: the car's body below the windows between x0 and x1 (fractions of the drawing height, before the facing). */
+    private static void carBody(Gfx g, float s, float f, float x0, float x1, float base, float belt) {
+        float sf = s * f;
+        g.begin();
+        g.moveTo(x0 * sf, base);
+        if (x0 <= -0.949f) { g.lineTo(-0.95f * sf, belt + 0.12f * s); g.quadTo(-0.95f * sf, belt, -0.7f * sf, belt); }
+        else g.lineTo(x0 * sf, belt);
+        if (x1 >= 0.949f) { g.lineTo(0.43f * sf, belt); g.quadTo(0.95f * sf, belt + 0.05f * s, 0.95f * sf, belt + 0.2f * s); g.lineTo(0.95f * sf, base); }
+        else { g.lineTo(x1 * sf, belt); g.lineTo(x1 * sf, base); }
+        g.close(); g.fillPath();
+    }
+
+    /**
+     * v43: one open car door: hinged at hinge (its front edge), its free edge at free; its window from winBack to
+     * winFront under the roof. open 0..1 turns it up to 70 degrees: seen from the side it narrows to the cosine of
+     * that, and its free edge, nearer the camera, reaches a little higher and lower.
+     */
+    private static void carDoor(Gfx g, float s, float f, float hinge, float free, float winBack, float winFront, float open,
+                                int color, float base, float belt, float roof) {
+        double th = Math.toRadians(70 * (open * open * (3 - 2 * open)));
+        float c = (float) Math.cos(th), sn = (float) Math.sin(th);
+        float w = hinge - free;                                          // the door's width (its free edge behind the hinge)
+        float[] xs = {free, winBack, winFront, hinge, hinge, free};
+        float[] ys = {belt, roof + 0.03f * s, roof + 0.03f * s, belt, base, base};
+        float[] px = new float[6], py = new float[6];
+        for (int i = 0; i < 6; i++) {
+            float k = w == 0 ? 0 : (hinge - xs[i]) / w;                 // 0 at the hinge, 1 at the free edge
+            px[i] = (hinge - (hinge - xs[i]) * c) * s * f;
+            float grow = 1 + 0.12f * sn * k;
+            float midY = (belt + base) * 0.5f;
+            py[i] = midY + (ys[i] - midY) * grow;
+        }
+        // the door's lower panel (turned from the light: a shade darker) and its window frame with the glass
+        g.color(Puppet.shade(color, 0.82f - 0.12f * sn));
+        g.begin(); g.moveTo(px[0], py[0]); g.lineTo(px[3], py[3]); g.lineTo(px[4], py[4]); g.lineTo(px[5], py[5]); g.close(); g.fillPath();
+        g.color(alpha(0xFFB3E5FC, 0.3f));
+        g.begin(); g.moveTo(px[0], py[0]); g.lineTo(px[1], py[1]); g.lineTo(px[2], py[2]); g.lineTo(px[3], py[3]); g.close(); g.fillPath();
+        g.color(Puppet.shade(color, 0.7f));
+        g.begin(); g.moveTo(px[0], py[0]); g.lineTo(px[1], py[1]); g.lineTo(px[2], py[2]); g.lineTo(px[3], py[3]); g.strokePath(0.025f * s);
+        g.line(px[0], py[0], px[5], py[5], 0.012f * s);
+        // the handle near the free edge
+        g.color(0xFFE0E0E0);
+        float hx = px[0] + (px[3] - px[0]) * 0.2f, hy = py[0] + (py[3] - py[0]) * 0.2f + 0.07f * s;
+        g.roundRect(hx - 0.025f * s, hy, 0.05f * s, 0.014f * s, 0.006f * s);
     }
 
     static void bus(Gfx g, float s, float f, float dist, float t, boolean front) {

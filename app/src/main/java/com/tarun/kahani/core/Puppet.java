@@ -37,6 +37,7 @@ public final class Puppet {
             // v35: by the lie amount (lying back, sitting up), onto the mattress of a bed
             float L = p.lie > 0 ? p.lie : 1f;
             if (p.seat == Film.SEAT_BED) g.translate(0, -H * 0.27f * L);
+            else if (p.seat == Film.SEAT_SOFA) g.translate(0, -H * 0.25f * L);
             g.translate(0, -H * 0.09f * L);
             g.rotate((p.facing > 0 ? -88 : 88) * L);
             g.translate(0, H * 0.5f * L);
@@ -340,7 +341,7 @@ public final class Puppet {
         drawArm(g, l, p, b, 1, 152, 14, Pose.I_NONE);
         float[] h = hand(b, 1, 152, 14);
         float top = b.headY - b.headR - b.H * 0.12f, cx = h[4] * 0.45f, R = b.H * 0.3f;
-        drawUmbrella(g, cx, top, R, h[4], h[5] + b.H * 0.07f, umbrellaColor(l), p.facing, p.time, p.wind);
+        drawUmbrella(g, cx, top, R, h[4], h[5] + b.H * 0.07f, umbrellaColor(l), p.facing, p.time, p.wind, p.umbrellaAmt);
     }
 
     static int umbrellaColor(Look l) {
@@ -352,8 +353,16 @@ public final class Puppet {
 
     /** An open umbrella: a scalloped dome (apex at cx, top) of radius R, its shaft down to (hx, hy) with a crook. */
     static void drawUmbrella(Gfx g, float cx, float top, float R, float hx, float hy, int color, float facing, float time, float wind) {
-        float sway = (float) Math.sin(time * 1.7f) * 0.025f + wind * 0.04f;
-        float ax = cx + sway * R, base = top + R * 0.42f;
+        drawUmbrella(g, cx, top, R, hx, hy, color, facing, time, wind, 1);
+    }
+
+    /** v43: the same, open by amt (0 folded shut along its shaft .. 1 wide open): it spreads as it opens. */
+    static void drawUmbrella(Gfx g, float cx, float top, float R0, float hx, float hy, int color, float facing, float time, float wind, float amt) {
+        float o = Math.max(0, Math.min(1, amt));
+        float sway = (float) Math.sin(time * 1.7f) * 0.025f * o + wind * 0.04f * o;
+        float R = R0 * (0.14f + 0.86f * o);
+        top += (1 - o) * R0 * 0.25f;
+        float ax = cx + sway * R0, base = top + R0 * (0.42f + 0.5f * (1 - o));
         g.color(0xFF4E342E);
         g.line(ax, top, hx, hy, Math.max(2, R * 0.03f));
         g.begin(); g.moveTo(hx, hy); g.quadTo(hx, hy + R * 0.14f, hx - facing * R * 0.1f, hy + R * 0.1f); g.strokePath(Math.max(2, R * 0.035f));
@@ -1356,6 +1365,19 @@ public final class Puppet {
     public static void drawTool(Gfx g, int item, float x, float y, float k, float facing, float t, float floorY) {
         float f = facing < 0 ? -1 : 1;
         switch (item) {
+            case Pose.I_KNIFE: {
+                // v43: a kitchen knife, the dark handle in the fist, the blade down and forward to the board
+                g.color(0xFF3E2723); g.line(x - f * 3 * k, y - 4 * k, x + f * 3 * k, y + 4 * k, 3.4f * k);
+                g.color(0xFFCFD8DC);
+                g.begin(); g.moveTo(x + f * 3 * k, y + 2 * k); g.lineTo(x + f * 16 * k, y + 14 * k); g.lineTo(x + f * 13 * k, y + 17 * k); g.lineTo(x + f * 1 * k, y + 6 * k); g.close(); g.fillPath();
+                break;
+            }
+            case Pose.I_ROLLER: {
+                // v43: a belan, the rolling pin, across under the hand, tapered at its ends
+                g.color(0xFFBC8F5A); g.roundRect(x - 20 * k, y + 2 * k, 40 * k, 6 * k, 3 * k);
+                g.color(0xFF8D6E63); g.line(x - 26 * k, y + 5 * k, x - 20 * k, y + 5 * k, 3 * k); g.line(x + 20 * k, y + 5 * k, x + 26 * k, y + 5 * k, 3 * k);
+                break;
+            }
             case Pose.I_LADLE: {
                 // a long-handled ladle: the handle up behind the hand, the bowl down in the pot
                 g.color(0xFF8D6E63); g.line(x - f * 10 * k, y - 16 * k, x + f * 10 * k, y + 20 * k, 3.2f * k);

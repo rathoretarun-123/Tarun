@@ -323,8 +323,27 @@ public final class Film {
             FX_THING = 42,        // v41: a thing lying on the ground at x (kind 1: a school bag), sized for actor a
             FX_PUDDLE = 43,       // v41: a rain puddle on the ground at x (y: below the ground line, color: its width);
                                   //      t2: when someone jumps into it — the splash and its rings (-1: no one)
-            FX_PARKED = 44;       // v42: a car, a scooter or a bike left where its rider got off (a: the rider, kind:
+            FX_PARKED = 44,       // v42: a car, a scooter or a bike left where its rider got off (a: the rider, kind:
                                   //      the vehicle, color: its facing)
+            FX_VEHICLE = 45,      // v43: a hired auto, bus or taxi driving by itself, its driver at the wheel — up to
+                                  //      the ones it picks up, or away after dropping them (a: its rider, kind: the
+                                  //      vehicle, color: its facing; at x until t2, then to y over VEHICLE_MOVE s)
+            FX_KITCHEN = 46,      // v43: a kitchen counter with its stove at x (a: the cook, kind: Film.COOK_*, color:
+                                  //      the side the counter is on from the cook): the cooking from t0 to t2, the dish
+                                  //      ready on it after t2, until t1
+            FX_DOOR = 47,         // v43: a room's door at the edge of the picture (x: -1 left, +1 right); kind 0: the
+                                  //      door itself, there all through the part; kind 1: it swings open from t0 (0.4 s),
+                                  //      stands open, swings shut from t2, shut at t1
+            FX_SKY = 48;          // v43: the light of the sky changing within a part from t0 (kind: SKY_*): the sun
+                                  //      going down, night falling, the sun rising, the full moon up — to t1
+    /** v43: FX_SKY kinds. */
+    public static final int SKY_SUNSET = 0, SKY_NIGHTFALL = 1, SKY_SUNRISE = 2, SKY_MOON = 3;
+    /** v43: what is cooked (FX_KITCHEN.kind, a cooking act's how): a whole meal (chopping, the pot, the dish served),
+     *  a sabzi stirred in the kadhai, dal in the pressure cooker, tea boiled in a pan and poured, rotis rolled and puffed
+     *  on the tawa, vegetables chopped, a tadka spluttering and poured over the dal. */
+    public static final int COOK_MEAL = 0, COOK_STIR = 1, COOK_DAL = 2, COOK_TEA = 3, COOK_ROTI = 4, COOK_CHOP = 5, COOK_TADKA = 6;
+    /** v43: how long a hired vehicle takes to drive up or drive off (FX_VEHICLE). */
+    public static final float VEHICLE_MOVE = 2.2f;
 
     public static final class Fx {
         public float t0, t1;
@@ -435,7 +454,13 @@ public final class Film {
             SFX_CHAIN = 75,         // v37: a bicycle's chain and freewheel ticking
             SFX_CREAK = 76,         // v37: a swing's chains creaking at each end of the swing
             SFX_ROPE = 77,          // v37: a skipping rope: its whirr and the tap on the ground
-            SFX_KISS = 78;          // v37: a soft peck
+            SFX_KISS = 78,          // v37: a soft peck
+            SFX_CAR_DOOR = 79,      // v43: a car door opening — the handle's click, the seal letting go
+            SFX_CAR_SHUT = 80,      // v43: a car door shut — a solid low thunk and the latch
+            SFX_KNOCK = 81,         // v43: knocking at a door — three firm knuckle raps on wood
+            SFX_CHOP = 82,          // v43: a knife chopping on a board — quick dull taps
+            SFX_BOIL = 83,          // v43: something boiling in a pan — small bubbles bursting
+            SFX_WHISTLE = 84;       // v43: a pressure cooker's whistle — steam rushing up into a shrill hiss
 
     // -------------------------------------------------------------- weather and nature
     public static final int W_RAIN = 0, W_STORM = 1, W_WIND = 2, W_SNOW = 3, W_FOG = 4, W_FIRE = 5, W_FIREFLIES = 6, W_LEAVES = 7,

@@ -594,10 +594,14 @@ public final class Sets {
         g.color(night ? 0xFF4A4E58 : 0xFFBDB8AE); g.rect(0, 520, W, 40);
         g.linear(0, 560, 0, H, night ? 0xFF2A2E36 : 0xFF6E7278, night ? 0xFF1A1D24 : 0xFF4E5258); g.rect(0, 560, W, H - 560);
         g.color(0xFFF5F5DC); for (int i = 0; i < 8; i++) g.rect(i * 170 + 20, 640, 90, 8);
-        // a streetlight and a parked scooter
+        // a streetlight and a scooter parked at the kerb on its stand
         g.color(0xFF455A64); g.rect(1080, 300, 8, 260); g.rect(1040, 300, 60, 8);
         if (night) { g.radial(1045, 310, 150, 0x88FFE0A0, 0x00FFE0A0); g.oval(1045, 310, 150, 150); }
-        g.color(0xFFC62828); g.roundRect(220, 580, 90, 40, 14); g.color(0xFF263238); g.oval(230, 625, 16, 16); g.oval(300, 625, 16, 16);
+        // (v43: at its true size on the far kerb — it was a toy-sized red box at the people's feet)
+        g.save(); g.translate(250, 556);
+        Props.vehicle(g, Film.V_SCOOTER, 250, 1, 0, 0, night ? 0xFF7A2626 : 0xFFC62828, false, 0, 0, 1);
+        Props.vehicle(g, Film.V_SCOOTER, 250, 1, 0, 0, night ? 0xFF7A2626 : 0xFFC62828, true, 0, 0, 1);
+        g.restore();
     }
 
     static void hall(Gfx g) {
@@ -746,11 +750,15 @@ public final class Sets {
                 break;
             }
             case STREET: {
-                // a car passes far down the road now and then
-                float x = (t * 180) % (W + 600) - 300;
-                g.color(tod == NIGHT ? 0xFF1E2A48 : 0xFF3949AB); g.roundRect(x, 585, 110, 34, 10); g.roundRect(x + 20, 568, 60, 24, 8);
-                g.color(0xFF263238); g.oval(x + 22, 620, 12, 12); g.oval(x + 88, 620, 12, 12);
-                if (tod == NIGHT) { g.color(0xCCFFF59D); g.oval(x + 108, 605, 6, 4); }
+                // a car passes along the far side of the road now and then, behind everyone, someone at its wheel
+                // (v43: at its true size in the far lane — it was a toy at the people's feet)
+                float x = (t * 210) % (W + 1400) - 700;
+                g.save(); g.translate(x, 566);
+                int col = tod == NIGHT ? 0xFF1E2A48 : 0xFF5C6BC0;
+                Props.vehicle(g, Film.V_CAR + Film.V_PASSENGER, 230, 1, x, t, col, false);
+                Props.vehicle(g, Film.V_CAR + Film.V_PASSENGER, 230, 1, x, t, col, true);
+                if (tod == NIGHT) { g.color(0x55FFF59D); g.oval(0.9f * 230, -0.4f * 230, 60, 18); }
+                g.restore();
                 break;
             }
             default:

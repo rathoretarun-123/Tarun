@@ -15,7 +15,9 @@ public final class Pose {
             // v36: the tools of everyday tasks
             I_LADLE = 14, I_BROOM = 15, I_BOOK = 16, I_PEN = 17, I_PHONE = 18, I_BRUSH = 19, I_COMB = 20, I_CAN = 21, I_NOTEBOOK = 22, I_PAPER = 23,
             // v37: exercise and make-up, the bath's mug, painting
-            I_DUMBBELL = 24, I_KAJAL = 25, I_LIPSTICK = 26, I_BINDI = 27, I_CONE = 28, I_PUFF = 29, I_MUG = 30, I_PAINTBRUSH = 31, I_ROPE = 32;
+            I_DUMBBELL = 24, I_KAJAL = 25, I_LIPSTICK = 26, I_BINDI = 27, I_CONE = 28, I_PUFF = 29, I_MUG = 30, I_PAINTBRUSH = 31, I_ROPE = 32,
+            // v43: the kitchen's knife and rolling pin (belan)
+            I_KNIFE = 33, I_ROLLER = 34;
 
     public int body = STAND;
     public int emotion = NEUTRAL;
@@ -56,6 +58,7 @@ public final class Pose {
     public boolean twirl;              // twirling a moustache / fidgeting with the raised hand
     public boolean swing;
     public boolean umbrellaOpen;       // v34: an umbrella held open over the head (rain outdoors)
+    public float umbrellaAmt = 1;      // v43: how far it is open (it opens over 0.7 s when taken up or when the rain starts)
     /** v34: where the eyes look, on screen (-1 left .. +1 right, -1 up .. +1 down), and how much they rest on someone (0..1). */
     public float gazeX, gazeY, gazeHeld;
     /**
@@ -81,7 +84,7 @@ public final class Pose {
         q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
         q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
-        q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
+        q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.umbrellaAmt = umbrellaAmt; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld; q.turnBody = turnBody; q.turnHead = turnHead;
         q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel; q.flush = flush;
         return q;
@@ -92,7 +95,7 @@ public final class Pose {
         walk = 0; walkAmt = 0; tilt = 0; headTilt = 0; bob = 0; squash = 1; holdR = I_NONE; holdL = I_NONE;
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
-        sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; toMouth = 0; toMouthItem = 0;
+        sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; umbrellaAmt = 1; toMouth = 0; toMouthItem = 0;
         gazeX = 0; gazeY = 0; gazeHeld = 0; turnBody = 0; turnHead = 0;
         kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0; flush = 0;
     }

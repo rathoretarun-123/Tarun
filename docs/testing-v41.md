@@ -183,7 +183,15 @@ scratching the head, hiding by her mother, touching the feet, sneezing, the slow
 
 Run 1 (72 tests, before the last changes): 3 failed — "Maya runs to Kabir" (her friend's run across ended on her
 spot, so she had no run left), the cut after Riya walks out (taken out by the v41 clean-up), an auto ride that stopped
-after 168 pixels. All three fixed (above); run 2 on the final code: running (its result goes in with the v41 APK).
+after 168 pixels. All three fixed (above).
+
+Run 2 (74 tests, with the two new ones): 73 passed, 1 failed — "राहुल का पार्क" had lost its two things: the reader's
+new heading words took "वस्तु 1 - झूला:" for the heading of the things' list. Fixed: an item of a list (a number, a
+"field:", a "name - words") is never a heading. Then the reader was run on the 139 earlier stories and gives exactly
+what it gave before this round's reader changes — cast, places, things, scenes and all 3,333 lines and directions —
+and still 20 of 20 on the new ones.
+
+Run 3 on the final code (the APK's): running when this was written; its result is in the next commit.
 
 ## 7. Said plainly
 

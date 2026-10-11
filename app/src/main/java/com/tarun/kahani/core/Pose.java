@@ -58,6 +58,11 @@ public final class Pose {
     public boolean umbrellaOpen;       // v34: an umbrella held open over the head (rain outdoors)
     /** v34: where the eyes look, on screen (-1 left .. +1 right, -1 up .. +1 down), and how much they rest on someone (0..1). */
     public float gazeX, gazeY, gazeHeld;
+    /**
+     * v40: how far the body and the head are turned, on screen (-1 a three-quarter to the left .. +1 to the right,
+     * 0 to the camera): a rigged picture turns through its mesh toward whom it talks to and into each walk.
+     */
+    public float turnBody, turnHead;
     /** v37: make-up put on in the story so far (0..1 as it goes on): kajal, lipstick, a bindi, mehndi on the hands, powder, face paint. */
     public float kajal, lipstick, bindi, mehndi, powder, facePaint;
     /** v37: a towel round the shoulders after a bath (0..1). */
@@ -77,7 +82,7 @@ public final class Pose {
         q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
-        q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld;
+        q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld; q.turnBody = turnBody; q.turnHead = turnHead;
         q.kajal = kajal; q.lipstick = lipstick; q.bindi = bindi; q.mehndi = mehndi; q.powder = powder; q.facePaint = facePaint; q.towel = towel; q.flush = flush;
         return q;
     }
@@ -88,7 +93,7 @@ public final class Pose {
         disguised = false; noHeadwear = false; wearsTurban = false; redFace = false; tears = false; sweat = false;
         eyesClosed = false; fist = false; glowWand = false; carrying = false; turbanBand = 0; wind = 0; wet = 0;
         sit = 0; lie = 0; seat = -1; nod = 0; wave = 0; twirl = false; umbrellaOpen = false; toMouth = 0; toMouthItem = 0;
-        gazeX = 0; gazeY = 0; gazeHeld = 0;
+        gazeX = 0; gazeY = 0; gazeHeld = 0; turnBody = 0; turnHead = 0;
         kajal = 0; lipstick = 0; bindi = 0; mehndi = 0; powder = 0; facePaint = 0; towel = 0; flush = 0;
     }
 }

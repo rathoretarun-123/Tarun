@@ -376,6 +376,139 @@ public final class Cutout {
         }
     }
 
+    /**
+     * v40: how much a pixel looks like lips against the face's skin (0..1): redder — a lower, pinker hue — than the
+     * skin and coloured, or the dark red line where the lips meet; teeth between the lips count a little. Brown hair,
+     * a jaw's shadow, a neck or a nose have the skin's own hue and score nothing (a mouth point on them made the
+     * mesh open "new lips" there).
+     */
+    public static float lipness(int c, float skinHue) {
+        if ((c >>> 24) < 200) return 0;
+        float[] v = PicSense.hsv(c);
+        float hd = skinHue - v[0];
+        if (hd > 180) hd -= 360;
+        if (hd < -180) hd += 360;
+        if (v[2] > 0.78f && v[1] < 0.2f) return 0.45f;                     // teeth
+        if (v[2] < 0.16f || hd < 5 || hd > 75) return 0;
+        float sat = v[2] < 0.42f ? Math.min(1, (v[1] - 0.15f) / 0.15f) : Math.min(1, (v[1] - 0.2f) / 0.2f);
+        return Math.max(0, Math.min(1, (hd - 5) / 9f) * sat);
+    }
+
+    /** The mean lipness in a box (pixels) of a picture. */
+    public static float lipDensity(int[] px, int w, int h, float x0, float y0, float x1, float y1, float skinHue) {
+        int ax = Math.max(0, Math.round(x0)), bx = Math.min(w - 1, Math.round(x1)), ay = Math.max(0, Math.round(y0)), by = Math.min(h - 1, Math.round(y1));
+        float s = 0; int n = 0;
+        for (int y = ay; y <= by; y++) for (int x = ax; x <= bx; x++) { int c = px[y * w + x]; if ((c >>> 24) < 200) continue; s += lipness(c, skinHue); n++; }
+        return n == 0 ? 0 : s / n;
+    }
+
+    /**
+     * v40: the lips found by their colour, anywhere across the face below the eyes (in a three-quarter face the mouth
+     * is near the face's edge, not under the middle of the eyes): the most compact patch of lip colour with skin
+     * above it (between the nose and the lips), about one eye-distance below the eyes. Pixels: {x, y, half width,
+     * score}, or null when there is no convincing patch.
+     */
+    public static float[] findLips(int[] px, int w, int h, float exL, float exR, float ey, int skin) {
+        if (px == null || w < 20 || h < 20) return null;
+        if (exL > exR) { float tt = exL; exL = exR; exR = tt; }
+        float d = Math.max(5, exR - exL);
+        float skinHue = PicSense.hsv(skin)[0];
+        if (skinHue < 4 || skinHue > 45) return null;            // a green witch, a blue god: lips by colour are not read
+        int x0 = Math.max(0, Math.round(exL - 1.1f * d)), x1 = Math.min(w - 1, Math.round(exR + 1.1f * d));
+        int y0 = Math.max(0, Math.round(ey + 0.3f * d)), y1 = Math.min(h - 1, Math.round(ey + 1.75f * d));
+        if (x1 - x0 < 6 || y1 - y0 < 6) return null;
+        int W = x1 - x0 + 1, H = y1 - y0 + 1, W1 = W + 1;
+        float[] m = new float[W * H];
+        double[] ii = new double[W1 * (H + 1)], sk = new double[W1 * (H + 1)];
+        for (int y = 0; y < H; y++) {
+            double row = 0, rs = 0;
+            for (int x = 0; x < W; x++) {
+                int c = px[(y + y0) * w + x + x0];
+                float v = lipness(c, skinHue);
+                m[y * W + x] = v;
+                row += v;
+                rs += (c >>> 24) >= 200 && (faceSkin(c) || isSkin(c) || v > 0.2f) ? 1 : 0;
+                ii[(y + 1) * W1 + x + 1] = ii[y * W1 + x + 1] + row;
+                sk[(y + 1) * W1 + x + 1] = sk[y * W1 + x + 1] + rs;
+            }
+        }
+        int ww = Math.max(3, Math.round(0.42f * d)), wh = Math.max(2, Math.round(0.14f * d));
+        float best = -1e9f; int bx = -1, by = -1;
+        float mid = (exL + exR) / 2, expect = ey + 0.85f * d;
+        for (int cy = wh; cy < H - wh; cy++) {
+            for (int cx = ww / 2; cx < W - ww / 2; cx++) {
+                int ax = cx - ww / 2, bx2 = cx + ww / 2, ay = cy - wh / 2, by2 = cy + wh / 2;
+                float inner = (float) (rect(ii, W1, ax, ay, bx2, by2) / ((bx2 - ax + 1) * (by2 - ay + 1)));
+                if (inner < 0.12f) continue;
+                // compact: the lips stand out from the face just above and below them (cheeks, blush, a chin)
+                int ra = Math.max(0, ay - 2 * wh), rb = Math.min(H - 1, by2 + 2 * wh);
+                double all = rect(ii, W1, ax, ra, bx2, rb);
+                int ringN = (bx2 - ax + 1) * (rb - ra + 1) - (bx2 - ax + 1) * (by2 - ay + 1);
+                float ring = ringN <= 0 ? 0 : (float) ((all - rect(ii, W1, ax, ay, bx2, by2)) / ringN);
+                // skin over the lips (between the nose and the mouth): the mouth is in the face, not on its edge
+                int sa = Math.max(0, ay - Math.round(0.32f * d)), sb = Math.max(0, ay - 1);
+                float over = sb <= sa ? 0 : (float) (rect(sk, W1, ax, sa, bx2, sb) / ((bx2 - ax + 1) * (sb - sa + 1)));
+                if (over < 0.45f) continue;
+                // and the chin under them (skin, or a beard): a collar, a ribbon or a necklace has the dress below it
+                int ca = Math.min(H - 1, by2 + Math.max(1, Math.round(0.12f * d))), cb = Math.min(H - 1, by2 + Math.round(0.32f * d));
+                if (cb > ca) {
+                    int face = 0, all2 = 0;
+                    for (int y = ca; y <= cb; y++) for (int x = ax; x <= bx2; x++) {
+                        int c = px[(y + y0) * w + x + x0];
+                        if ((c >>> 24) < 200) { all2++; continue; }
+                        all2++;
+                        int R = (c >> 16) & 255, G = (c >> 8) & 255, B = c & 255, lum = (R * 77 + G * 150 + B * 29) >> 8;
+                        if (faceSkin(c) || isSkin(c) || m[y * W + x] > 0.2f || (lum < 90 && Math.max(R, Math.max(G, B)) - Math.min(R, Math.min(G, B)) < 60)) face++;
+                    }
+                    if (face < all2 * 0.4f) continue;
+                }
+                float gx = cx + x0, gy = cy + y0;
+                float sc = inner - 0.9f * ring - 0.12f * Math.abs(gy - expect) / d - 0.05f * Math.max(0, Math.abs(gx - mid) / d - 0.3f);
+                if (sc > best) { best = sc; bx = cx; by = cy; }
+            }
+        }
+        if (bx < 0 || best < 0.08f) return null;
+        // the lips' width: the columns around the best patch that still hold lip colour
+        int ay = Math.max(0, by - wh), by2 = Math.min(H - 1, by + wh);
+        float peak = 0;
+        float[] col = new float[W];
+        for (int x = 0; x < W; x++) { float s = 0; for (int y = ay; y <= by2; y++) s += m[y * W + x]; col[x] = s; }
+        for (int x = Math.max(0, bx - ww / 2); x <= Math.min(W - 1, bx + ww / 2); x++) peak = Math.max(peak, col[x]);
+        int l = bx, r = bx, gap = 0, maxGap = Math.max(1, Math.round(0.06f * d));
+        for (int x = bx; x >= 0 && bx - x < d * 0.7f; x--) { if (col[x] >= peak * 0.22f) { l = x; gap = 0; } else if (++gap > maxGap) break; }
+        gap = 0;
+        for (int x = bx; x < W && x - bx < d * 0.7f; x++) { if (col[x] >= peak * 0.22f) { r = x; gap = 0; } else if (++gap > maxGap) break; }
+        float sy = 0, sw = 0;
+        for (int y = ay; y <= by2; y++) for (int x = l; x <= r; x++) { sy += m[y * W + x] * y; sw += m[y * W + x]; }
+        float cyF = sw > 0 ? sy / sw : by;
+        float half = Math.max(0.16f * d, Math.min(0.5f * d, (r - l + 1) / 2f));
+        return new float[]{x0 + (l + r) / 2f, y0 + cyF, half, best};
+    }
+
+    /**
+     * v40: the mouth point checked against the picture: a point on lip colour stays; a point with no lips under it
+     * (a jaw line, a neck, the tip of a nose, a moustache) moves to the lips found by colour — near the middle of
+     * the eyes, or further toward the face's side when the patch is clearly lips (a three-quarter face). Pixels
+     * {x, y, half width} to use instead, or null to keep the point as it is.
+     */
+    public static float[] betterMouth(int[] px, int w, int h, float exL, float exR, float ey, float mx, float my, float mhw, int skin) {
+        if (px == null) return null;
+        float skinHue = PicSense.hsv(skin)[0];
+        if (skinHue < 4 || skinHue > 45) return null;
+        float d = Math.max(5, Math.abs(exR - exL));
+        float dens = lipDensity(px, w, h, mx - Math.max(2, mhw * 0.8f), my - 0.12f * d, mx + Math.max(2, mhw * 0.8f), my + 0.12f * d, skinHue);
+        if (dens >= 0.12f) return null;
+        float[] L = findLips(px, w, h, exL, exR, ey, skin);
+        if (L == null) return null;
+        float off = Math.abs(L[0] - (exL + exR) / 2) / d;
+        if (off > 0.5f && (L[3] < 0.3f || off > 1.1f)) return null;
+        return new float[]{L[0], L[1], L[2]};
+    }
+
+    private static double rect(double[] ii, int W1, int x0, int y0, int x1, int y1) {
+        return ii[(y1 + 1) * W1 + x1 + 1] - ii[y0 * W1 + x1 + 1] - ii[(y1 + 1) * W1 + x0] + ii[y0 * W1 + x0];
+    }
+
     /** Skin of a face in pictures and cartoons (light to dark brown skin, and the monkey's fur-free face). */
     static boolean faceSkin(int c) {
         int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;

@@ -84,8 +84,15 @@ public final class Rig {
         public float follow, followLean;
         /** v34: where the eyes look in the picture (-1 .. +1 towards the picture's right / down). */
         public float gazeX, gazeY;
+        /**
+         * v40: the turn about the body's upright axis (degrees; + = the front turns toward the picture's right) and the
+         * head's own turn on top of it. A flat picture turns as a rounded body does: its middle (the face, the nose,
+         * the shirt's front) moves toward the turn, the far side narrows, the near side stays wide.
+         */
+        public float turn, headTurn;
         public void reset() {
             follow = followLean = 0;
+            turn = headTurn = 0;
             gazeX = gazeY = 0;
             headRot = nod = lean = armL = armR = legLAng = legRAng = legLLift = legRLift = breathe = wind = time = 0;
             tail = jaw = ear = earBack = walkPhase = walkAmt = mountJaw = 0;
@@ -633,8 +640,38 @@ public final class Rig {
         o[1] += dy;
     }
 
+    /** v40: the most a picture turns (degrees): beyond this a flat picture would have to show sides it does not have. */
+    public static final float MAX_TURN = 34, MAX_HEAD_TURN = 40;
+
+    /**
+     * v40: how far a point of the picture (u, v: fractions of its width and height) moves sideways with the turn, as
+     * a fraction of the picture's width: the head about the middle of the face, the body about its own middle, the
+     * neck between them.
+     */
+    public float yawShift(State s, float u, float v) {
+        if (still || animal || (s.turn == 0 && s.headTurn == 0)) return 0;
+        float tb = Math.max(-MAX_TURN, Math.min(MAX_TURN, s.turn));
+        float th = Math.max(-MAX_HEAD_TURN, Math.min(MAX_HEAD_TURN, s.turn + s.headTurn));
+        float wHead = 1 - smooth(chinY - 0.01f, shoulderY + 0.02f, v);
+        float hc = face ? (eLX + eRX) / 2 : cx;
+        float d = 0;
+        if (wHead < 1) d += (1 - wHead) * cylinder(u, cx, Math.max(0.12f, shoulderHalf * 1.15f), 0.42f, tb);
+        if (wHead > 0) d += wHead * cylinder(u, hc, Math.max(0.06f, headHalf * 1.3f), 0.55f, th);
+        return d;
+    }
+
+    /** A rounded shape (radius R about c, depth: how far its middle stands out) turned by deg: the sideways shift at u. */
+    static float cylinder(float u, float c, float R, float depth, float deg) {
+        double a = Math.toRadians(deg);
+        float q = (u - c) / R;
+        return R * (q * ((float) Math.cos(a) - 1) + depth * (float) Math.sin(a) * Math.max(0, 1 - q * q));
+    }
+
     private void moveBody(Frame f, State s, float x, float y, float[] o) {
         float u = (x - f.L0) / f.W0, v = (y - f.T0) / f.H0;
+        // v40: the turn first (the picture's own points move as a turned body's would), then the bones on top of it
+        float yd = (s.turn != 0 || s.headTurn != 0) ? yawShift(s, u, v) * f.W0 : 0;
+        x += yd;
         // ---- upper body: head, arms, breathing, then the lean
         float wHead = 1 - smooth(chinY + 0.005f, chinY + 0.05f, v);
         float armTop = shoulderY - 0.02f, armBot = armEnd;
@@ -652,7 +689,7 @@ public final class Rig {
         }
         // breathing: the chest widens a little
         float chest = smooth(shoulderY, shoulderY + 0.05f, v) * (1 - smooth(hipY - 0.08f, hipY, v));
-        float px = f.L0 + (cx + (u - cx) * (1 + 0.012f * s.breathe * chest)) * f.W0, py = y;
+        float px = f.L0 + (cx + (u - cx) * (1 + 0.012f * s.breathe * chest)) * f.W0 + yd, py = y;
         float qx = px, qy = py;
         if (wHead > 0) {
             headLocal(f, px, py, f.tmp);
@@ -691,14 +728,14 @@ public final class Rig {
                 // a skirt or a saree on the floor: the lap and the folded legs make a wide, low mound
                 if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
                 else sy2 = ky - (knee - hipY) * f.H0 * 0.8f * s.sit + (y - ky) * (1 - shin);
-                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.32f * s.sit * smooth(hipY, knee, v))) * f.W0;
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.32f * s.sit * smooth(hipY, knee, v))) * f.W0 + yd;
             } else {
                 // v35: a skirt, a saree or a robe folds like a lap: from the hips to the knees it comes towards the
                 // camera and shortens as a pair of thighs would; from the knees it falls to the feet as before, spread
                 // a little over the knees (it used to shrink evenly, which read as a shorter person standing)
                 if (v < knee) sy2 = hy + (y - hy) * (1 - 0.8f * s.sit);
                 else sy2 = y - (knee - hipY) * f.H0 * 0.8f * s.sit;
-                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.14f * s.sit * smooth(hipY, knee, v))) * f.W0;
+                sx2 = f.L0 + (cx + (u - cx) * (1 + 0.14f * s.sit * smooth(hipY, knee, v))) * f.W0 + yd;
             }
         }
         if (legs) {
@@ -947,6 +984,12 @@ public final class Rig {
         if (still) return 0;
         if (animal) return 0.8f * s.sit * (bottom - legTop) * h;
         float rise = (1 - s.legScale) * (bottom - hipY) * h;
+        if (legs && s.sit <= 0 && (s.legLAng != 0 || s.legRAng != 0)) {
+            // v40: in a stride the legs are spread: the body comes down until the planted foot is on the floor
+            float L = (bottom - hipY) * h * s.legScale;
+            float fl = L * (float) Math.cos(Math.toRadians(s.legLAng)) * (1 - s.legLLift), fr = L * (float) Math.cos(Math.toRadians(s.legRAng)) * (1 - s.legRLift);
+            rise += L - Math.max(fl, fr);
+        }
         if (s.sit > 0) rise += 0.8f * 0.5f * s.sit * (bottom - hipY) * h;      // v35: a skirt folds at the knees like legs
         if (s.sit > 0 && s.floor) rise += 0.75f * 0.5f * s.sit * (bottom - hipY) * h;     // v35: and on the floor the shins fold under
         return rise;

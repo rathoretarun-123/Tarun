@@ -159,7 +159,10 @@ public final class Casting {
         // mesh, plays every shot — it walks, sits, gestures, speaks, blinks and shows each feeling; its made and real
         // views (three-quarter, side, back) turn it. A still picture of the user's is used only where the rig cannot
         // show what the shot needs: the back over the shoulder, or a back turned with no back view.
-        if (rigged(sp) && !w.ots && !(sameAngle(w.angle, Angles.BACK) && (sp.views == null || sp.view(2) == null))) return MAIN;
+        // v40 (the user: "use the rigged, animated, finely meshed skeleton for the movements and ignore the pictures I
+        // uploaded"): the rig plays every shot without exception — it turns to whoever it talks to and into each walk
+        // through its mesh; the uploaded pictures are only what it is made from (and its back view, turned away)
+        if (rigged(sp)) return MAIN;
         // the front picture's own score: the front angle, standing, neutral, and a little for the rig that can bend
         // and gesture (a picture of the same angle, pose and feeling never beats it; one of the moment's feeling does)
         // v33: the rig's small edge only while it must speak (the mouth moves on the front picture); otherwise the

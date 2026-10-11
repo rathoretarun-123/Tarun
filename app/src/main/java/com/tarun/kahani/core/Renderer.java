@@ -1029,6 +1029,9 @@ public final class Renderer {
         return p < 0.13f ? 1f : 0f;
     }
 
+    /** v40: running (not walking) at t. */
+    private boolean runningNow(Film.Actor a, float t) { Film.Key k = moving(a, t); return k != null && k.run; }
+
     private Film.Key moving(Film.Actor a, float t) {
         for (Film.Key k : a.keys) if (k.moveDur > 0 && t >= k.t && t < k.t + k.moveDur) return k;
         return null;
@@ -1121,6 +1124,78 @@ public final class Renderer {
         return best == null ? Float.NaN : Math.signum(Director.xAt(best, t) - x) * 0.9f;
     }
 
+    /**
+     * v40 (the twelve principles the director was trained on — anticipation, overlapping action, slow in and slow
+     * out, staging): which way a character turns now, on screen (-1 a three-quarter to the left .. +1 to the right,
+     * 0 to the camera). Into a walk a moment before the first step and through it; toward the one speaking while
+     * listening (and still toward them in the pause after the line); toward the one spoken to while speaking — the
+     * one who spoke before, else the one who answers, else the nearest; a little toward the way they face otherwise.
+     */
+    private float turnGoal(Film.Seg s, Film.Actor a, float t) {
+        Film.Key k = a.stateAt(t);
+        if (!k.visible || k.anchor != Film.A_GROUND) return 0;
+        for (Film.Key mk : a.keys) {
+            if (mk.moveDur <= 0 || t < mk.t - 0.3f || t >= mk.t + mk.moveDur + 0.35f) continue;
+            float dir = Math.signum(mk.x - Director.prevX(a, mk));
+            if (dir != 0) return dir;
+        }
+        float x = Director.xAt(a, t);
+        if (film != null) for (Film.Watch w : film.watches) {
+            if (w.who != a || t < w.t0 || t > w.t1) continue;
+            float d = Director.xAt(w.at, t) - x;
+            if (Math.abs(d) >= 1) return Math.signum(d) * 0.85f;
+        }
+        Film.Actor to = speakingAt(a, t) != null ? addressee(s, a, t) : lastSpeaker(s, a, t);
+        if (to != null) {
+            float d = Director.xAt(to, t) - x;
+            if (Math.abs(d) >= 1) return Math.signum(d) * 0.85f;
+        }
+        return 0.22f * (k.facing < 0 ? -1 : 1);
+    }
+
+    /** v40: whom a speaker speaks to: the one who spoke before (within 8 s), else the one who answers next, else the nearest in the scene. */
+    private Film.Actor addressee(Film.Seg s, Film.Actor a, float t) {
+        Film.Speak mine = speakingAt(a, t);
+        float t0 = mine != null ? mine.t0 : t, t1 = mine != null ? mine.t1 : t;
+        Film.Actor before = null, after = null, near = null;
+        float bestB = 8, bestA = 8, bestN = Float.MAX_VALUE, x = Director.xAt(a, t);
+        for (Film.Actor o : s.actors) {
+            if (o == a || !o.stateAt(t).visible) continue;
+            for (Film.Speak sp : o.speaks) {
+                if (sp.t1 <= t0 && t0 - sp.t1 < bestB) { bestB = t0 - sp.t1; before = o; }
+                if (sp.t0 >= t1 && sp.t0 - t1 < bestA) { bestA = sp.t0 - t1; after = o; }
+            }
+            float d = Math.abs(Director.xAt(o, t) - x);
+            if (d >= 1 && d < bestN) { bestN = d; near = o; }
+        }
+        return before != null ? before : after != null ? after : near;
+    }
+
+    /** v40: the one speaking now in the scene, or the last one to have spoken in the last 2.5 s (a listener keeps looking at them through the pause). */
+    private Film.Actor lastSpeaker(Film.Seg s, Film.Actor a, float t) {
+        Film.Actor best = null;
+        float bestEnd = t - 2.5f;
+        for (Film.Actor o : s.actors) {
+            if (o == a || !o.stateAt(t).visible) continue;
+            for (Film.Speak sp : o.speaks) {
+                if (sp.t0 > t) continue;
+                if (sp.t1 > t) return o;
+                if (sp.t1 > bestEnd) { bestEnd = sp.t1; best = o; }
+            }
+        }
+        return best;
+    }
+
+    /** v40: the turn of the head (leading) and of the body (following a little later), eased: no snap at either end. */
+    private void turnOf(Pose p, Film.Seg s, Film.Actor a, float t) {
+        final float[] w = {1, 2, 3, 3, 2, 1};
+        float head = 0, body = 0;
+        for (int i = 0; i < 6; i++) head += w[i] * turnGoal(s, a, t - i * 0.06f);
+        for (int i = 0; i < 6; i++) body += w[i] * turnGoal(s, a, t - 0.12f - i * 0.09f);
+        p.turnHead = head / 12f;
+        p.turnBody = body / 12f;
+    }
+
     /** A steady pseudo-random number in 0..1 for slot n of actor seed. */
     private static float hash01(int n, int seed) {
         int h = n * 374761393 + seed * 668265263;
@@ -1185,6 +1260,7 @@ public final class Renderer {
         // the eyes look (not behind dark glasses, a blindfold or an eye patch: nothing there to move)
         // (v35: a blind character's eyes do not follow anyone: the head turns to a sound, the eyes stay where they are)
         if (look.glasses != 2 && look.glasses != 4 && look.glasses != 5 && !look.cannotSee()) gaze(p, s, a, t);
+        turnOf(p, s, a, tp);
         if (film != null && Sets.outdoorSet(s.set)) {
             // v36: the wind on clothes, hair and fur comes in the same travelling gusts as on the grass behind them,
             // and outdoors a light breeze always stirs them a little
@@ -1230,11 +1306,18 @@ public final class Renderer {
         }
         Film.Key mv = moving(a, t);
         mo.dx = 0; mo.dy = 0; mo.rot = 0; mo.sx = 1; mo.sy = 1;
+        boolean rigWalk = sp != null && sp.rig != null && !sp.rig.still && !sp.rig.animal;
         if (mv != null) {
             float speed = mv.run ? 15f : 9f;
             // the steps start and stop gently (no snap into a stride), over a fifth of a second
             float amt = Rig.smooth(0, 0.2f, tp - mv.t) * Rig.smooth(0, 0.25f, mv.t + mv.moveDur - tp);
             p.walk = (tp - mv.t) * speed;
+            if (rigWalk) {
+                // v40: the steps keep pace with the ground (one step per stride length covered, slower as the walk
+                // eases in and out): the planted foot stays where it is — no gliding, no floating
+                float dist = Math.abs(Director.xAt(a, tp) - Director.prevX(a, mv));
+                p.walk = (float) Math.PI * dist / Math.max(1f, (mv.run ? 0.42f : 0.3f) * h);
+            }
             p.walkAmt = amt;
             p.facing = mv.facing;
             // a calm, weighted step: a small rise and fall (no hopping) and a slight sway of the body
@@ -1242,6 +1325,14 @@ public final class Renderer {
             mo.rot = (float) Math.sin(p.walk) * (mv.run ? 1.8f : 1.1f) * amt;
             p.armL = 8 + (17 + (float) Math.sin(p.walk) * 25) * amt;
             p.armR = 8 + (17 - (float) Math.sin(p.walk) * 25) * amt;
+            if (rigWalk) {
+                // v40: the rig's own walk (Renderer.rigState): the body is highest as the legs pass each other and
+                // comes down onto each step (the rig lowers it so the planted foot stays on the floor); the arms swing
+                // against the legs there, so they rest here
+                mo.dy = -(1 - bump(p.walk)) * h * (mv.run ? 0.022f : 0.011f) * amt;
+                mo.rot = 0;
+                p.armL = 8; p.armR = 8;
+            }
             if (look.aid == Look.AID_STICK || look.aid == Look.AID_CRUTCHES || look.aid == Look.AID_WALKER) {
                 // v34: a slow step on a stick: the stick hand stays on the stick, the body dips a little with each step;
                 // both hands stay on crutches or a walking frame
@@ -1597,7 +1688,19 @@ public final class Renderer {
         if (seat >= Film.SEAT_STOOL && seat != Film.SEAT_WHEELCHAIR && p.sit > 0.35f && p.body != Pose.LIE) {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
+            seatSpan = null;
+            if (seat == Film.SEAT_SOFA) for (Film.Fx f : s.fx) {
+                if (f.type != Film.FX_SEAT || f.a != a || f.kind != Film.SEAT_SOFA) continue;
+                float[] sp2 = sofaSpan(s, f, h * seatScale(a));
+                if (sp2 != null) {
+                    // in this character's own drawing units (it stands at x, drawn at its scale)
+                    float off = f.x - Director.xAt(a, t);
+                    seatSpan = new float[]{(sp2[0] + off) / scale, (sp2[1] + off) / scale, sp2[2], sp2[3]};
+                }
+                break;
+            }
             drawSeat(g, seat, h * seatScale(a), true, p.facing, sp != null);
+            seatSpan = null;
             g.restore();
         }
         // v37: what is in front of the body — a vehicle's side, door and glass; a bath curtain (or the water) from just
@@ -2392,6 +2495,41 @@ public final class Renderer {
     /** v35: the height of a bed's mattress top, in the sleeper's standing heights. */
     static final float BED_TOP = 0.27f;
 
+    /** v40: the part of a shared sofa the seat being drawn has (see sofaSpan), or null for a sofa of its own. */
+    private float[] seatSpan;
+
+    /**
+     * v40: one sofa for the people seated side by side on it: this seat's part of it, from half way to the
+     * neighbour on the left to half way to the one on the right (its own end, with an armrest, where there is none).
+     * {left, right, armrest left (1/0), armrest right (1/0)} relative to the seat, or null with no neighbour at all.
+     */
+    private float[] sofaSpan(Film.Seg s, Film.Fx self, float hh) {
+        float sw = hh * 1.05f, left = Float.NaN, right = Float.NaN;
+        // the whole sofa is as tall as for its tallest sitter (a back stepping down behind each child read as many sofas)
+        float tall = hh;
+        float lo = self.x, hi = self.x;
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (Film.Fx f : s.fx) {
+                if (f.type != Film.FX_SEAT || f.kind != Film.SEAT_SOFA || f.x >= lo - 8 && f.x <= hi + 8) continue;
+                if (f.x < lo && lo - f.x <= sw * 1.25f) { lo = f.x; grew = true; }
+                else if (f.x > hi && f.x - hi <= sw * 1.25f) { hi = f.x; grew = true; }
+                else continue;
+                if (f.a != null && art != null) tall = Math.max(tall, actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a));
+            }
+        }
+        for (Film.Fx f : s.fx) {
+            if (f == self || f.type != Film.FX_SEAT || f.kind != Film.SEAT_SOFA) continue;
+            float d = f.x - self.x;
+            if (Math.abs(d) < 8 || Math.abs(d) > sw * 1.25f) continue;
+            if (d < 0 && (Float.isNaN(left) || d > left)) left = d;
+            if (d > 0 && (Float.isNaN(right) || d < right)) right = d;
+        }
+        if (Float.isNaN(left) && Float.isNaN(right)) return null;
+        return new float[]{Float.isNaN(left) ? -sw / 2 : left / 2 - 1, Float.isNaN(right) ? sw / 2 : right / 2 + 1, Float.isNaN(left) ? 1 : 0, Float.isNaN(right) ? 1 : 0, tall};
+    }
+
     private void drawSeat(Gfx g, int seat, float h, boolean front) { drawSeat(g, seat, h, front, 1); }
 
     /** v35: furniture fits the sitter's legs — a drawn child's chair is a child's chair (a picture keeps the grown-up size). */
@@ -2422,30 +2560,39 @@ public final class Renderer {
             }
             case Film.SEAT_SOFA: {
                 // v35: a sofa — low and deep: a back cushion behind, armrests either side, a soft seat cushion
+                // v40: people seated side by side share one sofa (seatSpan: this sitter's part of it, armrests only
+                // at its two ends) — three sofas drawn over each other read as a pile of furniture
                 float sw = h * 1.05f, st = -h * 0.25f;
+                float sl = seatSpan != null ? seatSpan[0] : -sw / 2, sr = seatSpan != null ? seatSpan[1] : sw / 2;
+                boolean armL = seatSpan == null || seatSpan[2] > 0, armR = seatSpan == null || seatSpan[3] > 0;
+                float in = h * 0.025f;          // the cushions stop short of an end with an armrest
+                float cl = armL ? sl + in : sl, cr = armR ? sr - in : sr;
                 if (!front) {
                     g.linear(0, -h * 0.62f, 0, st, 0xFF8E5A9A, 0xFF5E3A6A);
-                    g.roundRect(-sw / 2, -h * 0.62f, sw, h * 0.4f, h * 0.08f);
-                    g.color(0x22FFFFFF); g.line(-sw * 0.02f, -h * 0.58f, -sw * 0.02f, st - h * 0.04f, h * 0.008f);
-                    g.color(0xFF3E2723); g.rect(-sw * 0.46f, -h * 0.05f, h * 0.035f, h * 0.05f); g.rect(sw * 0.46f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
+                    g.roundRect(sl, -h * 0.62f, sr - sl, h * 0.4f, armL && armR ? h * 0.08f : h * 0.02f);
+                    g.color(0x22FFFFFF); g.line((sl + sr) / 2 - sw * 0.02f, -h * 0.58f, (sl + sr) / 2 - sw * 0.02f, st - h * 0.04f, h * 0.008f);
+                    g.color(0xFF3E2723);
+                    if (armL) g.rect(sl + sw * 0.04f, -h * 0.05f, h * 0.035f, h * 0.05f);
+                    if (armR) g.rect(sr - sw * 0.04f - h * 0.035f, -h * 0.05f, h * 0.035f, h * 0.05f);
                     g.linear(0, st, 0, -h * 0.05f, 0xFF7A4A86, 0xFF4E2E5A);
-                    g.roundRect(-sw / 2, st, sw, h * 0.2f, h * 0.04f);
+                    g.roundRect(sl, st, sr - sl, h * 0.2f, armL && armR ? h * 0.04f : h * 0.01f);
                     g.linear(0, st - h * 0.03f, 0, st + h * 0.05f, 0xFFA572B2, 0xFF7A4A86);
-                    g.roundRect(-sw * 0.45f, st - h * 0.03f, sw * 0.9f, h * 0.08f, h * 0.035f);
+                    g.roundRect(cl + sw * 0.03f, st - h * 0.03f, cr - cl - sw * 0.06f, h * 0.08f, h * 0.035f);
                 }
                 if (front && legsIn) {
                     // v39: the seat's front in front of the sitter's legs — a front picture folded onto the seat cannot
                     // show its knees coming forward, so the legs go into the sofa and the body sits in its cushion
                     // (with the legs standing in front of the seat it read as one standing before the sofa)
                     // down to the floor (a skirted base): the shoes never show under it
+                    float fl = armL ? sl + sw * 0.03f : sl, fr = armR ? sr - sw * 0.03f : sr;
                     g.linear(0, st + h * 0.015f, 0, h * 0.005f, 0xFF7A4A86, 0xFF4E2E5A);
-                    g.roundRect(-sw * 0.47f, st + h * 0.015f, sw * 0.94f, -st - h * 0.01f, h * 0.035f);
-                    g.color(0x33FFFFFF); g.line(-sw * 0.44f, st + h * 0.03f, sw * 0.44f, st + h * 0.03f, h * 0.006f);
-                    g.color(0x22000000); g.line(-sw * 0.45f, -h * 0.045f, sw * 0.45f, -h * 0.045f, h * 0.006f);
+                    g.roundRect(fl, st + h * 0.015f, fr - fl, -st - h * 0.01f, armL && armR ? h * 0.035f : h * 0.008f);
+                    g.color(0x33FFFFFF); g.line(fl + sw * 0.03f, st + h * 0.03f, fr - sw * 0.03f, st + h * 0.03f, h * 0.006f);
+                    g.color(0x22000000); g.line(fl + sw * 0.02f, -h * 0.045f, fr - sw * 0.02f, -h * 0.045f, h * 0.006f);
                 }
                 g.linear(0, -h * 0.42f, 0, -h * 0.05f, 0xFF9A64A8, 0xFF5E3A6A);
-                g.roundRect(-sw / 2 - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
-                g.roundRect(sw / 2 - h * 0.08f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
+                if (armL) g.roundRect(sl - h * 0.03f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
+                if (armR) g.roundRect(sr - h * 0.08f, -h * 0.4f, h * 0.11f, h * 0.36f, h * 0.05f);
                 break;
             }
             case Film.SEAT_BED: {
@@ -2697,12 +2844,12 @@ public final class Renderer {
     }
 
     /** Bones and face of a picture character for this frame, from the same pose the cartoon puppets use. */
-    private Rig.State rigState(Pose p, Film.Actor a, Art.Sprite sp) {
+    private Rig.State rigState(Pose p, Film.Actor a, Art.Sprite sp, float mirror) {
         Rig.State st = rs;
         st.reset();
         float t = p.time;
         st.time = t;
-        st.wind = p.wind * (p.facing < 0 ? -1 : 1);     // the picture is mirrored when facing left
+        st.wind = p.wind * mirror;     // the picture is mirrored when facing left
         // every character moves in its own way (§26): lively ones bigger and quicker, calm ones smaller
         float en = a != null ? a.look.energy : 1f, poise = a != null ? a.look.poise : 0f;
         st.armL = armSwing(8 + (p.armL - 8) * en);
@@ -2715,13 +2862,40 @@ public final class Renderer {
             st.headRot += (float) Math.sin(t * 1.3f + p.seed) * 0.45f * en;
             st.nod += (float) Math.sin(t * 1.7f + p.seed) * 0.08f;
         }
-        if (p.walkAmt > 0) {
+        boolean person = sp != null && sp.rig != null && !sp.rig.animal && !sp.rig.still;
+        if (p.walkAmt > 0 && person) {
+            // v40: a real stride (the user: "while moving, no movement is visible, they seem to float"): the legs swing
+            // past each other from the hips, the swinging one bends and lifts its foot while the other carries the
+            // weight, the arms swing against the legs and the body leans a little into the walk. dir: the way of the
+            // walk in the picture's own coordinates.
+            float sw = (float) Math.sin(p.walk), cw = (float) Math.cos(p.walk), dir = p.facing * mirror < 0 ? -1 : 1;
+            boolean run = p.walkAmt > 0 && a != null && runningNow(a, t);
+            float A = (run ? 24 : 15) * p.walkAmt, lift = (run ? 0.22f : 0.13f) * p.walkAmt;
+            st.legLAng = -dir * A * sw;
+            st.legRAng = dir * A * sw;
+            st.legLLift = Math.max(0, cw) * lift;
+            st.legRLift = Math.max(0, -cw) * lift;
+            float arm = (run ? 20 : 13) * p.walkAmt;
+            st.armL += dir * arm * sw + 2 * p.walkAmt;
+            st.armR += dir * arm * sw + 2 * p.walkAmt;
+            st.lean += dir * (run ? 5f : 2f) * p.walkAmt;
+            st.headRot += sw * 1.0f;
+        } else if (p.walkAmt > 0) {
             float sw = (float) Math.sin(p.walk);
             st.legLLift = Math.max(0, sw) * 0.14f * p.walkAmt;
             st.legRLift = Math.max(0, -sw) * 0.14f * p.walkAmt;
             st.legLAng = sw * 4 * p.walkAmt;
             st.legRAng = sw * 4 * p.walkAmt;
             st.headRot += sw * 1.2f;
+        }
+        if (person && sp.faces == 0 && p.body != Pose.LIE && p.body != Pose.HANG) {
+            // v40: the turn — toward whom they talk to, into each walk (Renderer.turnOf); the head leads, the body
+            // follows; in a close shot only half as far (the face stays to the camera, the eyes just off it)
+            float close = camZ >= 2.5f ? 0.55f : camZ >= 1.6f ? 0.8f : 1f;
+            float walkTurn = Math.min(1, p.walkAmt * 1.5f);
+            float bodyDeg = (26 + 6 * walkTurn) * close, headDeg = 40 * close;
+            st.turn = p.turnBody * bodyDeg * mirror;
+            st.headTurn = (p.turnHead * headDeg - p.turnBody * bodyDeg) * mirror;
         }
         st.nod += p.nod - 0.25f * poise;
         st.lean -= 1.2f * poise;
@@ -2772,7 +2946,7 @@ public final class Renderer {
             faceFor(p.emotion, st, 1f);
         }
         // v34: the eyes (the picture is mirrored when facing left)
-        st.gazeX = p.gazeX * (p.facing < 0 ? -1 : 1);
+        st.gazeX = p.gazeX * mirror;
         st.gazeY = p.gazeY;
         return st;
     }
@@ -2826,6 +3000,10 @@ public final class Renderer {
         // v34: turned away or leaving: the back view (the user's back picture, or the one made from the front)
         if (sp.views != null && k.backTurned && !speaking && k.anchor == Film.A_GROUND && sp.view(2) != null) return sp.view(2);
         if (sp.views == null || speaking || k.body != Pose.STAND || k.anchor != Film.A_GROUND || p.sit > 0) return sp;
+        // v40: a rigged person turns through its own mesh, to the one it talks to and into each walk — no other picture
+        // swaps in for it (a swap popped from one picture to another, and a side picture facing the wrong way walked
+        // backwards)
+        if (sp.rig != null && !sp.rig.animal && !sp.rig.still && sp.faces == 0) return sp;
         if (p.walkAmt > 0.35f && sp.view(1) != null) return sp.view(1);
         Film.Shot sh = shotAt(t);
         if (sh != null && sh.type == ShotPlanner.TWO_SHOT && sp.view(0) != null && p.walkAmt <= 0.35f) {
@@ -2955,6 +3133,23 @@ public final class Renderer {
                 n, n == 0 ? 0 : 100f * alive / n, sp, sp == 0 ? 0 : 100f * spa / sp, STAT[4].get(), STAT[5].get());
     }
 
+    /**
+     * v40: whether a picture is drawn mirrored (-1) or as it is (1). A rigged front picture of a person never is: it
+     * turns to either side through its mesh, and the parting of the hair, the side a ponytail hangs on and the
+     * writing on a shirt stay the picture's own. A turned picture (a three-quarter or a side) is mirrored when it
+     * looks away from where the character looks — it never walks backwards. Anything else by its facing, as before.
+     */
+    static float mirrorFor(Art.Sprite sp, Pose p) {
+        Rig r = sp.rig;
+        boolean person = r != null && !r.animal && !r.still;
+        if (person && sp.faces == 0) return 1;
+        if (sp.faces != 0) {
+            float want = p.walkAmt <= 0.05f && Math.abs(p.turnHead) > 0.4f ? p.turnHead : p.facing;
+            return want * sp.faces < 0 ? -1 : 1;
+        }
+        return p.facing < 0 ? -1 : 1;
+    }
+
     private void drawSprite(Gfx g, Art.Sprite sp, Look look, Pose p, float h, float rot, Film.Actor actor) {
         float scale = h / sp.h;
         float w = sp.w * scale;
@@ -2964,7 +3159,9 @@ public final class Renderer {
         // every picture moves through its mesh, also lying down or hanging upside down (the whole picture is
         // turned; the body still breathes, the face still speaks and changes expression)
         boolean rigged = rig != null && (!beast || p.body != Pose.HANG) && !(p.noHeadwear && sp.turbanY > 0 && !bare);
-        Rig.State st = rigged ? rigState(p, actor, sp) : null;
+        // v40: a front picture of a person is never mirrored (it turns through its mesh); a turned one faces its way
+        float mirror = mirrorFor(sp, p);
+        Rig.State st = rigged ? rigState(p, actor, sp, mirror) : null;
         if (rigged && beast) animalState(st, p);
         // v39: what the film's pictures really did (MakeFilm STATS=1, tests): drawn with a living face, and speaking
         // frames whose jaw moved
@@ -2992,7 +3189,6 @@ public final class Renderer {
         if (!rigged && p.body == Pose.SIT) sy *= 0.8f;
         else if (!rigged && p.body == Pose.KNEEL) sy *= 0.74f;
         if (p.walkAmt > 0) sy *= 1 + (float) Math.sin(p.walk * 2) * 0.012f * p.walkAmt;
-        float mirror = p.facing < 0 ? -1 : 1;
         g.scale(sx * mirror, sy);
         // shadow
         if (p.body != Pose.LIE && p.body != Pose.HANG) {
@@ -3119,8 +3315,10 @@ public final class Renderer {
             g.oval(tx - rig.headSide * Math.abs(tx - hx) * 0.1f, hy + Math.abs(ly - hy) * 0.08f, Math.abs(tx - hx) * 0.05f, Math.abs(ly - hy) * 0.09f);
         }
         if (sp.faceKnown && !(rigged && rig.animal && !rig.eyesOnHead)) {
-            float ex1 = left + sp.eyeLX * w, ey1 = top + sp.eyeLY * h;
-            float ex2 = left + sp.eyeRX * w, ey2 = top + sp.eyeRY * h;
+            // v40: on the turned face (the rig's turn moves the eyes and the mouth with the mesh)
+            boolean turns = rigged && !beast && st != null && (st.turn != 0 || st.headTurn != 0);
+            float ex1 = left + (sp.eyeLX + (turns ? rig.yawShift(st, sp.eyeLX, sp.eyeLY) : 0)) * w, ey1 = top + sp.eyeLY * h;
+            float ex2 = left + (sp.eyeRX + (turns ? rig.yawShift(st, sp.eyeRX, sp.eyeRY) : 0)) * w, ey2 = top + sp.eyeRY * h;
             float er = sp.eyeR * w;
             // blinking / closed eyes (v34: never painted over dark glasses, a blindfold or an eye patch)
             boolean covered = look != null && (look.glasses == 2 || look.glasses == 4 || look.glasses == 5);
@@ -3181,7 +3379,7 @@ public final class Renderer {
             float m = p.mouth;
             if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown && !sp.mouthOpen) {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
-                float mx = left + sp.mouthX * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
+                float mx = left + (sp.mouthX + (turns ? rig.yawShift(st, sp.mouthX, sp.mouthY) : 0)) * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
                 float gap = Rig.jawDrop(hw) * st.jaw;
                 // only the dark inside between the parted real lips, and only once they are clearly apart: never a
                 // painted mouth shape of its own (it reads as a second pair of lips), no teeth bar
@@ -3205,27 +3403,27 @@ public final class Renderer {
             float hx = p.facing * w * 0.36f, hy = -h * 0.45f;
             if (rigged) {
                 rig.handAt(rf, st, 1, hand);
-                hx = hand[0] * (p.facing < 0 ? -1 : 1) * mo.sx;
+                hx = hand[0] * mirror * mo.sx;
                 hy = hand[1] * mo.sy + rig.feetRise(st, h);
             }
             // v35: eating or drinking in a close-up — the picture's hand is below the frame, so the cup, the glass,
             // the bottle or a morsel comes up into the frame to the lips in a hand of the character's own skin
             if (p.toMouth > 0.01f && sp.faceKnown && (p.toMouthItem == Pose.I_PHONE || p.toMouthItem == Pose.I_BRUSH || p.toMouthItem >= Pose.I_KAJAL || actorY + hy * actorScale > camY + vh / 2f / camZ - 2)) {
                 float rise = rigged ? rig.feetRise(st, h) : 0;
-                float mx = (-w / 2 + sp.mouthX * w) * (p.facing < 0 ? -1 : 1) * mo.sx, my = (-h + sp.mouthY * h) * mo.sy + rise;
+                float mx = (-w / 2 + sp.mouthX * w) * mirror * mo.sx, my = (-h + sp.mouthY * h) * mo.sy + rise;
                 float mw = Math.max(sp.mouthHW * w, w * 0.02f);
                 float u = ease01(p.toMouth);
                 float tx = mx + p.facing * mw * 0.6f, ty = my + mw * (p.toMouthItem == -1 ? 0.5f : 2.6f);
                 if (p.toMouthItem == Pose.I_PHONE) {
                     // v36: a phone goes to the ear on the side the character faces
                     float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * w, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy + rise;
-                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * (p.facing < 0 ? -1 : 1) * mo.sx;
+                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * mirror * mo.sx;
                     tx = ecx + p.facing * ed * 1.4f; ty = ey + ed * 0.35f;
                 } else if (p.toMouthItem == Pose.I_BRUSH) { tx = mx + p.facing * mw * 0.2f + (float) Math.sin(p.time * 28) * mw * 0.35f; ty = my + mw * 0.2f; }
                 else if (p.toMouthItem >= Pose.I_KAJAL) {
                     // v37: make-up to its place on the face — the lips, the lower lid, between the brows, a cheek
                     float ed = Math.max(Math.abs(sp.eyeRX - sp.eyeLX), 0.05f) * w, ey = (-h + (sp.eyeLY + sp.eyeRY) / 2 * h) * mo.sy + rise;
-                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * (p.facing < 0 ? -1 : 1) * mo.sx;
+                    float ecx = (-w / 2 + (sp.eyeLX + sp.eyeRX) / 2 * w) * mirror * mo.sx;
                     float jig = (float) Math.sin(p.time * 9) * mw * 0.15f;
                     switch (p.toMouthItem) {
                         case Pose.I_LIPSTICK: tx = mx + jig; ty = my + mw * 0.15f; break;
@@ -3389,7 +3587,9 @@ public final class Renderer {
                 case Film.FX_SEAT: if (behind) {
                     float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a) : 400;
                     float fc = f.a != null ? f.a.stateAt(t).facing : 1;
-                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
+                    seatSpan = f.kind == Film.SEAT_SOFA ? sofaSpan(s, f, hh) : null;
+                    g.save(); g.translate(f.x, s.ground); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
+                    seatSpan = null;
                 } break;
                 case Film.FX_STONE: if (!behind) {
                     // the stone's arc from the hand, then the splash and the rings of waves (or a puff of dust)

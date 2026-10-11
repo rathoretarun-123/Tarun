@@ -3849,17 +3849,25 @@ public final class Director {
         if (!leave && !cross && !goTo && !spot) return 0;
         boolean all = group.size() > 1 && (everyone(s) || head.startsWith("they ") || head.startsWith("वे "));
         List<Film.Actor> who = new ArrayList<Film.Actor>();
-        if (all) who.addAll(group); else who.add(subj);
+        // v40: names joined with a plural verb ("वृंदा और वनुशा कमरे से बाहर जाती हैं"): all of them go, not the first alone
+        boolean joint = !all && group.size() > 1 && (joinedPlural(s) || groupSubject);
+        if (all) who.addAll(group);
+        else if (joint) { for (Film.Actor a : group) if (a != target) who.add(a); }
+        else who.add(subj);
         boolean runWords = running(s);
         boolean slow = Txt.has(s, "slowly", "sadly", "धीरे", "उदास");
         boolean turning = Txt.has(s, TURN_AWAY);
         float d = 0;
         for (Film.Actor a : who) {
-            Film.Key now = a.stateAt(t);
-            if (!now.visible || now.anchor != Film.A_GROUND || a.look.kind == Look.BIRD || a.look.mount >= 0 || movedFrom(a, t)) continue;
-            if (a.last().t > t + 0.149f) continue;          // keys are kept in time order: nothing may come after one already planned
-            float x = xAt(a, t);
-            Look lk = lookAt(a, t);
+            // v40: a key this sentence already gave them (a look, a feeling) a moment after it starts: they set off
+            // just after it, in time order (they were left standing: "वृंदा और वनुशा … बाहर जाती हैं" took only one)
+            float ta = t;
+            if (a.last().t > t + 0.149f && a.last().t - t < 1.2f) ta = a.last().t - 0.14f;
+            Film.Key now = a.stateAt(ta);
+            if (!now.visible || now.anchor != Film.A_GROUND || a.look.kind == Look.BIRD || a.look.mount >= 0 || movedFrom(a, ta)) continue;
+            if (a.last().t > ta + 0.149f) continue;          // keys are kept in time order: nothing may come after one already planned
+            float x = xAt(a, ta);
+            Look lk = lookAt(a, ta);
             boolean aided = lk.aid != Look.AID_NONE || (lk.injury & Look.INJ_LEG) != 0;
             // v34 (realism): a blindfolded character feels the way, slowly, a hand out in front; one without an umbrella
             // hurries through the rain (not one on a walking aid)
@@ -3871,26 +3879,41 @@ public final class Director {
             // (a film shortens a long walk; a story that waits ten seconds for one loses its audience)
             float speed = (blind ? 120f : run ? 250f : slow ? 110f : 170f) * weightSpeed(a);
             // v39: one who gets up in the same sentence ("सोफे से उठकर … आता है") walks once on their feet
-            float go = t + 0.15f;
-            Film.Key before = a.stateAt(Math.max(seg.t0, t - 0.02f));
-            if (before.body == Pose.SIT || before.body == Pose.KNEEL || before.body == Pose.LIE) go = t + 1.1f;
+            float go = ta + 0.15f;
+            Film.Key before = a.stateAt(Math.max(seg.t0, ta - 0.02f));
+            if (before.body == Pose.SIT || before.body == Pose.KNEEL || before.body == Pose.LIE) go = ta + 1.1f;
             // v39: "पास आकर बैठती है" — they come first and sit there: the sit this sentence staged waits for the walk
             Film.Key sitAfter = null;
             if (Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat")) {
-                for (Film.Key kk : a.keys) if (kk.t >= t - 0.01f && kk.body == Pose.SIT) { sitAfter = kk; break; }
-                if (sitAfter != null) { sitAfter.body = Pose.STAND; go = t + 0.15f; }
+                for (Film.Key kk : a.keys) if (kk.t >= ta - 0.01f && kk.body == Pose.SIT) { sitAfter = kk; break; }
+                if (sitAfter != null) { sitAfter.body = Pose.STAND; go = ta + 0.15f; }
             }
             if (spot && !leave) {
                 // to a spot of the place: towards the middle of the stage (or the other side), a walk worth seeing;
                 // a group keeps its spacing
                 float shift = x < 640 ? 300 : -300;
                 float dest = Math.max(160, Math.min(1120, x + shift));
+                // v40: a walk long enough to be seen as one (several steps, not a slide of a third of a body): the
+                // first free spot at least 230 away — toward the middle first, then the other way
+                float freeDest = Float.NaN;
+                for (float cand : new float[]{x + shift * 1.3f, x + shift, x - shift * 1.3f, x - shift}) {
+                    float c = Math.max(160, Math.min(1120, cand));
+                    if (Math.abs(c - x) < 230) continue;
+                    boolean clear = true;
+                    for (Film.Actor o : seg.actors) {
+                        if (o == a || (all && who.contains(o)) || !o.stateAt(ta).visible) continue;
+                        float ox = xAt(o, ta);
+                        if (Math.abs(c - ox) < 140 || (ox - x) * (ox - c) < 0) { clear = false; break; }     // nobody on the spot or in the way
+                    }
+                    if (clear) { freeDest = c; break; }
+                }
+                if (!Float.isNaN(freeDest)) dest = freeDest;
                 // never onto another one standing there: stop beside them (an arm's length), short of them if need be
                 for (int pass = 0; pass < 3; pass++) {
                     boolean moved = false;
                     for (Film.Actor o : seg.actors) {
-                        if (o == a || (all && who.contains(o)) || !o.stateAt(t).visible) continue;
-                        float ox = xAt(o, t);
+                        if (o == a || (all && who.contains(o)) || !o.stateAt(ta).visible) continue;
+                        float ox = xAt(o, ta);
                         if (Math.abs(dest - ox) < 130) { dest = ox + (x < ox ? -140 : 140); moved = true; }
                     }
                     dest = Math.max(160, Math.min(1120, dest));
@@ -3907,7 +3930,7 @@ public final class Director {
                 continue;
             }
             if (goTo && target != null && target != a && !all) {
-                float tx = xAt(target, t);
+                float tx = xAt(target, ta);
                 // an arm's length apart, as people stand to talk (not shoulder to shoulder)
                 float gap = 155 + (a.look.kind == Look.MONSTER || target.look.kind == Look.MONSTER ? 80 : 0);
                 float dest = x < tx ? tx - gap : tx + gap;
@@ -3925,12 +3948,12 @@ public final class Director {
             } else if (leave) {
                 boolean back = speaksLater(a.c);
                 // v39: a group leaves together, by one side (the side most of them stand nearer)
-                float side = all ? groupSide(who, t) : x;
+                float side = all || joint ? groupSide(who, ta) : x;
                 float edge = side < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
-                float start = t + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
+                float start = ta + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
                 float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(edge - x) / ((blind ? 120f : run ? 245f : slow ? 150f : 200f) * weightSpeed(a))));
                 // a still frame they walk out of (the camera does not chase them off the stage)
-                frameAround(t + 0.05f);
+                frameAround(ta + 0.05f);
                 Film.Key k = a.at(start);
                 k.x = edge; k.moveDur = dur; k.run = run; k.facing = edge > x ? 1 : -1; k.backTurned = false;
                 if (blind) { if (!cane) a.acts.add(new Film.Act(start, start + dur, Film.G_REACH)); feltWay++; }
@@ -3958,22 +3981,22 @@ public final class Director {
                     // round the place: out to one side and back
                     float far = x < 640 ? Math.min(1100, x + 360) : Math.max(180, x - 360);
                     dur = Math.min(2.2f, Math.max(0.7f, Math.abs(far - x) / speed));
-                    frameAround(t + 0.05f, x, far);
-                    k = a.at(t + 0.15f); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
-                    Film.Key k2 = a.at(t + 0.2f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
+                    frameAround(ta + 0.05f, x, far);
+                    k = a.at(ta + 0.15f); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
+                    Film.Key k2 = a.at(ta + 0.2f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
                     dur = dur * 2 + 0.05f;
                 } else {
                     // across: to the other side (a slow walk goes less far)
                     float reach = slow || blind ? 360 : 520;
                     float dest = x < 640 ? Math.min(1100, x + reach) : Math.max(180, x - reach);
                     dur = Math.min(4.5f, Math.max(0.8f, Math.abs(dest - x) / speed));
-                    frameAround(t + 0.05f, x, dest);
-                    k = a.at(t + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
+                    frameAround(ta + 0.05f, x, dest);
+                    k = a.at(ta + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
                 }
-                if (blind) { if (!cane) a.acts.add(new Film.Act(t + 0.15f, t + 0.15f + dur, Film.G_REACH)); feltWay++; }
-                watch(a, t + 0.15f, t + 0.15f + dur, false);
+                if (blind) { if (!cane) a.acts.add(new Film.Act(ta + 0.15f, ta + 0.15f + dur, Film.G_REACH)); feltWay++; }
+                watch(a, ta + 0.15f, ta + 0.15f + dur, false);
                 crossings++;
-                d = Math.max(d, dur + 0.3f);
+                d = Math.max(d, ta - t + dur + 0.3f);
             }
         }
         return d;

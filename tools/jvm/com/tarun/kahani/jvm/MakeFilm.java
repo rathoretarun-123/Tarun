@@ -182,7 +182,10 @@ public class MakeFilm {
             System.out.println("STATS " + com.tarun.kahani.core.Renderer.stats());
             return;
         }
-        for (int f = 0; f < frames; f++) {
+        // FROM / TO (seconds): only a stretch of the film, for looking at one moment's motion
+        int f0 = Math.max(0, (int) (Float.parseFloat(System.getenv().getOrDefault("FROM", "0")) * fps));
+        int f1 = Math.min(frames, (int) (Float.parseFloat(System.getenv().getOrDefault("TO", "1e6")) * fps));
+        for (int f = f0; f < f1; f++) {
             float t = f / (float) fps;
             r.render(g, t);
             if (look != null) finish(img, look, com.tarun.kahani.core.FilmLook.at(film, t, lp), lookPx);

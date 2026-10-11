@@ -37,6 +37,13 @@ public final class Art {
         public boolean faceKnown;
         /** v38: the picture's own mouth is open (teeth or the dark inside show between the lips): it is never painted open further. */
         public boolean mouthOpen;
+        /** v40: the mouth point was moved onto the lips found by their colour (it had no lips under it). */
+        public boolean mouthMoved;
+        /**
+         * v40: the way the picture itself faces: -1 turned to the picture's left, +1 to its right, 0 a front (or a
+         * back). The film mirrors a picture by this, so a three-quarter or side picture never walks backwards.
+         */
+        public int faces;
         public transient Cutout.Result pixelsForSampling;
         /** Bones and face for moving the picture (null = moved as one piece). */
         public Rig rig;
@@ -185,6 +192,15 @@ public final class Art {
     public static void mouthFromPicture(Cutout.Result r, Sprite s) {
         s.mouthOpen = false;
         if (r == null || r.px == null || s == null || !s.faceKnown || s.mouthHW <= 0) return;
+        // v40: a mouth point with no lips under it (on the jaw, the neck, the nose) moves onto the lips found by their
+        // colour — the mesh opened "new lips" wherever the point was
+        float[] lips = Cutout.betterMouth(r.px, r.w, r.h, s.eyeLX * r.w, s.eyeRX * r.w, (s.eyeLY + s.eyeRY) / 2 * r.h,
+                s.mouthX * r.w, s.mouthY * r.h, s.mouthHW * r.w, s.skin);
+        if (lips != null) {
+            s.mouthX = lips[0] / r.w; s.mouthY = lips[1] / r.h; s.mouthHW = Math.max(lips[2], s.mouthHW * r.w * 0.6f) / r.w;
+            s.mouthMoved = true;
+        }
+        s.faces = facingOf(r, s);
         int cx = Math.round(s.mouthX * r.w), cy = Math.round(s.mouthY * r.h), hw = Math.max(2, Math.round(s.mouthHW * r.w));
         // the skin's colourfulness around the mouth (the cheeks either side)
         int skinSat = 0, skinN = 0;
@@ -231,6 +247,53 @@ public final class Art {
             }
         }
         if (m > 20 && dark > m * 0.2f) s.mouthOpen = true;
+    }
+
+    /**
+     * v40: which way a picture of a person faces, from its face: in the rows from the eyes to the mouth, where the
+     * skin lies within the head's outline. A front shows its skin in the middle of the head (hair round it on both
+     * sides); a three-quarter or side face shows its skin toward the side it looks to, the hair and the ear toward
+     * the other. -1 = looks to the picture's left, +1 = to its right, 0 = a front (or not known).
+     */
+    public static int facingOf(Cutout.Result r, Sprite s) {
+        float off = facingOffset(r, s);
+        return Float.isNaN(off) ? 0 : off < -0.075f ? -1 : off > 0.075f ? 1 : 0;
+    }
+
+    /** v40: the same from a cut-out's own face points. */
+    public static int facingOf(Cutout.Result r) {
+        if (r == null || !r.faceFound) return 0;
+        Sprite s = new Sprite();
+        s.faceKnown = true; s.eyeLX = r.eyeLX; s.eyeRX = r.eyeRX; s.eyeLY = s.eyeRY = r.eyeY; s.mouthY = r.mouthY;
+        return facingOf(r, s);
+    }
+
+    /** v40: how far the face's skin lies off the middle of the head (a share of the head's width; NaN = not known). */
+    public static float facingOffset(Cutout.Result r, Sprite s) {
+        if (r == null || r.px == null || s == null || !s.faceKnown || r.w < 20) return Float.NaN;
+        int w = r.w, h = r.h;
+        float d = Math.max(4, Math.abs(s.eyeRX - s.eyeLX) * w);
+        int y0 = Math.max(0, Math.round((s.eyeLY + s.eyeRY) / 2 * h - 0.2f * d)), y1 = Math.min(h - 1, Math.round(s.mouthY * h));
+        if (y1 - y0 < 3) return Float.NaN;
+        double skinX = 0, skinN = 0, offSum = 0; int rows = 0;
+        int seed = Math.round((s.eyeLX + s.eyeRX) / 2 * w);
+        for (int y = y0; y <= y1; y++) {
+            int row = y * w;
+            // the head's outline in this row: the opaque run around the face (a ponytail apart from the head is left out)
+            int a = Math.max(0, Math.min(w - 1, seed)), b = a;
+            if ((r.px[row + a] >>> 24) < 128) continue;
+            int gap = 0;
+            while (a > 0 && gap <= 2) { a--; if ((r.px[row + a] >>> 24) < 128) gap++; else gap = 0; }
+            gap = 0;
+            while (b < w - 1 && gap <= 2) { b++; if ((r.px[row + b] >>> 24) < 128) gap++; else gap = 0; }
+            if (b - a < d * 0.8f) continue;
+            double sx = 0, sn = 0;
+            for (int x = a; x <= b; x++) { int c = r.px[row + x]; if (Cutout.isSkin(c) || Cutout.faceSkin(c)) { sx += x; sn++; } }
+            if (sn < d * 0.3f) continue;
+            offSum += (sx / sn - (a + b) / 2.0) / (b - a);
+            skinX += sx; skinN += sn; rows++;
+        }
+        return rows < 3 ? Float.NaN : (float) (offSum / rows);
     }
 
     /**
@@ -1037,16 +1100,20 @@ public final class Art {
             boolean[] mf = framingOf(d, -1);
             boolean whole = mf != null ? !mf[0] && !mf[1] : d[1] >= d[0] * 1.35f;
             // v39: and a face — a back read as a front (no eyes, no mouth) never plays the film: the rig speaks with it
-            boolean face = true;
-            if (whole && (charLine.length < 11 || parseOr(charLine[3], 0) <= 0)) {
+            boolean face = true, turned = false;
+            if (whole) {
                 try {
                     int[] px = new int[d[0] * d[1]];
                     System.arraycopy(d, 2, px, 0, px.length);
                     Cutout.Result cr = Cutout.process(px, d[0], d[1]);
-                    face = cr.faceFound && Math.abs(Angles.guess(cr, false)) < 100;     // eyes found in the hair of a back are no face
+                    if (charLine.length < 11 || parseOr(charLine[3], 0) <= 0)
+                        face = cr.faceFound && Math.abs(Angles.guess(cr, false)) < 100;     // eyes found in the hair of a back are no face
+                    // v40: a three-quarter or side picture as the front: the rig turns a front picture to either side
+                    // through its mesh (and speaks with its whole mouth), so the user's own front plays instead
+                    turned = face && facingOf(cr) != 0;
                 } catch (RuntimeException e) { face = true; }
             }
-            if (whole && face) return null;           // not cut by the frame, not seated, with a face: a whole figure that can play
+            if (whole && face && !turned) return null;           // not cut by the frame, not seated, with a face: a whole figure that can play
             float mainAspect = (mf != null && (mf[0] || mf[1])) || !face ? 0 : d[1] / (float) Math.max(1, d[0]);
             String[] best = null;
             float bestScore = -1;
@@ -1056,6 +1123,7 @@ public final class Art {
                 // v39: a front (else a three-quarter), standing, with a face — a calm or happy one first, any other
                 // feeling but sorrow or anger if that is all there is (the rig gives it every feeling anyway)
                 if (Math.abs(angle) > 46 || (pose != PoseSense.STAND && pose != PoseSense.WAVE) || emo == PoseSense.NO_FACE || emo == PoseSense.SAD || emo == PoseSense.ANGRY || emo == PoseSense.ASLEEP) continue;
+                if (turned && (Math.abs(angle) >= 1 || pose != PoseSense.STAND)) continue;      // v40: for a turned front, only a standing front
                 float eyeY = (Float.parseFloat(p[11].trim()) + Float.parseFloat(p[13].trim())) / 2, mouthX = Float.parseFloat(p[7].trim());
                 // a child's head is a bigger part of the figure: the eyes up to a third of the way down
                 if (mouthX <= 0 || eyeY <= 0 || eyeY > 0.35f) continue;
@@ -1064,7 +1132,14 @@ public final class Art {
                 boolean[] pf = framingOf(pd, eyeY);
                 if (pf != null && (pf[0] || pf[1])) continue;                  // v39: a half-length or a seated picture is no standing front
                 float aspect = pd[1] / (float) Math.max(1, pd[0]);
-                if (aspect < Math.max(1.3f, mainAspect + 0.3f)) continue;       // clearly more of the figure than the front
+                if (turned) {
+                    // v40: a whole standing figure that really faces the camera (a three-quarter tagged "front" is not one)
+                    if (aspect < 1.8f) continue;
+                    int[] ppx = new int[pd[0] * pd[1]];
+                    System.arraycopy(pd, 2, ppx, 0, ppx.length);
+                    Cutout.Result pr = Cutout.process(ppx, pd[0], pd[1]);
+                    if (!pr.faceFound || facingOf(pr) != 0) continue;
+                } else if (aspect < Math.max(1.3f, mainAspect + 0.3f)) continue;       // clearly more of the figure than the front
                 float sc = aspect - 2 * eyeY + (emo == PoseSense.NEUTRAL ? 0.3f : emo == PoseSense.HAPPY ? 0.15f : -0.4f) + (pose == PoseSense.STAND ? 0.3f : 0)
                         + (Math.abs(angle) < 1 ? 1f : 0);                      // a front before a three-quarter
                 if (sc > bestScore) { bestScore = sc; best = p; }

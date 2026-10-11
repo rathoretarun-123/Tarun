@@ -37,6 +37,7 @@ import com.tarun.kahani.core.Renderer;
 import com.tarun.kahani.core.ScriptParser;
 import com.tarun.kahani.core.Story;
 import com.tarun.kahani.core.TechnicalDirector;
+import com.tarun.kahani.core.Txt;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -5810,6 +5811,111 @@ public class AppTest {
         keep.mkdirs();
         for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
         ac.pause().stop().destroy();
+    }
+
+    /**
+     * v41: twenty stories written the way the user asked scripts to be written — the characters, places and things listed
+     * at the start, every line of dialogue in double quotes — in twenty different layouts (numbered and bulleted lists,
+     * "Name: …" and "Name — …" lines, curly, low and doubled quotes, a line broken over two lines, screenplay form,
+     * English and Hindi headings). Each is read on the phone and must give exactly the cast, places, things, scenes and
+     * spoken lines of expected.tsv; then each is directed without a crash, every speaker of a line in the film.
+     */
+    @Test
+    public void v41TwentyStoriesInTheUsersFormatAreReadAndDirected() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/v41stories");
+        List<String> rows = Files.readAllLines(new File(dir, "expected.tsv").toPath(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals("twenty stories", 20, rows.size());
+        StringBuilder bad = new StringBuilder();
+        int lines = 0;
+        for (String row : rows) {
+            String[] f = row.split("\t");
+            String script = new String(Files.readAllBytes(new File(dir, f[0]).toPath()), "UTF-8");
+            Story st = ScriptParser.parse(script);
+            java.util.Set<String> cast = new java.util.HashSet<String>();
+            for (Story.CharacterDef c : st.cast()) cast.add(c.fullName);
+            if (!cast.equals(new java.util.HashSet<String>(java.util.Arrays.asList(f[1].split(","))))) bad.append(f[0]).append(" cast ").append(cast).append('\n');
+            if (st.places.size() != Integer.parseInt(f[2])) bad.append(f[0]).append(" places ").append(st.places.size()).append('\n');
+            if (st.things.size() != Integer.parseInt(f[3])) bad.append(f[0]).append(" things ").append(st.things.size()).append('\n');
+            if (st.scenes.size() != Integer.parseInt(f[4])) bad.append(f[0]).append(" scenes ").append(st.scenes.size()).append('\n');
+            List<String[]> got = new ArrayList<String[]>();
+            for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.type == Story.Beat.DIALOGUE)
+                got.add(new String[]{b.speaker == null ? "?" : b.speaker.fullName, b.text});
+            if (got.size() != f.length - 5) bad.append(f[0]).append(" lines ").append(got.size()).append(" of ").append(f.length - 5).append('\n');
+            for (int i = 5; i < f.length && i - 5 < got.size(); i++) {
+                String[] e = f[i].split("::", 2);
+                String[] g = got.get(i - 5);
+                String want = Txt.norm(e[1]).replaceAll("[\\s\"“”'.,!?।…]+", "");
+                if (!g[0].equals(e[0]) || !Txt.norm(g[1]).replaceAll("[\\s\"“”'.,!?।…]+", "").equals(want))
+                    bad.append(f[0]).append(" line ").append(i - 4).append(": ").append(g[0]).append(" \"").append(g[1]).append("\"\n");
+                lines++;
+            }
+            Director d = new Director(st, new Director.Options());
+            d.prepare();
+            Film film = d.direct(new Art());
+            assertTrue(f[0] + ": a film", film.duration > 5);
+            java.util.Set<String> speakers = new java.util.HashSet<String>();
+            for (Film.Seg sg : film.segs) for (Film.Actor ac : sg.actors) if (!ac.speaks.isEmpty() && ac.c != null) speakers.add(ac.c.fullName);
+            for (String[] g : got) if (!speakers.contains(g[0])) bad.append(f[0]).append(" ").append(g[0]).append(" never speaks in the film\n");
+        }
+        assertEquals("every story read right:\n" + bad, "", bad.toString());
+        assertTrue("the lines were compared: " + lines, lines >= 59);
+    }
+
+    /**
+     * v41: everyday words. 130 Hindi and 59 English directions of daily life (brushing, crying, smiling, scratching the
+     * head, touching the feet, pushing, hiding, falling, sneezing, singing, flying a kite, feeding the birds, opening
+     * the door, an umbrella, the stairs …), each in a little story of its own: every one must stage something for its
+     * character — an act, a move, a change of body or face, a held thing, a sound — beyond what a plain "looks at" gives.
+     */
+    @Test
+    public void v41EverydayWordsAllStageSomething() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        StringBuilder bad = new StringBuilder();
+        int n = 0;
+        for (String lang : new String[]{"hindi", "english"}) {
+            boolean en = lang.equals("english");
+            String base = vocabSig(en ? "Rahul looks at Mother." : "राहुल माँ की ओर देखता है।", en);
+            for (String line : Files.readAllLines(new File(root, "tools/testdata/v41vocab/" + lang + ".txt").toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                n++;
+                if (vocabSig(line, en).equals(base)) bad.append(line).append('\n');
+            }
+        }
+        assertEquals("directions that staged nothing:\n" + bad, "", bad.toString());
+        assertTrue("sentences tried: " + n, n >= 180);
+    }
+
+    /** What the director staged for a sentence in a two-character story (acts, body, place, face, hands, effects, sounds). */
+    static String vocabSig(String sentence, boolean en) {
+        String s = en
+                ? "Title: Check\n\nCharacters\n1. Rahul - 10, a boy\n2. Mother - 38, his mother\n\nPlaces\n1. The courtyard of the house\n\nScript begins\n\nScene 1: The courtyard - day\n\n[Rahul stands in the courtyard. Mother stands near him.]\n\nMother: \"Rahul!\"\n\n[" + sentence + "]\n\nRahul: \"Yes, mother.\"\n"
+                : "शीर्षक: जाँच\n\nपात्र परिचय\n1. राहुल - 10 साल, बेटा\n2. माँ - 38 साल, माँ\n\nजगह का परिचय\n1. घर का आँगन\n\nस्क्रिप्ट शुरू\n\nदृश्य 1: घर का आँगन - दिन\n\n[राहुल आँगन में खड़ा है। माँ पास में खड़ी है।]\n\nमाँ: \"राहुल!\"\n\n[" + sentence + "]\n\nराहुल: \"हाँ माँ।\"\n";
+        Director d = new Director(ScriptParser.parse(s), new Director.Options());
+        d.prepare();
+        Film f = d.direct(new Art());
+        StringBuilder b = new StringBuilder();
+        for (Film.Seg sg : f.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            for (Film.Actor ac : sg.actors) {
+                b.append(ac.c.fullName).append(':');
+                for (Film.Act a : ac.acts) b.append('A').append(a.type).append(',');
+                Film.Key prev = null;
+                for (Film.Key k : ac.keys) {
+                    if (prev == null || prev.body != k.body) b.append('B').append(k.body).append(',');
+                    if (prev == null || Math.abs(prev.x - k.x) > 20) b.append("X,");
+                    if (prev == null || prev.emotion != k.emotion) b.append('E').append(k.emotion).append(',');
+                    if (prev == null || prev.holdR != k.holdR || prev.holdL != k.holdL) b.append('H').append(k.holdR).append('/').append(k.holdL).append(',');
+                    if (prev == null || prev.visible != k.visible) b.append('V').append(k.visible).append(',');
+                    if (prev == null || prev.eyesShut != k.eyesShut || prev.tears != k.tears || prev.sweat != k.sweat) b.append("F,");
+                    prev = k;
+                }
+                b.append(';');
+            }
+            b.append("fx").append(sg.fx.size()).append(';');
+        }
+        return b.append("sfx").append(f.sfx.size()).toString();
     }
 
     static int posePictures(Film film, Art art) {

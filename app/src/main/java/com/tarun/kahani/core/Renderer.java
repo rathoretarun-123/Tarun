@@ -2316,7 +2316,8 @@ public final class Renderer {
                     mo.rot += (float) Math.sin(u * 6) * 8;
                     mo.dy -= bump(u * 6) * 12;
                     p.armL = 140 + s * 20; p.armR = 140 - s * 20;
-                    p.emotion = Pose.EVIL;
+                    // v41: a villain's dance is a wicked grin; anyone else dances happily
+                    p.emotion = a.look != null && !a.look.hero ? Pose.EVIL : Pose.HAPPY;
                     break;
                 case Film.G_PAT:
                     p.armR = 110; p.elbowR = 40 + s * 15;

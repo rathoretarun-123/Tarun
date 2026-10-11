@@ -10,6 +10,12 @@ import java.util.*;
  * cuts or wild zooms, segments in order. SoakCheck storyDir famProj rahulProj menProj
  */
 public class SoakCheck {
+    static boolean together(Film.Actor a, Film.Actor b, float t) {
+        for (Film.Actor x : new Film.Actor[]{a, b}) for (Film.Act ac : x.acts)
+            if ((ac.type == Film.G_HUG || ac.type == Film.G_HOLD_HAND || ac.type == Film.G_RIDE || ac.type == Film.G_KISS || ac.type == Film.G_PLAYGROUND || ac.type == Film.G_GIVE)
+                    && t >= ac.t0 - 1.0f && t <= ac.t1 + 1.0f) return true;
+        return false;
+    }
     static boolean playing(Film.Actor a, float t) { for (Film.Act x : a.acts) if (x.type == Film.G_PLAYGROUND && t >= x.t0 - 0.3f && t <= x.t1 + 0.3f) return true; return false; }
     static boolean bad(float f) { return Float.isNaN(f) || Float.isInfinite(f); }
     static int scored, shotsTotal, over6, overMotion, multi, stillWrong, corrected, reactions, povs, loud, estabHeld, estabTotal, longest, longShots;
@@ -104,6 +110,22 @@ public class SoakCheck {
                         if (prev != null && c.ease == 0 && c.t - prev.t < 0.25f && c.t - prev.t > 1e-3f && Math.abs(c.zoom - prev.zoom) + Math.abs(c.cx - prev.cx) / 200 > 0.15f) {
                             issues.merge("flash cut", 1, Integer::sum); if (notes.size() < 6) notes.add(String.format(Locale.US, "flash cut %.2f→%.2f", prev.t, c.t)); }
                         prev = c;
+                    }
+                }
+                // two people standing almost on top of each other (not hugging, holding hands, riding together) for a while
+                for (Film.Seg sg : film.segs) {
+                    for (int p = 0; p < sg.actors.size(); p++) for (int q = p + 1; q < sg.actors.size(); q++) {
+                        Film.Actor A = sg.actors.get(p), B = sg.actors.get(q);
+                        if (A.look == null || B.look == null || !A.look.isHumanoid() || !B.look.isHumanoid()) continue;
+                        float run = 0;
+                        for (float tt = sg.t0 + 0.25f; tt < sg.t1; tt += 0.25f) {
+                            Film.Key ka = A.stateAt(tt), kb = B.stateAt(tt);
+                            boolean close = ka.visible && kb.visible && ka.anchor == Film.A_GROUND && kb.anchor == Film.A_GROUND
+                                    && Math.abs(Director.xAt(A, tt) - Director.xAt(B, tt)) < 45 && !together(A, B, tt)
+                                    && Math.abs(ka.depth - kb.depth) < 0.2f && Math.abs(Director.liftAt(A, tt) - Director.liftAt(B, tt)) < 20;
+                            run = close ? run + 0.25f : 0;
+                            if (run >= 1.5f) { issues.merge("stand on each other", 1, Integer::sum); if (notes.size() < 6) notes.add(String.format(Locale.US, "%s+%s t=%.1f", A.c.fullName, B.c.fullName, tt)); break; }
+                        }
                     }
                 }
                 for (Film.Line l : film.lines) {

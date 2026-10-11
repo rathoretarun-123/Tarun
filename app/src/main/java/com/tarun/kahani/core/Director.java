@@ -907,6 +907,76 @@ public final class Director {
 
     /** Time for "state" facts (sitting, caged, hiding): the start of the part when it is the opening description. */
     private float ts(float t) { return estab ? seg.t0 : t; }
+    /**
+     * v41 (blocking): two people never stand inside each other. After a beat, where two are left standing on the
+     * same spot once they have arrived (out of a car, after a walk to the same place) — not in a hug, hand in hand,
+     * riding or playing together — the one who came last steps aside to free ground (sitting and lying people are
+     * left where they are).
+     */
+    private void unstack(float tc) {
+        for (int p = 0; p < seg.actors.size(); p++) for (int q = p + 1; q < seg.actors.size(); q++) {
+            Film.Actor A = seg.actors.get(p), B = seg.actors.get(q);
+            if (A.look == null || B.look == null || !A.look.isHumanoid() || !B.look.isHumanoid() || A.c.voiceOnly || B.c.voiceOnly) continue;
+            float t = Math.max(tc, Math.max(arrivalAfter(A, tc), arrivalAfter(B, tc)));
+            Film.Key ka = A.stateAt(t), kb = B.stateAt(t);
+            if (!ka.visible || !kb.visible || ka.anchor != Film.A_GROUND || kb.anchor != Film.A_GROUND) continue;
+            float xa = xAt(A, t), xb = xAt(B, t);
+            if (Math.abs(xa - xb) >= 60 || xa < -40 || xa > 1320) continue;
+            if (closeOnPurpose(A, t) || closeOnPurpose(B, t)) continue;
+            // who steps aside: one standing (the later of the two in the cast unless only the other stands)
+            Film.Actor m = kb.body == Pose.STAND ? B : ka.body == Pose.STAND ? A : null;
+            if (m == null) continue;
+            Film.Actor o = m == B ? A : B;
+            float mx = xAt(m, t), ox = xAt(o, t);
+            float dir = mx > ox ? 1 : mx < ox ? -1 : (mx < 640 ? 1 : -1);
+            float h = heightOf(m), step = Math.max(110, h * 0.42f);
+            float to = mx + dir * step;
+            if (to < 140 || to > 1140) { dir = -dir; to = mx + dir * step; }
+            // the new spot must be free too (of where the others stand or are going)
+            for (int tries = 0; tries < 6; tries++) {
+                boolean taken = false;
+                for (Film.Actor x : seg.actors) if (x != m && x.stateAt(t).visible && (Math.abs(xAt(x, t) - to) < 70 || Math.abs(x.stateAt(t + 3f).x - to) < 70)) taken = true;
+                if (!taken) break;
+                to += dir * 80;
+                if (to < 120 || to > 1160) { dir = -dir; to = mx + dir * step; }
+            }
+            to = Math.max(120, Math.min(1160, to));
+            Film.Key k = m.at(t + 0.15f);
+            k.x = to; k.moveDur = Math.max(0.5f, Math.min(1.1f, Math.abs(to - mx) / 220f)); k.facing = dir; k.run = false;
+            Film.Key back = m.at(t + 0.15f + k.moveDur + 0.05f);
+            back.facing = ox > to ? 1 : -1;
+            unstacked++;
+        }
+        for (Film.Actor a : seg.actors) orderKeys(a);
+    }
+    int unstacked;
+    private int backAtEdge;
+
+    /** v41: the x nearest to want (170..1110) with at least gap clear of everyone visible at t but those in except. */
+    private float freeNear(float want, float t, List<Film.Actor> except, float gap0) {
+        // a crowded stage: a narrower gap next
+        for (float gap : new float[]{gap0, gap0 * 0.6f})
+        for (int k = 0; k <= 16; k++) {
+            float cand = want + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * 60f;
+            if (cand < 170 || cand > 1110) continue;
+            boolean ok = true;
+            for (Film.Actor o : seg.actors) {
+                if (except.contains(o) || !o.stateAt(t).visible || o.look == null || !o.look.isHumanoid()) continue;
+                if (Math.abs(xAt(o, t) - cand) < gap || Math.abs(o.stateAt(t + 3f).x - cand) < gap) { ok = false; break; }
+            }
+            if (ok) return cand;
+        }
+        return want;
+    }
+
+    /** v41: close to someone on purpose at t: a hug, a held hand, a ride, a gift, a kiss, the swing or the slide. */
+    private static boolean closeOnPurpose(Film.Actor a, float t) {
+        for (Film.Act x : a.acts)
+            if ((x.type == Film.G_HUG || x.type == Film.G_HOLD_HAND || x.type == Film.G_RIDE || x.type == Film.G_KISS || x.type == Film.G_PLAYGROUND
+                    || x.type == Film.G_GIVE) && t >= x.t0 - 0.5f && t <= x.t1 + 0.5f) return true;
+        return false;
+    }
+
     /** v41: when a walk under way at t (or set off within half a second of it) ends; t when none is. */
     static float arrivalAfter(Film.Actor a, float t) {
         float end = t;
@@ -1197,6 +1267,7 @@ public final class Director {
             if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
             for (Film.Actor a : seg.actors) orderKeys(a);
+            unstack(tc);
             for (Object[] ch : changed) {
                 // v37: from behind the screen: the reveal waits until they have stepped out
                 for (Film.Act sa : ((Film.Actor) ch[0]).acts) if (sa.type == Film.G_SCREEN && sa.t1 > tc) tc = sa.t1 + 0.05f;
@@ -4321,6 +4392,7 @@ public final class Director {
         boolean slow = Txt.has(s, "slowly", "sadly", "धीरे", "उदास");
         boolean turning = Txt.has(s, TURN_AWAY);
         float d = 0;
+        backAtEdge = 0;
         for (Film.Actor a : who) {
             // v40: a key this sentence already gave them (a look, a feeling) a moment after it starts: they set off
             // just after it, in time order (they were left standing: "वृंदा और वनुशा … बाहर जाती हैं" took only one)
@@ -4423,6 +4495,8 @@ public final class Director {
                 // v39: a group leaves together, by one side (the side most of them stand nearer)
                 float side = all || joint ? groupSide(who, ta) : x;
                 float edge = side < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
+                // v41: those who stay near the edge (they speak again later) stand side by side there, not on one spot
+                if (back) { edge += (side < 640 ? 1 : -1) * 115 * backAtEdge; backAtEdge++; }
                 float start = Math.max(walkFrom, ta + (turning ? 0.7f : 0.25f));           // a turned back reads for a moment before the walk
                 float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(edge - x) / ((blind ? 120f : run ? 245f : slow ? 150f : 200f) * weightSpeed(a))));
                 // a still frame they walk out of (the camera does not chase them off the stage)
@@ -5658,6 +5732,8 @@ public final class Director {
             float dir = away ? (x0 < 640 ? -1 : 1) : (x0 < 640 ? 1 : -1);
             float to = away ? (dir > 0 ? 1560 : -280) : Math.max(170, Math.min(1110, 1280 - x0));
             if (!away && Math.abs(to - x0) < 260) to = Math.max(170, Math.min(1110, x0 + dir * 420));
+            // v41: it stops on free ground, not on someone standing there
+            if (!away) to = freeNear(to, t, riders, 140);
             float dur = Math.max(2.2f, Math.min(5.5f, Math.abs(to - x0) / speed));
             for (int i = 0; i < riders.size(); i++) {
                 Film.Actor a = riders.get(i);
@@ -5689,6 +5765,15 @@ public final class Director {
                     rides++;
                 }
                 d = Math.max(d, t0 + lag + dur - t + 0.3f);
+                // v41: a car (a scooter, an auto) that stops here lets them out side by side, not one on top of another
+                if (!away && riders.size() > 1 && v != Film.V_BICYCLE) {
+                    float out = t0 + lag + dur + 0.85f;
+                    float spot = Math.max(150, Math.min(1130, to + (i - (riders.size() - 1) / 2f) * 115));
+                    Film.Key ko = keyAt(a, out);
+                    ko.x = spot; ko.moveDur = 0.6f; ko.facing = spot >= to ? 1 : -1; ko.run = false; ko.body = Pose.STAND;
+                    spread(a, ko);
+                    d = Math.max(d, out + 0.6f - t);
+                }
             }
             frameAround(t + 0.2f, x0, away ? (dir > 0 ? 1180 : 100) : to);
             rode = true;
@@ -5951,12 +6036,19 @@ public final class Director {
         return b.toString();
     }
 
+    /** v41: a rainbow needs the sun behind the watcher: by day or in the evening light, never in a night sky. */
+    private void rainbow(float t) {
+        if (seg != null && seg.tod == Sets.NIGHT) { if (!nightRainbowNoted) film.notes.add("  ↳ no rainbow at night (it needs the sun)"); nightRainbowNoted = true; return; }
+        open(Film.W_RAINBOW, t, 1f);
+    }
+    private boolean nightRainbowNoted;
+
     /** Scenery named in a line of dialogue: it is there to be seen (no weather starts from talk). */
     private void sceneryFrom(String s, float t) {
         if (s == null) return;
         if (boatIn(s)) { open(Film.W_BOAT, t, 1f); if (wOpen[Film.W_SEA] < 0 && !Txt.has(s, "नदी", "river", "तालाब", "lake", "झील")) open(Film.W_SEA, t, 0.6f); }
         if (Txt.has(s, SEA) && !Txt.has(s, "जाएँगे", "जाएंगे", "चलेंगे", "will go", "let's go")) open(Film.W_SEA, t, 0.8f);
-        if (Txt.has(s, RAINBOW)) open(Film.W_RAINBOW, t, 1f);
+        if (Txt.has(s, RAINBOW)) rainbow(t);
         if (Txt.has(s, BIRDS_FLY)) open(Film.W_BIRDS, t, 1f);
         if (Txt.has(s, FIREFLY)) open(Film.W_FIREFLIES, t, 1f);
         if (Txt.has(s, STARS) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) open(Film.W_STARS, t, 1f);
@@ -5998,8 +6090,9 @@ public final class Director {
             open(Film.W_FIRE, t, 1f);
         }
         if (Txt.has(s, FIREFLY)) open(Film.W_FIREFLIES, t, 1f);
-        if (Txt.has(s, STARS)) open(Film.W_STARS, t, 1f);
-        if (Txt.has(s, RAINBOW)) open(Film.W_RAINBOW, t, 1f);
+        // v41: nature as it is — stars in a dark sky only, a rainbow only with the sun up (not at night)
+        if (Txt.has(s, STARS) && (seg == null || seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) open(Film.W_STARS, t, 1f);
+        if (Txt.has(s, RAINBOW)) rainbow(t);
         if (Txt.has(s, LEAVES)) open(Film.W_LEAVES, t, 1f);
         if (Txt.has(s, PETALS)) {
             if (place) open(Film.W_PETALS, t, 1f);

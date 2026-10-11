@@ -437,8 +437,14 @@ public final class Director {
                     // v41: never a cut-in in the middle of a jump (a puddle's splash at the feet): after it lands, or none
                     float tk = times.get(k - 1);
                     if (tight) {
+                        // v42: ... or before it takes off, when waiting for the landing would hold the shot past the
+                        // cap (an opening wide still keeps its whole hold)
+                        float prev = k >= 2 ? times.get(k - 2) : c.t, least = k == 1 && open ? ESTAB_HOLD : 0.8f;
                         for (Film.Actor a : sg.actors) for (Film.Act x : a.acts)
-                            if (x.type == Film.G_JUMP && tk > x.t0 - 0.2f && tk < x.t1 + 0.6f && a.stateAt(tk).visible) tk = x.t1 + 0.6f;
+                            if (x.type == Film.G_JUMP && tk > x.t0 - 0.2f && tk < x.t1 + 0.6f && a.stateAt(tk).visible) {
+                                float before = x.t0 - 0.25f;
+                                tk = x.t1 + 0.6f - prev > TechnicalDirector.MAX_SHOT_SECONDS - 0.05f && before - prev >= least ? before : x.t1 + 0.6f;
+                            }
                         if (tk > next - 0.6f) continue;
                     }
                     // the second framing of a long hold: closer for a wider shot; for a close-up a touch wider (a
@@ -1430,6 +1436,11 @@ public final class Director {
         off.x = startX;
         off.facing = fromRight ? -1 : 1;
         if (far) { dest = fromRight ? 1180 : 100; off.depth = 1; }
+        // v42: to free ground — the place they began the scene on may be taken by now (समीर came in onto अर्जुन)
+        else {
+            java.util.List<Film.Actor> self = java.util.Collections.singletonList(a);
+            if (!freeAt(dest, tc, self, 84)) dest = freeNear(dest, tc, self, 140);
+        }
         boolean run = Txt.has(sentence, "दौड़", "छलाँग", "run", "jump");
         if (Txt.has(sentence, "उल्टा लटक", "डाल", "पेड़ से") && a.look.kind == Look.MONKEY) {
             Film.Key k = a.at(tc);
@@ -4063,6 +4074,8 @@ public final class Director {
             seg.cams.get(seg.cams.size() - 1).reverse = true;
             p = shot(pt, ShotPlanner.MEDIUM, ShotPlanner.POV, 0, ShotPlanner.STATIC, target, subj, ShotPlanner.DEVELOP);
             p.purpose = "Point of view: what " + subj.c.shown() + " sees — " + target.c.shown();
+            // v42: looking down on them from above (a roof, a balcony): seen from above, in their picture from above
+            p.above = Txt.has(s, LOOK_DOWN);
             p.action = target.c.shown() + " as " + subj.c.shown() + " sees them, from where " + subj.c.shown() + " stands";
             p.face = faceOf(kt.emotion);
             p.body = bodyOf(kt.emotion, target.look);
@@ -4319,10 +4332,13 @@ public final class Director {
                     while (way / (free * 0.7f) < 0.3f && (way + 2 * Math.PI) / (free * 0.7f) <= 0.85f) way += 2 * Math.PI;
                     int n = Math.max(1, Math.round(free / 4.5f));
                     float pause = n > 1 ? Math.min(1.4f, free * 0.3f / (n - 1)) : 0, walkT = (free - pause * (n - 1)) / n;
+                    float carry = 0;
                     for (int i = 0; i < n; i++) {
-                        float to = th + dir * way / n;
-                        walkArc(a, t, t + walkT, th, to); th = to; t += walkT;
-                        if (i < n - 1) { hold(a, t, t + pause, th); t += pause; }
+                        float to = th + dir * way / n, wt = walkT + carry;
+                        carry = 0;
+                        walkArc(a, t, t + wt, th, to); th = to; t += wt;
+                        // v42: (no pause on top of someone: the walk takes that time instead)
+                        if (i < n - 1) { if (crowded(a, th, t)) carry = pause; else { hold(a, t, t + pause, th); t += pause; } }
                     }
                     t = limit;
                 }
@@ -4333,10 +4349,12 @@ public final class Director {
                     float to = th + dir * w * d;
                     if (!Float.isNaN(aim) && d >= limit - t - 1e-3f) to = aim;               // the last stretch arrives behind
                     else if (!Float.isNaN(aim) && (aim - to) * dir < 0) to = aim;
+                    // v42: never a standstill on top of someone (the seated man beside the fire): walk on past them
+                    if (Math.abs(to - th) <= 0.05f && crowded(a, th, t)) to = th + dir * 0.3f * d;
                     if (Math.abs(to - th) > 0.05f) { walkArc(a, t, t + d, th, to); th = to; }
                     else hold(a, t, t + d, th);
                     t += d;
-                    if (limit - t > 1.4f && rnd.nextFloat() < 0.75f) { float p = Math.min(limit - t, 0.7f + rnd.nextFloat() * 1.5f); hold(a, t, t + p, th); t += p; }
+                    if (limit - t > 1.4f && rnd.nextFloat() < 0.75f && !crowded(a, th, t)) { float p = Math.min(limit - t, 0.7f + rnd.nextFloat() * 1.5f); hold(a, t, t + p, th); t += p; }
                 }
                 if (t < limit) { hold(a, t, limit, th); t = limit; }
                 if (e == null) break;
@@ -4349,6 +4367,11 @@ public final class Director {
                     walkArc(a, t, t + d, th, to); th = to; t += d;
                     float p = Math.min(1.5f, Math.max(0, tEnd - t)); hold(a, t, t + p, th); t += p;
                 } else if (type == PACE_STOP) {
+                    // (a stop the line asks for, a step or two on when it would come on top of someone)
+                    for (int k = 0; k < 4 && len > 1.2f && crowded(a, th, t); k++) {
+                        float to = th + dir * 0.35f;
+                        walkArc(a, t, t + 0.7f, th, to); th = to; t += 0.7f; len -= 0.7f;
+                    }
                     hold(a, t, t + len, th); t += len;
                 } else if (type == PACE_WALK || type == PACE_REVERSE) {
                     float d = len, to = th + dir * 0.55f * d;
@@ -4373,6 +4396,16 @@ public final class Director {
         }
         // the seated keep their seats to the end of the part
         if (seg != null) for (Film.Actor a : seg.actors) for (Film.Track r : a.track) if (r.t1 > 1e5f) r.t1 = tEnd + 2f;
+    }
+
+    /** v42: the place on the ring at th is taken at t — someone (a seated man beside the fire) is there, at about its depth. */
+    private boolean crowded(Film.Actor a, float th, float t) {
+        float x = fireCx + fireRw * (float) Math.cos(th), lift = fireCy - fireRy * (float) Math.sin(th);
+        for (Film.Actor o : seg.actors) {
+            if (o == a || !o.stateAt(t).visible || o.stateAt(t).anchor != Film.A_GROUND) continue;
+            if (Math.abs(xAt(o, t) - x) < 70 && Math.abs(liftAt(o, t) - lift) < 30) return true;
+        }
+        return false;
     }
 
     private void walkArc(Film.Actor a, float t0, float t1, float th0, float th1) {
@@ -4432,6 +4465,9 @@ public final class Director {
             "सरसराती हवा", "wind", "breeze", "gust", "windy", "hawa chal"};
     static final String[] WIND_STRONG = {"तेज़ हवा", "तेज हवा", "ज़ोर की हवा", "जोर की हवा", "झोंक", "strong wind", "gust", "howling", "fierce wind"};
     static final String[] WIND_SOFT = {"हल्की हवा", "ठंडी हवा", "मंद हवा", "breeze", "gentle wind", "soft wind"};
+    /** v42: looking down on someone from above. */
+    static final String[] LOOK_DOWN = {"नीचे देख", "नीचे झाँक", "नीचे झांक", "ऊपर से देख", "ऊपर से झाँक", "छत से देख", "छत से झाँक", "बालकनी से देख", "बालकनी से झाँक",
+            "looks down", "look down", "looked down", "looking down", "peers down", "from the balcony", "from the roof", "from the rooftop"};
     static final String[] WIND_STOP = {"हवा रुक", "हवा थम", "wind stopped", "wind died", "wind dropped"};
     static final String[] THUNDER = {"बिजली कड़क", "बिजली चमक", "बिजली गिर", "बादल गरज", "गड़गड़ाहट", "कड़कड़ाहट", "thunder", "lightning", "bijli"};
     static final String[] SNOW = {"बर्फ़ गिर", "बर्फ गिर", "बर्फबारी", "बर्फ़बारी", "हिमपात", "snow"};
@@ -6116,8 +6152,9 @@ public final class Director {
                 float gap = 0.8f * (heightOf(a) + heightOf(o));
                 float xa = Math.max(240, Math.min(1040 - gap * 0.5f, xAt(a, t))), xo = xa + gap;
                 if (xo > 1180) { xo = 1180; xa = xo - gap; }
-                Film.Key ka = a.at(t + 0.1f); ka.x = xa; ka.moveDur = 0.7f; ka.facing = 1;
-                Film.Key ko = o.at(t + 0.1f); ko.x = xo; ko.moveDur = 0.7f; ko.facing = -1;
+                // (v42: they walk to it standing — "दोनों सी-सॉ पर बैठते हैं" had seated them first, and they slid there seated)
+                Film.Key ka = a.at(t + 0.1f); ka.x = xa; ka.moveDur = 0.7f; ka.facing = 1; ka.body = Pose.STAND; ka.seat = -1;
+                Film.Key ko = o.at(t + 0.1f); ko.x = xo; ko.moveDur = 0.7f; ko.facing = -1; ko.body = Pose.STAND; ko.seat = -1;
                 Film.Act sa = new Film.Act(t0, t0 + dur, Film.G_PLAYGROUND); sa.item = Film.PG_SEESAW; sa.target = o; a.acts.add(sa);
                 Film.Act so = new Film.Act(t0, t0 + dur, Film.G_PLAYGROUND); so.item = -Film.PG_SEESAW; so.target = a; o.acts.add(so);
                 film.sfx.add(sfxAt(Film.SFX_CREAK, t0, dur, 0.22f, a));

@@ -1,6 +1,8 @@
 package com.tarun.kahani;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
@@ -5591,6 +5593,16 @@ public class AppTest {
         assertTrue("कबीर walks round the fire, again and again: " + orbits, orbits >= 4);
         assertTrue("कबीर sits on the empty log and gets up again: " + kSits + "/" + kStands, kSits >= 1 && kStands >= 1);
         assertEquals("the last key of कबीर stands", com.tarun.kahani.core.Pose.STAND, ka.last().body);
+        // v42: his sudden stops come on open ground — never standing still on a seated man for a second and a half
+        for (Film.Actor o : new Film.Actor[]{aa, sa}) {
+            float run = 0;
+            for (float t = seg.t0 + 0.25f; t < seg.t1; t += 0.25f) {
+                boolean on = Math.abs(Director.xAt(ka, t) - Director.xAt(o, t)) < 45 && Math.abs(Director.liftAt(ka, t) - Director.liftAt(o, t)) < 20
+                        && Math.abs(Director.xAt(ka, t) - Director.xAt(ka, t - 0.25f)) < 3;
+                run = on ? run + 0.25f : 0;
+                assertTrue("कबीर stands still on " + o.c.fullName + " at " + t, run < 1.5f);
+            }
+        }
         assertEquals(0, posePictures(film, art));
         ac.pause().stop().destroy();
     }
@@ -5793,6 +5805,35 @@ public class AppTest {
                         v.h / (float) v.w >= 0.7f * sp.h / sp.w);
             }
         }
+        // v42: प्रिया's front holds the tray of tea: her arms keep their place (no swing bends the tray) and no turned
+        // picture without the tray stands in for her while she listens; तरुण's and वृंदा's hands hang free. Every view's
+        // shoulders are where the front has them (before, a back picture's were read at the ears)
+        Story.CharacterDef priya = null;
+        for (Story.CharacterDef x : st.cast()) if (x.fullName.equals("प्रिया")) priya = x;
+        Art.Sprite psp = art.sprites.get(priya.id);
+        assertTrue("प्रिया's front holds the tray", psp.holds && psp.rig != null && psp.rig.armsFixed);
+        assertTrue("no three-quarter picture without the tray stands in for her", psp.view(0) == null || !psp.view(0).userQuarter);
+        for (Story.CharacterDef c : st.cast()) {
+            Art.Sprite sp = art.sprites.get(c.id);
+            if (c.fullName.equals("तरुण") || c.fullName.equals("वृंदा")) assertFalse(c.fullName + "'s hands hang free", sp.holds);
+            if (sp.rig == null || sp.rig.armsFixed || sp.rig.bottom - sp.rig.top < 0.3f) continue;
+            for (int i = 0; i < 3; i++) {
+                Art.Sprite v = sp.view(i);
+                if (v == null || v.rig == null || v.faceKnown || v.rig.still) continue;
+                float want = v.rig.top + (sp.rig.shoulderY - sp.rig.top) * (v.rig.bottom - v.rig.top) / (sp.rig.bottom - sp.rig.top);
+                assertTrue(c.fullName + " view " + i + ": shoulders at " + v.rig.shoulderY + ", the front's at " + want, Math.abs(v.rig.shoulderY - want) <= 0.061f);
+            }
+        }
+        // v42: a picture the user marks as seen from above (270) is the character's top view — a still picture for the
+        // shots that look down on them, never a front or a turned view
+        String poseLine = null;
+        for (String l : cast.split("\n")) { String[] f = l.split("\\|", -1); if (f.length >= 6 && f[0].equals("pose") && ScriptParser.resolve(st, f[1]) == priya) { poseLine = l; break; } }
+        assertNotNull("प्रिया has pose pictures", poseLine);
+        String[] tf2 = poseLine.split("\\|", -1);
+        tf2[3] = "270";
+        Art art2 = Art.fromManifest(cast + "\n" + String.join("|", tf2) + "\n", st, p.loader());
+        assertNotNull("प्रिया's top view", art2.sprites.get(priya.id).top);
+        for (Story.CharacterDef c : st.cast()) if (c != priya) assertNull(c.fullName + " has no top view", art2.sprites.get(c.id).top);
         Director d = new Director(st, new Director.Options());
         d.prepare();
         Film film = d.direct(art);
@@ -5871,6 +5912,108 @@ public class AppTest {
         keep.mkdirs();
         for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
         ac.pause().stop().destroy();
+    }
+
+    /**
+     * v42: twenty-five more stories in the user's format (lists first, dialogue in double quotes) — rain, a kite, a
+     * see-saw, a fire, a bus stop, a birthday, Hinglish lines, "शीर्षक | …" headings, "# title", bare "स्थान" and
+     * "आरंभ" — each read exactly as expected.tsv says (cast, places, things, scenes, every spoken line) and directed.
+     */
+    @Test
+    public void v42TwentyFiveMoreStoriesAreReadAndDirected() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/v42stories");
+        List<String> rows = Files.readAllLines(new File(dir, "expected.tsv").toPath(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals("twenty-five stories", 25, rows.size());
+        StringBuilder bad = new StringBuilder();
+        int lines = 0;
+        for (String row : rows) {
+            String[] f = row.split("\t");
+            Story st = ScriptParser.parse(new String(Files.readAllBytes(new File(dir, f[0]).toPath()), "UTF-8"));
+            java.util.Set<String> cast = new java.util.HashSet<String>();
+            for (Story.CharacterDef c : st.cast()) cast.add(c.fullName);
+            if (!cast.equals(new java.util.HashSet<String>(java.util.Arrays.asList(f[1].split(","))))) bad.append(f[0]).append(" cast ").append(cast).append('\n');
+            if (st.places.size() != Integer.parseInt(f[2])) bad.append(f[0]).append(" places ").append(st.places.size()).append('\n');
+            if (st.things.size() != Integer.parseInt(f[3])) bad.append(f[0]).append(" things ").append(st.things.size()).append('\n');
+            if (st.scenes.size() != Integer.parseInt(f[4])) bad.append(f[0]).append(" scenes ").append(st.scenes.size()).append('\n');
+            List<String[]> got = new ArrayList<String[]>();
+            for (Story.Scene sc : st.scenes) for (Story.Beat b : sc.beats) if (b.type == Story.Beat.DIALOGUE)
+                got.add(new String[]{b.speaker == null ? "?" : b.speaker.fullName, b.text});
+            if (got.size() != f.length - 5) bad.append(f[0]).append(" lines ").append(got.size()).append(" of ").append(f.length - 5).append('\n');
+            for (int i = 5; i < f.length && i - 5 < got.size(); i++) {
+                String[] e = f[i].split("::", 2);
+                String[] g = got.get(i - 5);
+                String want = Txt.norm(e[1]).replaceAll("[\\s\"“”'.,!?।…]+", "");
+                if (!g[0].equals(e[0]) || !Txt.norm(g[1]).replaceAll("[\\s\"“”'.,!?।…]+", "").equals(want))
+                    bad.append(f[0]).append(" line ").append(i - 4).append(": ").append(g[0]).append(" \"").append(g[1]).append("\"\n");
+                lines++;
+            }
+            Director d = new Director(st, new Director.Options());
+            d.prepare();
+            Film film = d.direct(new Art());
+            assertTrue(f[0] + ": a film", film.duration > 5);
+            for (Film.Shot sh : film.shots) assertTrue(f[0] + ": a shot of " + sh.dur + " s at " + sh.t, sh.dur <= com.tarun.kahani.core.TechnicalDirector.MAX_SHOT_SECONDS + 0.05f);
+        }
+        assertEquals("every story read right:\n" + bad, "", bad.toString());
+        assertTrue("the lines were compared: " + lines, lines >= 144);
+    }
+
+    /**
+     * v42: the picture selector measured on the phone: every figure of the user's character sheets (177, labelled by
+     * eye in tools/testdata/labels/figures.tsv) cut as an upload cuts it and its angle read as the upload reads it. On
+     * the desktop 148 of 177 read right (67 of the 71 whole standing figures); before v42, 140 (61 of 71). And the
+     * mouth point of the fronts that had it on the collar (two boys, a bearded man, a laughing toddler) sits on the lips.
+     */
+    @Test
+    public void v42AnglesAndMouthsOfTheUsersLabelledFigures() throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File td = new File(root, "tools/testdata");
+        java.util.Map<String, String[]> lab = new java.util.LinkedHashMap<String, String[]>();
+        for (String l : Files.readAllLines(new File(td, "labels/figures.tsv").toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+            if (l.startsWith("#") || l.trim().isEmpty()) continue;
+            String[] f = l.split("\t");
+            lab.put(f[0], new String[]{f[1], f[2]});
+        }
+        java.util.Set<String> sheets = new java.util.LinkedHashSet<String>();
+        for (String k : lab.keySet()) sheets.add(k.substring(0, k.indexOf('#')));
+        java.util.Map<String, Float> mouthBelow = new java.util.HashMap<String, Float>();
+        String[] collar = {"sheets40/05_boy_turnaround_a.jpg#0", "sheets40/06_boy_turnaround_b.jpg#0", "sheets38/22_papa_beard_b.png#4", "sheets38/29_pari_toddler_b.png#1"};
+        int ok = 0, n = 0, wholeOk = 0, wholeN = 0;
+        for (String sh : sheets) {
+            Bitmap b = android.graphics.BitmapFactory.decodeFile(new File(td, sh).getAbsolutePath());
+            float sc = Math.min(1f, 3000f / Math.max(b.getWidth(), b.getHeight()));
+            if (sc < 1) b = Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * sc), Math.round(b.getHeight() * sc), true);
+            int w = b.getWidth(), h = b.getHeight();
+            int[] px = new int[w * h];
+            b.getPixels(px, 0, w, 0, 0, w, h);
+            List<com.tarun.kahani.core.Angles.Piece> ps = com.tarun.kahani.core.Angles.figures(com.tarun.kahani.core.Angles.split(px, w, h), w, h, false);
+            for (int k = 0; k < ps.size(); k++) {
+                String[] want = lab.get(sh + "#" + k);
+                if (want == null) continue;
+                com.tarun.kahani.core.Angles.Piece pc = ps.get(k);
+                com.tarun.kahani.core.Cutout.Result r = com.tarun.kahani.core.Cutout.process(pc.px, pc.w, pc.h, false);
+                float a = Math.abs(com.tarun.kahani.core.PoseSense.tag(r, 0, false).angle);
+                String got = a < 1 ? "F" : Math.abs(a - 45) < 1 ? "Q" : Math.abs(a - 90) < 1 ? "S" : Math.abs(a - 180) < 1 ? "B" : "T";
+                boolean right = java.util.Arrays.asList(want[0].split("/")).contains(got);
+                n++; if (right) ok++;
+                if (want[1].equals("W") || want[1].equals("K")) { wholeN++; if (right) wholeOk++; }
+                if (java.util.Arrays.asList(collar).contains(sh + "#" + k) && r.faceFound) {
+                    Art.Sprite sp = new Art.Sprite();
+                    sp.faceKnown = true; sp.mouthX = r.mouthX; sp.mouthY = r.mouthY; sp.mouthHW = r.mouthW / 2;
+                    sp.eyeLX = r.eyeLX; sp.eyeRX = r.eyeRX; sp.eyeLY = sp.eyeRY = r.eyeY; sp.skin = r.skin;
+                    Art.mouthFromPicture(r, sp);
+                    mouthBelow.put(sh + "#" + k, (sp.mouthY - r.eyeY) * r.h / Math.max(1f, Math.abs(r.eyeRX - r.eyeLX) * r.w));
+                }
+            }
+        }
+        System.out.println("V42 ANGLES: " + ok + " of " + n + " right, whole standing " + wholeOk + " of " + wholeN + "; mouths below the eyes (eye distances): " + mouthBelow);
+        assertEquals("every labelled figure found", 177, n);
+        assertTrue("angles read right: " + ok + " of " + n, ok >= 140);
+        assertTrue("whole standing figures read right: " + wholeOk + " of " + wholeN, wholeOk >= 64);
+        for (String k : collar) {
+            assertTrue(k + "'s face is found", mouthBelow.containsKey(k));
+            assertTrue(k + ": the mouth on the lips, not the collar (" + mouthBelow.get(k) + " eye distances below the eyes)", mouthBelow.get(k) > 0.3f && mouthBelow.get(k) < 0.9f);
+        }
     }
 
     /**

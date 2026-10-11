@@ -502,6 +502,23 @@ final class SheetSaver {
                 }
                 if (best >= 0) angles[best] = sa;
             }
+            // v42: no picture read as a side: the most turned of the other whole three-quarter figures takes the side's
+            // place (a profile is often read as a three-quarter — the boy's and समीर's were, and they walked frontways)
+            boolean haveSide = false;
+            for (float a : angles) if (a == com.tarun.kahani.core.Angles.SIDE) haveSide = true;
+            if (!haveSide && !beast) {
+                int best = -1; float bestTurn = 0.12f;
+                for (int i = 0; i < pics.size(); i++) {
+                    if (!Float.isNaN(angles[i]) || guessed[i] != com.tarun.kahani.core.Angles.THREE_QUARTER || cuts[i] == null) continue;
+                    if (tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
+                            || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
+                    com.tarun.kahani.core.Cutout.Result r = cuts[i];
+                    if (mainAspect >= 1.3f && r.w > 0 && r.h / (float) r.w < 0.75f * mainAspect) continue;
+                    float turn = com.tarun.kahani.core.Art.facingOffset(r);
+                    if (!Float.isNaN(turn) && Math.abs(turn) > bestTurn) { bestTurn = Math.abs(turn); best = i; }
+                }
+                if (best >= 0) angles[best] = com.tarun.kahani.core.Angles.SIDE;
+            }
             String have = c == null ? null : Studio3DArt.charFile(project, st, c);
             boolean haveFront = false;
             for (float a : angles) if (a == com.tarun.kahani.core.Angles.FRONT) haveFront = true;

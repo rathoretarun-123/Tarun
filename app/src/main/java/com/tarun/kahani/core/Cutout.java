@@ -380,6 +380,20 @@ public final class Cutout {
                 na += 2;
             }
             if (nl < half) continue;
+            // v42: a mouth lies inside the face — its row has face on both sides of it (cheeks: skin, or a beard), not
+            // the collar under a chin with the shirt beside it (राहुल's smile was lost to his T-shirt's neckline)
+            int fc = 0, fn = 0;
+            for (int side = -1; side <= 1; side += 2)
+                for (int k = half + 1; k <= (int) (d * 0.62f); k++) {
+                    int x = (int) mx + side * k;
+                    if (x < 0 || x >= w) continue;
+                    fn++;
+                    int c = r.px[y * w + x];
+                    if ((c >>> 24) < 200) continue;
+                    int R = (c >> 16) & 255, G = (c >> 8) & 255, B = c & 255;
+                    if (isSkin(c) || faceSkin(c) || (lum[y * w + x] < 90 && Math.max(R, Math.max(G, B)) - Math.min(R, Math.min(G, B)) < 60)) fc++;
+                }
+            if (fn > 4 && fc < fn * 0.35f) continue;
             float sc = line / nl - around / Math.max(1, na);
             // a mouth is usually about one eye-distance below the eyes
             sc -= Math.abs((y - ey) / d - expect) * 40;

@@ -55,7 +55,15 @@ public class MakeFilm {
         Director dir = new Director(story, opt);
         Film film = dir.prepare();
         float[][] voices = new float[film.lines.size()][];
-        File tmp = Files.createTempDirectory("voices").toFile();
+        final File tmp = Files.createTempDirectory("voices").toFile();
+        // v42: the voices' scratch folder goes when the tool ends (hundreds of runs had left gigabytes behind)
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                File[] fs = tmp.listFiles();
+                if (fs != null) for (File f : fs) f.delete();
+                tmp.delete();
+            }
+        });
         // SAMPLE="वानुषा=/path/sample.wav": that character's lines are moved to the sample's voice (as on the phone)
         String sampleWho = null;
         VoiceFx.Profile sampleProfile = null;

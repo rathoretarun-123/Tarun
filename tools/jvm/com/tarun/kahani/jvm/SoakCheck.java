@@ -45,6 +45,8 @@ public class SoakCheck {
                 if (proj != null) {
                     Art.spriteSide = 600; Art.backdropSide = 800;
                     art = Art.fromManifest(new String(Files.readAllBytes(Paths.get(proj, "cast.txt")), "UTF-8"), st, new MakeFilm.AwtLoader(proj));
+                    // v42: a picture folder that no longer loads (moved, cleaned away) is a failure, never a quiet doll film
+                    if (art.sprites.isEmpty()) issues.merge("user pictures not loaded", 1, Integer::sum);
                 }
                 Director d = new Director(st, new Director.Options());
                 d.prepare();
@@ -68,7 +70,10 @@ public class SoakCheck {
                     estabHeld += hs.estabHeld; estabTotal += hs.estabTotal;
                     longest = Math.max(longest, hs.longest);
                 }
-                for (Film.Shot sh : film.shots) if (sh.dur > TechnicalDirector.MAX_SHOT_SECONDS + 0.05f) longShots++;
+                for (Film.Shot sh : film.shots) if (sh.dur > TechnicalDirector.MAX_SHOT_SECONDS + 0.05f) {
+                    longShots++;
+                    if (System.getenv("LONG") != null) System.out.println("LONG " + f.getName() + " t=" + sh.t + " dur=" + sh.dur + " type=" + sh.type + " size=" + sh.size + " " + sh.purpose + " | " + sh.action);
+                }
                 if (film.duration < 5 || film.duration > 3600 || bad(film.duration)) issues.merge("film length", 1, Integer::sum);
                 if (film.shots.isEmpty()) issues.merge("no shots", 1, Integer::sum);
                 float prevEnd = -1;
@@ -120,9 +125,13 @@ public class SoakCheck {
                         float run = 0;
                         for (float tt = sg.t0 + 0.25f; tt < sg.t1; tt += 0.25f) {
                             Film.Key ka = A.stateAt(tt), kb = B.stateAt(tt);
+                            // (v42: one walking past in front of or behind the other — feet 10 px or more apart in
+                            // depth — is no standing on each other; a stop there is)
+                            float dl = Math.abs(Director.liftAt(A, tt) - Director.liftAt(B, tt));
+                            boolean still = Math.abs(Director.xAt(A, tt) - Director.xAt(A, tt - 0.25f)) < 3 && Math.abs(Director.xAt(B, tt) - Director.xAt(B, tt - 0.25f)) < 3;
                             boolean close = ka.visible && kb.visible && ka.anchor == Film.A_GROUND && kb.anchor == Film.A_GROUND
                                     && Math.abs(Director.xAt(A, tt) - Director.xAt(B, tt)) < 45 && !together(A, B, tt)
-                                    && Math.abs(ka.depth - kb.depth) < 0.2f && Math.abs(Director.liftAt(A, tt) - Director.liftAt(B, tt)) < 20;
+                                    && Math.abs(ka.depth - kb.depth) < 0.2f && dl < 20 && (dl < 10 || still);
                             run = close ? run + 0.25f : 0;
                             if (run >= 1.5f) { issues.merge("stand on each other", 1, Integer::sum); if (notes.size() < 6) notes.add(String.format(Locale.US, "%s+%s t=%.1f", A.c.fullName, B.c.fullName, tt)); break; }
                         }

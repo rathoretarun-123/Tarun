@@ -46,6 +46,12 @@ public final class Art {
         public int faces;
         /** v41: the user's own side picture of the character (a view), which the rig walks with when it walks across. */
         public boolean userSide;
+        /** v42: the user's own three-quarter picture (a view), in which the character listens through a two-shot, turned to the speaker. */
+        public boolean userQuarter;
+        /** v42: the picture's hands are held before the body (holding something) or in its pockets (Art.handsHeld): its arms never swing. */
+        public boolean holds;
+        /** v42: the user's own picture of the character seen from above (a still picture), for the shots that look down on them; null = none. */
+        public Sprite top;
         /** v41: of a side picture, the legs alone (below the hips), a little in the shade: the far leg of the stride. */
         public Object legImg;
         public transient Cutout.Result pixelsForSampling;
@@ -285,6 +291,32 @@ public final class Art {
      */
     /** v41: marks a view made from one of the user's own side pictures. */
     static final String USER_SIDE = "user-side";
+    /** v42: marks a view made from one of the user's own three-quarter pictures. */
+    static final String USER_QUARTER = "user-quarter";
+
+    /**
+     * v42: which way a turned picture of a person looks (1 right, -1 left, 0 not known), read from where the skin of
+     * the head lies against the head's outline (it read every one of the user's turned pictures right, three-quarters
+     * and profiles); the older readings when that is too close to the middle.
+     */
+    /**
+     * v42: the rig of a front picture reads its hands held up before the body (holding a tray, a cup, a toy) rather
+     * than hanging at its sides: the hands end less than 1.3 times as far below the shoulders as the hips are. On the
+     * user's eight fronts: प्रिया's tray, वनुशा's toy and कबीर's hands in his pockets read as held (arms kept still —
+     * right for all three), the hanging hands of the five others as free (समीर's cup hangs at his side).
+     */
+    public static boolean handsHeld(Rig r) {
+        if (r == null || r.still || r.animal || r.armsFixed || r.hipY <= r.shoulderY + 0.05f) return false;
+        return r.armEnd - r.shoulderY < 1.3f * (r.hipY - r.shoulderY);
+    }
+
+    static int turnedFacing(Cutout.Result r, int skin) {
+        if (r == null) return 0;
+        float off = Angles.headFeatures(r)[2];
+        if (!Float.isNaN(off) && Math.abs(off) >= 0.03f) return off > 0 ? 1 : -1;
+        int f = facingOf(r);
+        return f != 0 ? f : sideFacing(r, skin);
+    }
 
     /**
      * v41: which way a side picture of a person looks (1 right, -1 left, 0 not known): in the head (the top quarter of
@@ -927,6 +959,9 @@ public final class Art {
                     // head, arms, legs and face for animating the picture (needs the final face points)
                     mouthFromPicture(s.pixelsForSampling, s);
                     try { s.rig = Rig.build(s.pixelsForSampling, s, c.look, L); } catch (RuntimeException e) { s.rig = null; }
+                    // v42: hands held before the body (a tray of tea, a toy) or in the pockets: the arms keep their place — a
+                    // swing would bend what they hold
+                    if (!beast && handsHeld(s.rig)) { s.holds = true; s.rig.armsFixed = true; }
                     if (c.look != null && c.look.headwear == Look.HW_TURBAN && !beast) takeOffHeadwear(s, L);
                     if (s.rig != null && s.rig.face && !beast) {
                         // the face again from the full picture, for sharp close-ups
@@ -1035,6 +1070,7 @@ public final class Art {
                 }
                 mouthFromPicture(v.pixelsForSampling, v);
                 try { v.rig = Rig.build(v.pixelsForSampling, v, c.costumes.get(n - 1).look, L); } catch (RuntimeException e) { v.rig = null; }
+                if (handsHeld(v.rig)) { v.holds = true; v.rig.armsFixed = true; }
                 v.shadowImg = castShadow(v.pixelsForSampling, L);
                 v.pixelsForSampling = null;
                 art.costumes.put(c.id + "#" + n, v);
@@ -1044,15 +1080,42 @@ public final class Art {
         try { PlayPics.read(art, L, thingLines); } catch (RuntimeException e) { art.slideGeo = null; art.swingSeat = null; }
         // v41: the user's own side picture of a character — a standing figure at ±90° among the pictures of their
         // sheets — is the side view the rig walks with (in place of one the 3D maker made); read after the others
-        java.util.Set<String> sideOf = new java.util.HashSet<String>();
+        // v42: the most whole of them (the tallest for its width — a half figure or a close-up read as standing is
+        // never the one), and the same for the user's three-quarter pictures; a picture marked as seen from above is
+        // the character's top view
+        java.util.Map<String, String[]> sideBest = new java.util.LinkedHashMap<String, String[]>(), quarterBest = new java.util.LinkedHashMap<String, String[]>();
+        java.util.Map<String, Float> sideTall = new java.util.HashMap<String, Float>(), quarterTall = new java.util.HashMap<String, Float>();
+        java.util.Set<String> topOf = new java.util.HashSet<String>();
         for (String[] f : poses) {
             try {
-                if (f.length < 6 || sideOf.contains(f[1])) continue;
-                if (Math.abs(Math.abs(Float.parseFloat(f[3].trim())) - 90) > 1 || Integer.parseInt(f[4].trim()) != PoseSense.STAND) continue;
-                views.add(new String[]{"view", f[1], "-90", f[2], USER_SIDE});
-                sideOf.add(f[1]);
+                if (f.length < 6) continue;
+                float ang = Math.abs(Float.parseFloat(f[3].trim()));
+                if (Math.abs(ang - Angles.TOP) < 1) {
+                    Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                    Sprite main = c == null ? null : art.sprites.get(c.id);
+                    if (main != null && !topOf.contains(c.id)) {
+                        Sprite tv = makeSprite(L, f[2], spriteSide, false);
+                        if (tv != null) { tv.pixelsForSampling = null; main.top = tv; topOf.add(c.id); art.notes.add("top view of " + f[1] + ": " + f[2]); }
+                    }
+                    continue;
+                }
+                if (Integer.parseInt(f[4].trim()) != PoseSense.STAND) continue;
+                boolean side = Math.abs(ang - 90) <= 1, quarter = Math.abs(ang - 45) <= 1;
+                if (!side && !quarter) continue;
+                int[] dd = L.decode(f[2], 160);
+                float tall = dd == null || dd[0] <= 0 ? 0 : dd[1] / (float) dd[0];
+                // (never a half figure or a seated one — a turned figure over 2.2 times as tall as wide is whole whatever
+                // its shoes look like)
+                boolean[] fr = dd != null && dd[1] > 0 ? framingOf(dd, -1) : null;
+                if (fr != null && ((fr[0] && tall < 2.2f) || fr[1])) continue;
+                java.util.Map<String, String[]> best = side ? sideBest : quarterBest;
+                java.util.Map<String, Float> bestTall = side ? sideTall : quarterTall;
+                Float was = bestTall.get(f[1]);
+                if (was == null || tall > was) { best.put(f[1], f); bestTall.put(f[1], tall); }
             } catch (RuntimeException ignored) { }
         }
+        for (String[] f : sideBest.values()) views.add(new String[]{"view", f[1], "-90", f[2], USER_SIDE});
+        for (String[] f : quarterBest.values()) views.add(new String[]{"view", f[1], "-45", f[2], USER_QUARTER});
         for (String[] f : views) {
             try {
                 Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
@@ -1098,13 +1161,22 @@ public final class Art {
                     } catch (RuntimeException ignored) { }
                 }
                 mouthFromPicture(v.pixelsForSampling, v);
-                try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L); } catch (RuntimeException e) { v.rig = null; }
+                try { v.rig = Rig.build(v.pixelsForSampling, v, c.look, L, main.rig); } catch (RuntimeException e) { v.rig = null; }
                 // v41: a side picture of the user's: which way it looks (the face's skin lies to the front of the head,
                 // the hair behind), so it is drawn facing the way of the walk — never walking backwards
                 if (idx == 1 && f.length == 5 && USER_SIDE.equals(f[4]) && v.pixelsForSampling != null) {
-                    v.faces = sideFacing(v.pixelsForSampling, main.skin);
+                    v.faces = turnedFacing(v.pixelsForSampling, main.skin);
                     v.userSide = v.faces != 0;
                     if (!v.userSide) art.notes.add("side picture of " + f[1] + " not used: which way it looks could not be read");
+                }
+                // v42: a three-quarter picture of the user's: which way it looks, for listening turned to the speaker
+                if (idx == 0 && f.length == 5 && USER_QUARTER.equals(f[4]) && v.pixelsForSampling != null) {
+                    v.faces = turnedFacing(v.pixelsForSampling, main.skin);
+                    v.userQuarter = v.faces != 0;
+                    if (!v.userQuarter) art.notes.add("three-quarter picture of " + f[1] + " not used: which way it looks could not be read");
+                    // ... and only when the front's hands hang free: a front that holds something before it (a tray of
+                    // tea, a cup) would lose it in the turned picture and get it back at the next cut
+                    else if (main.holds) { v.userQuarter = false; art.notes.add("three-quarter picture of " + f[1] + " not used for listening: the front picture's hands are held (something in them, or in the pockets)"); }
                 }
                 // v41: the far leg of a side picture's stride: its legs alone, below the hips, in a little shade
                 if (v.userSide && v.rig != null && !v.rig.still && v.pixelsForSampling != null) {

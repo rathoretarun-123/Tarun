@@ -306,6 +306,9 @@ public final class PoseSense {
         // ---- the pose, from the silhouette
         boolean[] fr = framing(r.px, r.w, r.h, r.faceFound ? r.eyeY : -1);
         t.cut = fr[0];
+        // v42: a turned figure more than 2.2 times as tall as it is wide is a whole one (the user's half figures never
+        // are): the flat soles of a profile's shoes read as the frame's cut edge, and the boy's profiles were left out
+        if (t.cut && (t.angle == Angles.SIDE || t.angle == Angles.THREE_QUARTER) && r.w > 0 && r.h >= 2.2f * r.w) t.cut = false;
         boolean sideways = t.angle == Angles.SIDE || t.angle == Angles.THREE_QUARTER;
         boolean low = m.hRatio > 0 ? m.hRatio < 0.86f && m.lowMass >= 0.32f : m.lowMass > 0.5f;   // a low, bottom-heavy figure sits or crouches (crossed legs spread the "feet": still a seat)
         float reach = Math.max(m.reachL, m.reachR);
@@ -319,6 +322,14 @@ public final class PoseSense {
         else if (m.armsL >= 0.4f || m.armsR >= 0.4f) t.pose = WAVE;
         else if (reach >= 0.22f && Math.min(m.reachL, m.reachR) < 0.1f && !sideways) t.pose = POINT;
         t.pose = framedPose(t.pose, fr);
+        // v42 (measured on the user's sheets, every figure labelled by eye): a whole standing figure whose head is not
+        // its own mirror image is turned — a three-quarter, not a front (तरुण's, the mother's and समीर's three-quarter
+        // views were read as fronts); a seated one keeps its reading (arms and a cup break the head's outline)
+        if (!beast && t.angle == Angles.FRONT && r.w > 0 && r.h >= 1.6f * r.w && (t.pose == STAND || t.pose == WALK || t.pose == RUN
+                || t.pose == ARMS_UP || t.pose == WAVE || t.pose == POINT || t.pose == FIGHT)) {
+            float sym = Angles.headFeatures(r)[0];
+            if (!Float.isNaN(sym) && sym < 0.2f) t.angle = Angles.THREE_QUARTER;
+        }
         // ---- the emotion, from the face (front or three-quarter only); v34: the guide's gate — a back view or a
         // figure without a face is NO_FACE, never a feeling (no smile on the back of a head)
         if (!m.face || t.angle == Angles.BACK) { t.emotion = t.pose == LIE ? ASLEEP : NO_FACE; t.conf = conf; return t; }

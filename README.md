@@ -1,4 +1,4 @@
-# Kahani Film — v41
+# Kahani Film — v42
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,35 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v42
+
+You asked for more test stories, said you will give three-quarter and top pictures too, and asked for the picture
+selector to be trained again, for lips, faces and body parts to be read and meshed right, and for the physical and
+natural effects to be right.
+
+* **25 more test stories** in your format (`tools/testdata/v42stories`): 9 ways of writing that were misread are now
+  read (a bare "स्थान" or "आरंभ" heading, "शीर्षक | …" and "# …" titles, "1. नाम - विवरण" lists, a thing's "रंग:" field,
+  ages written "प्रिया - 40,", "|" in scene headings, English lines in a Hindi story): 25 of 25 stories and 144 of 144
+  lines read right. Directing them found a see-saw rider walking while seated, an entrance onto someone's spot and a
+  4.3-s shot — all fixed. All 179 test stories, directed with your pictures: no crash, no shot over 4 s.
+* **The picture selector, measured on your sheets:** all 177 figures of your character sheets were labelled by eye.
+  The angle is now read right for 148 (was 140); for the 71 whole standing figures, 67 (was 61). The front,
+  three-quarter, side and back pictures chosen for your 8 characters are 30 of 30 right (the family's were 8 of 14).
+  It is not 100 %: you can correct any reading in the picture review ("Angle:").
+* **Your three-quarter pictures** are used while a character listens through a whole two-shot, standing still and
+  turned to the speaker — never while speaking (a turned face's mouth cannot be found surely) and never when the front
+  picture holds something the turned one does not (प्रिया's tea tray vanished in it).
+* **Your top pictures:** mark a picture "top" in the picture review; a shot that looks down on that character ("छत से
+  नीचे देखती है", "looks down from the balcony") shows them from above.
+* **Faces and bodies:** every picture the films use was checked with its eyes, mouth, chin, shoulders, hips, hands and
+  legs drawn on it. राहुल's mouth was on his T-shirt's collar (and 3 more in your sheets) — now on the lips; side,
+  three-quarter and back pictures had their shoulders at the ears — now at the shoulders, from the front picture of the
+  same person; hands that hold a tray or a toy, or rest in pockets, no longer swing.
+* **अलाव के पास:** कबीर no longer stops right on top of seated अर्जुन while circling the fire.
+* Details and numbers: [`docs/testing-v42.md`](docs/testing-v42.md).
+* **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
+  quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.
 
 ## New in v41
 

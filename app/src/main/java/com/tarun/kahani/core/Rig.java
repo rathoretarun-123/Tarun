@@ -116,7 +116,17 @@ public final class Rig {
      * Finds the bones from the cut-out picture's outline. Standing people get head, arms, legs and a face;
      * animals (and any long, lying shape) get a head with a jaw and ears, a tail and legs.
      */
-    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) { return build(r, s, look, L, false); }
+    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L) { return build(r, s, look, L, false, null); }
+
+    /**
+     * v42: a view of a character (its side, three-quarter or back picture) has no face to measure the body from: its
+     * chin, shoulders, hips and hands start from where the front picture of the same person has them (as fractions of
+     * the figure's height) — before, a back picture's shoulders were read at the ears and its hips at the waist of the
+     * shirt, so the arms swung from the head and the legs bent at the belt.
+     */
+    public static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, Rig like) { return build(r, s, look, L, false, like); }
+
+    static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, boolean stillOnly) { return build(r, s, look, L, stillOnly, null); }
 
     /**
      * v39: a face-only rig for a person's picture whose body must stay as the picture has it — sitting, drinking,
@@ -128,7 +138,7 @@ public final class Rig {
         return build(r, s, look, L, true);
     }
 
-    static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, boolean stillOnly) {
+    static Rig build(Cutout.Result r, Art.Sprite s, Look look, Art.Loader L, boolean stillOnly, Rig like) {
         if (r == null || r.px == null || r.w < 40 || r.h < 40) return null;
         int w = r.w, h = r.h;
         float aspect = h / (float) w;
@@ -171,9 +181,14 @@ public final class Rig {
         g.eLX = s.eyeLX; g.eLY = s.eyeLY; g.eRX = s.eyeRX; g.eRY = s.eyeRY; g.eR = s.eyeR;
         g.mX = s.mouthX; g.mY = s.mouthY; g.mHW = s.mouthHW;
         float eyeY = (s.eyeLY + s.eyeRY) / 2;
+        boolean prior = like != null && !s.faceKnown && !like.still && !like.animal && like.bottom - like.top > 0.3f;
+        float pk = prior ? (g.bottom - g.top) / (like.bottom - like.top) : 1;
         if (s.faceKnown && s.mouthY > eyeY) {
             g.cx = (s.eyeLX + s.eyeRX + 2 * s.mouthX) / 4;
             g.chinY = Math.min(0.6f, s.mouthY + (s.mouthY - eyeY) * 0.95f);
+        } else if (prior) {
+            g.cx = 0.5f;
+            g.chinY = g.top + (like.chinY - like.top) * pk;
         } else {
             g.cx = 0.5f;
             g.chinY = g.top + (g.bottom - g.top) * 0.22f;
@@ -183,15 +198,20 @@ public final class Rig {
         // shoulders: first row under the chin that is clearly wider than the head
         int headRow = (int) ((s.faceKnown ? eyeY : g.top + 0.1f) * h);
         float headW = Math.max(4, right[Math.max(topRow, Math.min(botRow, headRow))] - left[Math.max(topRow, Math.min(botRow, headRow))]);
-        g.shoulderY = g.chinY + 0.05f * body;
+        // (a view: the head's widest row — at the ears, not near its crown)
+        if (prior) for (int y = topRow; y < (int) (g.chinY * h) && y <= botRow; y++) if (left[y] >= 0) headW = Math.max(headW, right[y] - left[y]);
+        // (not from a front whose hands hold something before it: its tray widens the outline below the shoulders)
+        float shPrior = prior && !like.armsFixed ? g.top + (like.shoulderY - like.top) * pk : -1;
+        g.shoulderY = shPrior > 0 ? shPrior : g.chinY + 0.05f * body;
         for (int y = (int) (g.chinY * h); y < (int) ((g.chinY + 0.25f * body) * h) && y <= botRow; y++) {
             if (left[y] >= 0 && right[y] - left[y] > headW * 1.25f) { g.shoulderY = y / (float) h + 0.01f; break; }
         }
+        if (shPrior > 0 && Math.abs(g.shoulderY - shPrior) > 0.06f) g.shoulderY = shPrior;
         g.shoulderY = Math.max(g.shoulderY, g.chinY + 0.035f);   // the arms never reach into the face
         int sr = Math.min(botRow, (int) ((g.shoulderY + 0.04f * body) * h));
         g.shoulderHalf = left[sr] >= 0 ? (right[sr] - left[sr]) / 2f / w : 0.3f;
         // hips: about 42 % down the body, moved to the narrowest middle part nearby
-        float hip = g.chinY + 0.42f * body;
+        float hip = prior ? g.top + (like.hipY - like.top) * pk : g.chinY + 0.42f * body;
         int best = -1;
         float bestW = 1e9f;
         int cxPx = (int) (g.cx * w);
@@ -203,6 +223,8 @@ public final class Rig {
             if (rw < bestW) { bestW = rw; best = y; }
         }
         g.hipY = best > 0 ? best / (float) h : hip;
+        // (a view: the front's hips as they are — a profile's belly or a turned back has no narrowest row there)
+        if (prior) g.hipY = hip;
         // legs: two separate runs below the hips for a good part of the way down
         int two = 0, rows = 0;
         float gapSum = 0, halfSum = 0;
@@ -229,7 +251,7 @@ public final class Rig {
             g.armEnd = last / (float) h + 0.015f;
             g.armInner = Math.max(0.35f, Math.min(0.85f, innerSum / found - 0.08f));
         } else {
-            g.armEnd = g.chinY + 0.36f * body;
+            g.armEnd = prior && !like.armsFixed ? g.top + (like.armEnd - like.top) * pk : g.chinY + 0.36f * body;
             g.armInner = 0.55f;
         }
         // an arm raised to the face: skin beside the head, well outside the face, between the eyes and shoulders

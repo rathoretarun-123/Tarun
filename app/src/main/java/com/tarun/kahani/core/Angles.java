@@ -12,6 +12,8 @@ public final class Angles {
 
     /** The view angles the studio keeps: 0 front, -45 three-quarter, -90 side, 180 back (Figure3D.VIEW_ANGLES for the last three). */
     public static final float FRONT = 0, THREE_QUARTER = -45, SIDE = -90, BACK = 180;
+    /** v42: seen from above (the user marks such a picture; it is never guessed). */
+    public static final float TOP = 270;
 
     /** One figure cut from a sheet: its pixels (with transparency) and where it was. */
     public static final class Piece {
@@ -841,6 +843,21 @@ public final class Angles {
      * so a face with its eyes shut (laughing, crying, asleep) is still a front, never a back.
      */
     public static float guess(Cutout.Result r, boolean beast) {
+        float g = guess0(r, beast);
+        // v42 (measured on the user's sheets, every figure labelled by eye): a "back" with real eyes seen in it, the
+        // face's skin well to one side of the head and a head that is not its own mirror image is a profile — वृंदा's
+        // and तरुण's side views were read as backs and took the back's place
+        if (!beast && g == BACK && r != null && r.faceFound && r.eyesSeen) {
+            float turn = Art.facingOffset(r);
+            if (!Float.isNaN(turn) && Math.abs(turn) >= 0.11f) {
+                float sym = headFeatures(r)[0];
+                if (!Float.isNaN(sym) && sym < 0.1f) return SIDE;
+            }
+        }
+        return g;
+    }
+
+    private static float guess0(Cutout.Result r, boolean beast) {
         if (r == null) return FRONT;
         if (!r.faceFound) {
             // no face: a back (or a side so narrow that the face finder lost it)
@@ -897,6 +914,104 @@ public final class Angles {
         if (off > 0.06f || inter < 0.085f) return THREE_QUARTER;
         if (known && turn >= 0.085f) return THREE_QUARTER;
         return FRONT;
+    }
+
+    /** v42: the names of {@link #features}. */
+    public static final String[] FEATURES = {"face", "seen", "eyeGap", "eyeOff", "eyeY", "dark", "faceSkin", "hairAbove", "turn", "forehead",
+            "sym", "headSkin", "headSkinOff", "headDark", "headTall", "headWide", "tall"};
+
+    /**
+     * v42: every feature the angle reading uses, in the order of FEATURES (missing ones are 0, with "face" or the
+     * head's numbers telling which are there): the face finder's (found, eyes seen, how far apart the eyes are, how
+     * far their middle lies off the picture's, how far down, how dark they are, the skin of the face box, the hair
+     * above the face, the face's skin to one side of the head, the forehead's skin), the head outline's
+     * (headFeatures) and the figure's height over its width.
+     */
+    public static float[] features(Cutout.Result r) {
+        float[] x = new float[FEATURES.length];
+        if (r == null) return x;
+        if (r.faceFound) {
+            float inter = Math.max(0.02f, r.eyeRX - r.eyeLX);
+            x[0] = 1; x[1] = r.eyesSeen ? 1 : 0; x[2] = inter; x[3] = Math.abs((r.eyeLX + r.eyeRX) / 2 - 0.5f); x[4] = r.eyeY - r.headTop;
+            x[5] = eyeDarkness(r);
+            x[6] = skinShare(r, r.eyeLX - inter * 0.5f, r.eyeY - inter * 0.3f, r.eyeRX + inter * 0.5f, r.mouthY + inter * 0.25f);
+            x[7] = Math.min(4, (r.faceTop - r.headTop) / Math.max(0.01f, r.chinY - r.faceTop));
+            float t = Art.facingOffset(r);
+            x[8] = Float.isNaN(t) ? 0 : Math.abs(t);
+            float fh = foreheadSkin(r);
+            x[9] = Float.isNaN(fh) ? 0 : fh;
+        }
+        float[] hf = headFeatures(r);
+        for (int i = 0; i < 6; i++) x[10 + i] = Float.isNaN(hf[i]) ? 0 : (i == 2 ? Math.abs(hf[i]) : hf[i]);
+        x[16] = r.w > 0 ? Math.min(4, r.h / (float) r.w) : 0;
+        for (int i = 0; i < x.length; i++) if (Float.isNaN(x[i]) || Float.isInfinite(x[i])) x[i] = 0;
+        return x;
+    }
+
+    /**
+     * v42: features of the head read from its outline, whatever the face finder found — the head is the figure's
+     * top down to its neck (the narrowest row under the widest part of the head, or 1.25 head widths down):
+     * {mirror likeness of the head about its middle (-1..1: a front or a back is its own mirror image, a turned head
+     * is not), the share of the head that is skin, how far the skin lies to one side (a share of the head's width,
+     * signed), the share of the head that is dark hair, the head's height over its width, the head's width over the
+     * figure's}. NaNs when no head can be read.
+     */
+    public static float[] headFeatures(Cutout.Result r) {
+        float[] out = {Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN};
+        if (r == null || r.px == null || r.w < 16 || r.h < 16) return out;
+        int[] px = r.read();
+        int w = r.w, h = r.h;
+        int top = -1;
+        int[] a = new int[h], b = new int[h];
+        for (int y = 0; y < h; y++) {
+            a[y] = -1; b[y] = -1;
+            for (int x = 0; x < w; x++) if ((px[y * w + x] >>> 24) > 128) { if (a[y] < 0) a[y] = x; b[y] = x; }
+            if (top < 0 && a[y] >= 0) top = y;
+        }
+        if (top < 0) return out;
+        // the head: grow down while it widens; below its widest row, the neck is where it is narrowest before it widens again
+        int maxW = 0, bottom = Math.min(h - 1, top + 4);
+        int limit = Math.min(h - 1, top + (int) (h * 0.6f));
+        int minW = Integer.MAX_VALUE, minY = -1;
+        for (int y = top; y <= limit; y++) {
+            int wy = a[y] < 0 ? 0 : b[y] - a[y] + 1;
+            if (wy > maxW && (minY < 0 || wy < minW * 1.15f)) { maxW = Math.max(maxW, wy); minW = Integer.MAX_VALUE; minY = -1; }
+            if (y - top > maxW * 0.5f && wy < minW) { minW = wy; minY = y; }
+            if (minY >= 0 && wy > minW * 1.35f && y - top > maxW * 0.6f) break;
+            if (y - top > maxW * 1.25f) break;
+            bottom = y;
+        }
+        if (minY > top && minY - top > maxW * 0.55f) bottom = Math.min(bottom, minY);
+        int hh = bottom - top + 1;
+        if (hh < 8 || maxW < 8) return out;
+        // the head's middle: the mean of its rows' middles
+        double mid = 0; int n = 0;
+        for (int y = top; y <= bottom; y++) if (a[y] >= 0) { mid += (a[y] + b[y]) / 2.0; n++; }
+        mid /= Math.max(1, n);
+        double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0; int m = 0;
+        int skin = 0, dark = 0, all = 0; double skinX = 0;
+        for (int y = top; y <= bottom; y++) for (int x = Math.max(0, a[y]); x <= b[y] && a[y] >= 0; x++) {
+            int c = px[y * w + x];
+            if ((c >>> 24) <= 128) continue;
+            all++;
+            int lum = ((c >> 16 & 255) * 299 + (c >> 8 & 255) * 587 + (c & 255) * 114) / 1000;
+            if (Cutout.isSkin(c) || Cutout.faceSkin(c)) { skin++; skinX += x; }
+            else if (lum < 80) dark++;
+            int xm = (int) Math.round(2 * mid - x);
+            if (xm < 0 || xm >= w) continue;
+            int cm = px[y * w + xm];
+            double l1 = (cm >>> 24) > 128 ? ((cm >> 16 & 255) * 299 + (cm >> 8 & 255) * 587 + (cm & 255) * 114) / 1000.0 : 255;
+            sa += lum; sb += l1; saa += lum * (double) lum; sbb += l1 * l1; sab += lum * l1; m++;
+        }
+        if (all < 30 || m < 30) return out;
+        double ca = saa - sa * sa / m, cb = sbb - sb * sb / m, cab = sab - sa * sb / m;
+        out[0] = ca > 1e-6 && cb > 1e-6 ? (float) (cab / Math.sqrt(ca * cb)) : 0;
+        out[1] = skin / (float) all;
+        out[2] = skin < 10 ? 0 : (float) ((skinX / skin - mid) / maxW);
+        out[3] = dark / (float) all;
+        out[4] = hh / (float) maxW;
+        out[5] = maxW / (float) w;
+        return out;
     }
 
     /**
@@ -994,6 +1109,7 @@ public final class Angles {
     }
 
     public static String name(float angle) {
+        if (Math.abs(angle - TOP) < 1) return "top";
         if (Math.abs(angle - BACK) < 1) return "back";
         if (Math.abs(angle - SIDE) < 1 || Math.abs(angle + SIDE) < 1) return "side";
         if (Math.abs(angle - THREE_QUARTER) < 1 || Math.abs(angle + THREE_QUARTER) < 1) return "three-quarter";

@@ -137,6 +137,11 @@ public final class ScriptParser {
         for (int i = 0; i < out.length; i++) {
             String l = Txt.clean(out[i]);
             if (l.length() == 0 || l.length() > 140) continue;
+            // v42: "दृश्य-1 | घर का लिविंग रूम | सुबह": the bars part the heading like a colon and dashes
+            if (l.indexOf('|') > 0) {
+                String r = l.replaceFirst("\\s*\\|\\s*", ": ").replaceAll("\\s*\\|\\s*", " - ");
+                if (SCENE.matcher(r).matches() || SCENE_X.matcher(r).matches() || SCENE_ORD.matcher(r).matches()) { out[i] = r; l = r; }
+            }
             if (SCENE.matcher(l).matches()) { anyHeading = true; continue; }
             Matcher m = SCENE_X.matcher(l);
             int n = -1;
@@ -376,7 +381,8 @@ public final class ScriptParser {
             int n = 0;
             for (String tok : p.name.split("[\\s,،\\-–—()/]+")) {
                 String w = Txt.norm(tok);
-                if (w.length() < 3 || isStop(w)) continue;
+                // (v42: a two-letter Hindi word counts too — "छत", "घर", "बस" — never a stop word)
+                if (w.length() < 2 || (w.length() < 3 && !Txt.isDevanagari(w.charAt(0))) || isStop(w)) continue;
                 int i = t.indexOf(w);
                 while (i >= 0) {
                     boolean l = !isWordChar(t.charAt(i - 1)), r = i + w.length() >= t.length() || !isWordChar(t.charAt(i + w.length()));
@@ -496,17 +502,24 @@ public final class ScriptParser {
                 && !Txt.has(h, "मुख्य जगह", "main location", "main place")) return true;
         // v41: more words for the places' list ("स्थल", "जगहें", "पृष्ठभूमि", "बैकग्राउंड", "Sets", "Backgrounds", "Scenery")
         String sh = shortHeading(l);
+        // (v42: and "स्थान" alone on its line — the docs list it, and the places were read as characters)
         return sh != null && (Txt.has(sh, "स्थल", "जगहें", "जगहे", "पृष्ठभूमि", "बैकग्राउंड", "लोकेशंस", "लोकेशन्स", "सेट्स", "स्थान सूची", "स्थान विवरण", "स्थानों")
+                || Txt.norm(sh).equals(Txt.norm("स्थान"))
                 || Txt.hasWord(sh, "backgrounds", "background", "sets", "scenery", "venues", "where", "locales", "world"));
     }
 
     /** v39: the end of the lists before the script ("---", "स्क्रिप्ट शुरू", "Script starts"). */
     private static boolean listsEnd(String l) {
         String h = l.trim();
+        // (v42: a start word alone on its line — "आरंभ", "शुरू", "प्रारंभ")
+        if (h.replaceAll("[#*:：\\-–—=_.!।\\s]+$", "").replaceAll("^[#*\\s]+", "").matches("^(आरंभ|आरम्भ|प्रारंभ|प्रारम्भ|शुरू|शुरु|शुरुआत)$")) return true;
         return h.matches("^[-–—_*=~]{3,}$") || Txt.has(h, "स्क्रिप्ट शुरू", "कहानी शुरू", "पटकथा शुरू", "स्क्रिप्ट आरंभ", "कहानी आरंभ", "पटकथा आरंभ",
                 "कहानी प्रारंभ", "पटकथा प्रारंभ", "स्क्रिप्ट प्रारंभ", "कहानी की शुरुआत", "स्क्रिप्ट की शुरुआत")
                 || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|story|screenplay|film) (starts|begins).*") || h.toLowerCase(java.util.Locale.ROOT).matches("^fade in[:.]?$");
     }
+
+    /** v42: "शीर्षक - …", "Title - …", "कहानी: …" at the start of a line: the line that names the film. */
+    static final Pattern TITLE_LINE = Pattern.compile("^[#*\\s]*(?:शीर्षक|title|कहानी|story)\\s*[-–—:：]\\s*\\S", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     /** v40: "फिल्म का नाम: राहुल का पार्क", "Film name - …": the line that names the film (the words before the name). */
     static final Pattern NAME_LINE = Pattern.compile("^[#*\\s]*(?:(?:फ़िल्म|फिल्म|मूवी|कहानी|कार्टून)\\s+का\\s+नाम|(?:film|movie|story)\\s+name|name\\s+of\\s+the\\s+(?:film|movie|story))\\s*[-–—:：]\\s*",
@@ -562,6 +575,11 @@ public final class ScriptParser {
         return false;
     }
 
+    /** v42: the few labels that describe a thing of the list (a thing may well be called चप्पल or चश्मा). */
+    private static boolean thingField(String head) {
+        return Txt.hasWord(Txt.norm(head), Txt.norm("रंग"), Txt.norm("विवरण"), Txt.norm("आकार"), Txt.norm("नोट"), "colour", "color", "size", "description", "note", "notes", "use");
+    }
+
     private static boolean narratorName(String head) {
         return Txt.has(head, "narrator", "कथावाचक", "सूत्रधार", "वाचक", "writer", "लेखक", "note", "नोट");
     }
@@ -569,10 +587,18 @@ public final class ScriptParser {
     private static void parsePreamble(Story story, String[] pre) {
         // The title: "Title: …" anywhere, else the last short line before the first scene, else the first line
         int titleIdx = -1;
-        for (int i = 0; i < pre.length && titleIdx < 0; i++) if (Txt.has(Txt.clean(pre[i]), "शीर्षक", "title:") || NAME_LINE.matcher(Txt.clean(pre[i])).find()) titleIdx = i;
-        for (int i = pre.length - 1; i >= 0 && titleIdx < 0; i--) {
+        for (int i = 0; i < pre.length && titleIdx < 0; i++) if (Txt.has(Txt.clean(pre[i]), "शीर्षक", "title:") || NAME_LINE.matcher(Txt.clean(pre[i])).find()
+                || TITLE_LINE.matcher(Txt.clean(pre[i])).find()) titleIdx = i;
+        // v42: "# बारिश वाला रविवार" — a markdown title at the top
+        for (int i = 0; i < pre.length && titleIdx < 0; i++) {
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
+            if (l.matches("^#\\s+\\S.*") && !isCharHeader(l.substring(1).trim()) && !isPlaceHeader(l.substring(1).trim()) && !isThingsHeader(l.substring(1).trim()) && !listsEnd(l.substring(1).trim())) titleIdx = i;
+            break;
+        }
+        for (int i = pre.length - 1; i >= 0 && titleIdx < 0; i--) {
+            String l = Txt.clean(pre[i]);
+            if (l.length() == 0 || listsEnd(l)) continue;      // (v42: "कहानी शुरू" is where the script starts, never its title)
             if (titleLike(l, false)) titleIdx = i;
             break;
         }
@@ -583,7 +609,7 @@ public final class ScriptParser {
             break;
         }
         if (titleIdx >= 0) {
-            String t = NAME_LINE.matcher(Txt.clean(pre[titleIdx])).replaceFirst("").replaceFirst("^(शीर्षक|Title|TITLE)\\s*[-–—:：]\\s*", "");
+            String t = NAME_LINE.matcher(Txt.clean(pre[titleIdx])).replaceFirst("").replaceFirst("^[#*\\s]*(शीर्षक|Title|TITLE|title)\\s*[-–—:：]\\s*", "");
             t = t.replaceAll("^[#*\\s]+", "").replaceAll("[*\\s]+$", "");
             int p = t.indexOf('(');
             if (p > 0 && t.endsWith(")")) {
@@ -639,8 +665,10 @@ public final class ScriptParser {
                     // v40: "अर्जुन - 32 साल का, ऑफिस की शर्ट अब मुड़ी हुई है। थका हुआ लगता है।": the name, then a dash, then a
                     // long description (a short one after the dash is a role: "तारा - The Coder Didi", "वृंदा - 11 साल")
                     Matcher dm = Pattern.compile("^(.{2," + (mode == 3 ? 70 : 40) + "}?)\\s+[-–—]\\s+(.+)$").matcher(header);
+                    // (v42: a place's or a thing's name is the words before the dash, however short the words after it:
+                    // "1. छाता - लाल रंग का बड़ा छाता")
                     if (dm.matches() && Txt.withoutParens(dm.group(1)).trim().split("\\s+").length <= (mode == 3 ? 10 : 5) && !dm.group(1).contains("।")
-                            && (dm.group(2).length() > 60 || dm.group(2).contains("।") || dm.group(2).trim().split("\\s+").length > 6)) {
+                            && (mode == 2 || mode == 3 || dm.group(2).length() > 60 || dm.group(2).contains("।") || dm.group(2).trim().split("\\s+").length > 6)) {
                         desc.append(dm.group(2).trim()).append('\n');
                         header = dm.group(1).trim();
                     }
@@ -661,7 +689,7 @@ public final class ScriptParser {
                     Matcher dm = Pattern.compile("^(.{2,40}?)\\s+[-–—]\\s+(.+)$").matcher(body);
                     if (dm.matches()) { head = dm.group(1).trim(); rest = dm.group(2).trim(); }
                 }
-                if (head != null && head.length() <= 40 && Txt.withoutParens(head).trim().split("\\s+").length <= 5 && !fieldLabel(head)) {
+                if (head != null && head.length() <= 40 && Txt.withoutParens(head).trim().split("\\s+").length <= 5 && !(mode == 3 ? thingField(head) : fieldLabel(head))) {
                     flushEntry(story, entryMode, header, desc);
                     header = null;
                     // a spoken line or a writer's note before the story starts: never a character, never acted
@@ -833,8 +861,15 @@ public final class ScriptParser {
         if (m.find()) {
             try { return Integer.parseInt(m.group(1)); } catch (NumberFormatException e) { return -1; }
         }
+        // v42: "तरुण - 42, father": a bare number right after the name's dash is the age
+        m = BARE_AGE.matcher(s);
+        if (m.find()) {
+            try { int a = Integer.parseInt(m.group(1)); return a >= 1 && a <= 110 ? a : -1; } catch (NumberFormatException e) { return -1; }
+        }
         return -1;
     }
+
+    private static final Pattern BARE_AGE = Pattern.compile("^[^0-9\\n]{1,40}?\\s[-–—]\\s*([0-9]{1,3})\\s*(?:[,،;]|$)");
 
     // ------------------------------------------------------------------ scenes
 

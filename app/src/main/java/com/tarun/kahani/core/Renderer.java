@@ -1057,6 +1057,7 @@ public final class Renderer {
             int tint = Sets.tint(s.set, s.tod);
             if (tint != 0) { g.color(tint); g.rect(0, 0, vw, vh); }
         }
+        topView(g, s, t);
         overShoulder(g, s, t);
         weatherScreen(g, s, t);
         light(g, s, t);
@@ -3201,6 +3202,8 @@ public final class Renderer {
         // v34: turned away or leaving: the back view (the user's back picture, or the one made from the front)
         if (sp.views != null && k.backTurned && !speaking && k.anchor == Film.A_GROUND && sp.view(2) != null) return sp.view(2);
         if (sp.views == null || speaking || k.body != Pose.STAND || k.anchor != Film.A_GROUND || p.sit > 0) return sp;
+        // v42: listening through a whole two-shot, still and turned to the speaker: the user's own three-quarter picture
+        if (p.walkAmt <= 0.05f && quarterListens(sp, a, s, t)) return sp.view(0);
         // v41: walking across, a rigged person takes its steps in the user's own side picture (its own rig, drawn
         // facing the way of the walk); standing, talking or turning to someone, the front picture
         if (sideWalks(sp, k, speaking, a, t) && p.walkAmt > 0.35f) return sp.view(1);
@@ -3230,6 +3233,78 @@ public final class Renderer {
         for (Film.Act x : a.acts)
             if (x != r && x.type == Film.G_RIDE && x.item == r.item && Math.abs(after ? x.t0 - r.t1 : x.t1 - r.t0) < 0.1f) return true;
         return false;
+    }
+
+    private final java.util.concurrent.ConcurrentHashMap<String, Boolean> quarterCache = new java.util.concurrent.ConcurrentHashMap<String, Boolean>();
+
+    /**
+     * v42: this character listens through the whole of this two-shot (or over-the-shoulder shot), standing still and
+     * turned to someone: the user's own three-quarter picture is drawn for the whole shot — a cut brings it and a cut
+     * takes it away, never a swap in mid-shot, and never while the character speaks (a turned picture's mouth cannot
+     * be found surely: on the user's sheets it lay on the neck or the nose in five pictures of eight).
+     */
+    private boolean quarterListens(Art.Sprite sp, Film.Actor a, Film.Seg s, float t) {
+        Art.Sprite q = sp == null ? null : sp.view(0);
+        if (q == null || !q.userQuarter || q.rig == null || q.rig.still || sp.rig == null || sp.rig.animal || a == null || a.c == null) return false;
+        Film.Shot sh = shotAt(t);
+        if (sh == null || (sh.type != ShotPlanner.TWO_SHOT && sh.type != ShotPlanner.OTS)) return false;
+        String key = a.c.id + "@" + sh.t;
+        Boolean b = quarterCache.get(key);
+        if (b == null) { b = quarterWholeShot(a, s, sh); quarterCache.put(key, b); }
+        return b;
+    }
+
+    private boolean quarterWholeShot(Film.Actor a, Film.Seg s, Film.Shot sh) {
+        float t0 = sh.t, t1 = sh.t + sh.dur;
+        if (sh.ots.length() > 0 && sh.ots.equals(a.c.shown())) return false;          // the shoulder in the foreground
+        for (Film.Line l : film.lines) if (l.who == a.c && l.start < t1 + 0.2f && l.start + l.dur > t0 - 0.2f) return false;
+        for (Film.Act x : a.acts) if (x.t0 < t1 + 0.3f && x.t1 > t0 - 0.3f) return false;      // anything to do: the front picture does it
+        float x0 = Director.xAt(a, t0);
+        Film.Key k0 = a.stateAt(t0 + 0.02f);
+        for (int i = 0; i <= 8; i++) {
+            float t = t0 + (t1 - t0) * i / 8f;
+            Film.Key k = a.stateAt(t);
+            if (!k.visible || k.body != Pose.STAND || k.anchor != Film.A_GROUND || k.backTurned || Math.signum(k.facing) != Math.signum(k0.facing)) return false;
+            if (Math.abs(Director.xAt(a, t) - x0) > 2) return false;
+        }
+        // someone to listen to, on the side it faces
+        for (Film.Actor o : s.actors) {
+            if (o == a || !o.stateAt(t0).visible || o.stateAt(t0).anchor != Film.A_GROUND) continue;
+            float dx = Director.xAt(o, t0) - x0;
+            if (Math.abs(dx) >= 40 && Math.abs(dx) <= 900 && Math.signum(dx) == Math.signum(k0.facing)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * v42: a shot that looks down on someone (from a roof, a balcony): their own picture from above, on the ground of
+     * the place, over the whole frame. Only when the user gave a picture from above.
+     */
+    private void topView(Gfx g, Film.Seg s, float t) {
+        Film.Shot sh = shotAt(t);
+        if (sh == null || !sh.above || sh.type != ShotPlanner.POV) return;
+        Film.Actor who = null;
+        for (Film.Actor a : s.actors) if (a.c != null && a.c.shown().equals(sh.subject)) who = a;
+        Art.Sprite sp = who == null ? null : art.sprites.get(who.c.id);
+        if (sp == null || sp.top == null || sp.top.img == null || !who.stateAt(t).visible) return;
+        // the ground: the place's own floor (the band where its feet stand), spread over the frame, else its colour
+        Art.Backdrop b = bd(s);
+        if (b != null && b.img != null && !b.object) {
+            float gy = Math.max(0.2f, Math.min(1f, b.ground));
+            float sy0 = b.y0 * b.h + (gy - 0.12f) * (b.y1 - b.y0) * b.h, sy1 = Math.min(b.y1 * b.h, sy0 + 0.2f * (b.y1 - b.y0) * b.h);
+            g.imageRect(b.img, b.x0 * b.w, sy0, (b.x1 - b.x0) * b.w, Math.max(4, sy1 - sy0), 0, 0, vw, vh);
+        } else {
+            g.color(b != null && b.avgLow != 0 ? b.avgLow : 0xFF8D7B68);
+            g.rect(0, 0, vw, vh);
+        }
+        float h = vh * 0.78f, w = h * sp.top.w / Math.max(1, sp.top.h);
+        if (w > vw * 0.8f) { w = vw * 0.8f; h = w * sp.top.h / Math.max(1, sp.top.w); }
+        float cx = vw / 2f, cy = vh * 0.52f;
+        // its shadow straight under it, and a little breath
+        g.radial(cx + w * 0.06f, cy + h * 0.08f, Math.max(w, h) * 0.55f, 0x55000000, 0x00000000);
+        g.rect(cx - w, cy - h, w * 2, h * 2);
+        float br = 1 + 0.01f * (float) Math.sin(t * 2.2f);
+        g.image(sp.top.img, cx - w * br / 2, cy - h * br / 2, w * br, h * br);
     }
 
     /**

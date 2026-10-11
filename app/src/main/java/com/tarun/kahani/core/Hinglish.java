@@ -216,12 +216,15 @@ public final class Hinglish {
             else if (isLatin(c)) latin++;
         }
         if (latin == 0 || dev > latin) return false;
-        int words = 0, hindi = 0;
+        int words = 0, hindi = 0, eng = 0;
         for (String w : line.toLowerCase().split("[^a-z]+")) {
             if (w.length() == 0) continue;
             words++;
             if (hindiWords.contains(w) && !english.contains(w) && !AMBIGUOUS.contains(w)) hindi++;
+            else if (english.contains(w)) eng++;
         }
+        // v42: an English line with one Hindi-looking word in it ("In your hand, Papa.") stays English
+        if ((hindi <= 1 && eng >= 2 && words >= 4) || (eng >= 3 && eng > 2 * hindi)) return false;
         return hindi >= 2 || (hindi == 1 && words <= 4) || (words > 0 && hindi * 100 >= words * 20);
     }
 

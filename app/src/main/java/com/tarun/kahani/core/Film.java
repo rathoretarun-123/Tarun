@@ -41,6 +41,8 @@ public final class Film {
         public String subject = "", other = "", purpose = "", action = "", face = "", body = "", sound = "", cutWhen = "", emotionalPurpose = "";
         public float light = 0.4f;
         public boolean reaction;
+        /** v42: a point-of-view shot looking down on its subject (from a roof, a balcony): their picture from above, when given. */
+        public boolean above;
         public int line = -1;            // the dialogue line spoken in this shot (index into lines), or -1
         /** Technical Director checks: the largest movement of a character (fraction of the frame width), the
          *  words spoken in the shot, how many actions start in it. */

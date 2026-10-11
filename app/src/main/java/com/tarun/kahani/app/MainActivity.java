@@ -615,7 +615,8 @@ public class MainActivity extends Activity {
         });
         int unsureN = 0;
         for (String[] f : lines) if (confOf(f) < 0.65f) unsureN++;
-        final float[] angleOf = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK};
+        // (v42: and "top" — a picture from above, for the shots that look down on the character; never guessed)
+        final float[] angleOf = {com.tarun.kahani.core.Angles.FRONT, com.tarun.kahani.core.Angles.THREE_QUARTER, com.tarun.kahani.core.Angles.SIDE, com.tarun.kahani.core.Angles.BACK, com.tarun.kahani.core.Angles.TOP};
         final int[] angles = new int[lines.size()], poses = new int[lines.size()], emotions = new int[lines.size()];
         float d = getResources().getDisplayMetrics().density;
         LinearLayout list = new LinearLayout(this);

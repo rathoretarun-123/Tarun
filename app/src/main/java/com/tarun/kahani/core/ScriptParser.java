@@ -481,6 +481,8 @@ public final class ScriptParser {
     /** v41: a line that is a heading (short, no sentence in it): its words without marks; null when it is none. */
     static String shortHeading(String l) {
         String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
+        // (an item of a list is no heading: "वस्तु 1 - झूला:", "भूमिका: नायक" — a number, a field, a name and its words)
+        if (h.matches(".*[0-9०-९].*") || h.contains(":") || h.contains("：") || h.matches(".*\\s[-–—]\\s.*")) return null;
         return h.length() > 0 && h.length() <= 40 && !h.contains("।") && !h.contains("\"") && !h.contains("“") && h.split("\\s+").length <= 5 ? h : null;
     }
 

@@ -746,7 +746,7 @@ public class StoryForge {
                     if (SoakCheck.bad(k.t) || SoakCheck.bad(k.x) || SoakCheck.bad(k.moveDur) || SoakCheck.bad(k.facing)) inv(issues, first, "NaN key", ac.c.fullName + " t=" + k.t);
                     if (i > 0 && k.t < ac.keys.get(i - 1).t - 1e-3f) inv(issues, first, "key out of order", ac.c.fullName + " t=" + k.t + " after " + ac.keys.get(i - 1).t);
                     if (k.moveDur < 0) inv(issues, first, "negative move", ac.c.fullName + " t=" + k.t);
-                    if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !SoakCheck.playing(ac, k.t) && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40)
+                    if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !SoakCheck.playing(ac, k.t) && !SoakCheck.thrown(ac, k.t) && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40)
                         inv(issues, first, "moves while lying", ac.c.fullName + " moves lying at " + k.t);
                     if (k.moveDur > 0.3f && k.visible && k.body == Pose.SIT && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) {
                         boolean riding = false;

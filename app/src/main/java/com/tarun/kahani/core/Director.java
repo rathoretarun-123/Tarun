@@ -358,6 +358,7 @@ public final class Director {
         walkSounds();
         settleStays();
         oneRideAtATime();
+        unstack();
         steadyRiders();
         vehicleDoors();
         placeSteps();
@@ -4819,7 +4820,74 @@ public final class Director {
             }
         }
     }
-    public int overlapsCut;
+    public int overlapsCut, spotsCleared;
+
+    /** v44: two people (not hugging, riding, playing or handing over) standing still on one spot? */
+    private static boolean onOneSpot(Film.Actor A, Film.Actor B, float tt) {
+        Film.Key ka = A.stateAt(tt), kb = B.stateAt(tt);
+        if (!ka.visible || !kb.visible || ka.anchor != Film.A_GROUND || kb.anchor != Film.A_GROUND) return false;
+        if (Math.abs(xAt(A, tt) - xAt(B, tt)) >= 48 || Math.abs(ka.depth - kb.depth) >= 0.2f) return false;
+        if (Math.abs(liftAt(A, tt) - liftAt(B, tt)) >= 20) return false;
+        for (Film.Actor x : new Film.Actor[]{A, B}) for (Film.Act ac : x.acts)
+            if ((ac.type == Film.G_HUG || ac.type == Film.G_HOLD_HAND || ac.type == Film.G_RIDE || ac.type == Film.G_KISS || ac.type == Film.G_PLAYGROUND
+                    || ac.type == Film.G_GIVE || ac.type == Film.G_FALL) && tt >= ac.t0 - 1.1f && tt <= ac.t1 + 1.1f) return false;
+        return true;
+    }
+
+    /**
+     * v44: the last safety net — two people left standing on one spot (a slide's foot where someone stood, a mark
+     * reached where another waits) for more than half a second: the one who came there steps aside to free ground.
+     */
+    private void unstack() {
+        Film.Seg keep = seg;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            seg = sg;
+            for (int p = 0; p < sg.actors.size(); p++) for (int q = p + 1; q < sg.actors.size(); q++) {
+                Film.Actor A = sg.actors.get(p), B = sg.actors.get(q);
+                if (A.look == null || B.look == null || !A.look.isHumanoid() || !B.look.isHumanoid()) continue;
+                float run = 0, from = -1;
+                for (float tt = sg.t0 + 0.25f; tt < sg.t1; tt += 0.25f) {
+                    boolean still = Math.abs(xAt(A, tt) - xAt(A, tt - 0.25f)) < 3 && Math.abs(xAt(B, tt) - xAt(B, tt - 0.25f)) < 3;
+                    if (still && onOneSpot(A, B, tt)) { if (run == 0) from = tt; run += 0.25f; } else run = 0;
+                    if (run < 0.5f) continue;
+                    // the one who moved there last steps aside (or the one standing, when the other sits)
+                    Film.Actor mover = lastMoveBefore(A, from) >= lastMoveBefore(B, from) ? A : B;
+                    if (mover.stateAt(from).body != Pose.STAND) mover = mover == A ? B : A;
+                    // (never the one about to speak: the shots are framed on them)
+                    if (speaksNear(mover, from)) { Film.Actor o2 = mover == A ? B : A; if (o2.stateAt(from).body == Pose.STAND && !speaksNear(o2, from)) mover = o2; }
+                    if (mover.stateAt(from).body != Pose.STAND || speaksNear(mover, from)) break;
+                    Film.Actor other = mover == A ? B : A;
+                    float mx = xAt(mover, from), ox = xAt(other, from);
+                    float dir = mx != ox ? Math.signum(mx - ox) : (mx < 640 ? 1 : -1);
+                    float want = Math.max(150, Math.min(1130, ox + dir * 120));
+                    if (Math.abs(want - ox) < 100) want = Math.max(150, Math.min(1130, ox - dir * 120));
+                    java.util.List<Film.Actor> me = java.util.Collections.singletonList(mover);
+                    float to = freeAt(want, from, me, 84) ? want : freeNear(want, from, me, 100);
+                    Film.Key k = keyAt(mover, from - 0.2f);
+                    k.x = to; k.moveDur = 0.6f; k.run = false; k.facing = to > mx ? 1 : -1;
+                    spread(mover, k);
+                    Film.Key f = keyAt(mover, from + 0.45f); f.facing = ox > to ? 1 : -1; spread(mover, f);
+                    spotsCleared++;
+                    break;
+                }
+            }
+        }
+        seg = keep;
+    }
+
+    /** v44: a line of theirs from a moment before t to a few seconds after. */
+    private static boolean speaksNear(Film.Actor a, float t) {
+        for (Film.Speak x : a.speaks) if (x.t0 < t + 5f && x.t0 + 0.1f > t - 1f) return true;
+        return false;
+    }
+
+    /** v44: when a last moved (a key with a move) at or before t, or -1. */
+    private static float lastMoveBefore(Film.Actor a, float t) {
+        float m = -1;
+        for (Film.Key k : a.keys) { if (k.t > t) break; if (k.moveDur > 0) m = k.t; }
+        return m;
+    }
 
     /**
      * v43: one who only got on (and waits on it, the engine running) stays on until the next thing they or the one on
@@ -6784,7 +6852,12 @@ public final class Director {
             if (o == a || !o.stateAt(t).visible) continue;
             float ox = xAt(o, t);
             if ((ox - x) * dir > 30 && (mx - ox) * dir > -40) {
-                Film.Key ok = o.at(t); ok.x = Math.max(110, Math.min(1170, x - dir * (140 + 100 * back++))); ok.moveDur = 0.8f;
+                float to = Math.max(110, Math.min(1170, x - dir * (140 + 100 * back++)));
+                java.util.List<Film.Actor> me = java.util.Collections.singletonList(o);
+                if (!freeAt(to, t + 0.8f, me, 84)) to = freeNear(to, t + 0.8f, me, 110);
+                // (no room behind the archer: behind the mark instead, where the arrows stop)
+                if (Math.abs(to - x) < 100 || (to - x) * dir > 0) to = Math.max(110, Math.min(1170, mx + dir * 140));
+                Film.Key ok = o.at(t); ok.x = to; ok.moveDur = 0.8f;
                 ok.facing = dir;
             }
         }
@@ -7766,6 +7839,9 @@ public final class Director {
                     // (v44: a mishap comes riding in — unless they have already spoken or done something here: then
                     // they ride from where they are, turning for a run-up first)
                     || ((mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH) && !Txt.has(s, MOUNT_ONLY) && firstThing(lead, t)));
+            // (v44: one gone out of the picture who only "gets in and starts it" comes back on it first and stops —
+            // never sitting on it off the edge of the picture)
+            if (enters && stay) stay = false;
             float x0 = xAt(lead, t + 0.05f);
             float faces = lead.stateAt(t).facing >= 0 ? 1 : -1;
             // v43: their own vehicle parked in this part (where they got off it): they walk back to it and ride it from there

@@ -16,6 +16,8 @@ public class SoakCheck {
                     && t >= ac.t0 - 1.0f && t <= ac.t1 + 1.0f) return true;
         return false;
     }
+    /** v44: thrown down in a fall (off a skidding bike): the short slide lying is the fall itself. */
+    static boolean thrown(Film.Actor a, float t) { for (Film.Act x : a.acts) if (x.type == Film.G_FALL && Math.abs(x.t0 - t) < 0.15f) return true; return false; }
     static boolean playing(Film.Actor a, float t) { for (Film.Act x : a.acts) if (x.type == Film.G_PLAYGROUND && t >= x.t0 - 0.3f && t <= x.t1 + 0.3f) return true; return false; }
     static boolean bad(float f) { return Float.isNaN(f) || Float.isInfinite(f); }
     static int scored, shotsTotal, over6, overMotion, multi, stillWrong, corrected, reactions, povs, loud, estabHeld, estabTotal, longest, longShots;
@@ -87,7 +89,7 @@ public class SoakCheck {
                             if (bad(k.t) || bad(k.x) || bad(k.moveDur) || bad(k.facing)) issues.merge("NaN key", 1, Integer::sum);
                             if (i > 0 && k.t < ac.keys.get(i - 1).t - 1e-3f) issues.merge("key out of order", 1, Integer::sum);
                             if (k.moveDur < 0) issues.merge("negative move", 1, Integer::sum);
-                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !playing(ac, k.t) && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) { issues.merge("moves while lying", 1, Integer::sum); if (notes.size() < 6) notes.add(ac.c.fullName + " moves lying at " + k.t); }
+                            if (k.moveDur > 0.3f && k.visible && k.body == Pose.LIE && !playing(ac, k.t) && !thrown(ac, k.t) && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) { issues.merge("moves while lying", 1, Integer::sum); if (notes.size() < 6) notes.add(ac.c.fullName + " moves lying at " + k.t); }
                             if (k.moveDur > 0.3f && k.visible && k.body == Pose.SIT && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) {
                                 boolean riding = false;
                                 for (Film.Act x : ac.acts) if ((x.type == Film.G_RIDE || x.type == Film.G_PLAYGROUND || (x.type == Film.G_SNOW_PLAY && x.item == Film.SNOW_SLIDE)) && k.t >= x.t0 - 0.5f && k.t <= x.t1 + 0.5f) riding = true;

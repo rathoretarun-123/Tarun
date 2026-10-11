@@ -73,6 +73,9 @@ public final class Sets {
         if (Txt.has(text, "मुहान", "गुफा के बाहर", "गुफा के दरवाज", "cave entrance")) return CAVE_MOUTH;
         // places of today, before the old ones ("rooftop garden" is a rooftop, not the palace garden)
         // (English words as whole words: a "small living room" is no "mall", a "proof" no "roof")
+        // v45: a shopping mall open for the day is a bright room of today (shops, an escalator); the closed one stays dark
+        if ((Txt.has(text, "मॉल") || Txt.hasWord(text, "mall", "malls")) && (Txt.has(text, "शॉपिंग", "शहर का मॉल", "दुकानों", "एस्केलेटर") || Txt.hasWord(text, "shopping", "shops", "escalator", "the mall"))
+                && !Txt.has(text, "बंद", "बेसमेंट", "तहखान") && !Txt.hasWord(text, "closed", "abandoned", "basement", "dark")) return ROOM;
         if (Txt.has(text, "बेसमेंट", "तहखान", "मॉल", "सर्वर रूम", "पार्किंग", "गोदाम", "गैराज", "फैक्ट्री", "कारखान", "लैब")
                 || Txt.hasWord(text, "basement", "basements", "mall", "malls", "server room", "parking", "warehouse", "garage", "factory", "arcade", "bunker",
                 "lab", "laboratory")) return BASEMENT;
@@ -159,6 +162,265 @@ public final class Sets {
             case CAVE_MOUTH: return new float[][]{{140, 600, 1.1f}};
             default: return null;
         }
+    }
+
+    // ------------------------------------------------------------------ v45: what makes a place itself
+
+    /** v45: the details of a place drawn over its set (a metro platform over the street, desks over the room …). */
+    public static final int D_NONE = 0, D_METRO = 1, D_OFFICE = 2, D_HOSPITAL = 3, D_CLASS = 4, D_MALL = 5, D_AIRPORT = 6, D_GYM = 7, D_CAFE = 8,
+            D_WELL = 9, D_FIELDS = 10, D_POTTER = 11, D_TEMPLE = 12, D_GHAT = 13, D_CAMP = 14, D_BAZAAR = 15;
+
+    /** v45: the place's own details, from its name or its first sentence. */
+    public static int decorFor(String text) {
+        if (text == null) return D_NONE;
+        if (Txt.has(text, "मेट्रो", "प्लेटफ़ॉर्म", "प्लेटफॉर्म", "रेलवे स्टेशन") || Txt.hasWord(text, "metro", "platform", "railway station", "train station", "subway")) return D_METRO;
+        if (Txt.has(text, "हवाई अड्डा", "हवाई अड्डे", "एयरपोर्ट") || Txt.hasWord(text, "airport", "terminal")) return D_AIRPORT;
+        if (Txt.has(text, "अस्पताल", "हॉस्पिटल", "दवाखान", "क्लिनिक", "वार्ड") || Txt.hasWord(text, "hospital", "ward", "clinic")) return D_HOSPITAL;
+        if (Txt.has(text, "दफ़्तर", "दफ्तर", "ऑफिस", "ऑफ़िस") || Txt.hasWord(text, "office", "offices")) return D_OFFICE;
+        if (Txt.has(text, "कक्षा", "क्लास", "स्कूल") || Txt.hasWord(text, "classroom", "class", "school")) return D_CLASS;
+        if (Txt.has(text, "मॉल") || Txt.hasWord(text, "mall", "malls")) return D_MALL;
+        if (Txt.has(text, "जिम") || Txt.hasWord(text, "gym", "gymnasium")) return D_GYM;
+        if (Txt.has(text, "रेस्टोरेंट", "रेस्तरां", "कैफ़े", "कैफे", "ढाबा") || Txt.hasWord(text, "restaurant", "cafe", "café", "dhaba", "diner")) return D_CAFE;
+        if (Txt.has(text, "घाट") || Txt.hasWord(text, "ghat", "ghats", "riverbank", "river bank")) return D_GHAT;
+        if (Txt.has(text, "मंदिर", "शिवालय", "देवालय") || Txt.hasWord(text, "temple", "shrine")) return D_TEMPLE;
+        if (Txt.has(text, "कुआँ", "कुएँ", "कुआं", "कुएं") || Txt.hasWord(text, "well")) return D_WELL;
+        if (Txt.has(text, "कुम्हार", "चाक") || Txt.hasWord(text, "potter", "potter's", "pottery")) return D_POTTER;
+        if (Txt.has(text, "युद्ध", "रणभूमि", "छावनी", "शिविर") || Txt.hasWord(text, "battlefield", "battle", "camp", "war camp")) return D_CAMP;
+        if (Txt.has(text, "बाज़ार", "बाजार", "हाट", "मंडी") || Txt.hasWord(text, "bazaar", "market", "marketplace")) return D_BAZAAR;
+        if (Txt.has(text, "खेत", "खलिहान") || Txt.hasWord(text, "fields", "field", "farm", "farmland")) return D_FIELDS;
+        return D_NONE;
+    }
+
+    /** v45: an indoor place of today is a room (a gym, an airport hall, a restaurant), an old bazaar a village's lanes, a platform the city. */
+    public static int setForDecor(int set, int decor, String text) {
+        switch (decor) {
+            case D_OFFICE: case D_HOSPITAL: case D_CLASS: case D_MALL: case D_GYM: case D_CAFE: case D_AIRPORT:
+                return set == BASEMENT && Txt.has(text, "बंद", "closed", "dark", "अँधेर") ? set : ROOM;
+            case D_METRO: return STREET;
+            case D_BAZAAR: return Txt.has(text, "पुरान", "old", "गाँव", "गांव", "village", "हाट") ? VILLAGE : set;
+            case D_WELL: case D_FIELDS: case D_POTTER: return set == STREET || set == ROOM ? VILLAGE : set;
+            default: return set;
+        }
+    }
+
+    /** v45: the set and its details as one cached picture. */
+    public static void paintStatic(Gfx g, int set, int tod, int decor) {
+        paintStatic(g, set, tod);
+        if (decor != D_NONE) paintDecor(g, decor, tod);
+    }
+
+    static void paintDecor(Gfx g, int decor, int tod) {
+        boolean night = tod == NIGHT, eve = tod == EVENING, dark = night || eve;
+        switch (decor) {
+            case D_METRO: {
+                // the station's roof, a train standing at the platform, the platform's edge and the rails before it
+                g.color(dark ? 0xFF2B3140 : 0xFF6F7C8A); g.rect(0, 0, W, 70);
+                for (int i = 0; i < 9; i++) { g.color(dark ? 0xFF1E2430 : 0xFF55606C); g.rect(i * 160, 70, 10, 230); }
+                g.color(dark ? 0xFF8C96A6 : 0xFFD6DCE3); g.roundRect(-20, 300, W + 40, 220, 26);
+                g.color(0xFF1565C0); g.rect(-20, 440, W + 40, 18);
+                for (int i = 0; i < 8; i++) {
+                    float x = 30 + i * 165;
+                    g.color(dark ? 0xFFFFE9A8 : 0xFF2B3A4A); g.roundRect(x, 330, 110, 80, 8);
+                    if (i % 3 == 1) { g.color(dark ? 0xFF5E6A7A : 0xFFAEB8C4); g.rect(x + 120, 320, 36, 190); g.color(0xFF37474F); g.rect(x + 137, 320, 2, 190); }
+                }
+                g.color(dark ? 0xFF3A3F48 : 0xFFB9BEC4); g.rect(0, 520, W, 170);
+                g.color(0xFFFFD54F); g.rect(0, 676, W, 10);
+                g.color(0xFF2E2A26); g.rect(0, 686, W, 34);
+                g.color(0xFF9E9E9E); g.rect(0, 696, W, 4); g.rect(0, 712, W, 4);
+                // the display board
+                g.color(0xFF101418); g.roundRect(520, 90, 240, 60, 6);
+                g.color(0xFFFFB300); g.text("METRO  2 min", 640, 130, 26, true, 1);
+                break;
+            }
+            case D_OFFICE: {
+                wallOver(g, dark, 0xFFE8EEF2, 0xFF39414E);
+                // a glass partition, desks with screens, a clock
+                g.color(dark ? 0x3390CAF9 : 0x5590CAF9); g.rect(420, 140, 360, 380);
+                g.color(dark ? 0xFF607080 : 0xFFB0BEC5); g.rect(420, 140, 360, 6); g.rect(598, 140, 4, 380);
+                for (int i = 0; i < 2; i++) {
+                    float x = 60 + i * 180;
+                    g.color(0xFF8D6E63); g.rect(x, 440, 160, 14); g.rect(x + 8, 454, 10, 80); g.rect(x + 142, 454, 10, 80);
+                    g.color(0xFF263238); g.roundRect(x + 40, 370, 80, 56, 4); g.rect(x + 76, 426, 8, 14);
+                    g.color(dark ? 0xFF4FC3F7 : 0xFF81D4FA); g.rect(x + 45, 375, 70, 46);
+                }
+                clock(g, 1000, 80);
+                break;
+            }
+            case D_HOSPITAL: {
+                wallOver(g, dark, 0xFFE3F2EC, 0xFF34433E);
+                // a drip on its stand, a curtain on its rail, a cabinet with a red cross
+                g.color(0xFF90A4AE); g.rect(330, 300, 5, 300); g.rect(305, 300, 55, 4); g.oval(332, 600, 26, 6);
+                g.color(0xCCE1F5FE); g.roundRect(312, 306, 22, 40, 6); g.color(0xFF90A4AE); g.line(323, 346, 323, 420, 2);
+                g.color(0xFF9E9E9E); g.rect(40, 96, 300, 6);
+                g.color(dark ? 0xFF5D7A8A : 0xFF9FD3E6); g.rect(46, 102, 120, 400);
+                for (int i = 0; i < 6; i++) { g.color(dark ? 0xFF4C6878 : 0xFF86C4DA); g.rect(52 + i * 20, 102, 6, 400); }
+                g.color(0xFFF5F5F5); g.roundRect(200, 180, 110, 130, 6);
+                g.color(0xFFE53935); g.rect(246, 200, 18, 60); g.rect(225, 221, 60, 18);
+                floorTiles(g, dark, 0xFFDDE6E3, 0xFF4A5551);
+                break;
+            }
+            case D_CLASS: {
+                wallOver(g, dark, 0xFFF3E9D2, 0xFF3E3A33);
+                g.color(0xFF6D4C41); g.rect(372, 132, 456, 236);
+                g.color(0xFF2E4A3A); g.rect(382, 142, 436, 216);
+                g.color(0xCCFFFFFF); g.text("2 + 3 = 5", 600, 230, 40, false, 1); g.text("अ आ इ ई", 600, 300, 34, false, 1);
+                for (int i = 0; i < 2; i++) {
+                    float x = 70 + i * 170;
+                    g.color(0xFF8D6E63); g.rect(x, 450, 140, 14); g.rect(x + 8, 464, 10, 70); g.rect(x + 122, 464, 10, 70);
+                    g.color(0xFF6D4C41); g.rect(x - 4, 500, 148, 10);
+                }
+                clock(g, 1000, 80);
+                break;
+            }
+            case D_MALL: {
+                wallOver(g, dark, 0xFFF4F1EC, 0xFF3A3640);
+                int[] sh = {0xFFE91E63, 0xFF3F51B5, 0xFF009688, 0xFFFF9800};
+                for (int i = 0; i < 4; i++) {
+                    float x = 20 + i * 320;
+                    g.color(sh[i]); g.rect(x, 130, 280, 40);
+                    g.color(dark ? 0xFF2C3440 : 0xFFCFE8F2); g.rect(x, 170, 280, 330);
+                    g.color(0xFFB0BEC5); g.rect(x + 138, 170, 4, 330);
+                    for (int m = 0; m < 2; m++) { g.color(sh[(i + m + 1) % 4]); g.oval(x + 70 + m * 140, 250, 14, 14); g.roundRect(x + 56 + m * 140, 266, 28, 90, 8); }
+                }
+                g.color(dark ? 0xFF9E9E9E : 0xFFE0E0E0); g.begin(); g.moveTo(1000, 520); g.lineTo(1280, 300); g.lineTo(1280, 340); g.lineTo(1040, 520); g.close(); g.fillPath();
+                floorTiles(g, dark, 0xFFF0EEEA, 0xFF55525A);
+                break;
+            }
+            case D_AIRPORT: {
+                // a wall of glass with a plane on the apron, the departures board, a counter
+                g.color(dark ? 0xFF1C2638 : 0xFFAEDCF5); g.rect(0, 80, W, 440);
+                g.color(dark ? 0xFF3A4458 : 0xFF90A4AE); for (int i = 0; i <= 8; i++) g.rect(i * 160, 80, 8, 440); g.rect(0, 80, W, 8);
+                g.color(0xFFF5F5F5); g.oval(760, 400, 260, 36); g.color(0xFF1565C0); g.rect(560, 396, 400, 8);
+                g.color(0xFFF5F5F5); g.begin(); g.moveTo(760, 400); g.lineTo(700, 330); g.lineTo(740, 330); g.lineTo(840, 400); g.close(); g.fillPath();
+                g.begin(); g.moveTo(980, 392); g.lineTo(1010, 330); g.lineTo(1030, 330); g.lineTo(1015, 396); g.close(); g.fillPath();
+                g.color(0xFF101418); g.roundRect(80, 110, 300, 120, 6);
+                g.color(0xFFFFB300); g.text("DEL  10:40", 230, 150, 24, true, 1); g.text("BOM  11:15", 230, 185, 24, true, 1); g.text("BLR  12:05", 230, 218, 24, true, 1);
+                g.color(0xFF607D8B); g.roundRect(860, 470, 360, 70, 6); g.color(0xFF37474F); g.rect(860, 470, 360, 10);
+                floorTiles(g, dark, 0xFFEDEDED, 0xFF4E4E55);
+                break;
+            }
+            case D_GYM: {
+                wallOver(g, dark, 0xFFE0E0E0, 0xFF33363C);
+                g.color(dark ? 0x553E5060 : 0x88B3E5FC); g.rect(420, 120, 440, 380);
+                g.color(0xFF424242); g.rect(60, 440, 260, 10); g.rect(70, 450, 8, 90); g.rect(300, 450, 8, 90);
+                for (int i = 0; i < 5; i++) { float x = 90 + i * 46; g.color(0xFF212121); g.oval(x, 432, 10, 10); g.oval(x + 26, 432, 10, 10); g.rect(x, 429, 26, 6); }
+                g.color(0xFF37474F); g.begin(); g.moveTo(960, 530); g.lineTo(1180, 530); g.lineTo(1160, 500); g.lineTo(980, 500); g.close(); g.fillPath();
+                g.rect(1150, 400, 10, 110); g.roundRect(1120, 380, 60, 26, 4);
+                floorTiles(g, dark, 0xFF6D6D6D, 0xFF2E2E2E);
+                break;
+            }
+            case D_CAFE: {
+                wallOver(g, dark, 0xFFF1E3CF, 0xFF3D3128);
+                g.color(0xFF2E2E2E); g.roundRect(80, 140, 220, 160, 6);
+                g.color(0xFFFFFFFF); g.text("MENU", 190, 180, 26, true, 1); g.text("चाय  20", 190, 220, 22, false, 1); g.text("कॉफ़ी 40", 190, 255, 22, false, 1);
+                for (int i = 0; i < 3; i++) {
+                    float x = 420 + i * 300;
+                    g.color(0xFF5D4037); g.line(x, 0, x, 120, 2);
+                    g.color(0xFFFFCC80); g.begin(); g.moveTo(x - 30, 150); g.lineTo(x + 30, 150); g.lineTo(x + 16, 120); g.lineTo(x - 16, 120); g.close(); g.fillPath();
+                    if (dark) { g.radial(x, 160, 110, 0x66FFE0A0, 0x00FFE0A0); g.oval(x, 160, 110, 110); }
+                }
+                for (int i = 0; i < 2; i++) { float x = 140 + i * 200; g.color(0xFFC62828); g.oval(x, 470, 70, 14); g.color(0xFF6D4C41); g.rect(x - 5, 476, 10, 60); }
+                break;
+            }
+            case D_WELL: {
+                // a stone well with its frame, pulley, rope and bucket
+                float x = 980;
+                g.color(0xFF9E9A92); g.rect(x - 90, 520, 180, 90);
+                g.color(0xFF7D786F); for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) g.rect(x - 86 + c * 45 + (r % 2) * 20, 524 + r * 30, 38, 24);
+                g.color(0xFF5A564F); g.oval(x, 520, 90, 18); g.color(0xFF1E2A30); g.oval(x, 520, 76, 12);
+                g.color(0xFF6D4C41); g.rect(x - 84, 380, 12, 140); g.rect(x + 72, 380, 12, 140); g.rect(x - 90, 372, 180, 12);
+                g.color(0xFF4E342E); g.oval(x, 396, 14, 14);
+                g.color(0xFF8D6E63); g.line(x, 396, x, 470, 2);
+                g.color(0xFF78909C); g.begin(); g.moveTo(x - 16, 470); g.lineTo(x + 16, 470); g.lineTo(x + 12, 500); g.lineTo(x - 12, 500); g.close(); g.fillPath();
+                break;
+            }
+            case D_FIELDS: {
+                // rows of wheat to the far edge, a scarecrow
+                for (int r = 0; r < 6; r++) {
+                    float y = 460 + r * 14;
+                    g.color(r % 2 == 0 ? (dark ? 0xFF8A7330 : 0xFFE6C35C) : (dark ? 0xFF6E5B26 : 0xFFD4AE44));
+                    g.rect(0, y, W, 12);
+                }
+                g.color(0xFF6D4C41); g.rect(1150, 360, 8, 160); g.rect(1110, 400, 90, 8);
+                g.color(0xFFE53935); g.rect(1132, 404, 44, 50); g.color(0xFFFFE0B2); g.oval(1154, 384, 18, 18);
+                g.color(0xFF8D6E63); g.begin(); g.moveTo(1126, 372); g.lineTo(1182, 372); g.lineTo(1154, 352); g.close(); g.fillPath();
+                break;
+            }
+            case D_POTTER: {
+                float x = 1000;
+                for (int i = 0; i < 5; i++) { float px = 860 + i * 60, sz = 26 + (i % 2) * 8; g.color(i % 2 == 0 ? 0xFFB5651D : 0xFFA0522D); g.oval(px, 560 - sz, sz, sz * 1.1f); g.rect(px - sz * 0.35f, 560 - sz * 2.05f, sz * 0.7f, 10); }
+                g.color(0xFF5D4037); g.oval(x - 260, 600, 70, 14); g.color(0xFF8D6E63); g.oval(x - 260, 594, 54, 10);
+                g.color(0xFFB5651D); g.begin(); g.moveTo(x - 280, 594); g.lineTo(x - 240, 594); g.lineTo(x - 246, 560); g.lineTo(x - 274, 560); g.close(); g.fillPath();
+                break;
+            }
+            case D_TEMPLE: {
+                // a shikhara behind, its steps, a flag on top, a bell hung at the side
+                float x = 640;
+                g.color(dark ? 0xFFB08A60 : 0xFFF0C890); g.rect(x - 200, 330, 400, 190);
+                g.color(dark ? 0xFF9A7650 : 0xFFE3B577); g.begin(); g.moveTo(x - 150, 330); g.quadTo(x - 120, 160, x, 110); g.quadTo(x + 120, 160, x + 150, 330); g.close(); g.fillPath();
+                g.color(dark ? 0xFF7A5C3A : 0xFFC9975A); for (int i = 0; i < 5; i++) g.rect(x - 140 + i * 6, 180 + i * 30, 280 - i * 12, 6);
+                g.color(0xFF5D4037); g.rect(x - 50, 400, 100, 120); g.color(0xFFFFB300); g.oval(x, 120, 10, 10);
+                g.color(0xFF6D4C41); g.rect(x - 2, 60, 4, 60); g.color(0xFFFF6F00); g.begin(); g.moveTo(x + 2, 60); g.lineTo(x + 52, 74); g.lineTo(x + 2, 88); g.close(); g.fillPath();
+                for (int i = 0; i < 3; i++) { g.color(i % 2 == 0 ? 0xFFD7CCC8 : 0xFFBCAAA4); g.rect(x - 230 - i * 20, 520 + i * 10, 460 + i * 40, 10); }
+                g.color(0xFF6D4C41); g.rect(220, 300, 80, 8); g.color(0xFFC9A227); g.begin(); g.moveTo(246, 308); g.lineTo(274, 308); g.lineTo(282, 346); g.lineTo(238, 346); g.close(); g.fillPath();
+                break;
+            }
+            case D_GHAT: {
+                // the river behind, a far bank with small shrines, the stone steps coming down to it
+                g.linear(0, 400, 0, 520, dark ? 0xFF2A3E5C : 0xFF6FA8C8, dark ? 0xFF1C2A40 : 0xFF4E86A6); g.rect(0, 400, W, 120);
+                g.color(dark ? 0x55FFE0A0 : 0x66FFFFFF); for (int i = 0; i < 10; i++) g.rect(60 + i * 128, 430 + (i % 3) * 22, 60, 3);
+                g.color(dark ? 0xFF3E4A3A : 0xFF8BA67A); g.rect(0, 380, W, 22);
+                for (int i = 0; i < 4; i++) { float x = 160 + i * 300; g.color(dark ? 0xFF8A6E50 : 0xFFE0C090); g.rect(x - 20, 350, 40, 32); g.begin(); g.moveTo(x - 24, 352); g.lineTo(x, 320); g.lineTo(x + 24, 352); g.close(); g.fillPath(); }
+                for (int i = 0; i < 6; i++) { g.color(i % 2 == 0 ? (dark ? 0xFF7A7064 : 0xFFCDBFAA) : (dark ? 0xFF6A6056 : 0xFFB8A992)); g.rect(0, 520 + i * 34, W, 34); }
+                if (dark) for (int i = 0; i < 5; i++) { float x = 200 + i * 210; g.radial(x, 470, 30, 0xAAFFC107, 0x00FFC107); g.oval(x, 470, 30, 30); g.color(0xFFFFE082); g.oval(x, 470, 4, 3); }
+                break;
+            }
+            case D_CAMP: {
+                // tents and flags across the field, dust
+                for (int i = 0; i < 5; i++) {
+                    float x = 90 + i * 270, w = 140 - (i % 2) * 30;
+                    g.color(i % 2 == 0 ? (dark ? 0xFF8C7A5C : 0xFFE8D8B0) : (dark ? 0xFF7A5C4C : 0xFFD9B79A));
+                    g.begin(); g.moveTo(x - w / 2, 480); g.lineTo(x, 380); g.lineTo(x + w / 2, 480); g.close(); g.fillPath();
+                    g.color(0x55000000); g.begin(); g.moveTo(x - 14, 480); g.lineTo(x, 430); g.lineTo(x + 14, 480); g.close(); g.fillPath();
+                    g.color(0xFF5D4037); g.rect(x - 1, 340, 3, 42);
+                    g.color(i % 2 == 0 ? 0xFFFF6F00 : 0xFFC62828); g.begin(); g.moveTo(x + 2, 340); g.lineTo(x + 34, 350); g.lineTo(x + 2, 360); g.close(); g.fillPath();
+                }
+                g.color(dark ? 0x22FFFFFF : 0x33D7CCC8); g.rect(0, 460, W, 60);
+                break;
+            }
+            case D_BAZAAR: {
+                // stalls with striped awnings, heaps of fruit and pots
+                int[] aw = {0xFFE53935, 0xFF1E88E5, 0xFF43A047, 0xFFFB8C00};
+                for (int i = 0; i < 4; i++) {
+                    float x = 20 + i * 320;
+                    g.color(0xFF6D4C41); g.rect(x + 10, 360, 8, 160); g.rect(x + 262, 360, 8, 160);
+                    for (int k = 0; k < 7; k++) { g.color(k % 2 == 0 ? aw[i] : 0xFFFFFFFF); g.begin(); g.moveTo(x + k * 40, 360); g.lineTo(x + k * 40 + 40, 360); g.lineTo(x + k * 40 + 40, 330); g.lineTo(x + k * 40, 330); g.close(); g.fillPath(); }
+                    g.color(0xFF8D6E63); g.rect(x, 460, 280, 50);
+                    int[] fr = {0xFFFF7043, 0xFFFFEB3B, 0xFF7CB342, 0xFFE53935};
+                    for (int k = 0; k < 9; k++) { g.color(fr[(k + i) % 4]); g.oval(x + 30 + k * 28, 452 - (k % 2) * 8, 13, 13); }
+                }
+                break;
+            }
+            default:
+        }
+    }
+
+    /** v45: the back wall painted again over the room's home things (sofa, shelf), its window kept. */
+    static void wallOver(Gfx g, boolean dark, int day, int nightC) {
+        g.color(dark ? nightC : day); g.rect(0, 0, 770, 520); g.rect(1170, 0, W - 1170, 520); g.rect(770, 0, 400, 100); g.rect(770, 400, 400, 120);
+        g.color(dark ? 0x22000000 : 0x14000000); g.rect(0, 500, W, 20);
+    }
+
+    static void floorTiles(Gfx g, boolean dark, int day, int nightC) {
+        g.color(dark ? nightC : day); g.rect(0, 520, W, H - 520);
+        g.color(dark ? 0x22FFFFFF : 0x22000000);
+        for (int i = 0; i <= 10; i++) g.line(i * 128, 520, i * 128 - 200 + i * 40, H, 1.5f);
+        for (int j = 0; j < 4; j++) g.line(0, 560 + j * 45, W, 560 + j * 45, 1.5f);
+    }
+
+    static void clock(Gfx g, float x, float y) {
+        g.color(0xFFFFFFFF); g.oval(x, y, 30, 30); g.color(0xFF37474F); g.strokeOval(x, y, 30, 30, 3);
+        g.line(x, y, x, y - 18, 3); g.line(x, y, x + 12, y + 4, 3);
     }
 
     public static void paintStatic(Gfx g, int set, int tod) {

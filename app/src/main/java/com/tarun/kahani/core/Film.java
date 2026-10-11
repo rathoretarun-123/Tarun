@@ -76,6 +76,8 @@ public final class Film {
         public int type;
         public float t0, t1;
         public int set, tod;
+        /** v45: the place's own details over its set (Sets.D_*: a metro platform, desks, a drip stand, a well …). */
+        public int decor;
         public int scene = -1;
         public String text1 = "", text2 = "";
         public final List<Actor> actors = new ArrayList<Actor>();

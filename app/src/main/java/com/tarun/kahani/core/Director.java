@@ -295,6 +295,8 @@ public final class Director {
             card.text1 = sc.heading;
             card.text2 = sc.title;
             card.set = Sets.forScene(sc);
+            card.decor = Sets.decorFor((sc.title == null ? "" : sc.title) + " " + firstSentence(sc.setting == null ? "" : sc.setting));
+            card.set = Sets.setForDecor(card.set, card.decor, (sc.title == null ? "" : sc.title) + " " + (sc.setting == null ? "" : sc.setting));
             card.tod = Sets.detectTime(sc.setting, Sets.DAY);
             card.backdrop = this.art.sceneBackdrop(sc.number, 0);
             card.fadeIn = 0.4f; card.fadeOut = 0.4f;
@@ -1040,6 +1042,10 @@ public final class Director {
             seg.set = Sets.detect(firstSentence(where));
             if (seg.set == Sets.GENERIC_OUT) seg.set = Sets.detect(where);
         }
+        // v45: what makes the place itself (the platform and the train, the desks, the drip stand, the well …)
+        seg.decor = Sets.decorFor((sc.title == null ? "" : sc.title) + " " + firstSentence(where));
+        if (seg.decor == Sets.D_NONE) seg.decor = Sets.decorFor(where);
+        seg.set = Sets.setForDecor(seg.set, seg.decor, (sc.title == null ? "" : sc.title) + " " + where);
         // the hour: the scene's own words first (its title, the first line of its action), then the place's first
         // sentence (a place description that says the flowers glow "at night" does not make the morning night)
         String firstDir = "";

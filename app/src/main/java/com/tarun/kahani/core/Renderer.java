@@ -197,10 +197,10 @@ public final class Renderer {
         float u = (t - s.t0) / Math.max(0.1f, s.t1 - s.t0);
         if (s.backdrop != null) cover(g, s.backdrop, 1.08f + 0.04f * u, 0, 0);
         else {
-            final int set = s.set, tod = s.tod;
+            final int set = s.set, tod = s.tod, decor = s.decor;
             g.save();
             stageView(g, 1.08f + 0.04f * u);
-            g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
+            g.layer("set:" + set + ":" + tod + ":" + decor, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod, decor); } });
             Sets.paintLive(g, set, tod, t, film == null ? 0 : film.wind(t));     // v35: its trees, swaying
             g.restore();
         }
@@ -984,12 +984,12 @@ public final class Renderer {
             waterNature(g, s, t, sc, b);
             snowLand(g, s, t, sc == null ? 0.35f : sc.skyBottom);
         } else {
-            final int set = s.set, tod = s.tod;
+            final int set = s.set, tod = s.tod, decor = s.decor;
             // v35: a painted place is drawn as shapes when the camera is in on it (a cached picture of it, enlarged,
             // went soft); a wide shot keeps the cached one
             float farZoom = (1 + (camZ - 1) * 0.78f) * 1.1f;
-            if (farZoom > 1.2f) Sets.paintStatic(g, set, tod);
-            else g.layer("set:" + set + ":" + tod, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod); } });
+            if (farZoom > 1.2f) Sets.paintStatic(g, set, tod, decor);
+            else g.layer("set:" + set + ":" + tod + ":" + decor, W, H, new Gfx.Painter() { public void paint(Gfx gg) { Sets.paintStatic(gg, set, tod, decor); } });
             Sets.paintLive(g, set, tod, t, wind);
             skyNature(g, s, t, 0.38f);
             waterNature(g, s, t, null, null);

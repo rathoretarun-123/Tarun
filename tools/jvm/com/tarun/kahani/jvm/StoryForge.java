@@ -750,7 +750,7 @@ public class StoryForge {
                         inv(issues, first, "moves while lying", ac.c.fullName + " moves lying at " + k.t);
                     if (k.moveDur > 0.3f && k.visible && k.body == Pose.SIT && Math.abs(k.x - Director.xAt(ac, k.t + 0.01f)) > 40) {
                         boolean riding = false;
-                        for (Film.Act x : ac.acts) if ((x.type == Film.G_RIDE || x.type == Film.G_PLAYGROUND) && k.t >= x.t0 - 0.5f && k.t <= x.t1 + 0.5f) riding = true;
+                        for (Film.Act x : ac.acts) if ((x.type == Film.G_RIDE || x.type == Film.G_PLAYGROUND || (x.type == Film.G_SNOW_PLAY && x.item == Film.SNOW_SLIDE)) && k.t >= x.t0 - 0.5f && k.t <= x.t1 + 0.5f) riding = true;
                         if (!riding && ac.look != null && ac.look.aid != Look.AID_WHEELCHAIR) inv(issues, first, "walks seated", ac.c.fullName + " walks seated at " + k.t);
                     }
                 }

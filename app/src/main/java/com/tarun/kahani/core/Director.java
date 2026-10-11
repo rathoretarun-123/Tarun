@@ -357,6 +357,7 @@ public final class Director {
         umbrellaRain();
         walkSounds();
         settleStays();
+        oneRideAtATime();
         steadyRiders();
         vehicleDoors();
         placeSteps();
@@ -4803,6 +4804,24 @@ public final class Director {
     }
 
     /**
+     * v44: nobody is on two rides at once — one carried along in a car who then boards a bus gets out of the car
+     * first (the earlier ride ends as the next one begins).
+     */
+    private void oneRideAtATime() {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            List<Film.Act> rides = new ArrayList<Film.Act>();
+            for (Film.Act x : a.acts) if (x.type == Film.G_RIDE) rides.add(x);
+            if (rides.size() < 2) continue;
+            java.util.Collections.sort(rides, new java.util.Comparator<Film.Act>() { public int compare(Film.Act p, Film.Act q) { return Float.compare(p.t0, q.t0); } });
+            for (int i = 0; i + 1 < rides.size(); i++) {
+                Film.Act x = rides.get(i), y = rides.get(i + 1);
+                if (x.t1 > y.t0 + 0.05f) { x.t1 = Math.max(x.t0 + 0.3f, y.t0 - 0.05f); overlapsCut++; }
+            }
+        }
+    }
+    public int overlapsCut;
+
+    /**
      * v43: one who only got on (and waits on it, the engine running) stays on until the next thing they or the one on
      * the seat behind do — then they get off first; with nothing more to do in the part they stay on to its end.
      */
@@ -6377,6 +6396,8 @@ public final class Director {
     static final String[] ARRIVE_WORDS = {" आता", " आती", " आते", " आ रह", " आ गय", " आ गई", " आ जात", " आकर", "पहुँच", "पहुंच", " लौट", "comes", "came", "arrives",
             "arrived", "returns", "gets home", "reaches", "pulls up"};    // (with the space: "आता" is inside "चलाता")
     /** v43: going off on it to another place (out of the picture). */
+    /** v44: "rides his motorbike to the market", "drives the car to the office": off to a place on it. */
+    static final java.util.regex.Pattern RIDES_TO = java.util.regex.Pattern.compile("(?i)\\b(rides|drives|cycles|pedals|goes|heads)\\b.*\\bto (the |his |her |their )?(market|shop|school|college|office|work|temple|hospital|station|town|city|village|fair)\\b");
     static final String[] GO_WORDS = {" जाता", " जाती", " जाते", " जा रह", " जाने", " चला गय", " चली गई", " चले गए", "goes to", "go to", "went to", "heads to", "heads for",
             "off to", "drives to the", "rides to the", "leaves for"};    // (with the space: "जाता" is inside "बजाता")
     static final String[] DESTINATIONS = {"बाज़ार", "मार्केट", "मंडी", "दुकान", "स्कूल", "कॉलेज", "दफ़्तर", "ऑफिस", "आफिस", "काम पर", "मंदिर", "अस्पताल",
@@ -6873,6 +6894,16 @@ public final class Director {
                 Film.Key now = a.stateAt(t);
                 if (a.look == null || !a.look.isHumanoid() || now.anchor != Film.A_GROUND) continue;
                 float x = xAt(a, t), dest = x < 640 ? Math.min(1120, x + 420) : Math.max(160, x - 420);
+                // (v44: down a clear stretch — never into someone standing on the slope; the other way, or short of them)
+                if (between(a, x, dest, t) > 0) {
+                    float other = x < 640 ? Math.max(160, x - 420) : Math.min(1120, x + 420);
+                    if (Math.abs(other - x) > 200 && between(a, x, other, t) == 0) dest = other;
+                    else {
+                        float sd = dest > x ? 1 : -1, stop = dest;
+                        for (Film.Actor o : seg.actors) if (o != a && o.stateAt(t).visible) { float ox = xAt(o, t); if ((ox - x) * sd > 0 && Math.abs(ox - x) < Math.abs(stop - x) + 110) stop = ox - sd * 120; }
+                        dest = stop;
+                    }
+                }
                 Film.Act act = new Film.Act(t + 0.2f, t + 2.6f, Film.G_SNOW_PLAY); act.item = Film.SNOW_SLIDE;
                 a.acts.add(act);
                 Film.Key sit = keyAt(a, t + 0.2f); sit.body = Pose.SIT; sit.seat = Film.SEAT_FLOOR; sit.facing = dest > x ? 1 : -1; sit.emotion = Pose.LAUGH;
@@ -7622,7 +7653,7 @@ public final class Director {
             boolean takes = Txt.has(s, " को ", "takes ", "with ");
             // v43: off to another place on it ("स्कूटर से बाज़ार जाते हैं", "drives to the office"): out of the picture
             boolean arrives = Txt.has(s, ARRIVE_WORDS);
-            if (!away && !arrives && Txt.has(s, DESTINATIONS) && Txt.has(s, GO_WORDS)) away = true;
+            if (!away && !arrives && Txt.has(s, DESTINATIONS) && (Txt.has(s, GO_WORDS) || RIDES_TO.matcher(s).find())) away = true;
             float speed = v == Film.V_BICYCLE ? (subj.look.isChild() ? 190 : 230) : v == Film.V_BUS ? 320 : v == Film.V_AUTO ? 340
                     : v == Film.V_HORSE ? (Txt.has(s, "धीरे", "slowly", "walks", "trots", "कदम") ? 150 : 330) : v == Film.V_ELEPHANT ? 110 : 400;
             List<Film.Actor> riders = new ArrayList<Film.Actor>();
@@ -7732,7 +7763,9 @@ public final class Director {
             // v43: arriving on it from beyond the edge of the picture: one not yet in it ("तरुण बाइक से घर आता है")
             boolean enters = !joined && driver == null && (!lead.stateAt(t).visible || justIn(lead, t)
                     || ((arrives || Txt.has(s, "रुकता", "रुकती", "रुकते", "पार्क", "stops", "pulls up", "parks")) && firstThing(lead, t))
-                    || ((mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH) && !Txt.has(s, MOUNT_ONLY)));
+                    // (v44: a mishap comes riding in — unless they have already spoken or done something here: then
+                    // they ride from where they are, turning for a run-up first)
+                    || ((mishap == Film.MISHAP_SKID || mishap == Film.MISHAP_CRASH) && !Txt.has(s, MOUNT_ONLY) && firstThing(lead, t)));
             float x0 = xAt(lead, t + 0.05f);
             float faces = lead.stateAt(t).facing >= 0 ? 1 : -1;
             // v43: their own vehicle parked in this part (where they got off it): they walk back to it and ride it from there
@@ -7927,7 +7960,15 @@ public final class Director {
                 float lag = own ? i * 0.35f : 0;
                 float extra = own ? 0 : Math.max(0, i - 1) * 0.35f;
                 // (arriving: not in the picture until they ride in)
-                if (enters) for (Film.Key kk : a.keys) if (kk.t < t0 + lag - 0.001f && kk.t >= seg.t0 - 0.001f) kk.visible = false;
+                // (v44: only since they last went away — an earlier ride out of this part stays seen: "rides his motorbike
+                // to the market" and then "starts his scooter and rides off" hid the first ride's rider all the way)
+                // v44: one still on another ride (the back seat of a car, and now "बस में चढ़ जाता है"): that one ends
+                // first — nobody rides two at once
+                for (Film.Act x : a.acts) if (x.type == Film.G_RIDE && x.t0 < t0 + lag && x.t1 > t0 + lag) x.t1 = Math.max(x.t0 + 0.3f, t0 + lag - 0.05f);
+                float hideFrom = seg.t0 - 0.001f;
+                Float wentAt = goneAt.get(a);
+                if (wentAt != null && wentAt >= seg.t0 && wentAt < t0 + lag) hideFrom = wentAt;
+                if (enters) for (Film.Key kk : a.keys) if (kk.t < t0 + lag - 0.001f && kk.t >= hideFrom) kk.visible = false;
                 Film.Key k0 = keyAt(a, t0 + lag);
                 k0.visible = true; k0.body = Pose.STAND; k0.facing = dir; k0.run = false;
                 k0.x = own ? (enters ? x0 - (ownBikes ? i * 150 * dir : 0) : xAt(a, t0 + lag)) : x0 - dir * off[i];

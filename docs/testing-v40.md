@@ -79,11 +79,30 @@ slides down; both leave together at the end.
 | "चुनाव" in a line | opened the sea and a boat | nothing (the boat word must start a word) |
 | समीर's kulhad in both hands | made him walk over to hold अर्जुन's hand | stays seated with his kulhad |
 
+The film (640 px, 24 fps, desktop, from the project the test uploaded): 152 s, 13,637 drawings of a character, lips
+moving on every spoken frame, heads turned 10° or more in 91 %, कबीर in mid-stride in 2,857 drawings; the final check
+averages 4.7 of 5 with no critical failure. The title and the end are drawn on your fire picture (they were the
+studio's daylight palace garden).
+
+Still weak, said plainly: the rod poking the fire, the kettle pouring, the blanket and the jiggling leg are not
+animated; the log seats are drawn (your picture's logs stay where the picture has them); कबीर behind the fire is seen
+through your picture's flames, but the brick ring of the fire pit does not hide his feet.
+
+The park film: आरव swings on a drawn swing frame beside your picture's red swing, and the slide's insert shows as
+your picture on a white card.
+
 Angles over all the test sheets: the changes on people are mostly better (a girl's profile, a profile with a braid, two
 fronts of a jumping girl, a laughing front, अर्जुन's profile); two waving or crying figures moved between three-quarter
 and side. The sample backs and fronts (वृंदा, राजू, कृपा) read as before.
 
 ## 7. The suite
+
+The whole Robolectric suite (the app as it runs on a phone, with the user's sheets and stories): **70 tests, 0 failed,
+1 skipped (as before), 27 minutes.** Found and fixed on the way: the over-the-shoulder record now names the back
+picture it draws; वृंदा's sample back picture read as three-quarter after the forehead check (brown hair is now told
+from skin by its colour); two tests were wrong (the park test counted the wrong act; the pose test expected the sitting
+figure of sheet 4 at a fixed place in the order). After the title and end pages moved onto the story's own place, the
+10 tests that draw title pages, place pictures and the v40 stories ran again: all pass.
 
 ## Said plainly
 

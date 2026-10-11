@@ -338,6 +338,14 @@ public final class Director {
         end.text1 = story.hindi ? "समाप्त" : "The End";
         end.text2 = story.title;
         end.backdrop = this.art.end;
+        // v40: with no picture made for the title or the end, they are drawn on the story's own place — the user's
+        // picture of it, at its hour — never the studio's daylight palace garden after a night by a fire
+        if (this.art.title == null || this.art.end == null) {
+            Film.Seg first = null, last = null;
+            for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE && sg.backdrop != null && sg.backdrop.picture && !sg.backdrop.object) { if (first == null) first = sg; last = sg; }
+            if (this.art.title == null && first != null) { title.backdrop = first.backdrop; title.set = first.set; title.tod = first.tod; title.ground = first.ground; }
+            if (this.art.end == null && last != null) { end.backdrop = last.backdrop; end.set = last.set; end.tod = last.tod; end.ground = last.ground; }
+        }
         end.fadeIn = 0.8f; end.fadeOut = 1.2f;
         film.segs.add(end);
         film.music.add(new Film.Music(Film.M_END, t, end.t1));

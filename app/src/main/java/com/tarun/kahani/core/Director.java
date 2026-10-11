@@ -3208,7 +3208,7 @@ public final class Director {
         {new String[]{"माफ़ी", "माफी", "क्षमा", "sorry", "apologi"}, Pose.SAD, Film.G_BOW, 2.0f, EV_NONE},
         {new String[]{"हाथ जोड़", "नमस्कार", "प्रणाम", "folds his hands", "folds her hands", "joins his hands", "joins her hands"}, Pose.HAPPY, Film.G_BOW, 1.8f, EV_NONE},
         {new String[]{"पूजा", "प्रार्थना", "आरती", "दुआ", "prays", "praying", "worship"}, Pose.RELIEVED, Film.G_BOW, 2.6f, EV_EYES},
-        {new String[]{"छाता खोल", "छतरी खोल", "छाता तान", "opens the umbrella", "opens an umbrella", "opens her umbrella", "opens his umbrella"}, -1, Film.G_REACH, 1.2f, EV_UMBRELLA},
+        {new String[]{"छाता", "छतरी", "umbrella"}, -1, Film.G_REACH, 1.2f, EV_UMBRELLA},
         {new String[]{"छिप", "छुप", "hides", "hiding", "ducks down", "ducks behind"}, Pose.SCARED, -1, 2.2f, EV_HIDE},
         {new String[]{"घुटनों के बल", "घुटने के बल", "घुटने टेक", "kneels", "on his knees", "on her knees"}, -1, -1, 1.6f, EV_KNEEL},
         {new String[]{"पालथी", "cross-legged", "cross legged"}, -1, -1, 1.4f, EV_FLOOR},
@@ -3313,10 +3313,20 @@ public final class Director {
             if (c.displayName != null && c.displayName.length() > 0) w = w.replace(c.displayName, " ");
         }
         Object[] row = null;
-        for (Object[] r : EVERYDAY) if (Txt.has(w, (String[]) r[0])) { row = r; break; }
-        if (row != null && (Integer) row[4] == EV_FALL && Txt.has(w, "हाथ से", "छूट", "पत्ते", "पत्ता", "बूँद", "बूंद", "बारिश", "बर्फ", "ओले", "गिरा दे", "गिरा दि", "गिरा दी",
-                "drops the", "leaves fall", "rain falls", "snow falls", "night falls", "silence falls", "falls asleep")) row = null;
-        if (row != null && (Integer) row[4] == EV_GIVE && Txt.has(w, "दिखाई", "सुनाई", "ध्यान", "जवाब", "धोखा")) row = null;
+        for (Object[] r : EVERYDAY) {
+            if (!Txt.has(w, (String[]) r[0])) continue;
+            int kind = (Integer) r[4];
+            // a fall of something else (a leaf, the rain, a thing dropped), not of the one named
+            if (kind == EV_FALL && Txt.has(w, "हाथ से", "छूट", "पत्ते", "पत्ता", "बूँद", "बूंद", "बारिश", "बर्फ", "ओले", "गिरा दे", "गिरा दि", "गिरा दी",
+                    "drops the", "leaves fall", "rain falls", "snow falls", "night falls", "silence falls", "falls asleep")) continue;
+            // "देता है" gives only to someone ("बिल्ली को दूध देता है"); "रख देता है", "दिखाई देता है" are other verbs
+            if (kind == EV_GIVE && (Txt.has(w, "दिखाई", "सुनाई", "ध्यान", "जवाब", "धोखा", "रख दे", "छोड़ दे", "फेंक दे", "हटा दे", "खोल दे", "बंद कर दे", "बता दे", "दिखा दे")
+                    || (!Txt.has(w, " को ", "gives", "hands", "offers", "तोहफ़ा", "तोहफा", "उपहार", "गिफ्ट", "थमा", "सौंप") && target == null))) continue;
+            // an umbrella put away is not opened
+            if (kind == EV_UMBRELLA && Txt.has(w, "बंद", "समेट", "close", "fold", "puts away", "put away")) continue;
+            row = r;
+            break;
+        }
         Object[] mood = null;
         for (Object[] r : FEELINGS) if (Txt.has(w, (String[]) r[0])) { mood = r; break; }
         if (row == null && mood == null) return 0;

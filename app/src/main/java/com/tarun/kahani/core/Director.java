@@ -4398,6 +4398,12 @@ public final class Director {
         if (seg != null) for (Film.Actor a : seg.actors) for (Film.Track r : a.track) if (r.t1 > 1e5f) r.t1 = tEnd + 2f;
     }
 
+    /** v42: a ride that runs straight on from another ride of the same vehicle (no fading in: the car waits). */
+    private static boolean rideJoinedBefore(Film.Actor a, Film.Act r) {
+        for (Film.Act x : a.acts) if (x != r && x.type == Film.G_RIDE && x.item == r.item && Math.abs(x.t1 - r.t0) < 0.1f) return true;
+        return false;
+    }
+
     /** v42: the place on the ring at th is taken at t — someone (a seated man beside the fire) is there, at about its depth. */
     private boolean crowded(Film.Actor a, float th, float t) {
         float x = fireCx + fireRw * (float) Math.cos(th), lift = fireCy - fireRy * (float) Math.sin(th);
@@ -6096,6 +6102,12 @@ public final class Director {
                 ride.target = own ? null : riders.get(0);
                 a.acts.add(ride);
                 if (away) { Film.Key gone = a.at(t0 + lag + dur + 0.05f); gone.visible = false; leftFrom.put(a, dir > 0 ? 1400f : -120f); goneAt.put(a, t0 + lag + dur); }
+                // v42: a car, a scooter or a bike ridden in stays where its rider got off — parked, until it is ridden
+                // again (it faded away while the family stood beside it)
+                if (own && ride.item > 0 && (v == Film.V_CAR || v == Film.V_SCOOTER || v == Film.V_MOTORBIKE || v == Film.V_BICYCLE)) {
+                    for (Film.Fx o : seg.fx) if (o.type == Film.FX_PARKED && o.a == a && o.t1 > ride.t0) o.t1 = ride.t0 + (rideJoinedBefore(a, ride) ? 0.05f : 0.35f);
+                    if (!away) { Film.Fx pk = fx(Film.FX_PARKED, ride.t1 - 0.35f, 1e6f, go, 0, a, null); pk.kind = ride.item; pk.color = dir > 0 ? 1 : -1; }
+                }
                 if (own) {
                     float mid = t0 + lag + 0.2f;
                     switch (v) {
@@ -6347,8 +6359,41 @@ public final class Director {
     private float oneTask(String s, String sp, int kind, float t, List<Film.Actor> who) {
         if (kind == Film.T_READ && Txt.has(sp, "अख़बार", "अखबार", "newspaper")) kind = Film.T_PAPER;
         float dur = kind == Film.T_PHONE ? 3.2f : kind == Film.T_COMB ? 3f : kind == Film.T_RANGOLI || kind == Film.T_PAINT ? 5f : 4.2f;
+        float most = 0;
         for (Film.Actor a : who) {
             if (a.look == null || !a.look.isHumanoid()) continue;
+            // v42: a task on the floor in front of them (the plants watered, the floor swept, a bucket, a stove, a
+            // rangoli) is done on open floor: standing at a drawn sofa, प्रिया watered its arm — the water fell on it
+            float walk = 0;
+            Film.Key k0 = a.stateAt(t);
+            if (seg != null && k0.visible && k0.body == Pose.STAND && k0.anchor == Film.A_GROUND
+                    && (kind == Film.T_WATER || kind == Film.T_SWEEP || kind == Film.T_WASH || kind == Film.T_COOK || kind == Film.T_RANGOLI)) {
+                float x = xAt(a, t);
+                Film.Fx seat = seatNear(x, 330);
+                if (seat != null) {
+                    // turned away from it, the pot, the bucket or the stove stands on the open side; with no room there,
+                    // a few steps out to open floor first
+                    float away = x >= seat.x ? 1 : -1;
+                    if (x + away * 150 >= 60 && x + away * 150 <= 1220 && seatNear(x + away * 150, 120) == null) {
+                        if (k0.facing != away) { Film.Key tk = keyAt(a, t + 0.05f); tk.facing = away; walk = 0.35f; }
+                    } else {
+                        List<Film.Actor> self = java.util.Collections.singletonList(a);
+                        float to = Float.NaN;
+                        for (int k = 1; k <= 16 && Float.isNaN(to); k++) {
+                            float c = x + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * 60f;
+                            if (c >= 170 && c <= 1110 && seatNear(c, 380) == null && freeAt(c, t, self, 100)) to = c;
+                        }
+                        if (!Float.isNaN(to)) {
+                            walk = Math.max(0.8f, Math.min(2.5f, Math.abs(to - x) / 170f));
+                            Film.Key wk = keyAt(a, t + 0.05f);
+                            wk.x = to; wk.moveDur = walk; wk.facing = to > x ? 1 : -1; wk.run = false;
+                            walk += 0.1f;
+                        }
+                    }
+                }
+            }
+            most = Math.max(most, walk);
+            t += walk;
             Film.Act act = new Film.Act(t + 0.2f, t + 0.2f + dur, Film.G_TASK);
             act.item = kind;
             a.acts.add(act);
@@ -6365,8 +6410,16 @@ public final class Director {
             }
             tasks++;
             if (who.size() == 1 && photo(a) && (kind == Film.T_PHONE || kind == Film.T_BRUSH)) { mealCU = a; mealCUt = t + 0.1f; }
+            t -= walk;
         }
-        return dur + 0.3f;
+        return dur + 0.3f + most;
+    }
+
+    /** v42: the nearest drawn seat (a sofa, a chair, a bed, a stool, a log) within gap of x, or null. */
+    private Film.Fx seatNear(float x, float gap) {
+        Film.Fx best = null;
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && Math.abs(f.x - x) < gap && (best == null || Math.abs(f.x - x) < Math.abs(best.x - x))) best = f;
+        return best;
     }
 
     /** The AI's cues for a line, without the events the text itself already sets off (no double lightning or stones). */

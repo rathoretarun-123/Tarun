@@ -23,15 +23,20 @@ natural effects to be right.
   three-quarter, side and back pictures chosen for your 8 characters are 30 of 30 right (the family's were 8 of 14).
   It is not 100 %: you can correct any reading in the picture review ("Angle:").
 * **Your three-quarter pictures** are used while a character listens through a whole two-shot, standing still and
-  turned to the speaker — never while speaking (a turned face's mouth cannot be found surely) and never when the front
-  picture holds something the turned one does not (प्रिया's tea tray vanished in it).
+  turned to the speaker — never while speaking (a turned face's mouth cannot be found surely).
+* **The right front picture:** प्रिया's picture with the tea tray carried the tray into every scene (and a watering
+  can floated beside it). A front holding something now gives way to a plain standing front of the same person when
+  your sheets have one, with the back picture that goes with it.
 * **Your top pictures:** mark a picture "top" in the picture review; a shot that looks down on that character ("छत से
   नीचे देखती है", "looks down from the balcony") shows them from above.
 * **Faces and bodies:** every picture the films use was checked with its eyes, mouth, chin, shoulders, hips, hands and
   legs drawn on it. राहुल's mouth was on his T-shirt's collar (and 3 more in your sheets) — now on the lips; side,
   three-quarter and back pictures had their shoulders at the ears — now at the shoulders, from the front picture of the
   same person; hands that hold a tray or a toy, or rest in pockets, no longer swing.
-* **अलाव के पास:** कबीर no longer stops right on top of seated अर्जुन while circling the fire.
+* **Physical and natural effects**, checked second by second in three renders: a car, scooter or bike stays parked
+  where its rider got off (the car faded away); no stars in the sky of an evening rainbow; a floor task (watering,
+  sweeping) is done on open floor, not into a drawn sofa; in अलाव के पास, कबीर no longer stops right on top of seated
+  अर्जुन while circling the fire.
 * Details and numbers: [`docs/testing-v42.md`](docs/testing-v42.md).
 * **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
   quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.

@@ -321,8 +321,10 @@ public final class Film {
             FX_SWING = 40,        // a swing: its frame at x; the seat hangs empty and sways in the air when no one is on it
             FX_SLIDE = 41,        // a slide: its ladder at x, the chute running toward kind (+1 right, -1 left)
             FX_THING = 42,        // v41: a thing lying on the ground at x (kind 1: a school bag), sized for actor a
-            FX_PUDDLE = 43;       // v41: a rain puddle on the ground at x (y: below the ground line, color: its width);
+            FX_PUDDLE = 43,       // v41: a rain puddle on the ground at x (y: below the ground line, color: its width);
                                   //      t2: when someone jumps into it — the splash and its rings (-1: no one)
+            FX_PARKED = 44;       // v42: a car, a scooter or a bike left where its rider got off (a: the rider, kind:
+                                  //      the vehicle, color: its facing)
 
     public static final class Fx {
         public float t0, t1;

@@ -5805,17 +5805,20 @@ public class AppTest {
                         v.h / (float) v.w >= 0.7f * sp.h / sp.w);
             }
         }
-        // v42: प्रिया's front holds the tray of tea: her arms keep their place (no swing bends the tray) and no turned
-        // picture without the tray stands in for her while she listens; तरुण's and वृंदा's hands hang free. Every view's
-        // shoulders are where the front has them (before, a back picture's were read at the ears)
+        // v42: प्रिया's picture with the tea tray carried the tray into every scene (and a watering can floated beside
+        // it): her plain standing front plays, with the plain back that goes with it; a front whose hands hold
+        // something keeps its arms still and never swaps to a turned picture; every view's shoulders are where the
+        // front has them (before, a back picture's were read at the ears)
         Story.CharacterDef priya = null;
         for (Story.CharacterDef x : st.cast()) if (x.fullName.equals("प्रिया")) priya = x;
         Art.Sprite psp = art.sprites.get(priya.id);
-        assertTrue("प्रिया's front holds the tray", psp.holds && psp.rig != null && psp.rig.armsFixed);
-        assertTrue("no three-quarter picture without the tray stands in for her", psp.view(0) == null || !psp.view(0).userQuarter);
+        String artNotes = String.join("\n", art.notes);
+        assertTrue("प्रिया plays from a front with free hands: " + artNotes, !psp.holds && artNotes.contains("front picture of प्रिया: the one with free hands"));
+        if (psp.view(2) != null) assertTrue("her back is as tall for its width as her front", Math.abs(psp.view(2).h / (float) psp.view(2).w / (psp.h / (float) psp.w) - 1) <= 0.16f);
         for (Story.CharacterDef c : st.cast()) {
             Art.Sprite sp = art.sprites.get(c.id);
-            if (c.fullName.equals("तरुण") || c.fullName.equals("वृंदा")) assertFalse(c.fullName + "'s hands hang free", sp.holds);
+            if (c.fullName.equals("तरुण") || c.fullName.equals("वृंदा") || c == priya) assertFalse(c.fullName + "'s hands hang free", sp.holds);
+            if (sp.holds) assertTrue(c.fullName + ": arms still, no turned picture", sp.rig.armsFixed && (sp.view(0) == null || !sp.view(0).userQuarter));
             if (sp.rig == null || sp.rig.armsFixed || sp.rig.bottom - sp.rig.top < 0.3f) continue;
             for (int i = 0; i < 3; i++) {
                 Art.Sprite v = sp.view(i);
@@ -5906,6 +5909,10 @@ public class AppTest {
         for (int i = 0; i < riders.size(); i++) for (int j = i + 1; j < riders.size(); j++)
             assertTrue("they wait at the car side by side: " + riders.get(i).c.fullName + " / " + riders.get(j).c.fullName,
                     Math.abs(Director.xAt(riders.get(i), board) - Director.xAt(riders.get(j), board)) >= 40);
+        // v42: the car stays parked where पापा stopped it (it faded away while the family stood beside it)
+        boolean parked = false;
+        for (Film.Seg sg : film.segs) for (Film.Fx f : sg.fx) if (f.type == Film.FX_PARKED && f.kind == Film.V_CAR && f.t0 <= drives.get(1).t1 && f.t1 > drives.get(1).t1 + 5) parked = true;
+        assertTrue("the car stays parked after the drive", parked);
         assertEquals(0, posePictures(film, art));
         File keep = new File(OUT.getParentFile(), "v41rain");
         deleteTree(keep);

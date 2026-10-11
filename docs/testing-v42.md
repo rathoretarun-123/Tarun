@@ -64,9 +64,14 @@ side or back: 8). You can correct any reading in the picture review (tap "Angle:
   to someone who is there. A cut brings it in and a cut takes it out (never a swap in mid-shot). It is not used while
   they speak: on your sheets the mouth of a turned face was found on the neck or the nose in five pictures of eight,
   so a three-quarter picture would move the wrong place.
-* **Not when the front holds something:** in the first render प्रिया listened in her three-quarter picture without
-  the tea tray she holds in her front picture — the tray vanished and came back at the next cut. Now a front whose
-  hands are held before the body (a tray, a toy) or in the pockets is never swapped for a turned picture.
+* **The front that plays has free hands:** in the first render प्रिया listened in her three-quarter picture without
+  the tea tray of her front picture — the tray vanished and came back at the next cut; the tray also went with her
+  through the rain, and when she watered the plants a watering can floated beside it. Your sheets also have a plain
+  standing front of her: now a front whose hands hold something gives way to a plain standing front of the same
+  person when there is one (the tray picture stays in the library), and her back picture is the plain one that goes
+  with it (a back must be about as tall for its width as the front; her back with the tray stuck out at both sides).
+  A front whose hands stay held (वनुशा's toy, कबीर's hands in his pockets — no other front of them) is never swapped
+  for a turned picture.
 * **Top:** a picture you mark as seen from above (in the picture review, tap "Angle:" until it says "top") is that
   character's top view. A point-of-view shot that looks down — "छत से नीचे देखती है", "बालकनी से झाँकता है", "looks
   down", "from the roof" — shows them from above on the ground of the place. A top picture is never guessed, and is
@@ -89,13 +94,31 @@ the two legs. Found and fixed:
   have the shoulders at the shoulders and the hips at the waistband; समीर's three-quarter and कबीर's three-quarter and
   side pictures still have the shoulders a little low, on the upper chest (कबीर's front, hands in pockets, cannot
   guide them). वनुशा's waving three-quarter picture is not read well, but it is never used for her.
-* **Hands that hold something stay still.** प्रिया's tea tray, वनुशा's toy and कबीर's hands in his pockets: the rig
-  no longer swings those arms (a swing bent the tray). The hanging hands of the other five swing as before.
+* **Hands that hold something stay still.** वनुशा's toy and कबीर's hands in his pockets (and प्रिया's tray, in a
+  picture set where it is her only front): the rig no longer swings those arms (a swing bent the tray). The hanging
+  hands of the others swing as before.
 * The eyes and mouths of all 8 fronts are on the eyes and lips.
 
 ## 6. Physical and natural effects
 
-(see section 6 below — filled in from the renders)
+"बारिश वाला रविवार" was rendered three times with your family's pictures and looked at second by second (the room,
+the drive, the rain, the evening with the rainbow), and अलाव के पास was checked for its fire. What was wrong:
+
+* **The car vanished after the drive.** पापा parked, everyone got out — and the car faded away beside them. A car,
+  a scooter or a bike ridden in now stays parked where its rider got off, until it is ridden again (behind the
+  family in the rain, the cycle and the bike in the evening).
+* **Stars beside the rainbow.** The evening after the rain had a full night of stars in the same sky as the rainbow.
+  A rainbow needs the low sun: no stars while it shows, and an evening sky shows only a few faint ones.
+* **Water on the sofa.** Standing at the end of the drawn sofa, प्रिया watered its arm. A task done on the floor in
+  front of someone (watering, sweeping, a bucket, a stove, a rangoli) now turns them to the open side, or takes them a
+  few steps to open floor.
+* **A cut waiting for a jump** made a 4.3-s shot (section 1); the fire walker stopping on a seated man (section 2).
+* Checked and right: the rain streaks and the wet darkening of everyone in the rain, the umbrella over प्रिया, the
+  puddles and the splash of the jump, the thunder's flash, the rainbow after the rain, the fire's light and sparks,
+  no floating feet (3519 feet positions on the ground line), no flicker or shake (the film's own frame-by-frame check:
+  largest change between two frames 10.6 of 14 allowed).
+* Not right yet: a drawn sofa is flat beside your painted rooms, and a person standing at its end is partly hidden by
+  its arm; a held thing for a task (the watering can) is at the hand but a picture's arm does not lift with it.
 
 ## 7. Said plainly
 

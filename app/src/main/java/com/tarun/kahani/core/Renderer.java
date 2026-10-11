@@ -518,8 +518,11 @@ public final class Renderer {
         if (film == null) return;
         float skyY = Math.max(120, skyBottom * H);
         float stars = film.weather(Film.W_STARS, t);
-        if (stars > 0 && (s.tod == Sets.NIGHT || s.tod == Sets.EVENING) && skyBottom > 0.12f) Nature.stars(g, W, skyY * 0.95f, t, stars);
         float bow = film.weather(Film.W_RAINBOW, t);
+        // v42: a rainbow needs the low sun behind the one who sees it — no stars in that sky; and an evening sky shows
+        // only the first few, faint (the rainy evening of "बारिश वाला रविवार" had a full night of stars by its rainbow)
+        if (stars > 0 && (s.tod == Sets.NIGHT || (s.tod == Sets.EVENING && bow <= 0)) && skyBottom > 0.12f)
+            Nature.stars(g, W, skyY * 0.95f, t, s.tod == Sets.EVENING ? stars * 0.45f : stars);
         if (bow > 0) Nature.rainbow(g, W * 0.62f, skyY + 60, W * 0.42f, bow);
         float storm = film.weather(Film.W_STORM, t), rain = film.weather(Film.W_RAIN, t);
         float cl = Math.max(film.weather(Film.W_CLOUDS, t), Math.max(storm, rain * 0.8f));
@@ -4117,6 +4120,7 @@ public final class Renderer {
                     sparkles(g, t, x - 120, f.y - 120, 240, 240, 14, f.color == 0 ? 0xFFFFF59D : f.color);
                 } break;
                 case Film.FX_SPLASH: if (!behind) { boolean inPuddle = false; for (Film.Fx o : s.fx) if (o.type == Film.FX_PUDDLE && Math.abs(o.t2 - f.t0) < 1e-3f) inPuddle = true; if (!inPuddle) splash(g, f, u); } break;
+                case Film.FX_PARKED: if (behind && f.a != null) parkedVehicle(g, s, f); break;
                 case Film.FX_PUDDLE: if (behind) puddle(g, s, f, t); else if (f.t2 >= 0 && t >= f.t2) {
                     float ps = perspective(s, f.y);
                     Nature.splashRipples(g, f.x, s.ground + f.y - 2, Math.min(t - f.t2, 0.9f), 1.6f * ps);
@@ -4522,6 +4526,26 @@ public final class Renderer {
      * v41: a rain puddle lying on the road: a flat pool with the sky's colour in it, a darker wet rim, a streak of light;
      * when someone jumps in, rings run out to its edge and die away (the drops are drawn in front of the people).
      */
+    /** v42: a vehicle left where its rider got off: still, its wheels at rest, behind everyone, as it was drawn under them. */
+    private void parkedVehicle(Gfx g, Film.Seg s, Film.Fx f) {
+        Film.Actor a = f.a;
+        if (a.look == null) return;
+        float h = actorHeight(a.look, a.c, art, s);
+        int v = f.kind % Film.V_PASSENGER;
+        float vS = v == Film.V_BICYCLE ? h : (a.look.isChild() ? h / 0.78f : h);
+        Film.Key k = a.stateAt(f.t0);
+        float y = s.ground, scale = 1f;
+        if (k.depth > 0) { y -= 26; scale = 0.88f; }
+        g.save();
+        g.translate(f.x, y);
+        if (scale != 1f) g.scale(scale, scale);
+        // (its inside, then its side, doors and glass: the two layers a rider sits between)
+        int col = vehicleColor(a.look, a.order);
+        Props.vehicle(g, f.kind, vS, f.color, f.x * f.color, f.t0, col, false);
+        Props.vehicle(g, f.kind, vS, f.color, f.x * f.color, f.t0, col, true);
+        g.restore();
+    }
+
     private void puddle(Gfx g, Film.Seg s, Film.Fx f, float t) {
         float ps = perspective(s, f.y), w = (f.color > 0 ? f.color : 180) * ps, h = w * 0.13f;
         float x = f.x, y = s.ground + f.y;

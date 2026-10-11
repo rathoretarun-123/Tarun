@@ -926,8 +926,10 @@ public final class Art {
                     // the close-up stays, for the face shots — v41: when it has a face (a back read as a front, put
                     // aside for having none, is never cast in a close-up: प्रिया's back talked in one)
                     if (showsFace(L, f[2])) extra.add("pose|" + f[1] + "|" + f[2] + "|0|0|0|1");
+                    boolean wasWhole = false;
+                    try { int[] wd = L.decode(f[2], 160); boolean[] wf = wd != null ? framingOf(wd, -1) : null; wasWhole = wf != null && !wf[0] && !wf[1]; } catch (RuntimeException e) { wasWhole = false; }
                     f = better;
-                    art.notes.add("front picture of " + f[1] + ": the full-length one (" + f[2] + ") instead of a close-up");
+                    art.notes.add("front picture of " + f[1] + ": " + (wasWhole ? "the one with free hands (" + f[2] + ") instead of one holding something" : "the full-length one (" + f[2] + ") instead of a close-up"));
                 }
             }
             try {
@@ -1116,6 +1118,37 @@ public final class Art {
         }
         for (String[] f : sideBest.values()) views.add(new String[]{"view", f[1], "-90", f[2], USER_SIDE});
         for (String[] f : quarterBest.values()) views.add(new String[]{"view", f[1], "-45", f[2], USER_QUARTER});
+        // v42: the back that goes with the front — about as tall for its width as the front that plays; प्रिया's back
+        // holding the tray (cups out at both sides) stood in for her plain front, while her plain back was on the sheet
+        for (int i = 0; i < views.size(); i++) {
+            try {
+                String[] f = views.get(i);
+                if (f.length < 4 || Math.abs(Math.abs(parseOr(f[2], 0)) - 180) > 1) continue;
+                Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
+                Sprite main = c == null ? null : art.sprites.get(c.id);
+                if (main == null || main.w <= 0 || main.h < main.w * 1.3f) continue;
+                float ma = main.h / (float) main.w;
+                int[] vd = L.decode(f[3], 160);
+                if (vd == null || vd[0] <= 0 || Math.abs(vd[1] / (float) vd[0] / ma - 1) <= 0.15f) continue;
+                String best = null;
+                float bestD = 0.1f;
+                for (String[] q : poses) {
+                    if (q.length < 6 || ScriptParser.resolve(story, q[1]) != c) continue;
+                    if (Math.abs(Math.abs(parseOr(q[3], 0)) - 180) > 1 || (int) parseOr(q[4], -1) != PoseSense.STAND) continue;
+                    int[] qd = L.decode(q[2], 160);
+                    if (qd == null || qd[0] <= 0) continue;
+                    boolean[] fr = framingOf(qd, -1);
+                    if (fr != null && (fr[0] || fr[1])) continue;
+                    float dd = Math.abs(qd[1] / (float) qd[0] / ma - 1);
+                    if (dd < bestD) { bestD = dd; best = q[2]; }
+                }
+                if (best == null) continue;
+                String[] nf = f.clone();
+                nf[3] = best;
+                views.set(i, nf);
+                art.notes.add("back picture of " + f[1] + ": " + best + ", as tall for its width as the front (" + f[3] + " was not)");
+            } catch (RuntimeException ignored) { }
+        }
         for (String[] f : views) {
             try {
                 Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
@@ -1328,7 +1361,7 @@ public final class Art {
             boolean[] mf = framingOf(d, -1);
             boolean whole = mf != null ? !mf[0] && !mf[1] : d[1] >= d[0] * 1.35f;
             // v39: and a face — a back read as a front (no eyes, no mouth) never plays the film: the rig speaks with it
-            boolean face = true, turned = false;
+            boolean face = true, turned = false, held = false;
             if (whole) {
                 try {
                     int[] px = new int[d[0] * d[1]];
@@ -1339,9 +1372,13 @@ public final class Art {
                     // v40: a three-quarter or side picture as the front: the rig turns a front picture to either side
                     // through its mesh (and speaks with its whole mouth), so the user's own front plays instead
                     turned = face && facingOf(cr) != 0;
+                    // v42: a front whose hands hold something before it (प्रिया's tea tray) carries it into every
+                    // scene — through the rain, while she waters the plants (a watering can floated beside the tray):
+                    // a plain standing front of the same person with free hands plays instead, when the sheets have one
+                    held = face && !turned && holdsIn(cr, charLine.length >= 11 && parseOr(charLine[3], 0) > 0 ? charLine : null, 3);
                 } catch (RuntimeException e) { face = true; }
             }
-            if (whole && face && !turned) return null;           // not cut by the frame, not seated, with a face: a whole figure that can play
+            if (whole && face && !turned && !held) return null;           // not cut by the frame, not seated, with a face: a whole figure that can play
             float mainAspect = (mf != null && (mf[0] || mf[1])) || !face ? 0 : d[1] / (float) Math.max(1, d[0]);
             String[] best = null;
             float bestScore = -1;
@@ -1360,7 +1397,14 @@ public final class Art {
                 boolean[] pf = framingOf(pd, eyeY);
                 if (pf != null && (pf[0] || pf[1])) continue;                  // v39: a half-length or a seated picture is no standing front
                 float aspect = pd[1] / (float) Math.max(1, pd[0]);
-                if (turned) {
+                if (held) {
+                    // v42: a standing front about as whole as the main one, facing the camera, its hands free
+                    if (Math.abs(angle) >= 1 || pose != PoseSense.STAND || aspect < 0.85f * d[1] / (float) Math.max(1, d[0])) continue;
+                    int[] ppx = new int[pd[0] * pd[1]];
+                    System.arraycopy(pd, 2, ppx, 0, ppx.length);
+                    Cutout.Result pr = Cutout.process(ppx, pd[0], pd[1]);
+                    if (!pr.faceFound || facingOf(pr) != 0 || holdsIn(pr, p, 7)) continue;
+                } else if (turned) {
                     // v40: a whole standing figure that really faces the camera (a three-quarter tagged "front" is not one)
                     if (aspect < 1.8f) continue;
                     int[] ppx = new int[pd[0] * pd[1]];
@@ -1378,6 +1422,26 @@ public final class Art {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * v42: the hands of a front picture held before the body or in its pockets (handsHeld), read from a rig of the
+     * picture without its face layers; the face points from the manifest line when it has them (from field `at`:
+     * mouthX, mouthY, mouthHW, eyeLX, eyeLY, eyeRX, eyeRY, eyeR), else as the cut-out found them.
+     */
+    static boolean holdsIn(Cutout.Result cr, String[] line, int at) {
+        Sprite s = new Sprite();
+        s.w = cr.w; s.h = cr.h; s.skin = cr.skin; s.lip = cr.lip;
+        if (line != null && line.length >= at + 8 && parseOr(line[at], 0) > 0) {
+            s.mouthX = parseOr(line[at], 0); s.mouthY = parseOr(line[at + 1], 0); s.mouthHW = parseOr(line[at + 2], 0);
+            s.eyeLX = parseOr(line[at + 3], 0); s.eyeLY = parseOr(line[at + 4], 0); s.eyeRX = parseOr(line[at + 5], 0); s.eyeRY = parseOr(line[at + 6], 0); s.eyeR = parseOr(line[at + 7], 0);
+        } else if (cr.faceFound) {
+            s.mouthX = cr.mouthX; s.mouthY = cr.mouthY; s.mouthHW = cr.mouthW / 2;
+            s.eyeLX = cr.eyeLX; s.eyeRX = cr.eyeRX; s.eyeLY = s.eyeRY = cr.eyeY; s.eyeR = cr.eyeR;
+        } else return false;
+        s.faceKnown = true;
+        mouthFromPicture(cr, s);
+        return handsHeld(Rig.build(cr, s, null, null));
     }
 
     static boolean mentions(Story st, String... words) {

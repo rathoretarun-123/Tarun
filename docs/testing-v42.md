@@ -120,6 +120,19 @@ the drive, the rain, the evening with the rainbow), and अलाव के प�
 * Not right yet: a drawn sofa is flat beside your painted rooms, and a person standing at its end is partly hidden by
   its arm; a held thing for a task (the watering can) is at the hand but a picture's arm does not lift with it.
 
+## The last checks, on the final code
+
+* All 179 test stories directed with your pictures: 0 crashes, 0 shots over 4 s, no lip-sync shot over six words;
+  still flagged (from before v42, none in your stories): 2 moments of two people on one spot in generated stories,
+  1 line whose speaker is not in the scene in the old "neo_mumbai" story.
+* The script reader: 25 of 25 new stories (144 of 144 lines), 20 of 20 of v41 (59 of 59 lines).
+* The desktop copies of the app tests: 5 of 5.
+* The whole app on the phone emulator (Robolectric): **76 tests, 0 failures** — among them the new ones: the 25
+  stories, the angles of the 177 labelled figures read through the phone's own picture decoding (148 of 177, whole
+  standing 67 of 71), the four mouths moved off the collar, प्रिया's plain front and matching back, the parked car,
+  the top view, कबीर's walk round the fire.
+* Version 42.0; the APK is `release/KahaniFilm.apk`.
+
 ## 7. Said plainly
 
 * The picture selector reads 84 % of your sheet figures right, not 100 %; it chooses around most of the misreads, and

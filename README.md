@@ -37,7 +37,8 @@ natural effects to be right.
   where its rider got off (the car faded away); no stars in the sky of an evening rainbow; a floor task (watering,
   sweeping) is done on open floor, not into a drawn sofa; in अलाव के पास, कबीर no longer stops right on top of seated
   अर्जुन while circling the fire.
-* Details and numbers: [`docs/testing-v42.md`](docs/testing-v42.md).
+* Checked on the final code: 179 test stories (no crash), the full app test run on the phone emulator (76 tests,
+  0 failures). Details and numbers: [`docs/testing-v42.md`](docs/testing-v42.md).
 * **Said plainly:** the rig is a flat picture on a fine mesh, not a 3D model, and the film is not Pixar or Disney
   quality. Testing finds and fixes the kinds of mistakes it looks for; it cannot promise that no bug is left.
 

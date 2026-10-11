@@ -360,6 +360,7 @@ public final class Director {
         keepDead();
         oneRideAtATime();
         unstack();
+        standToWalk();
         steadyRiders();
         vehicleDoors();
         placeSteps();
@@ -3298,6 +3299,16 @@ public final class Director {
         {new String[]{"नब्ज़", "नब्ज", "नाड़ी देख", "बुखार देख", "माथा छूकर", "pulse", "feels his forehead", "feels her forehead", "takes his temperature", "takes her temperature"},
                 Pose.CURIOUS, Film.G_REACH, 1.8f, EV_NEAR},
         {new String[]{"पैसे दे", "पैसे चुका", "भुगतान", "बिल चुका", "बिल दे", "pays", "paying", "hands over the money", "hands him the money", "hands her the money"}, Pose.HAPPY, Film.G_GIVE, 1.6f, EV_NEAR},
+        // v45: a button pressed (the lift, a switch); money from the ATM; the road crossed; water waded through;
+        // the old crafts — the hand-mill, the churn, the spinning wheel
+        {new String[]{"बटन दबा", "स्विच दबा", "presses the", "presses a ", "pushes the button", "hits the button"}, -1, Film.G_REACH, 1.2f, EV_NONE},
+        {new String[]{"एटीएम", " atm", "पैसे निकाल", "withdraws", "takes out cash", "cash from"}, Pose.CURIOUS, Film.G_REACH, 2.0f, EV_NONE},
+        {new String[]{"सड़क पार", "crosses the road", "crosses the street", "zebra crossing", "दोनों तरफ़ देख", "दोनों तरफ देख", "looks both ways", "looks left and right"},
+                Pose.CURIOUS, Film.G_TURN, 2.4f, EV_WALK},
+        {new String[]{"पानी में चल", "पानी से होकर", "पानी में से होकर", "wades", "wading"}, Pose.DETERMINED, -1, 2.6f, EV_WALK},
+        {new String[]{"चक्की", "आटा पीस", "hand-mill", "handmill", "grinds wheat", "grinds the", "grinds flour", "grinds grain"}, Pose.DETERMINED, Film.G_PAT, 2.6f, EV_FLOOR},
+        {new String[]{"मथानी", "बिलो", "दही मथ", "मक्खन निकाल", "churns", "churning"}, Pose.HAPPY, Film.G_PULL_ROPE, 2.6f, EV_FLOOR},
+        {new String[]{"चरखा", "सूत कात", "spinning wheel", "spins cotton", "spins yarn", "spins thread"}, Pose.HAPPY, Film.G_PAT, 2.6f, EV_FLOOR},
         {new String[]{"मोल-भाव", "मोलभाव", "मोल भाव", "भाव-ताव", "haggles", "haggling", "bargains", "bargaining"}, Pose.CURIOUS, Film.G_SHAKE_HEAD, 2.0f, EV_NEAR},
         // v43: clinging, a hand held out to help up
         {new String[]{"लिपट", "गले लग", "गले से लग", "clings to", "hugs", "embraces"}, Pose.HAPPY, Film.G_HUG, 2.0f, EV_NEAR},
@@ -6463,7 +6474,9 @@ public final class Director {
     static final String[] READ = {"किताब पढ़", "पुस्तक पढ़", "अख़बार पढ़", "अखबार पढ़", "पढ़ाई कर", "पढ़ रहा", "पढ़ रही", "पढ़ रहे", "reads a", "reads the", "reading a",
             "reading the", "reads his", "reads her", "reads the newspaper", "is reading", "studies", "studying",
             // v43: a poem read aloud, an exam prepared for
-            "कविता पढ़", "पढ़ता है", "पढ़ती है", "पढ़ते हैं", "परीक्षा की तैयारी", "इम्तिहान की तैयारी", "the exam", "his exam", "her exam", "exams", "revises", "revising"};
+            "कविता पढ़", "पढ़ता है", "पढ़ती है", "पढ़ते हैं", "परीक्षा की तैयारी", "इम्तिहान की तैयारी", "the exam", "his exam", "her exam", "exams", "revises", "revising",
+            // v45: a royal scroll, an order read out
+            "scroll", "reads it aloud", "reads aloud", "reads out", "पढ़कर सुना", "फ़रमान पढ़", "फरमान पढ़", "संदेश पढ़"};
     static final String[] WRITE = {"लिख रहा", "लिख रही", "लिख रहे", "लिखता है", "लिखती है", "लिखने लग", "होमवर्क कर", "चिट्ठी लिख", "पत्र लिख", "writes a", "writes in", "writing a",
             "is writing", "does her homework", "does his homework", "doing homework",
             // v45: on the board in class
@@ -7071,7 +7084,16 @@ public final class Director {
                 "दुर्घटना", "accident", "कट ", "cuts", "gash");
         int part = bodyPart(s);
         List<Film.Actor> hurtOnes = new ArrayList<Film.Actor>();
-        for (Film.Actor a : who) if (a.look != null && a.look.isHumanoid() && a.stateAt(t).visible && !a.stateAt(t).dead) hurtOnes.add(a);
+        // (v45: one who comes back on to the stage with the sentence is hurt once in sight)
+        float tw = t, t0w = t;
+        for (Film.Actor a : who) {
+            if (a.look == null || !a.look.isHumanoid() || a.stateAt(t).dead) continue;
+            float tv = -1;
+            for (float dt = 0; dt <= 2.6f && tv < 0; dt += 0.2f) if (a.stateAt(t + dt).visible && Math.abs(xAt(a, t + dt) - xAt(a, t + dt + 0.2f)) < 2) tv = t + dt;
+            if (tv < 0) continue;
+            hurtOnes.add(a); tw = Math.max(tw, tv);
+        }
+        t = tw;
         // "राहुल के हाथ से खून बहने लगता है" — the one whose hand it is ("X के …"), when the subject was read as someone else
         if (hurtOnes.isEmpty()) return 0;
         for (Film.Actor a : hurtOnes) {
@@ -7090,7 +7112,7 @@ public final class Director {
             Film.Key ok = keyAt(o, t + 0.5f); ok.emotion = Pose.SCARED; ok.facing = xAt(hurtOnes.get(0), t) >= xAt(o, t) ? 1 : -1;
             spread(o, ok);
         }
-        return 2.2f;
+        return 2.2f + (tw - t0w);
     }
 
     /**
@@ -7282,6 +7304,37 @@ public final class Director {
             end = Math.max(end, 3.6f);
         }
         return end;
+    }
+
+    public int standUps;
+
+    /**
+     * v45: nobody glides across the floor seated or lying ("धम से सोफ़े पर बैठ जाता है" and then "दरवाज़ा खोलकर बाहर
+     * चला जाता है"): a move that leaves a seat or a bed is made on foot — up as it begins, and standing after it until
+     * the next posture the story gives (a ride, the swing, a slide in the snow, a fall and a wheelchair move as they are).
+     */
+    private void standToWalk() {
+        for (Film.Seg sg : film.segs) for (Film.Actor a : sg.actors) {
+            if (a.look == null || !a.look.isHumanoid() || a.look.aid == Look.AID_WHEELCHAIR) continue;
+            for (int i = 0; i < a.keys.size(); i++) {
+                Film.Key k = a.keys.get(i);
+                if (k.moveDur <= 0.3f || !k.visible || k.dead || k.anchor != Film.A_GROUND) continue;
+                if (k.body != Pose.SIT && k.body != Pose.LIE) continue;
+                if (Math.abs(k.x - xAt(a, k.t + 0.01f)) <= 40) continue;
+                boolean exempt = false;
+                for (Film.Act x : a.acts) if ((x.type == Film.G_RIDE || x.type == Film.G_PLAYGROUND || x.type == Film.G_FALL || (x.type == Film.G_SNOW_PLAY && x.item == Film.SNOW_SLIDE))
+                        && k.t >= x.t0 - 0.5f && k.t <= x.t1 + 0.5f) exempt = true;
+                if (exempt) continue;
+                int b0 = k.body, s0 = k.seat;
+                k.body = Pose.STAND; k.seat = -1;
+                for (int j = i + 1; j < a.keys.size(); j++) {
+                    Film.Key n = a.keys.get(j);
+                    if (n.body != b0 || n.seat != s0) break;
+                    n.body = Pose.STAND; n.seat = -1;
+                }
+                standUps++;
+            }
+        }
     }
 
     /**
@@ -8136,6 +8189,15 @@ public final class Director {
                     return activityFrom(arrival, t, driver, w2, group);
                 }
                 if (!arrival.equals(s)) { arrivalsByRide++; return activityFrom(arrival, t, subj, who, group); }
+            }
+        }
+        // v45: "लाल बत्ती पर राहुल कार रोकता है", "pulls over": one not riding stops a car — it drives in with them at the wheel
+        if (Txt.has(s, "कार रोक", "गाड़ी रोक", "stops the car", "stops his car", "stops her car", "pulls over") && subj.look.isHumanoid() && !subj.look.isChild()) {
+            boolean riding = false;
+            for (Film.Act x : subj.acts) if (x.type == Film.G_RIDE && x.t0 <= t && x.t1 > t - 0.3f) riding = true;
+            if (!riding && subj.c != null) {
+                boolean en = !Txt.has(s, "कार", "गाड़ी");
+                return activityFrom(en ? subj.c.displayName + " drives up in his car and stops" : subj.c.displayName + " कार से आता है और रुकता है", t, subj, who, group);
             }
         }
         int v = vehicleIn(s, subj.look.isChild());

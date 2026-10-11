@@ -6260,7 +6260,8 @@ public class AppTest {
         f = v43Film("माँ की आवाज़ सुनकर राहुल की आँख खुल जाती है।", false, "घर का आँगन");
         assertTrue("the one who wakes is राहुल, not माँ", v43Acted(v43Actor(f, "राहुल"), Film.G_RUB_EYES) && !v43Acted(v43Actor(f, "माँ"), Film.G_RUB_EYES));
         f = v43Film("माँ फिसल जाती हैं और राहुल उनका हाथ पकड़कर उन्हें उठाता है।", false, "घर का आँगन");
-        assertTrue("माँ slips", v43Acted(v43Actor(f, "माँ"), Film.G_FLAIL));
+        // (v44: a slip is a fall to the ground — G_FALL — before the hand that helps her up; v43 flailed on her feet)
+        assertTrue("माँ slips", v43Acted(v43Actor(f, "माँ"), Film.G_FLAIL) || v43Acted(v43Actor(f, "माँ"), Film.G_FALL));
         assertTrue("राहुल helps her up", v43Acted(v43Actor(f, "राहुल"), Film.G_HOLD_HAND) || v43Acted(v43Actor(f, "राहुल"), Film.G_REACH));
         f = v43Film("राहुल स्कूल बस से उतरता है।", false, "घर के बाहर की सड़क");
         assertTrue("the bus brings him (a ride)", v43Acted(v43Actor(f, "राहुल"), Film.G_RIDE));

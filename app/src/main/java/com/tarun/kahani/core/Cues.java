@@ -93,6 +93,8 @@ public final class Cues {
         if (Txt.has(s, HUM)) out.add(new Cue(V_NONE, Film.SFX_HUM, 3f, 0.2f, "hum"));
         if (Txt.has(s, POP)) out.add(new Cue(V_GLOW, Film.SFX_POP, 1.5f, 0.4f, "pop"));
         if (Txt.has(s, RING)) out.add(new Cue(V_NONE, Film.SFX_BELL, 2f, 0.4f, "ring"));
+        // v45: a car's horn ("हॉर्न बजाता है", "honks at the traffic")
+        if (Txt.has(s, "हॉर्न", "हार्न", "honks", "honking", "honk", "पीं-पीं", "पीं पीं", "beep beep")) out.add(new Cue(V_NONE, Film.SFX_HORN, 1.2f, 0.4f, "horn"));
         // ---- any other sound written as a word in quotes: made from its letters
         Matcher m = QUOTED.matcher(s);
         while (m.find()) {

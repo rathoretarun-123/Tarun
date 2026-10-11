@@ -268,3 +268,103 @@ en	Rahul walks through the crowded bazaar.	MOVE
 hi	राहुल कबूतर के पैर में चिट्ठी बाँधकर उसे उड़ा देता है।	ANY
 en	Rahul ties a letter to the pigeon and lets it fly.	ANY
 en	Rahul reads the letter the pigeon brought.	TASK:READ|TASK:PAPER
+
+# ============================================================ second batch: more modern situations
+
+#@ cat=lift place=office age=adult
+hi	राहुल लिफ़्ट का बटन दबाता है और इंतज़ार करता है।	ACT:REACH|ACT:POINT
+en	Rahul presses the lift button and waits.	ACT:REACH|ACT:POINT
+en	Rahul checks his watch impatiently.	ANY
+
+#@ cat=atm place=street age=adult
+hi	राहुल एटीएम से पैसे निकालता है।	ACT:REACH|TASK:PHONE
+en	Rahul withdraws cash from the ATM.	ACT:REACH
+en	Rahul counts the notes and puts them in his wallet.	ACT:REACH|ANY
+
+#@ cat=traffic place=road age=adult
+hi	लाल बत्ती पर राहुल कार रोकता है।	RIDE:CAR|FX:PARKED
+hi	राहुल सड़क पार करने से पहले दोनों तरफ़ देखता है।	ACT:TURN|ACT:LOOK_AWAY|MOVE|ANY
+en	Rahul waits at the zebra crossing and then crosses the road.	MOVE
+en	Rahul honks at the traffic jam.	SFX:HORN|RIDE:CAR|ANY
+
+#@ cat=cinema place=room age=adult
+hi	राहुल पॉपकॉर्न खाते हुए फ़िल्म देखता है।	ACT:EAT
+en	Rahul laughs out loud at the comedy film.	ACT:LAUGH|EMO:LAUGH
+en	Rahul jumps in his seat at the scary scene.	EMO:SCARED|ACT:JUMP|ACT:FLAIL
+
+#@ cat=wedding place=out age=adult
+hi	शादी में राहुल ढोल की थाप पर नाचता है।	ACT:DANCE
+hi	राहुल दूल्हे को फूलों की माला पहनाता है।	ACT:REACH|ACT:OFFER|ANY
+en	Rahul dances at his sister's wedding.	ACT:DANCE
+en	Rahul showers flower petals on the couple.	ACT:THROW|W:PETALS|ANY
+
+#@ cat=fire-rescue place=room age=adult
+hi	कमरे में आग लग जाती है और राहुल चिल्लाता है।	W:FIRE|EMO:SCARED|EMO:ANGRY
+hi	राहुल धुएँ से खाँसता हुआ बाहर भागता है।	ACT:COUGH|RUN
+en	Rahul coughs in the thick smoke and crawls to the door.	ACT:COUGH|MOVE|BODY:CROUCH
+en	Rahul throws a bucket of water on the fire.	ACT:THROW|ANY
+
+#@ cat=flood place=street age=adult
+hi	बाढ़ का पानी बढ़ता है और राहुल छत पर चढ़ जाता है।	ACT:REACH|MOVE|ANY
+en	Rahul wades through the knee-deep water.	MOVE|ANY
+
+#@ cat=police place=bazaar age=adult
+hi	चोर राहुल का बटुआ छीनकर भागता है और राहुल उसके पीछे दौड़ता है।	RUN
+hi	राहुल पुलिस को फ़ोन करता है।	TASK:PHONE
+en	Rahul chases the thief through the crowd.	RUN
+en	Rahul shouts for help.	ACT:FIST|EMO:ANGRY|EMO:SCARED
+
+# ============================================================ second batch: more old situations
+
+#@ cat=chakki place=village age=adult
+hi	राहुल ज़मीन पर बैठकर चक्की से आटा पीसता है।	BODY:SIT|ANY
+en	Rahul grinds wheat on the stone hand-mill.	BODY:SIT|ANY
+hi	माँ के साथ राहुल मथानी से मक्खन बिलोता है।	ANY
+en	Rahul churns butter in the earthen pot.	ANY
+
+#@ cat=charkha place=out age=adult
+hi	राहुल चरखा चलाकर सूत कातता है।	BODY:SIT|ANY
+en	Rahul spins cotton on the spinning wheel.	BODY:SIT|ANY
+
+#@ cat=tonga place=bazaar age=adult
+hi	राहुल तांगे में बैठकर बाज़ार जाता है।	RIDE:HORSE|MOVE|ANY
+en	Rahul rides in a horse cart to the old market.	RIDE:HORSE|MOVE|ANY
+
+#@ cat=lamp place=room tod=night age=adult
+hi	राहुल मिट्टी के दीये में तेल डालकर उसे जलाता है।	ACT:REACH|W:CANDLES
+en	Rahul lights the oil lamp in the dark room.	ACT:REACH|W:CANDLES
+en	Rahul blows out the lamp and goes to sleep.	ACT:REACH|BODY:LIE|EYES
+
+#@ cat=messenger place=palace age=adult
+hi	राहुल घोड़े पर सवार होकर संदेश लेकर आता है।	RIDE:HORSE|MOVE
+en	Rahul unrolls the royal scroll and reads it aloud.	TASK:READ|TASK:PAPER
+hi	राहुल राजा के सामने सिर झुकाता है।	ACT:BOW
+
+# ============================================================ second batch: more injuries and deaths
+
+#@ cat=fall-hurt place=terrace age=adult
+hi	राहुल सीढ़ी से गिरता है और उसके सिर से खून बहने लगता है।	FX:BLOOD
+en	Rahul falls from the ladder and hurts his leg.	EMO:PAIN|ACT:FALL|BODY:LIE|ACT:CLUTCH
+
+#@ cat=death-fall place=terrace age=adult
+hi	राहुल छत से गिरकर मर जाता है।	DEAD
+en	Rahul falls from the roof and dies.	DEAD
+
+#@ cat=death-fire place=room age=adult
+hi	आग में फँसकर राहुल की मौत हो जाती है।	DEAD
+en	Rahul dies in the fire.	DEAD
+
+#@ cat=death-poison place=palace age=adult
+hi	ज़हर पीने से राहुल की मृत्यु हो जाती है।	DEAD
+en	Rahul drinks the poisoned wine and dies.	DEAD
+
+#@ cat=death-war place=camp age=adult
+hi	भाले से घायल होकर राहुल रणभूमि में गिरता है और प्राण त्याग देता है।	DEAD
+en	Rahul is struck by a spear and dies on the battlefield.	DEAD
+en	Rahul is shot and falls dead.	DEAD
+
+#@ cat=funeral place=ghat age=adult
+hi	राहुल अर्थी को कंधा देता है।	ANY
+hi	राहुल आँसू पोंछते हुए अंतिम विदाई देता है।	TEARS|ACT:CRY|EMO:SAD|ACT:RUB_EYES
+en	Rahul lays a garland on the photo of his late father.	ACT:REACH|ACT:OFFER|ANY
+en	Rahul stands in silence with his head bowed.	ACT:BOW|EMO:SAD

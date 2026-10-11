@@ -427,6 +427,7 @@ public class StoryForge {
             List<Person> others = new ArrayList<Person>(in);
             others.remove(lead);
             boolean quietStart = s > 0 && c.start.equals("stand") && r.nextDouble() < 0.3;
+            if (sc.contains(killer)) quietStart = false;     // (v45: the one who dies, or the body, is on the stage from the start)
             if (!quietStart) b.append('[').append(opening(en, c, p, lead, others)).append("]\n\n");
             // the first line: the story's opening, or the scene's
             String[] openPool = s == 0 ? (c.tod.equals("morning") ? (en ? EN_OPEN_MORNING : HI_OPEN_MORNING) : c.tod.equals("night") ? (en ? EN_OPEN_NIGHT : HI_OPEN_NIGHT) : (en ? EN_OPEN : HI_OPEN))
@@ -643,6 +644,13 @@ public class StoryForge {
         float t = r.tA - 0.06f;
         // v45: one who uses a wheelchair (named so earlier in the story) rolls: a run is not theirs to make
         if (kind.equals("RUN") && r.main != null && r.main.look != null && r.main.look.aid == Look.AID_WHEELCHAIR) return true;
+        // (and one walking with care — a limp, a leg in plaster, a stick or crutches — walks: the director never runs them)
+        if (kind.equals("RUN") && r.main != null && r.main.c != null) {
+            List<Look> looks = new ArrayList<Look>();
+            if (r.main.look != null) looks.add(r.main.look);
+            for (Story.Costume co : r.main.c.costumes) if (co.look != null) looks.add(co.look);
+            for (Look l : looks) if (l.aid != Look.AID_NONE || (l.injury & Look.INJ_LEG) != 0 || (l.condition & Look.C_LIMP) != 0) return true;
+        }
         switch (kind) {
             case "BODY": return b.body == PhenomenaProbe.pose(arg, PhenomenaProbe.BODIES);
             case "SEAT": return b.seat == PhenomenaProbe.film("SEAT_", arg) && (b.body == Pose.SIT || b.body == Pose.LIE);

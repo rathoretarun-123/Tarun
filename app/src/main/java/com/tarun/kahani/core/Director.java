@@ -2769,6 +2769,8 @@ public final class Director {
                 if (!careful(lk)) continue;
                 k.run = false;
                 if (aid == Look.AID_WHEELCHAIR) {
+                    // (v45: out of bed into the chair to go anywhere — never rolled along lying down)
+                    if (k.body == Pose.LIE && !k.dead && k.moveDur > 0.3f) { k.body = Pose.SIT; k.seat = -1; }
                     if (k.body != Pose.LIE) { k.body = picture ? Pose.STAND : Pose.SIT; k.seat = picture ? -1 : Film.SEAT_WHEELCHAIR; }
                 } else if (k.moveDur > 0) {
                     // a walking aid or a plaster: a third slower; a limp on its own: a fifth
@@ -6101,6 +6103,19 @@ public final class Director {
         if (who == null && group != null && group.size() > 1 && (joinedPlural(s) || groupSubject)) who = group;
         if (who == null) { who = new ArrayList<Film.Actor>(); who.add(subj); }
         boolean birdLike = subj.look.kind == Look.MONKEY || subj.look.kind == Look.BIRD;
+        // v45: "sits in a wheelchair" from the hospital bed — up out of the bed and into the chair beside it
+        if (Txt.has(s, "व्हीलचेयर", "व्हील चेयर", "wheelchair") && Txt.has(s, "बैठ", "sits", "sit in", "seated", "helped into", "gets into") && !negated(s)) {
+            float dd = 0;
+            for (Film.Actor a : who) {
+                Film.Key now = a.stateAt(t);
+                if (now.body != Pose.LIE || now.dead) continue;
+                Film.Key up = keyAt(a, t + 0.2f); up.body = Pose.SIT; up.seat = -1;
+                Film.Key in = keyAt(a, t + 1.0f); in.body = Pose.SIT; in.seat = Film.SEAT_WHEELCHAIR;
+                in.x = Math.max(150, Math.min(1130, xAt(a, t) + (xAt(a, t) < 640 ? 140 : -140))); in.moveDur = 0.6f; in.anchor = Film.A_GROUND;
+                dd = 2.0f;
+            }
+            if (dd > 0) return dd;
+        }
         if (Txt.has(s, TURN_AWAY)) {
             // v34: the back is to the camera for a while (or until the character has gone): the back picture is used
             boolean leaves = Txt.has(s, "चला जा", "चली जा", "चले जा", "चला गया", "चली गई", "चले गए", "walks away", "leaves", "goes away", "walked away") || leaving(s);
@@ -6967,7 +6982,7 @@ public final class Director {
     // ================================================================== v45: wounds and deaths
 
     static final String[] BLOOD_WORDS = {"खून", "ख़ून", "लहू", "रक्त", "लहूलुहान", "bleed", "bleeds", "bleeding", "blood", "bloody"};
-    static final String[] WOUND_WORDS = {"घायल", "ज़ख़्म", "ज़ख्म", "जख्म", "जख़्म", "चोट लग", "चोट आ", "चोटिल", "घाव", "ज़ख़्मी", "ज़ख्मी", "जख्मी", "चोट खा", "wound", "wounded", "injured", "gets hurt", "is hurt", "badly hurt"};
+    static final String[] WOUND_WORDS = {"घायल", "ज़ख़्म", "ज़ख्म", "जख्म", "जख़्म", "चोट लग", "चोट आ", "चोटिल", "घाव", "ज़ख़्मी", "ज़ख्मी", "जख्मी", "चोट खा", " wound ", " wound.", " wound,", " wounds", "wounded", "injured", "gets hurt", "is hurt", "badly hurt"};
     static final String[] CUT_WORDS = {"कट जा", "कट गय", "कट गई", "कट गयी", "कट जाती", "कट जाता", "छिल जा", "छिल ग", "cuts his", "cuts her", "cut his", "cut her", "grazes", "scrapes", "gashes"};
     static final String[] PART_HEAD = {"सिर", "माथ", "चेहर", "head", "forehead", "face", "brow"};
     static final String[] PART_LEG = {"पैर", "पाँव", "पांव", "टांग", "टाँग", "घुटन", "एड़ी", "leg", "knee", "foot", "ankle", "shin"};
@@ -6975,7 +6990,7 @@ public final class Director {
     static final String[] PART_ARM = {"हाथ", "उंगली", "उँगली", "बाँह", "बांह", "कलाई", "हथेली", "hand", "finger", "arm", "wrist", "palm", "thumb"};
     static final String[] DEATH_WORDS = {"मर जा", "मर गय", "मर गई", "मर गयी", "मारा जा", "मारा गय", "मारी गई", "मृत्यु", "मौत हो", "दम तोड़", "प्राण त्याग", "प्राण छोड़", "प्राण निकल",
             "चल बस", "नहीं रहे", "नहीं रही", "स्वर्ग सिधार", "आख़िरी साँस", "आखिरी सांस", "आख़िरी सांस", "अंतिम साँस", "अंतिम सांस", "शहीद हो", "देहांत", "निधन",
-            "dies", "died", "passes away", "passed away", "breathes his last", "breathes her last", "is killed", "was killed", "gets killed", "lies dead", "falls dead", "drops dead",
+            " dies", " died", "passes away", "passed away", "breathes his last", "breathes her last", "is killed", "was killed", "gets killed", "lies dead", "falls dead", "drops dead",
             "lifeless", "is dead",
             // v45: more ways of saying it — a hero's death, the breath that stops, drowned, gone from the world
             "वीरगति", "साँसें थम", "सांसें थम", "साँस थम", "सांस थम", "साँसें रुक", "सांसें रुक", "धड़कन रुक", "धड़कनें रुक", "दुनिया छोड़", "दुनिया से चल", "दुनिया से विदा",
@@ -7033,6 +7048,21 @@ public final class Director {
                 bandaged++;
             }
             if (d > 0) return d;
+            // v45: nothing bleeding — a wound dressed all the same: the one who binds it goes to the hurt one ("माँ राहुल के
+            // घाव पर पट्टी बाँधती हैं"), who holds out the hurt part; one named alone binds their own
+            Film.Actor hurt = null;
+            for (Film.Actor a : seg.actors) if (a != subj && namedIn(s, a) && a.look != null && a.look.isHumanoid() && a.stateAt(t).visible && !a.stateAt(t).dead) hurt = a;
+            if (subj.look != null && subj.look.isHumanoid() && subj.stateAt(t).visible) {
+                if (hurt != null) {
+                    if (Math.abs(xAt(subj, t) - xAt(hurt, t)) > 140) moveNear(subj, hurt, t, 0.8f);
+                    hurt.acts.add(new Film.Act(t + 0.5f, t + 2.2f, Film.G_OFFER));
+                    Film.Key hk = keyAt(hurt, t + 0.5f); hk.emotion = Pose.PAIN;
+                }
+                subj.acts.add(new Film.Act(t + 0.9f, t + 2.4f, Film.G_REACH));
+                bandaged++;
+                return 2.6f;
+            }
+            return 0;
         }
         boolean blood = Txt.has(s, BLOOD_WORDS);
         boolean wound = blood || Txt.has(s, WOUND_WORDS) || (Txt.has(s, CUT_WORDS) && (Txt.has(s, PART_ARM) || Txt.has(s, PART_LEG) || Txt.has(s, PART_HEAD)));
@@ -7074,14 +7104,14 @@ public final class Director {
         // a sheet over the dead
         if (Txt.has(s, SHROUD_WORDS) && !deathSaid(s)) {
             Film.Actor dead = null;
-            for (Film.Actor a : seg.actors) if (a.stateAt(t).dead && (dead == null || Txt.has(s, a.c.displayName))) dead = a;
+            for (Film.Actor a : seg.actors) if (a.stateAt(t).dead && (dead == null || namedIn(s, a))) dead = a;
             // v45: "राहुल माँ के शव पर चादर ओढ़ा देता है" with no death before it — the body named is hers: she is laid down dead first
             if (dead == null && Txt.has(s, "शव", "लाश", "पार्थिव", "मृत", "body", "corpse", "dead"))
-                for (Film.Actor a : seg.actors) if (a != subj && a.c != null && a.look != null && a.look.isHumanoid() && Txt.has(s, a.c.displayName) && a.stateAt(t).visible) {
+                for (Film.Actor a : seg.actors) if (a != subj && a.c != null && a.look != null && a.look.isHumanoid() && namedIn(s, a) && a.stateAt(t).visible) {
                     List<Film.Actor> one = new ArrayList<Film.Actor>(); one.add(a);
                     float e = deathOne("dies", t, a, one);
                     if (a.stateAt(t + e).dead) {
-                        float d2 = deathFrom(s.replace(a.c.displayName, ""), t + Math.min(e, 2.4f), subj, who);
+                        float d2 = deathFrom(withoutName(s, a), t + Math.min(e, 2.4f), subj, who);
                         return Math.max(e, Math.min(e, 2.4f) + d2);
                     }
                 }
@@ -7121,9 +7151,9 @@ public final class Director {
         // "Mother passes away, and Rahul covers her body with a white sheet" (one clause to the reader): the sheet after
         if (e > 0 && Txt.has(s, SHROUD_WORDS)) {
             Film.Actor by = null;
-            for (Film.Actor a : seg.actors) if (!who.contains(a) && a.c != null && a.look != null && a.look.isHumanoid() && Txt.has(s, a.c.displayName)) by = a;
+            for (Film.Actor a : seg.actors) if (!who.contains(a) && a.c != null && a.look != null && a.look.isHumanoid() && namedIn(s, a)) by = a;
             String rest = s;
-            for (Film.Actor a : who) if (a.c != null) rest = rest.replace(a.c.displayName, "");
+            for (Film.Actor a : who) if (a.c != null) rest = withoutName(rest, a);
             for (String w : DEATH_WORDS) rest = rest.replace(w, "");
             if (!deathSaid(rest)) e = Math.max(e, Math.min(e, 2.6f) + deathFrom(rest, t + Math.min(e, 2.6f), by, by == null ? new ArrayList<Film.Actor>() : java.util.Collections.singletonList(by)));
         }
@@ -7205,6 +7235,19 @@ public final class Director {
         }
         frameAround(t, xAt(dying.get(0), t) - 260, xAt(dying.get(0), t) + 260);
         return end + 0.4f;
+    }
+
+    /** v45: the sentence names this actor (by name, relation or alias). */
+    private boolean namedIn(String s, Film.Actor a) {
+        return a != null && a.c != null && story != null && ScriptParser.mentions(story, s).contains(a.c);
+    }
+
+    /** v45: the sentence with this actor's names taken out (so a second pass does not find them again). */
+    private static String withoutName(String s, Film.Actor a) {
+        if (a == null || a.c == null) return s;
+        String r = s.replace(a.c.displayName, " ");
+        for (String al : a.c.aliases) if (al != null && al.length() >= 2) r = r.replace(al, " ");
+        return r;
     }
 
     /**
@@ -8077,6 +8120,21 @@ public final class Director {
             for (Film.Act x : subj.acts) if (x.type == Film.G_RIDE && x.t1 > Math.max(seg.t0, t - 0.3f) && x.t0 <= t && Math.abs(x.item) % Film.V_PASSENGER == gv) rodeHere = true;
             if (gv != 0 && !rodeHere && !Txt.has(s, "सीढ़ी", "सीढ़ियों", "stairs", "steps down", "पेड़", "tree", "झूले", "swing", "slide")) {
                 String arrival = s.replaceAll("से उतर[^\\s।.,!?]*", "से आता").replaceAll("(?i)(gets|got|steps|climbs|hops) (off|out of) (the |a |an |his |her |their )?", "comes by ");
+                // v45: one who rode in this part beside or behind a driver comes back with that driver at the wheel
+                // (not driving the car themselves): "प्रिया कार से उतरती है" after "तरुण कार चलाता है। प्रिया … बैठते हैं"
+                Film.Actor driver = null;
+                for (Film.Act x : subj.acts) if (x.type == Film.G_RIDE && x.t0 >= seg.t0 && x.t0 < t && x.item < 0 && Math.abs(x.item) % Film.V_PASSENGER == gv
+                        && x.target != null && x.target != subj && x.target.c != null && x.target.look != null && !x.target.stateAt(t).dead) driver = x.target;
+                // (the car they rode in stands here still, parked where it stopped: it is that car — nothing comes back)
+                boolean parkedHere = false;
+                for (Film.Fx f : seg.fx) if (f.type == Film.FX_PARKED && f.kind == gv && f.t0 <= t && f.t1 >= t - 0.05f) parkedHere = true;
+                if (driver != null && parkedHere) return 0;
+                if (driver != null && !arrival.equals(s)) {
+                    List<Film.Actor> w2 = new ArrayList<Film.Actor>(); w2.add(driver);
+                    for (Film.Actor a : who) if (!w2.contains(a)) w2.add(a);
+                    arrivalsByRide++;
+                    return activityFrom(arrival, t, driver, w2, group);
+                }
                 if (!arrival.equals(s)) { arrivalsByRide++; return activityFrom(arrival, t, subj, who, group); }
             }
         }

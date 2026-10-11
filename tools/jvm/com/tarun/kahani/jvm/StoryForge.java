@@ -40,6 +40,8 @@ public class StoryForge {
     static final class Row {
         String lang, sentence, expect, file, cat = "misc", place = "out", start = "stand", tod = "day", age = "kid";
         boolean fam, girl, hasBoy, hasGirl, mom, dad;
+        /** v45: the row kills its main character (DEAD expected), or Mother (a sheet over her body). */
+        boolean kills, killsMom;
         int line, idx;
         String bad;      // why the codes are not valid (null: valid)
         String key() { return lang + "|" + place + "/" + start + "/" + tod + "/" + age + (fam ? "/fam" : ""); }
@@ -97,6 +99,8 @@ public class StoryForge {
                 String s = r.sentence;
                 r.mom = s.contains("माँ") || s.contains("मम्मी") || s.contains("Mother") || s.contains("mother") || s.contains("Mom") || s.contains("mom");
                 r.dad = r.fam || s.contains("पापा") || s.contains("पिता") || s.contains("Father") || s.contains("father") || s.contains("Dad") || s.contains("dad");
+                r.kills = java.util.regex.Pattern.compile("(^|[|&])DEAD").matcher(r.expect).find();
+                r.killsMom = r.expect.contains("FX:SHROUD") && r.mom;
                 if (SKIP_CATS.contains(r.cat)) continue;
                 try { PhenomenaProbe.validate(r.expect); } catch (Throwable e) { r.bad = e.getMessage(); }
                 r.idx = ROWS.size();
@@ -169,6 +173,22 @@ public class StoryForge {
         {"forest", "घना जंगल", "जंगल में", "ऊँचे पेड़, घनी झाड़ियाँ", "The forest", "in the forest", "tall trees, thick bushes"},
         {"snow", "बर्फ़ से ढकी पहाड़ी", "बर्फ़ में", "सफ़ेद बर्फ़, देवदार के पेड़", "The snowy hillside", "in the snow", "white snow, deodar trees"},
         {"road", "शहर की बड़ी सड़क", "सड़क पर", "चौड़ी सड़क, ट्रैफ़िक लाइट", "The main road", "on the road", "a wide road, traffic lights"},
+        // v45: new modern and old places
+        {"hospital", "शहर का अस्पताल", "अस्पताल में", "सफ़ेद बिस्तर, ड्रिप का स्टैंड", "The hospital ward", "in the ward", "white beds, a drip stand"},
+        {"office", "कंपनी का दफ़्तर", "दफ़्तर में", "मेज़ें, कंप्यूटर, काँच की दीवार", "The office", "in the office", "desks, computers, a glass wall"},
+        {"metro", "मेट्रो स्टेशन", "प्लेटफ़ॉर्म पर", "चमकता फ़र्श, डिस्प्ले बोर्ड", "The metro platform", "on the platform", "a shining floor, a display board"},
+        {"mall", "शहर का मॉल", "मॉल में", "दुकानों की कतार, एस्केलेटर", "The mall", "in the mall", "a row of shops, an escalator"},
+        {"airport", "हवाई अड्डा", "हवाई अड्डे पर", "चेक-इन काउंटर, बड़ी खिड़कियाँ", "The airport", "at the airport", "check-in counters, big windows"},
+        {"gym", "मोहल्ले का जिम", "जिम में", "डंबल, ट्रेडमिल, आईने", "The gym", "in the gym", "dumbbells, a treadmill, mirrors"},
+        {"school", "स्कूल की कक्षा", "कक्षा में", "ब्लैकबोर्ड, बेंचें", "The classroom", "in the classroom", "a blackboard, benches"},
+        {"cafe", "शहर का रेस्टोरेंट", "रेस्टोरेंट में", "गोल मेज़ें, धीमी रोशनी", "The restaurant", "in the restaurant", "round tables, soft light"},
+        {"village", "गाँव का कुआँ", "कुएँ के पास", "पत्थर का कुआँ, रस्सी और बाल्टी", "The village well", "by the well", "a stone well, a rope and a bucket"},
+        {"fields", "गाँव के खेत", "खेत में", "गेहूँ की फसल, नीम का पेड़", "The fields", "in the fields", "a wheat crop, a neem tree"},
+        {"potter", "कुम्हार का आँगन", "आँगन में", "चाक, मिट्टी के घड़े", "The potter's yard", "in the yard", "a wheel, clay pots"},
+        {"temple", "पुराना मंदिर", "मंदिर में", "पत्थर के खंभे, बड़ी घंटी", "The temple", "in the temple", "stone pillars, a big bell"},
+        {"ghat", "नदी का घाट", "घाट पर", "पत्थर की सीढ़ियाँ, बहती नदी", "The ghat", "on the ghat", "stone steps, the flowing river"},
+        {"camp", "युद्ध का मैदान", "मैदान में", "तंबू, झंडे, धूल", "The battlefield", "on the battlefield", "tents, flags, dust"},
+        {"bazaar", "पुराने शहर का बाज़ार", "बाज़ार में", "फल की दुकानें, भीड़", "The bazaar", "in the bazaar", "fruit stalls, a crowd"},
     };
 
     static String[] place(String key) {
@@ -206,6 +226,9 @@ public class StoryForge {
     static final String[] HI_OPEN_MORNING = {"सुप्रभात, {n}!", "सुबह हो गई, {n}!"};
     static final String[] HI_OPEN_NIGHT = {"रात कितनी शांत है।", "आज तो बहुत देर हो गई।"};
     static final String[] HI_SCENE = {"तो, अब यहाँ!", "यह जगह कितनी अच्छी है।", "{n}, यहाँ देखो।", "चलो, शुरू करें।"};
+    /** v45: the last line of a story that ends in a death. */
+    static final String[] HI_GRIEF = {"नहीं… ऐसा नहीं हो सकता!", "हम तुम्हें कभी नहीं भूलेंगे।", "भगवान तुम्हारी आत्मा को शांति दे।", "अब हमें हिम्मत रखनी होगी।"};
+    static final String[] EN_GRIEF = {"No… this cannot be!", "We will never forget you.", "Rest in peace.", "We have to be strong now."};
     static final String[] HI_CLOSE = {"आज का दिन यादगार रहा!", "कितना मज़ेदार दिन था!", "कल फिर ऐसा ही करेंगे!", "सच में, बहुत अच्छा लगा।"};
     static final String[] EN_OPEN = {"Today feels like a good day.", "Let's do something fun today.", "{n}, what's the plan today?", "What lovely weather!"};
     static final String[] EN_OPEN_MORNING = {"Good morning, {n}!", "It's morning already, {n}!"};
@@ -236,8 +259,8 @@ public class StoryForge {
     static <T> T pick(Random r, T[] a) { return a[r.nextInt(a.length)]; }
     static <T> T pick(Random r, List<T> a) { return a.get(r.nextInt(a.size())); }
 
-    static final Set<String> ROYAL = new HashSet<String>(Arrays.asList("palace", "arena"));
-    static final Set<String> MODERN = new HashSet<String>(Arrays.asList("street", "road", "park"));
+    static final Set<String> ROYAL = new HashSet<String>(Arrays.asList("palace", "arena", "camp"));
+    static final Set<String> MODERN = new HashSet<String>(Arrays.asList("street", "road", "park", "hospital", "office", "metro", "mall", "airport", "gym", "school", "cafe"));
     static final Set<String> SITTING = new HashSet<String>(Arrays.asList("bed", "chair", "sofa", "floor", "throne"));
 
     static Person person(Random r, boolean en, boolean male, boolean kid, String slot, Set<String> used, int age, String role, boolean royal) {
@@ -274,6 +297,7 @@ public class StoryForge {
         List<Row> sameAge = new ArrayList<Row>();
         for (Row x : pool) if (x.age.equals(first.age) && (royalStory ? !MODERN.contains(x.place) : !ROYAL.contains(x.place))) sameAge.add(x);
 
+        boolean needMomFor = false;
         // the scenes: a context group each, 2–7 of its rows in the file's order
         int nScenes = between(r, 1, 4);
         List<List<Row>> scenes = new ArrayList<List<Row>>();
@@ -305,8 +329,19 @@ public class StoryForge {
             scenes.add(rows);
         }
 
+        // v45: a death ends the story — nothing after the row that kills (the dead never act or speak again)
+        int deathScene = -1;
+        for (int s = 0; s < scenes.size() && deathScene < 0; s++)
+            for (int i = 0; i < scenes.get(s).size(); i++) {
+                Row x = scenes.get(s).get(i);
+                if (x.kills || x.killsMom) { scenes.set(s, new ArrayList<Row>(scenes.get(s).subList(0, i + 1))); deathScene = s; break; }
+            }
+        if (deathScene >= 0) while (scenes.size() > deathScene + 1) scenes.remove(scenes.size() - 1);
+        Row killer = deathScene < 0 ? null : scenes.get(deathScene).get(scenes.get(deathScene).size() - 1);
+        if (killer != null && killer.killsMom) needMomFor = true;
+
         // the cast: who the rows need, then family and friends up to 2–5
-        boolean needBoy = false, needGirl = false, needDad = false, needMom = !adult, royal = false;
+        boolean needBoy = false, needGirl = false, needDad = false, needMom = !adult || needMomFor, royal = false;
         for (List<Row> sc : scenes) for (Row x : sc) {
             needBoy |= x.hasBoy; needGirl |= x.hasGirl; needDad |= x.dad; needMom |= x.mom;
             royal |= ROYAL.contains(x.place);
@@ -406,6 +441,18 @@ public class StoryForge {
                 d.lineBefore = g.lines.size() - 1;
                 b.append('[').append(d.text).append("]\n\n");
                 boolean last = s == scenes.size() - 1 && i == sc.size() - 1;
+                if (x == killer) {
+                    // the one who died speaks no more; a mourner closes the story
+                    Person gone = x.killsMom ? mom : d.main;
+                    List<Person> living = new ArrayList<Person>(in);
+                    living.remove(gone);
+                    if (living.isEmpty()) for (Person q : g.cast) if (q != gone) { living.add(q); break; }
+                    if (!living.isEmpty()) line(g, b, r, en, living, null, en ? EN_GRIEF : HI_GRIEF, true);
+                    else g.lines.add("");
+                    d.lineAfter = g.lines.size() - 1;
+                    g.dirs.add(d);
+                    continue;
+                }
                 line(g, b, r, en, in, r.nextDouble() < 0.35 ? d.main : null, last ? (en ? EN_CLOSE : HI_CLOSE) : (en ? EN_LINES : HI_LINES), true);
                 d.lineAfter = g.lines.size() - 1;
                 g.dirs.add(d);
@@ -594,6 +641,8 @@ public class StoryForge {
         String kind = c < 0 ? code : code.substring(0, c), arg = c < 0 ? "" : code.substring(c + 1);
         Film.Key b = PhenomenaProbe.before(r);
         float t = r.tA - 0.06f;
+        // v45: one who uses a wheelchair (named so earlier in the story) rolls: a run is not theirs to make
+        if (kind.equals("RUN") && r.main != null && r.main.look != null && r.main.look.aid == Look.AID_WHEELCHAIR) return true;
         switch (kind) {
             case "BODY": return b.body == PhenomenaProbe.pose(arg, PhenomenaProbe.BODIES);
             case "SEAT": return b.seat == PhenomenaProbe.film("SEAT_", arg) && (b.body == Pose.SIT || b.body == Pose.LIE);

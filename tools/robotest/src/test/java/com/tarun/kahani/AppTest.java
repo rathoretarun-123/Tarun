@@ -6563,6 +6563,130 @@ public class AppTest {
         System.out.println("V44 SNOW/PARTY ok");
     }
 
+    // ================================================================== v45: wounds, deaths, new places
+
+    static Film v45Film(String name) throws Exception {
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        Story st = ScriptParser.parse(new String(Files.readAllBytes(new File(root, "tools/testdata/v45stories/" + name).toPath()), "UTF-8"));
+        Director d = new Director(st, new Director.Options());
+        d.prepare();
+        return d.direct(new Art());
+    }
+
+    static Film.Actor v45Actor(Film film, String name) {
+        for (Film.Seg sg : film.segs) if (sg.type == Film.S_SCENE) for (Film.Actor a : sg.actors) if (a.c.displayName.equals(name)) return a;
+        return null;
+    }
+
+    static float v45DeathAt(Film.Actor a) { if (a != null) for (Film.Key k : a.keys) if (k.dead) return k.t; return -1; }
+
+    /** The dead lie still: after death every key is dead, lying, eyes shut, at one place; no act begins after it; no lips. */
+    static void v45StaysDead(Film film, Film.Actor a, String what) {
+        float td = v45DeathAt(a);
+        assertTrue(what + ": dies", td > 0);
+        float x0 = Float.NaN;
+        for (Film.Key k : a.keys) if (k.t >= td) {
+            assertTrue(what + ": dead at " + k.t, k.dead && k.eyesShut && k.body == Pose.LIE);
+            if (Float.isNaN(x0)) x0 = k.x; else assertEquals(what + ": the body does not move", x0, k.x, 1f);
+        }
+        for (Film.Act x : a.acts) assertTrue(what + ": no act after death " + x.type + "@" + x.t0, x.t0 <= td + 0.06f);
+    }
+
+    /**
+     * v45 (the user: "include injury and blood flowing etc as well if required, and also death scene from various
+     * causes"): the arrow in the chest bleeds (an arrow shaft, the chest), the bandage stops it, the commander dies and
+     * lies still, the princess and the queen weep, the queen draws a white sheet over him; in the second story the
+     * grandfather ill in bed passes away (no stagger, already lying), a white sheet, a cut finger bleeds and is bandaged.
+     */
+    @Test
+    public void v45WoundsBloodBandagesAndDeaths() throws Exception {
+        Film f = v45Film("s01_battle_death.txt");
+        Film.Fx blood = null, shroud = null;
+        for (Film.Seg sg : f.segs) for (Film.Fx x : sg.fx) { if (x.type == Film.FX_BLOOD && blood == null) blood = x; if (x.type == Film.FX_SHROUD) shroud = x; }
+        assertNotNull("the arrow wound bleeds", blood);
+        assertEquals("in the chest", Film.BLOOD_CHEST, blood.kind);
+        assertEquals("with the arrow in it", 1, blood.color);
+        assertTrue("the bandage stops the bleeding: " + blood.t1, blood.t1 < 1000);
+        Film.Actor tarun = v45Actor(f, "तरुण"), vrinda = v45Actor(f, "वृंदा"), priya = v45Actor(f, "प्रिया");
+        v45StaysDead(f, tarun, "the commander");
+        assertNotNull("the white sheet", shroud);
+        assertTrue("the sheet after the death", shroud.t0 > v45DeathAt(tarun));
+        assertTrue("on him", shroud.a == tarun);
+        boolean tears = false;
+        for (Film.Actor a : new Film.Actor[]{vrinda, priya}) for (Film.Key k : a.keys) if (k.tears) tears = true;
+        assertTrue("the mourners weep", tears);
+        int cries = 0;
+        for (Film.Act x : vrinda.acts) if (x.type == Film.G_CRY) cries++;
+        assertEquals("one death, one weeping (the death was said twice in one sentence)", 1, cries);
+
+        Film f2 = v45Film("s02_illness_heart.txt");
+        Film.Actor grandpa = v45Actor(f2, "Tarun");
+        v45StaysDead(f2, grandpa, "the grandfather");
+        for (Film.Act x : grandpa.acts) assertTrue("dies quietly in bed (no stagger)", x.type != Film.G_STAGGER);
+        boolean sheet = false, cut = false, bandaged = false;
+        for (Film.Seg sg : f2.segs) for (Film.Fx x : sg.fx) {
+            if (x.type == Film.FX_SHROUD && x.a == grandpa) sheet = true;
+            if (x.type == Film.FX_BLOOD && x.a != null && x.a.c.displayName.equals("Priya")) { cut = true; bandaged = x.t1 < 1000; }
+        }
+        assertTrue("a sheet over the grandfather", sheet);
+        assertTrue("the cut finger bleeds", cut);
+        assertTrue("and is bandaged", bandaged);
+    }
+
+    /**
+     * v45: deaths of other causes and a collapse that is not one — a heart attack at the office knocks him down and he
+     * wakes in hospital (no death); a heart attack in the village is a death; the figures of speech kill no one.
+     */
+    @Test
+    public void v45HeartAttackCollapseAndFiguresOfSpeech() throws Exception {
+        Film f = v45Film("s03_metro_office_hospital.txt");
+        Film.Actor tarun = v45Actor(f, "तरुण");
+        assertTrue("the heart attack does not kill him", v45DeathAt(tarun) < 0);
+        boolean down = false, clutch = false;
+        for (Film.Seg sg : f.segs) for (Film.Actor a : sg.actors) if (a.c.displayName.equals("तरुण")) {
+            for (Film.Key k : a.keys) if (k.body == Pose.LIE) down = true;
+            for (Film.Act x : a.acts) if (x.type == Film.G_CLUTCH) clutch = true;
+        }
+        assertTrue("he clutches his chest and goes down", down && clutch);
+        Film f4 = v45Film("s04_village_ghat.txt");
+        v45StaysDead(f4, v45Actor(f4, "Tarun"), "the grandfather of the village");
+        for (String s : new String[]{"Rahul's phone dies in the middle of the call.", "Rahul is dying to see the new film.", "Rahul studies for his exam.",
+                "Rahul plays dead to fool his sister.", "Rahul studied all night."}) {
+            Film g = v43Film(s, true, "The living room");
+            assertTrue("no death in: " + s, v45DeathAt(v43Actor(g, "Rahul")) < 0);
+        }
+        Film g = v43Film("राहुल डर के मारे मरा जा रहा है।", false, "घर का कमरा");
+        assertTrue("मरा जा रहा (dying of fear) is no death", v45DeathAt(v43Actor(g, "राहुल")) < 0);
+    }
+
+    /**
+     * v45 (the user: "unknown scenes … new modern and old situations"): the fifteen new places are recognised and drawn
+     * as themselves over their sets (a metro platform, an office, a hospital … the ghat, the battlefield, the bazaar),
+     * every one renders on the phone's canvas, and a shopping mall open for the day is a bright room, the closed one dark.
+     */
+    @Test
+    public void v45NewPlacesAreDrawnAsThemselves() throws Exception {
+        String[][] places = {{"मेट्रो स्टेशन", "" + Sets.D_METRO}, {"कंपनी का दफ़्तर", "" + Sets.D_OFFICE}, {"शहर का अस्पताल", "" + Sets.D_HOSPITAL},
+                {"स्कूल की कक्षा", "" + Sets.D_CLASS}, {"The shopping mall", "" + Sets.D_MALL}, {"हवाई अड्डा", "" + Sets.D_AIRPORT}, {"The gym", "" + Sets.D_GYM},
+                {"शहर का रेस्टोरेंट", "" + Sets.D_CAFE}, {"गाँव का कुआँ", "" + Sets.D_WELL}, {"गाँव के खेत", "" + Sets.D_FIELDS}, {"कुम्हार का आँगन", "" + Sets.D_POTTER},
+                {"पुराना मंदिर", "" + Sets.D_TEMPLE}, {"नदी का घाट", "" + Sets.D_GHAT}, {"युद्ध का मैदान", "" + Sets.D_CAMP}, {"पुराने शहर का बाज़ार", "" + Sets.D_BAZAAR}};
+        Bitmap bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
+        AndroidGfx g = new AndroidGfx(bmp, 4);
+        for (String[] p : places) {
+            int decor = Sets.decorFor(p[0]);
+            assertEquals(p[0], Integer.parseInt(p[1]), decor);
+            int set = Sets.setForDecor(Sets.detect(p[0]), decor, p[0]);
+            for (int tod = Sets.MORNING; tod <= Sets.NIGHT; tod++) Sets.paintStatic(g, set, tod, decor);
+        }
+        assertEquals("a shopping mall in the day is a room", Sets.ROOM, Sets.setForDecor(Sets.detect("The shopping mall"), Sets.D_MALL, "The shopping mall"));
+        assertEquals("the closed mall stays the dark basement", Sets.BASEMENT, Sets.detect("the dark basement of the closed mall"));
+        assertEquals("a living room is no decor", Sets.D_NONE, Sets.decorFor("Grandpa's small living room"));
+        Film f = v45Film("s03_metro_office_hospital.txt");
+        int metro = 0, office = 0, hospital = 0;
+        for (Film.Seg sg : f.segs) if (sg.type == Film.S_SCENE) { if (sg.decor == Sets.D_METRO) metro++; if (sg.decor == Sets.D_OFFICE) office++; if (sg.decor == Sets.D_HOSPITAL) hospital++; }
+        assertTrue("the story's three places drawn as themselves: " + metro + "/" + office + "/" + hospital, metro > 0 && office > 0 && hospital > 0);
+    }
+
     static void deleteTree(File f) {
         if (f.isDirectory()) for (File c : f.listFiles()) deleteTree(c);
         f.delete();

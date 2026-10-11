@@ -69,7 +69,17 @@ in the frame. 1,000 of the stories are kept in `tools/testdata/v44forge` to read
 
 | | the first 100,000 (start of v44) | the final 100,000 |
 |---|---|---|
-FORGE_TABLE
+| stories | 100,000 (seeds 1–100,000) | the same 100,000 |
+| crashed | 0 | 0 |
+| directions checked | 977,876 | 977,876 |
+| staged as asked (pass) | 84.2 % | 97.4 % |
+| state already held (context) | 2.1 % | 2.3 % |
+| not staged (fail) | 13.6 % | 0.3 % |
+| stories with a film fault (invariants) | 11,347 | 1,374 |
+| time | 15 ms a story | 20 ms a story |
+
+The faults still counted in the final run: two people on one spot for a moment (516 stories), an effect ending before it
+starts in contrived chains of rides (244), walking while seated (283), waiting off the edge of the picture (200).
 
 What it found, and what was fixed (each found in many stories at once):
 
@@ -99,8 +109,11 @@ near the one they go to) — nothing to show. What still **fails** in the final 
 
 * The eight v44 stories directed with your pictures: 8 of 8, none crashed, no problem found.
 * The 523 sentences: 405 of 405 and 118 of 118.
-* The 100,000 generated stories: FORGE_LINE
-* The app on the phone emulator (Robolectric): ROBO_LINE
+* The 100,000 generated stories: 0 crashed; 97.4 % staged as asked, 2.3 % context, 0.3 % not staged.
+* The app on the phone emulator (Robolectric): 83 tests — 80 passed, 1 skipped, 2 failed: the rainy-Sunday story had
+  प्रिया drive the car (getting out of a car that stood parked brought a car back with her at the wheel) and the v43 slip
+  test expected a flail where v44 makes a real fall. Both were found by this run and are fixed in v45 (see
+  `docs/testing-v45.md`).
 * Version 44.0; the APK is `release/KahaniFilm.apk`.
 
 ## 5. Still not right

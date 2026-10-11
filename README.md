@@ -1,4 +1,4 @@
-# Kahani Film — v44
+# Kahani Film — v45
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,48 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v45
+
+You asked for injuries and blood flowing where needed, death scenes from various causes, and 100,000 absolutely new
+stories with unknown scenes — new modern and old situations — rechecked and hard-coded.
+
+* **Injuries:** a wince and a hand to the wound. Where blood is named, or a weapon, a fall or an accident did it, a
+  stain spreads at the part named (head, arm, leg, chest), a trickle runs and drops fall; an arrow stays in the wound.
+  Others turn in alarm. A bandage stops the bleeding: the one who binds it goes to the hurt one. All kept to what a
+  family film shows.
+* **Deaths, by cause:**
+  * ill or old in bed: a last breath, the eyes close;
+  * a heart attack: a hand to the chest, a stagger, the knees, down;
+  * an arrow, a sword, a spear, a shot or a snakebite: the wound bleeds, a stagger, down;
+  * an accident, drowning, a fall, fire or poison: down and still.
+* **After a death:** the dead lie still — no breath, no blink, no lips. The two nearest kneel beside them and weep, the
+  others stand in grief. A white sheet is drawn over the body when the story says so.
+* **Not a death:** a heart attack or a faint without death collapses the person and brings the nearest to them.
+  "Phone dies", "dying to…", "plays dead", "मरा जा रहा है" and "studies" kill no one.
+* **New places, drawn as themselves:**
+  * modern: a metro platform with its train, an office, a hospital ward, a classroom, a shopping mall, an airport, a
+    gym, a restaurant;
+  * old: a village well, wheat fields, a potter's yard, a temple, the river ghat with lamps at dusk, a battlefield's
+    tents, a bazaar.
+* **New situations:** 229 new sentences, Hindi and English, all passing (v43's 405 and v44's 118 still pass):
+  * modern: the lift, the ATM, the red light, crossing the road, a video call, a delivery, the cinema, a wedding, a
+    fire, a flood, a thief and the police;
+  * old: the hand-mill, the churn, the spinning wheel, the plough, the harvest, a tonga, an oil lamp, a royal scroll, a
+    letter by pigeon.
+* **200,000 brand-new stories,** from seeds never used before, generated, directed and checked. A death ends a story
+  and a mourner speaks last. 1,000 are kept in `tools/testdata/v45forge`. The final 100,000: 0 crashed, 97.0 % staged as asked, 2.7 % context, 0.3 % not staged.
+* **Bugs they found, now fixed:**
+  * "studies" read as "dies";
+  * people gliding across the floor seated;
+  * a hospital patient rolled along lying down;
+  * someone off the stage being wounded unseen;
+  * a death said twice making two deaths;
+  * प्रिया driving the parked car in the rainy-Sunday story;
+  * kneeling in a saree looking like standing.
+* Checked on the final code: ROBO_LINE. Details: [`docs/testing-v45.md`](docs/testing-v45.md).
+* **Sorry — said plainly:** still not Pixar or Disney, and I cannot make it so: flat pictures on a mesh, drawn places,
+  a director of rules, not understanding. And no promise of "no bug at all" — tell me any sentence that goes wrong.
 
 ## New in v44
 
@@ -41,8 +83,8 @@ and stories by the hundred and the thousand, 100,000 checked and debugged, then 
 * **Stories by the thousand:** a story generator builds whole stories in your script format (2–5 people, 1–4
   scenes) from 523 tested sentences, directs each and checks it — every direction staged, and the film itself sound
   (nobody speaking unseen, two on one spot, riding two things, walking seated, lingering off the picture). 1,000 of
-  them are kept in `tools/testdata/v44forge`. FORGE_LINE
-* Checked on the final code: ROBO_LINE. Details: [`docs/testing-v44.md`](docs/testing-v44.md).
+  them are kept in `tools/testdata/v44forge`. The final 100,000: 0 crashed, 97.4 % staged as asked, 2.3 % context, 0.3 % not staged.
+* Checked on the final code: the phone emulator ran 83 tests — 80 passed, 1 skipped, 2 failed (both fixed in v45). Details: [`docs/testing-v44.md`](docs/testing-v44.md).
 * **Sorry — said plainly:** this is still not Pixar or Disney, and I cannot make it so: the characters are your flat
   pictures moved on a mesh (their arms can only lift so far — so the bow is drawn in a close-up, as films do), the
   places and props are drawn, and the director works from rules for the words it knows, not from understanding. And I

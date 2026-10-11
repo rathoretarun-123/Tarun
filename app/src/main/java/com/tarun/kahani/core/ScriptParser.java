@@ -19,6 +19,8 @@ public final class ScriptParser {
     private static final Pattern NUMBERED = Pattern.compile("^\\s*([0-9]+)\\s*[.)]\\s*(.+)$");
     /** v40: अर्जुन [छड़ी से आग में लकड़ी धकेलते हुए] - "…": a name, what they do while saying it (in brackets), a dash, the line. */
     private static final Pattern DASH_LINE = Pattern.compile("^(.{1,40}?)\\s*(?:[\\[(]([^\\])]{0,400})[\\])])?\\s*[-–—:：]\\s*([\"“].+)$");
+    /** v41: a name (and what they do, in brackets), maybe a comma, then the words in double inverted commas — nothing after. */
+    private static final Pattern NAME_QUOTE = Pattern.compile("^(.{1,40}?)\\s*(?:[\\[(]([^\\])]{0,300})[\\])])?\\s*[,،]?\\s*([\"“][^\"”]{1,600}[\"”][!?.।]*)\\s*$");
     private static final Pattern AGE = Pattern.compile("([0-9]+)\\s*(वर्ष|साल|बरस|years?|yrs?|yo)", Pattern.CASE_INSENSITIVE);
 
     static final String[] TITLE_WORDS = {"बड़ी", "छोटी", "बड़ा", "छोटा", "बाकी", "राजकुमारी", "राजकुमार", "गार्ड", "गार्ड्स",
@@ -26,6 +28,140 @@ public final class ScriptParser {
             // honorifics are never a name on their own ("गेम वाली आंटी हूँ" does not call Aunty Algora on to the stage)
             "आंटी", "आँटी", "अंकल", "दीदी", "भैया", "भाई", "मिस्टर", "मिस", "मिसेज", "सर", "मैडम", "डॉक्टर", "बाबा", "दादा", "दादी", "नानी", "नाना", "चाचा", "चाची", "मामा", "मामी", "बुआ", "मौसी",
             "aunty", "auntie", "aunt", "uncle", "mister", "mr", "mrs", "ms", "miss", "sir", "madam", "dr", "doctor", "grandpa", "grandma", "papa", "mama", "mummy", "daddy"};
+
+    // ------------------------------------------------------------------ v41: the many ways a script is written
+
+    /** Every kind of double inverted commas as the plain one (“ ” stay: they pair). */
+    static String normalizeQuotes(String t) {
+        // „…“ (its closing mark is an opening one elsewhere) first, as “…”
+        t = t.replaceAll("„([^„“”\"\\n]*)[“”]", "“$1”");
+        t = t.replace('„', '“').replace('‟', '“').replace('〝', '“').replace('〞', '”').replace('＂', '"').replace('″', '"')
+                .replace('«', '“').replace('»', '”').replace("‘‘", "“").replace("’’", "”").replace("''", "\"").replace("``", "“");
+        return t;
+    }
+
+    /** The open double quotes a line leaves (ASCII ones odd in number, or more “ than ”). */
+    static boolean quoteOpen(String l) {
+        int ascii = 0, open = 0, close = 0;
+        for (int i = 0; i < l.length(); i++) {
+            char c = l.charAt(i);
+            if (c == '"') ascii++; else if (c == '“') open++; else if (c == '”') close++;
+        }
+        return ascii % 2 == 1 || open > close;
+    }
+
+    /**
+     * A spoken line that goes on over the next lines (its quotes close further down) is one line; a speaker's name
+     * alone on a line ("राहुल:", "मीरा (धीरे से):") with the quoted words on the next is one line too.
+     */
+    static String[] joinOpenQuotes(String[] in) {
+        List<String> out = new ArrayList<String>();
+        for (int i = 0; i < in.length; i++) {
+            String l = in[i];
+            String c = Txt.clean(l);
+            // "Name:" / "Name (manner):" then the words, quoted, on the next line
+            if (c.length() > 0 && c.length() <= 60 && c.matches("^[^\"“।]{1,50}?\\s*(\\([^)]*\\))?\\s*[:：]$")) {
+                int j = i + 1;
+                while (j < in.length && Txt.clean(in[j]).length() == 0 && j - i <= 2) j++;
+                if (j < in.length && Txt.clean(in[j]).matches("^[\"“].*")) { l = c + " " + Txt.clean(in[j]); c = Txt.clean(l); i = j; }
+            }
+            if (quoteOpen(c)) {
+                int j = i + 1;
+                StringBuilder b = new StringBuilder(c);
+                while (j < in.length && j - i <= 6) {
+                    String n = Txt.clean(in[j]);
+                    if (n.length() == 0 || SCENE.matcher(n).matches()) break;
+                    b.append(' ').append(n);
+                    j++;
+                    if (!quoteOpen(b.toString())) break;
+                }
+                if (!quoteOpen(b.toString())) { l = b.toString(); i = j - 1; }
+            }
+            out.add(l);
+        }
+        return out.toArray(new String[0]);
+    }
+
+    static final String[] HI_NUM = {"शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ", "दस", "ग्यारह", "बारह", "तेरह", "चौदह", "पंद्रह", "सोलह", "सत्रह", "अठारह", "उन्नीस", "बीस"};
+    static final String[] HI_ORD = {"", "पहला", "दूसरा", "तीसरा", "चौथा", "पाँचवाँ", "छठा", "सातवाँ", "आठवाँ", "नौवाँ", "दसवाँ", "ग्यारहवाँ", "बारहवाँ", "तेरहवाँ", "चौदहवाँ", "पंद्रहवाँ"};
+    static final String[] EN_NUM = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"};
+    static final String[] EN_ORD = {"", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"};
+
+    /** A number written as digits, a Hindi or English word, an ordinal or a Roman numeral; -1 when it is none. */
+    static int numberWord(String w) {
+        String x = w.trim().replaceAll("[.)]+$", "").toLowerCase(java.util.Locale.ROOT)
+                .replace("पांच", "पाँच").replace("पाचवां", "पाँचवाँ").replace("पांचवां", "पाँचवाँ").replace("वां", "वाँ").replace("छः", "छह").replace("छे", "छह");
+        if (x.matches("[0-9]{1,3}")) return Integer.parseInt(x);
+        for (int i = 0; i < HI_NUM.length; i++) if (x.equals(HI_NUM[i])) return i;
+        for (int i = 1; i < HI_ORD.length; i++) if (x.equals(HI_ORD[i]) || x.equals(HI_ORD[i].replace("ा", "ी"))) return i;
+        for (int i = 0; i < EN_NUM.length; i++) if (x.equals(EN_NUM[i])) return i;
+        for (int i = 1; i < EN_ORD.length; i++) if (x.equals(EN_ORD[i])) return i;
+        if (x.matches("[ivxl]{1,6}")) {
+            int v = 0, prev = 0;
+            for (int i = x.length() - 1; i >= 0; i--) {
+                int d = "ivxl".indexOf(x.charAt(i));
+                int n = d == 0 ? 1 : d == 1 ? 5 : d == 2 ? 10 : 50;
+                v += n < prev ? -n : n;
+                prev = Math.max(prev, n);
+            }
+            return v;
+        }
+        return -1;
+    }
+
+    static final String SCENE_WORDS = "दृश्य|द्रश्य|दृष्य|दृश्‍य|सीन|सिन|scene|अंक|भाग|एपिसोड|episode|act|part|chapter|अध्याय";
+    /** The bigger parts of a script (an act, a chapter): scenes only in a script that has no scene headings. */
+    static boolean bigPart(String w) { return w.matches("(?iu)अंक|भाग|एपिसोड|episode|act|part|chapter|अध्याय"); }
+    private static final Pattern SCENE_X = Pattern.compile("^\\s*[#*]*\\s*(" + SCENE_WORDS + ")\\s*(?:संख्या|सं\\.|नंबर|नम्बर|नं\\.?|क्रमांक|क्र\\.|no\\.?|number|num\\.?|#)?\\s*[-–—:]?\\s*"
+            + "([0-9]{1,3}|[IVXLivxl]{1,6}|[\\p{L}\\p{M}]{2,12})\\s*(?:[:：.\\-–—)|]+\\s*(.*))?$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern SCENE_ORD = Pattern.compile("^\\s*[#*]*\\s*([\\p{L}\\p{M}]{3,12})\\s+(" + SCENE_WORDS + ")\\s*(?:[:：.\\-–—|]+\\s*(.*))?$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern SLUG = Pattern.compile("^\\s*(INT|EXT|INT\\./EXT|INT/EXT|EXT/INT|I/E)\\.?\\s+(.+)$");
+
+    /**
+     * "दृश्य संख्या 2 –", "सीन नंबर 3:", "Scene No. 4", "पहला दृश्य", "Scene Two", "SCENE IV", "अंक-5", and screenplay
+     * sluglines ("INT. LIVING ROOM – NIGHT", numbered in order when the script has no other heading): all read as
+     * "दृश्य N: title" (or "Scene N: …").
+     */
+    static String[] canonicalHeadings(String[] lines) {
+        String[] out = lines.clone();
+        boolean anyHeading = false;
+        // does the script head its scenes as scenes ("दृश्य", "सीन", "Scene")? then an act or chapter line is no scene
+        boolean sceneLevel = false;
+        for (String x : lines) {
+            String l = Txt.clean(x);
+            Matcher a = SCENE.matcher(l), b = SCENE_X.matcher(l), c = SCENE_ORD.matcher(l);
+            String w = a.matches() ? a.group(1) : b.matches() && numberWord(b.group(2)) > 0 ? b.group(1) : c.matches() && numberWord(c.group(1)) > 0 ? c.group(2) : null;
+            if (w != null && !bigPart(w)) { sceneLevel = true; break; }
+        }
+        for (int i = 0; i < out.length; i++) {
+            String l = Txt.clean(out[i]);
+            if (l.length() == 0 || l.length() > 140) continue;
+            if (SCENE.matcher(l).matches()) { anyHeading = true; continue; }
+            Matcher m = SCENE_X.matcher(l);
+            int n = -1;
+            String word = null, title = "";
+            if (m.matches()) { n = numberWord(m.group(2)); word = m.group(1); title = m.group(3) == null ? "" : m.group(3).trim(); }
+            if (n < 0) {
+                Matcher o = SCENE_ORD.matcher(l);
+                if (o.matches()) { n = numberWord(o.group(1)); word = o.group(2); title = o.group(3) == null ? "" : o.group(3).trim(); }
+            }
+            // a heading has no sentence after it (a line of a story beginning "Part of the wall…" is no heading)
+            if (n <= 0 || n > 200 || (title.length() == 0 && m.matches() && m.group(3) == null && !l.matches(".*[0-9IVXivx]\\s*$") && numberWord(m.group(2)) < 0)) continue;
+            if (bigPart(word) && sceneLevel) { out[i] = ""; continue; }     // "अध्याय 2" over "दृश्य 5…": a title of the part only
+            boolean hindi = word.matches(".*[\\u0900-\\u097F].*");
+            out[i] = (hindi ? "दृश्य " : "Scene ") + n + (title.length() > 0 ? ": " + title : "");
+            anyHeading = true;
+        }
+        if (!anyHeading) {
+            int n = 0;
+            for (int i = 0; i < out.length; i++) {
+                Matcher m = SLUG.matcher(Txt.clean(out[i]));
+                if (m.matches()) out[i] = "Scene " + (++n) + ": " + m.group(2).replaceAll("\\s+[-–—]\\s+", ", ").trim();
+            }
+        }
+        return out;
+    }
 
     /**
      * Reads a script in Hindi, English, Hinglish (Hindi in English letters) or a mix: every Hinglish line is turned
@@ -57,7 +193,10 @@ public final class ScriptParser {
     static Story parseText(String raw) {
         Story story = new Story();
         String text = Txt.digitsToAscii(raw.replace("\r\n", "\n").replace('\r', '\n'));
-        String[] lines = text.split("\n");
+        // v41: dialogue is written in double inverted commas — every kind of them reads the same ("…", “…”, „…“, «…»,
+        // ''…'', ″…″), a line split over several lines is joined, and every way of heading a scene is one heading
+        text = normalizeQuotes(text);
+        String[] lines = canonicalHeadings(joinOpenQuotes(text.split("\n")));
 
         int firstScene = -1;
         for (int i = 0; i < lines.length; i++) {
@@ -295,8 +434,8 @@ public final class ScriptParser {
             if (isCharHeader(l) || isPlaceHeader(l)) { lists = true; continue; }
             String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
             if (!lists || h.length() > 30) continue;
-            if (h.matches("^(पटकथा|स्क्रिप्ट|स्क्रीनप्ले|कहानी शुरू|स्क्रिप्ट शुरू|पटकथा शुरू)$")
-                    || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|screenplay|story)( (starts|begins))?$")) return i;
+            if (h.matches("^(पटकथा|स्क्रिप्ट|स्क्रीनप्ले|कहानी शुरू|स्क्रिप्ट शुरू|पटकथा शुरू|कहानी आरंभ|स्क्रिप्ट आरंभ|पटकथा आरंभ|संवाद|संवाद और दृश्य|कहानी)$")
+                    || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|screenplay|story|dialogues?)( (starts|begins))?$") || h.toLowerCase(java.util.Locale.ROOT).matches("^fade in[:.]?$")) return i;
         }
         return -1;
     }
@@ -311,7 +450,11 @@ public final class ScriptParser {
     static boolean isThingsHeader(String l) {
         if (NUMBERED.matcher(l).matches() || l.length() > 80) return false;
         String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").trim();
-        return !h.contains("।") && (Txt.has(h, "वस्तुओं", "वस्तुएँ", "वस्तुएं", "सामान", "प्रॉप्स", "चीज़ों का", "चीजों का") || Txt.hasWord(h, "props", "objects", "things", "items"));
+        if (!h.contains("।") && (Txt.has(h, "वस्तुओं", "वस्तुएँ", "वस्तुएं", "सामान", "प्रॉप्स", "चीज़ों का", "चीजों का") || Txt.hasWord(h, "props", "objects", "things", "items"))) return true;
+        // v41: more words for the things' list ("वस्तु सूची", "चीज़ें", "सामग्री", "उपकरण", "Properties", "Equipment")
+        String sh = shortHeading(l);
+        return sh != null && (Txt.has(sh, "वस्तु", "चीज़ें", "चीजें", "सामग्री", "उपकरण", "प्रॉप", "औज़ार", "औजार", "साज़ो-सामान")
+                || Txt.hasWord(sh, "prop", "properties", "equipment", "object", "item", "thing", "tools", "stuff"));
     }
 
     /**
@@ -327,7 +470,18 @@ public final class ScriptParser {
     }
 
     private static boolean isCharHeader(String l) {
-        return !NUMBERED.matcher(l).matches() && Txt.has(l, "पात्र", "किरदार", "character", "cast") && l.length() < 120;
+        if (NUMBERED.matcher(l).matches()) return false;
+        if (Txt.has(l, "पात्र", "किरदार", "character", "cast") && l.length() < 120) return true;
+        // v41: a short heading of the cast in other words ("कलाकार", "चरित्र परिचय", "भूमिकाएँ", "Who's who", "Starring")
+        String h = shortHeading(l);
+        return h != null && (Txt.has(h, "कलाकार", "चरित्र परिचय", "चरित्र-परिचय", "चरित्रों", "भूमिका", "अभिनेता", "किरदारों", "पात्रों", "लोग")
+                || Txt.hasWord(h, "starring", "roles", "people", "persons", "dramatis personae", "who's who", "who is who", "actors", "the cast"));
+    }
+
+    /** v41: a line that is a heading (short, no sentence in it): its words without marks; null when it is none. */
+    static String shortHeading(String l) {
+        String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
+        return h.length() > 0 && h.length() <= 40 && !h.contains("।") && !h.contains("\"") && !h.contains("“") && h.split("\\s+").length <= 5 ? h : null;
     }
 
     private static boolean isPlaceHeader(String l) {
@@ -335,15 +489,21 @@ public final class ScriptParser {
         if (Txt.has(l, "स्थानों", "स्थान का", "स्थान :", "स्थान:", "जगहों", "places", "locations", "settings") && l.length() < 120) return true;
         // v39: a short heading line ("जगह का परिचय", "लोकेशन", "Location") — never a sentence of a description
         String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
-        return h.length() <= 30 && !h.contains("।") && h.split("\\s+").length <= 4
+        if (h.length() <= 30 && !h.contains("।") && h.split("\\s+").length <= 4
                 && (Txt.has(h, "जगह", "लोकेशन", "स्थान परिचय", "सेटिंग") || Txt.hasWord(h, "location", "place", "setting"))
-                && !Txt.has(h, "मुख्य जगह", "main location", "main place");
+                && !Txt.has(h, "मुख्य जगह", "main location", "main place")) return true;
+        // v41: more words for the places' list ("स्थल", "जगहें", "पृष्ठभूमि", "बैकग्राउंड", "Sets", "Backgrounds", "Scenery")
+        String sh = shortHeading(l);
+        return sh != null && (Txt.has(sh, "स्थल", "जगहें", "जगहे", "पृष्ठभूमि", "बैकग्राउंड", "लोकेशंस", "लोकेशन्स", "सेट्स", "स्थान सूची", "स्थान विवरण", "स्थानों")
+                || Txt.hasWord(sh, "backgrounds", "background", "sets", "scenery", "venues", "where", "locales", "world"));
     }
 
     /** v39: the end of the lists before the script ("---", "स्क्रिप्ट शुरू", "Script starts"). */
     private static boolean listsEnd(String l) {
         String h = l.trim();
-        return h.matches("^[-–—_*=~]{3,}$") || Txt.has(h, "स्क्रिप्ट शुरू", "कहानी शुरू", "पटकथा शुरू") || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|story) (starts|begins).*");
+        return h.matches("^[-–—_*=~]{3,}$") || Txt.has(h, "स्क्रिप्ट शुरू", "कहानी शुरू", "पटकथा शुरू", "स्क्रिप्ट आरंभ", "कहानी आरंभ", "पटकथा आरंभ",
+                "कहानी प्रारंभ", "पटकथा प्रारंभ", "स्क्रिप्ट प्रारंभ", "कहानी की शुरुआत", "स्क्रिप्ट की शुरुआत")
+                || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|story|screenplay|film) (starts|begins).*") || h.toLowerCase(java.util.Locale.ROOT).matches("^fade in[:.]?$");
     }
 
     /** v40: "फिल्म का नाम: राहुल का पार्क", "Film name - …": the line that names the film (the words before the name). */
@@ -386,7 +546,13 @@ public final class ScriptParser {
     static final String[] FIELDS = {"चेहरा", "पहनावा", "पोशाक", "कपड़े", "शरीर", "रूप", "आवाज़", "आवाज", "उम्र", "स्वभाव", "बाल", "आँखें", "कद",
             "face", "dress", "outfit", "clothes", "costume", "body", "hair", "voice", "age", "personality", "nature", "look", "looks",
             "appearance", "height", "eyes", "skin", "role", "note", "notes", "description", "features", "behaviour", "behavior", "accessories",
-            "सपना", "शौक", "पसंद", "आदत", "रिश्ता", "dream", "dreams", "hobby", "hobbies", "likes", "habit", "relation"};   // v39
+            "सपना", "शौक", "पसंद", "आदत", "रिश्ता", "dream", "dreams", "hobby", "hobbies", "likes", "habit", "relation",   // v39
+            // v41: more labels of a description
+            "आयु", "रंग", "रंगत", "त्वचा", "हाइट", "लंबाई", "ऊँचाई", "वजन", "वज़न", "पेशा", "काम", "व्यवसाय", "नौकरी", "भाषा", "बोली", "लहजा",
+            "विशेषता", "विशेषताएँ", "खासियत", "ख़ासियत", "पहचान", "हुलिया", "वेशभूषा", "ड्रेस", "जूते", "चप्पल", "गहने", "आभूषण", "चश्मा", "मूड", "भाव",
+            "व्यक्तित्व", "चाल", "चाल-ढाल", "हावभाव", "संबंध", "परिवार", "उद्देश्य", "डर", "कमज़ोरी", "ताकत", "ताक़त", "पसंदीदा", "आवाज़ का अंदाज़",
+            "occupation", "job", "profession", "language", "accent", "skin tone", "complexion", "build", "weight", "traits", "characteristics",
+            "mannerisms", "gait", "walk", "shoes", "jewellery", "jewelry", "glasses", "mood", "goal", "fear", "fears", "strength", "weakness", "favourite", "favorite", "family"};
 
     private static boolean fieldLabel(String head) {
         String h = Txt.norm(head.replaceAll("[*•\\-&]", " ")).trim();
@@ -682,13 +848,58 @@ public final class ScriptParser {
                 inner = inner.trim();
                 String low = Txt.norm(inner);
                 if (sc.setting.length() == 0 && (low.startsWith(Txt.norm("स्थान")) || low.startsWith("location") || low.startsWith("place")
-                        || low.startsWith("setting"))) {
+                        || low.startsWith("setting") || low.startsWith(Txt.norm("जगह")) || low.startsWith(Txt.norm("लोकेशन")) || low.startsWith(Txt.norm("सेटिंग"))
+                        || low.startsWith("where") || low.startsWith(Txt.norm("स्थल"))) && (inner.indexOf(':') > 0 || inner.indexOf('：') > 0 || inner.matches("^\\S+\\s*[-–—].*"))) {
                     int c = inner.indexOf(':');
                     if (c < 0) c = inner.indexOf('：');
                     sc.setting = c >= 0 ? inner.substring(c + 1).trim() : inner;
                 }
                 sc.beats.add(Story.Beat.direction(inner));
                 continue;
+            }
+            // v41: "राहुल "चलो!"", "राहुल (हँसते हुए) "चलो!"", "राहुल, "चलो!"": a name, and the words in double inverted commas
+            Matcher nq = NAME_QUOTE.matcher(l);
+            if (nq.matches()) {
+                String who = nq.group(1).trim().replaceAll("[,،]+$", "").trim();
+                Story.CharacterDef dc = who.length() > 0 && !who.contains("।") ? resolve(story, who) : null;
+                if (dc != null && (aliasEquals(dc, who) || Txt.norm(dc.fullName).equals(Txt.norm(who)))) {
+                    Story.Beat b = new Story.Beat();
+                    b.type = Story.Beat.DIALOGUE;
+                    b.speakerRaw = who;
+                    b.manner = nq.group(2) == null ? "" : nq.group(2).trim();
+                    b.text = Txt.stripQuotes(nq.group(3).trim());
+                    if (b.text.length() > 0) { sc.beats.add(b); lastSpeaker = who; continue; }
+                }
+            }
+            // v41: the screenplay way — the name alone on its line ("RAHUL", "मीरा (V.O.)"), a (manner) line, then the words
+            String alone = l.replaceAll("[:：]$", "").trim();
+            if (alone.length() <= 40 && !alone.matches(".*[।.!?,\"“”\\[\\]].*") && Txt.withoutParens(alone).trim().split("\\s+").length <= 4) {
+                String nm = Txt.withoutParens(alone).trim();
+                Story.CharacterDef dc = nm.length() > 0 ? resolve(story, nm) : null;
+                if (dc != null && (aliasEquals(dc, nm) || Txt.norm(dc.fullName).equals(Txt.norm(nm)))) {
+                    int j = i + 1;
+                    while (j < to && Txt.clean(lines[j]).length() == 0 && j - i <= 2) j++;
+                    String manner = "";
+                    if (j < to && Txt.clean(lines[j]).matches("^\\(.*\\)$")) {
+                        manner = Txt.clean(lines[j]); manner = manner.substring(1, manner.length() - 1).trim();
+                        j++;
+                        while (j < to && Txt.clean(lines[j]).length() == 0 && j - i <= 4) j++;
+                    }
+                    String words = j < to ? Txt.clean(lines[j]) : "";
+                    String wn = Txt.withoutParens(words.replaceAll("[:：]$", "")).trim();
+                    Story.CharacterDef other = wn.length() > 0 && wn.length() <= 40 ? resolve(story, wn) : null;
+                    boolean isName = other != null && (aliasEquals(other, wn) || Txt.norm(other.fullName).equals(Txt.norm(wn)));
+                    if (words.length() > 0 && !words.startsWith("(") && !words.startsWith("[") && !SCENE.matcher(words).matches() && !isName && colonOutsideParens(words) < 0) {
+                        Story.Beat b = new Story.Beat();
+                        b.type = Story.Beat.DIALOGUE;
+                        b.speakerRaw = nm;
+                        String paren = alone.indexOf('(') >= 0 && alone.lastIndexOf(')') > alone.indexOf('(') ? alone.substring(alone.indexOf('(') + 1, alone.lastIndexOf(')')).trim() : "";
+                        b.offScreen = paren.toLowerCase(java.util.Locale.ROOT).matches("v\\.?o\\.?|o\\.?s\\.?|o\\.?c\\.?|voice ?over|off ?screen") || Txt.has(paren, "आवाज़", "आवाज", "फ़ोन", "फोन");
+                        b.manner = (manner + (paren.length() > 0 && !b.offScreen ? (manner.length() > 0 ? ", " : "") + paren : "")).trim();
+                        b.text = Txt.stripQuotes(words);
+                        if (b.text.length() > 0) { sc.beats.add(b); lastSpeaker = nm; i = j; continue; }
+                    }
+                }
             }
             // v40: अर्जुन [छड़ी से आग में एक लकड़ी को धकेलते हुए, माथे पर शिकन लाते हुए] - "हर चुनाव से पहले…" — the bracket is
             // what he does while he says it (the manner), the dash brings the line
@@ -704,6 +915,15 @@ public final class ScriptParser {
                     b.text = Txt.stripQuotes(dl.group(3).trim());
                     if (b.text.length() > 0) { sc.beats.add(b); lastSpeaker = who; continue; }
                 }
+            }
+            // v41: "स्थान: …", "Location: …", "समय: …" lines in a scene are where and when it happens, never someone speaking
+            if (l.matches("^(स्थान|जगह|लोकेशन|स्थल|सेटिंग|समय|वक़्त|वक्त|Location|Place|Setting|Time|LOCATION|PLACE|SETTING|TIME)\\s*[:：].+")) {
+                boolean when = l.matches("^(समय|वक़्त|वक्त|Time|TIME).*");
+                String what = l.substring(l.indexOf(':') >= 0 ? l.indexOf(':') + 1 : l.indexOf('：') + 1).trim();
+                if (!when && sc.setting.length() == 0) sc.setting = what;
+                else if (when) sc.setting = sc.setting.length() == 0 ? "समय: " + what : sc.setting.replaceAll("[।.\\s]+$", "") + "। समय: " + what;
+                sc.beats.add(Story.Beat.direction(l));
+                continue;
             }
             int colon = colonOutsideParens(l);
             if (colon > 0 && colon <= 260) {

@@ -999,14 +999,14 @@ public final class Director {
     private Film.Actor lastDlgA, lastDlgB;
     private int dlgCount;
     /** v41: lines and reaction shots in the part being staged (one reaction at least where someone listens). */
-    private int dlgInPart, partReactions, forcedReactions;
+    private int dlgInPart, partReactions, forcedReactions, partEnd;
     private Film.Actor lastSpeaker;
 
     private boolean leading;
 
     private float stagePart(int si, Story.Scene sc, int pi, int nParts, int b0, int b1, String where, int prevTod, float t) {
         leading = true;
-        dlgInPart = 0; partReactions = 0;
+        dlgInPart = 0; partReactions = 0; partEnd = b1;
         seg = new Film.Seg();
         seg.type = Film.S_SCENE;
         seg.scene = si;
@@ -1669,8 +1669,11 @@ public final class Director {
             // the reaction is often more important than the line: show it and let it breathe (§9, §31)
             // v41: and every part with someone listening shows at least one (the handbook's performance gate): after
             // the first line said with feeling, or a question or an exclamation, if the plan chose none so far
+            boolean lastLine = true;
+            Story.Scene scn = story.scenes.get(si);
+            for (int k = bi + 1; k < Math.min(partEnd, scn.beats.size()); k++) if (scn.beats.get(k).type == Story.Beat.DIALOGUE) { lastLine = false; break; }
             boolean force = !plan.reaction && partReactions == 0
-                    && (line.emotion != Pose.NEUTRAL || line.text.contains("!") || line.text.contains("?"));
+                    && (line.emotion != Pose.NEUTRAL || line.text.contains("!") || line.text.contains("?") || lastLine);
             if ((plan.reaction || force) && to.stateAt(end).visible && reactionShot(to, sp, end, line, plan)) {
                 after += plan.reaction ? plan.breathe : 0.9f;
                 partReactions++;

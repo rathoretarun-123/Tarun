@@ -173,6 +173,23 @@ public final class Art {
         public boolean object;
     }
 
+    /**
+     * v41: one of the user's pictures of a thing (cut out): the picture, its size, and the box its shape fills (shares
+     * of the picture: left, top, right, bottom).
+     */
+    public static final class Thing {
+        public String key;
+        public Object img;
+        public int w, h;
+        public float bx0, by0, bx1, by1;
+        /** Its main colour (the most saturated one it has much of; 0 unknown). */
+        public int color;
+    }
+
+    /** v41: the slide read from the user's side view of it (PlayPics), and their side view of the swing's seat; null when none. */
+    public Props.SlideGeo slideGeo;
+    public Thing swingSeat;
+
     public final Map<String, Sprite> sprites = new HashMap<String, Sprite>();   // by character id
     /** v34: the pictures of a character's changes of clothes, by "id#n" (the user's picture, else their own recoloured). */
     public final Map<String, Sprite> costumes = new HashMap<String, Sprite>();
@@ -818,6 +835,7 @@ public final class Art {
         java.util.List<String[]> views = new java.util.ArrayList<String[]>();
         java.util.List<String[]> poses = new java.util.ArrayList<String[]>();
         java.util.List<String[]> costumeLines = new java.util.ArrayList<String[]>();
+        java.util.List<String[]> thingLines = new java.util.ArrayList<String[]>();
         // v39: every character's own pictures first: a front picture that is only a face and shoulders (a sheet's
         // close-up chosen as the front) is swapped for the user's full-length standing front picture, and kept as a
         // close-up — everything is sized against the front picture, so a close-up front made giants of the others
@@ -850,6 +868,8 @@ public final class Art {
                     views.add(f);            // after the characters, below
                 } else if (f[0].equals("costume") && f.length >= 3) {
                     costumeLines.add(f);     // v34: after the characters, below
+                } else if (f[0].equals("objview") && f.length >= 3) {
+                    thingLines.add(new String[]{f[1], f[2]});      // v41: every angle of a thing (the playground's slide and swing)
                 } else if (f[0].equals("char") && f.length >= 3) {
                     Story.CharacterDef c = ScriptParser.resolve(story, f[1]);
                     if (c == null) continue;
@@ -941,6 +961,7 @@ public final class Art {
                     s.object = f.length >= 5 && f[4].trim().equals("object");
                     b.object = s.object;
                     art.shots.add(s);
+                    if (s.object) thingLines.add(new String[]{f[2], f[3]});
                 } else if (f[0].equals("title") || f[0].equals("end")) {
                     Backdrop b = makeBackdrop(L, f[1], backdropSide);
                     if (b == null) continue;
@@ -982,6 +1003,8 @@ public final class Art {
                 art.costumes.put(c.id + "#" + n, v);
             } catch (RuntimeException ignored) { /* a broken line never stops the film */ }
         }
+        // v41: the user's own slide and swing for the playground of the place (read from their side views)
+        try { PlayPics.read(art, L, thingLines); } catch (RuntimeException e) { art.slideGeo = null; art.swingSeat = null; }
         for (String[] f : views) {
             try {
                 Story.CharacterDef c = ScriptParser.resolve(story, f[1]);

@@ -346,6 +346,30 @@ public final class ScriptParser {
         return h.matches("^[-–—_*=~]{3,}$") || Txt.has(h, "स्क्रिप्ट शुरू", "कहानी शुरू", "पटकथा शुरू") || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|story) (starts|begins).*");
     }
 
+    /** v40: "फिल्म का नाम: राहुल का पार्क", "Film name - …": the line that names the film (the words before the name). */
+    static final Pattern NAME_LINE = Pattern.compile("^[#*\\s]*(?:(?:फ़िल्म|फिल्म|मूवी|कहानी|कार्टून)\\s+का\\s+नाम|(?:film|movie|story)\\s+name|name\\s+of\\s+the\\s+(?:film|movie|story))\\s*[-–—:：]\\s*",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    /**
+     * v40: a numbered section heading ("1. उपयोग में आने वाली वस्तुएं (Objects)", "2. पात्र का विवरण", "3. स्थान का
+     * विवरण"): the heading without its number; null for a numbered entry ("1. मीरा - 9 साल…", "2. Cast: Meera").
+     */
+    static String numberedHeading(String l) {
+        Matcher m = NUMBERED.matcher(l);
+        if (!m.matches()) return null;
+        String h = m.group(2).trim();
+        String bare = h.replaceAll("[#*:：\\-–—=_\\s]+$", "").trim();
+        if (bare.contains("।") || colonOutsideParens(bare) > 0 || bare.matches(".*\\s[-–—]\\s.*") || Txt.withoutParens(bare).trim().split("\\s+").length > 6) return null;
+        return isThingsHeader(bare) || isCharHeader(bare) || isPlaceHeader(bare) ? bare : null;
+    }
+
+    /** v40: "वस्तु 1 - झूला", "पात्र 2: मीरा", "Object 1 - Swing": the entry's name without its label and number. */
+    static String entryName(String h) {
+        String n = h.replaceFirst("(?iu)^(वस्तु|चीज़|चीज|सामान|प्रॉप|पात्र|किरदार|स्थान|जगह|लोकेशन|object|item|prop|thing|character|place|location)\\s*(?:नं\\.?|no\\.?|#)?\\s*[0-9]+\\s*[-–—:：.)]?\\s*", "").trim();
+        n = n.replaceAll("[:：\\s]+$", "");
+        return n.length() > 0 ? n : h;
+    }
+
     /** A line that can be the film's title: short, not a sentence, list entry, heading or "Name: words" line. */
     private static boolean titleLike(String l, boolean allowColon) {
         boolean bullet = l.startsWith("*") || l.startsWith("-") || l.startsWith("•");
@@ -377,7 +401,7 @@ public final class ScriptParser {
     private static void parsePreamble(Story story, String[] pre) {
         // The title: "Title: …" anywhere, else the last short line before the first scene, else the first line
         int titleIdx = -1;
-        for (int i = 0; i < pre.length && titleIdx < 0; i++) if (Txt.has(Txt.clean(pre[i]), "शीर्षक", "title:")) titleIdx = i;
+        for (int i = 0; i < pre.length && titleIdx < 0; i++) if (Txt.has(Txt.clean(pre[i]), "शीर्षक", "title:") || NAME_LINE.matcher(Txt.clean(pre[i])).find()) titleIdx = i;
         for (int i = pre.length - 1; i >= 0 && titleIdx < 0; i--) {
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
@@ -391,7 +415,7 @@ public final class ScriptParser {
             break;
         }
         if (titleIdx >= 0) {
-            String t = Txt.clean(pre[titleIdx]).replaceFirst("^(शीर्षक|Title|TITLE)\\s*[-–—:：]\\s*", "");
+            String t = NAME_LINE.matcher(Txt.clean(pre[titleIdx])).replaceFirst("").replaceFirst("^(शीर्षक|Title|TITLE)\\s*[-–—:：]\\s*", "");
             t = t.replaceAll("^[#*\\s]+", "").replaceAll("[*\\s]+$", "");
             int p = t.indexOf('(');
             if (p > 0 && t.endsWith(")")) {
@@ -424,6 +448,8 @@ public final class ScriptParser {
             if (i == titleIdx) continue;
             String l = Txt.clean(pre[i]);
             if (l.length() == 0) continue;
+            String section = numberedHeading(l);
+            if (section != null) l = section;
             if (listsEnd(l)) { flushEntry(story, entryMode, header, desc); header = null; mode = 0; numbered = false; continue; }
             // v40: "समय - रात 11 बजे, ठंड वाली रात, आसमान में तारे": the hour of the story (never a character or a place)
             String time = mode == 0 || header == null ? timeLine(l) : null;
@@ -451,6 +477,7 @@ public final class ScriptParser {
                         header = dm.group(1).trim();
                     }
                 }
+                header = entryName(header);
                 entryMode = mode == 0 ? 1 : mode;
                 numbered = true;
                 continue;
@@ -471,7 +498,7 @@ public final class ScriptParser {
                     header = null;
                     // a spoken line or a writer's note before the story starts: never a character, never acted
                     if (rest.startsWith("\"") || rest.startsWith("“") || narratorName(head)) continue;
-                    header = head;
+                    header = entryName(head);
                     if (rest.length() > 0) desc.append(rest).append('\n');
                     entryMode = mode;
                     continue;
@@ -516,6 +543,7 @@ public final class ScriptParser {
             if (Txt.has(header, "मुख्य जगह", "मुख्य स्थान", "जगह", "स्थान", "लोकेशन") && header.split("\\s+").length <= 2 || Txt.hasWord(header, "main location", "main place", "location", "place")) {
                 String first = d.split("\n")[0].trim();
                 if (first.length() > 80) first = Director.firstSentence(first).trim();     // v40: a paragraph: its first sentence
+                first = first.replaceAll("[।.\\s]+$", "");
                 if (first.length() > 0 && first.length() <= 80) p.name = first;
             }
             p.description = d;

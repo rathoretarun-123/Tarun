@@ -584,6 +584,7 @@ public final class Director {
             oneActionPerShot();
             limitShotLength(TechnicalDirector.CUT_SECONDS);
         }
+        playFrames();
         shotsFromCuts();
         if (opt.technical) validateShots();
         int longest = 0;
@@ -1039,7 +1040,7 @@ public final class Director {
                     && (wakesIn(sc, b0, b1, c) || (bool(pAsleep.get(c)) && !Sets.outdoorSet(seg.set) && !speaksFirst(sc, b0, b1, c)));
             if (asleepNow) { k.body = Pose.LIE; k.seat = Film.SEAT_BED; k.eyesShut = true; k.visible = true; }
             a.keys.add(k);
-            if (asleepNow) { Film.Fx bf = fx(Film.FX_SEAT, seg.t0, 1e6f, k.x, ground, a, null); bf.kind = Film.SEAT_BED; }
+            if (asleepNow) { Film.Fx bf = fx(Film.FX_SEAT, seg.t0, 1e6f, k.x, 0, a, null); bf.kind = Film.SEAT_BED; }
             // Spider-Verse: the frame rate this character's poses step on (only when the user asks for it)
             a.stepFps = opt.onTwos ? PixarLead.stepFps(c) : 0;
             seg.actors.add(a);
@@ -1060,6 +1061,7 @@ public final class Director {
         ambience(where, t);
         weatherFrom(where + " । " + sc.title + (pi == 0 && sc.cues.length() > 0 ? " । " + sc.cues : ""), seg.t0, true);
         campfire(sc);
+        playgroundProps(sc, b0, b1, where);
         if (Sets.outdoorSet(seg.set) && (seg.tod == Sets.NIGHT || seg.tod == Sets.EVENING)) {
             // natural night: stars in the sky, fireflies in the woods
             if (wOpen[Film.W_STARS] < 0) open(Film.W_STARS, seg.t0, 0.9f);
@@ -1158,6 +1160,7 @@ public final class Director {
             if ((mood == Film.M_HAPPY || mood == Film.M_PLAYFUL || mood == Film.M_CELEBRATE) && storyHasVillain() && tc - t > 6) shadowPass(t + (tc - t) * 0.55f);
         }
         paceTracks(tc + 0.8f);
+        playUntil(tc + 0.8f);
         seg.t1 = tc + 0.8f;
         for (Film.Fx f : seg.fx) if (f.type == Film.FX_LIGHTS_OFF && f.t1 > seg.t1) f.t1 = seg.t1;
         if (pi == nParts - 1) closeAllWeather(seg.t1);
@@ -2008,7 +2011,11 @@ public final class Director {
         float chin = fb[1] + fb[2] * 0.5f, headTop = fb[4] - 0.05f * heightOf(a) - 18;
         zoom = Math.min(zoom, 0.74f * 720f / Math.max(1, chin - headTop));
         zoom = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], zoom));
-        if (tight > 1) {
+        // v41: on a swing going high, or sliding down, a close shot would lose them: a medium shot on the swing's arc
+        float[] pl = playAt(a, t);
+        boolean moving = pl != null && pl[1] > 6;
+        if (moving) zoom = Math.min(zoom, 1.1f);
+        if (tight > 1 && !moving) {
             // the next group of words gets a visibly different framing (never a jump cut): closer if the picture
             // allows it, otherwise a little wider
             float base = Math.max(ShotPlanner.ZOOM[ShotPlanner.MCU], Math.min(fb[3], Math.min(fill / 1.1f * 720f / fb[2], 0.74f * 720f / Math.max(1, chin - headTop))));
@@ -2037,6 +2044,15 @@ public final class Director {
         Film.Key k = a.stateAt(t);
         float top = ground - h;
         if (k.body == Pose.SIT) top = ground - h * Math.min(1f, seatedFace(a, t) + 0.115f);     // v35: by the seat's height
+        float[] pl = playAt(a, t);
+        if (pl != null) top -= pl[0];                                                             // v41: up on the slide
+        else if (k.body == Pose.LIE && k.anchor == Film.A_GROUND && a.look != null && a.look.isHumanoid()) {
+            // v41: lying on the grass or a bed: low down, the whole body in a medium shot (a close-up of a face turned on
+            // its side is no lip-sync shot, and a frame aimed at a standing head finds nothing but the trees)
+            float bed = k.seat == Film.SEAT_BED ? Renderer.BED_TOP * h : 0;
+            float fy = ground - bed - 0.12f * h;
+            return new float[]{x, fy, 0.17f * h, Math.min(1.5f, 720f / (0.9f * h)), fy - 0.25f * h};
+        }
         else if (k.body == Pose.KNEEL || k.body == Pose.CROUCH) top += h * 0.25f;
         if (k.anchor == Film.A_BRANCH) top = ground - 450 - h * 0.1f;
         else if (k.anchor == Film.A_SHOULDER || k.anchor == Film.A_ON_FACE) top = ground - 320 - h * 0.1f;
@@ -2217,7 +2233,7 @@ public final class Director {
             sortCams(sg);
             for (int i = 0; i < sg.cams.size(); i++) {
                 Film.Cam c = sg.cams.get(i);
-                if (c.ease > 0) continue;
+                if (c.ease > 0 || c.place) continue;
                 float t = c.t + 0.05f;
                 boolean faceShot = false;
                 for (Film.Shot sh : film.shots) if (Math.abs(sh.t - c.t) < 0.06f && (sh.speech || sh.reaction)) faceShot = true;
@@ -2360,7 +2376,13 @@ public final class Director {
             for (Film.Actor a : sg.actors) if (a.c.shown().equals(sh.subject) && a.stateAt(sh.t + 0.05f).visible) { main = a; break; }
             if (main == null) main = nearestTo(sg, cam.cx, sh.t + 0.05f);
             float fh = 720f / cam.zoom, topEdge = cam.cy - fh / 2;
-            if (main != null && main.stateAt(sh.t + 0.05f).anchor == Film.A_GROUND && sh.size < ShotPlanner.XCU) {
+            Film.Key mk = main == null ? null : main.stateAt(sh.t + 0.05f);
+            Film.Seg keepS = seg; float keepG = ground;
+            seg = sg; ground = sg.ground;
+            // v41: one lying down, or up on the slide or the swing, is not checked against a standing head and feet
+            boolean offFeet = mk != null && (mk.body == Pose.LIE || playAt(main, sh.t + 0.05f) != null);
+            seg = keepS; ground = keepG;
+            if (main != null && mk.anchor == Film.A_GROUND && sh.size < ShotPlanner.XCU && !offFeet) {
                 float h = heightOf(main);
                 v.headTop = (sg.ground - h - topEdge) / fh;
                 v.feet = (sg.ground - topEdge) / fh;
@@ -2886,6 +2908,9 @@ public final class Director {
             sh.light = 0.3f;
         }
         Art.Shot shot = art.shotFor(story.scenes.get(si).number, text);
+        // v41: the swing or the slide is in the place itself (played on, swaying in the wind): no picture of it over the scene
+        if (shot != null && shot.object && shot.keys != null) for (String key : shot.keys)
+            if ((swingProp != null && Txt.has(key, PlayPics.SWING_KEYS)) || (slideProp != null && Txt.has(key, PlayPics.SLIDE_KEYS))) { shot = null; break; }
         // an object's picture is an insert of the thing itself, once — when the story first brings it in
         if (shot != null && shot.object && !usedInserts.add(shot)) shot = null;
         // a picture of the moment headwear changes hands shows the old state (the owner still wearing it): the
@@ -3149,6 +3174,7 @@ public final class Director {
             focusSet = true;
             d = Math.max(d, 2.5f);
         }
+        playSentence = playKind(s, subj);
         d = Math.max(d, postureFrom(s, t, subj, group));
         if (mealCU != null) { camOn(mealCU, mealCUt, 2.4f); focusSet = true; mealCU = null; mealCloseUps++; }
         // v36: lighting diyas, candles or a fire is shown — a frame low and wide enough to see the flames catch
@@ -3406,6 +3432,17 @@ public final class Director {
             d = Math.max(d, 1.6f);
         }
         if (Txt.has(s, "पसीना")) for (Film.Actor a : group) { Film.Key k = a.at(t); k.sweat = true; }
+        // v41: "उसका बैग एक तरफ पड़ा है" — a school bag lying on the grass (thrown down on the way in), there from now on
+        if (subj != null && Txt.has(s, "बैग", "बस्ता", "school bag", "schoolbag", "backpack", "rucksack") && Txt.has(s, "पड़ा", "पड़ी", "रखा", "फेंक", "lies", "lying", "dropped", "drops", "throws", "tossed")) {
+            boolean have = false;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_THING && f.kind == 1) have = true;
+            if (!have) {
+                float x = xAt(subj, t), off = 0.9f * heightOf(subj);
+                Film.Fx bag = fx(Film.FX_THING, t, 1e6f, x < 640 ? Math.max(130, x - off) : Math.min(1150, x + off), 0, subj, null);
+                bag.kind = 1;
+                groundThings++;
+            }
+        }
         if (Txt.has(s, "तलवार") && Txt.has(s, "अभ्यास", "टकरा") ) {
             int i = 0;
             for (Film.Actor a : group) {
@@ -3425,13 +3462,18 @@ public final class Director {
             lightsOff = false;
         }
         d = Math.max(d, loudReaction(s, t, subj, d));
+        // v41: on the swing and the slide (the sentence's own framing; no walk of its own after it)
+        playStaged = false;
+        playDelay = 0;
+        if (playSentence != 0) { d = Math.max(d, playFrom(s, t, subj, group)); if (playStaged) focusSet = true; }
+        playSentence = 0;
         if (!focusSet && !establishing && subj != null && subj.stateAt(t).visible && DirectorsManual.looksAt(s) && !Txt.has(s, "देखो", "look!", "look,")) {
             d = Math.max(d, pointOfView(s, t, subj, target));
             focusSet = true;
         }
         // v34: walking off, across or up to someone (last: its keys must come after every other key of the sentence)
         travelFramed = false;
-        d = Math.max(d, travelFrom(s, t, subj, target, group));
+        if (!playStaged) d = Math.max(d, playDelay + travelFrom(s, t + playDelay, subj, target, group));
         if (travelFramed) focusSet = true;
 
         if (!focusSet && !establishing) {
@@ -4145,6 +4187,16 @@ public final class Director {
             float go = ta + 0.15f;
             Film.Key before = a.stateAt(Math.max(seg.t0, ta - 0.02f));
             if (before.body == Pose.SIT || before.body == Pose.KNEEL || before.body == Pose.LIE) go = ta + 1.1f;
+            // v41: nobody walks off sitting (or lying): up on their feet first — from the grass after a slide, from a
+            // mat, from a bed a moment longer — unless they roll in a wheelchair
+            boolean seated = (before.body == Pose.SIT || before.body == Pose.KNEEL || before.body == Pose.LIE) && lk.isHumanoid() && lk.aid != Look.AID_WHEELCHAIR;
+            if (seated) {
+                Film.Key up = a.at(ta + 0.1f);
+                up.body = Pose.STAND; up.seat = -1; up.eyesShut = false;
+                if (before.body == Pose.LIE) go = ta + 1.5f;
+                stoodToWalk++;
+            }
+            float walkFrom = seated ? go : ta + 0.15f;
             // v39: "पास आकर बैठती है" — they come first and sit there: the sit this sentence staged waits for the walk
             Film.Key sitAfter = null;
             if (Txt.has(s, "आकर बैठ", "आ कर बैठ", "जाकर बैठ", "जा कर बैठ", "and sits", "and sat")) {
@@ -4213,7 +4265,7 @@ public final class Director {
                 // v39: a group leaves together, by one side (the side most of them stand nearer)
                 float side = all || joint ? groupSide(who, ta) : x;
                 float edge = side < 640 ? (back ? 150 : -220) : (back ? 1130 : 1500);
-                float start = ta + (turning ? 0.7f : 0.25f);           // a turned back reads for a moment before the walk
+                float start = Math.max(walkFrom, ta + (turning ? 0.7f : 0.25f));           // a turned back reads for a moment before the walk
                 float dur = Math.min(4.0f, Math.max(0.8f, Math.abs(edge - x) / ((blind ? 120f : run ? 245f : slow ? 150f : 200f) * weightSpeed(a))));
                 // a still frame they walk out of (the camera does not chase them off the stage)
                 frameAround(ta + 0.05f);
@@ -4245,16 +4297,17 @@ public final class Director {
                     float far = x < 640 ? Math.min(1100, x + 360) : Math.max(180, x - 360);
                     dur = Math.min(2.2f, Math.max(0.7f, Math.abs(far - x) / speed));
                     frameAround(ta + 0.05f, x, far);
-                    k = a.at(ta + 0.15f); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
-                    Film.Key k2 = a.at(ta + 0.2f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
-                    dur = dur * 2 + 0.05f;
+                    k = a.at(walkFrom); k.x = far; k.moveDur = dur; k.run = run; k.facing = far > x ? 1 : -1;
+                    Film.Key k2 = a.at(walkFrom + 0.05f + dur); k2.x = x; k2.moveDur = dur; k2.run = run; k2.facing = far > x ? -1 : 1;
+                    dur = dur * 2 + 0.05f + (walkFrom - ta - 0.15f);
                 } else {
                     // across: to the other side (a slow walk goes less far)
                     float reach = slow || blind ? 360 : 520;
                     float dest = x < 640 ? Math.min(1100, x + reach) : Math.max(180, x - reach);
                     dur = Math.min(4.5f, Math.max(0.8f, Math.abs(dest - x) / speed));
                     frameAround(ta + 0.05f, x, dest);
-                    k = a.at(ta + 0.15f); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
+                    k = a.at(walkFrom); k.x = dest; k.moveDur = dur; k.run = run; k.facing = dest > x ? 1 : -1;
+                    dur += walkFrom - ta - 0.15f;
                 }
                 if (blind) { if (!cane) a.acts.add(new Film.Act(ta + 0.15f, ta + 0.15f + dur, Film.G_REACH)); feltWay++; }
                 watch(a, ta + 0.15f, ta + 0.15f + dur, false);
@@ -4469,6 +4522,9 @@ public final class Director {
     static final String[] STAND_UP = {"उठ खड़", "उठकर खड़", "खड़ा हो गया", "खड़ी हो गई", "खड़े हो गए", "खड़ी हो गयी", "उठ गया", "उठ गई", "उठ गए",
             // v39: "सोफे से उठकर खिड़की के पास आता है" — getting up on the way somewhere (उठाकर, lifting, is another word)
             "उठकर", "उठ कर", "उठता है", "उठती है", "उठते हैं", "उठ जाता", "उठ जाती", "उठ जाते", "उठी और", "उठे और",
+            // v41: "तुरंत खड़ा हो जाता है"
+            "खड़ा हो जाता", "खड़ी हो जाती", "खड़े हो जाते", "खड़ा होता है", "खड़ी होती है", "खड़े होते हैं", "खड़ा हुआ और", "खड़ी हुई और",
+            "stands up", "standing up", "gets to his feet", "gets to her feet", "gets back up", "jumps up", "springs up",
             "stood up", "stands up", "got up", "gets up", "rose to", "uth khada"};
     static final String[] LIE_DOWN = {"लेट गया", "लेट गई", "लेट गए", "लेट जाता", "लेट जाती", "लेटता", "लेटती", "सो गया", "सो गई", "सो गए", "सो जाता", "सो जाती",
             "सो रहा", "सो रही", "सो रहे", "सोता है", "सोती है", "सोने चल", "lay down", "lies down", "lie down", "fell asleep", "falls asleep", "goes to sleep",
@@ -4609,7 +4665,9 @@ public final class Director {
                 } else d = Math.max(d, 0.8f);
             }
         }
-        if (Txt.has(s, STAND_UP) && !Txt.has(s, "उठकर बैठ", "उठ कर बैठ", "उठ बैठ", "sits up", "sat up")) {
+        if (playSentence != 0) {
+            // v41: on the swing or the slide: the seat, the getting up and the lying down are the play's (playFrom)
+        } else if (Txt.has(s, STAND_UP) && !Txt.has(s, "उठकर बैठ", "उठ कर बैठ", "उठ बैठ", "sits up", "sat up")) {
             for (Film.Actor a : who) {
                 // v35: one lying sits up first (0.9 s), then stands; from the floor, a sofa or a bed the rise takes a second.
                 // When the same sentence woke them, they stand after sitting up and stretching on the bed
@@ -4653,7 +4711,7 @@ public final class Director {
                 if (st >= Film.SEAT_STOOL) {
                     boolean have = false;
                     for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && f.a == a) have = true;
-                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, ts(t)), ground, a, null); f.kind = st; }
+                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, ts(t)), 0, a, null); f.kind = st; }
                 }
             }
             d = Math.max(d, estab ? 0 : 1.0f);
@@ -4674,7 +4732,7 @@ public final class Director {
                 if (bed) {
                     boolean have = false;
                     for (Film.Fx f : seg.fx) if (f.type == Film.FX_SEAT && f.a == a) have = true;
-                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, t), ground, a, null); f.kind = Film.SEAT_BED; }
+                    if (!have) { Film.Fx f = fx(Film.FX_SEAT, seg.t0, 1e6f, xAt(a, t), 0, a, null); f.kind = Film.SEAT_BED; }
                     film.sfx.add(sfxAt(Film.SFX_BED, tl - 0.2f, 1.0f, 0.3f, a));
                 }
                 Film.Key k = a.at(tl);
@@ -4902,6 +4960,448 @@ public final class Director {
         return 0;
     }
 
+    // ================================================================== v41: the playground as part of the place
+
+    /** v41: this part's swing and slide (null when it has none) and where the slide's parts are. */
+    private Film.Fx swingProp, slideProp;
+    private Props.SlideGeo slideGeo;
+    /** v41: who is on the swing now (their last act on it); where each one is on the slide (SL_*) and their act at its top. */
+    private final Map<Film.Actor, Film.Act> onSwing = new HashMap<Film.Actor, Film.Act>();
+    private final Map<Film.Actor, Integer> slideAt = new HashMap<Film.Actor, Integer>();
+    private final Map<Film.Actor, Film.Act> onSlide = new HashMap<Film.Actor, Film.Act>();
+    private static final int SL_FOOT = 1, SL_DECK = 2, SL_SEATED = 3, SL_OFF = 4;
+    /** v41: the sentence was staged on the swing or the slide: no sitting down on the grass, no walk of its own. */
+    private boolean playStaged;
+    /** v41: how long the getting off the swing takes before the sentence's walk may start. */
+    private float playDelay;
+    /** v41: the sentence being staged is one of the playground (playKind): its sitting is on the seat of the swing or the top of the slide. */
+    private int playSentence;
+    int swingRides, swingChanges, slideClimbs, slideRuns, playProps, emptySwingShots, groundThings, stoodToWalk;
+
+    static final String[] SWING_NOUN = {"झूला", "झूले", "झूलों", "the swing", "a swing", "the swings", "swing set", "swingset", "swing seat"};
+    static final String[] SLIDE_NOUN = {"फिसलपट्टी", "फिसल पट्टी", "फिसलन पट्टी", "स्लाइड", "the slide", "a slide", "the slides", "slide's", "down the slide"};
+    static final String[] SWING_GO_ON = {"बैठ", "चढ़", "sits on", "sit on", "sat on", "gets on", "got on", "jumps on", "hops on", "climbs on", "jumped on", "hopped on", "climbed on"};
+    static final String[] SWING_VERB = {"झूलना", "झूलने", "झूलता", "झूलती", "झूलते", "झूल रह", "झूलकर", "झूल कर", "झूलूँ", "झूलूं", "झूला झूल", "झूले झूल",
+            "swings", "swinging", "swing higher", "swing high", "swung"};
+    static final String[] STOP_SWING = {"रोक", "रुक", "थम", "धीमा कर", "धीमे कर", "stops", "stopped", "slows", "slowed", "comes to a stop"};
+    static final String[] GET_OFF = {"उतर", "कूद कर नीचे", "कूदकर नीचे", "jumps off", "jumped off", "gets off", "got off", "hops off", "hopped off", "climbs off"};
+    static final String[] CLIMB = {"चढ़", "climbs", "climbed", "climbing", "goes up the", "went up the", "runs up the"};
+    static final String[] LADDER = {"सीढ़ी", "सीढ़ियाँ", "सीढ़ियां", "सीढ़ियों", "ladder", "steps", "stairs"};
+    static final String[] TUMBLE = {"गिर", "लुढ़क", "falls", "fell", "tumbles", "tumbled", "rolls over", "lands on the grass"};
+
+    /** v41: a key at t, put in its place among the keys when later ones are already there. */
+    private static Film.Key keyAt(Film.Actor a, float t) { return t >= a.last().t - 1e-4f ? a.at(t) : insertKey(a, t); }
+
+    /**
+     * v41: a key put in among later ones (made by an earlier rule of the sentence: a laugh, a turn): what it changes —
+     * where they are, sitting or lying, the seat, the way they face — holds on in the later keys that still had the
+     * old state, until one of them changes it (they used to snap back: off the swing and back on its seat).
+     */
+    static void spread(Film.Actor a, Film.Key k) {
+        int i = a.keys.indexOf(k);
+        if (i <= 0 || i >= a.keys.size() - 1) return;
+        Film.Key p = a.keys.get(i - 1);
+        boolean x = Math.abs(k.x - p.x) > 0.5f, body = k.body != p.body, seat = k.seat != p.seat, face = k.facing != p.facing;
+        for (int j = i + 1; j < a.keys.size() && (x || body || seat || face); j++) {
+            Film.Key l = a.keys.get(j);
+            if (x) { if (l.moveDur == 0 && Math.abs(l.x - p.x) < 0.5f) l.x = k.x; else x = false; }
+            if (body) { if (l.body == p.body) l.body = k.body; else body = false; }
+            if (seat) { if (l.seat == p.seat) l.seat = k.seat; else seat = false; }
+            if (face) { if (l.facing == p.facing) l.facing = k.facing; else face = false; }
+        }
+    }
+
+    /** v41: the words of sliding down (not slipping: "फिसल गया" on a peel is a fall). */
+    static boolean slidePlay(String s) { return Txt.has(s, SLIDE_PLAY) && !Txt.has(s, "फिसल गय", "फिसल ग", "slipped"); }
+
+    /** v41: where in the sentence a word of the list comes last (-1: none). */
+    private static int lastAt(String s, String[] words) {
+        String n = Txt.norm(s);
+        int best = -1;
+        for (String w : words) best = Math.max(best, n.lastIndexOf(Txt.norm(w)));
+        return best;
+    }
+
+    /**
+     * v41: a swing or a slide that the part's place or action names stands there from its first frame, not only while
+     * someone plays on it: the slide toward the left with its chute running toward the middle, the swing beyond it, both
+     * sized for the child of the part (the smallest one on the stage). The slide is the user's own picture of it when
+     * they gave one that shows it from the side.
+     */
+    private void playgroundProps(Story.Scene sc, int b0, int b1, String where) {
+        swingProp = slideProp = null;
+        slideGeo = null;
+        onSwing.clear(); slideAt.clear(); onSlide.clear();
+        StringBuilder sb = new StringBuilder(where);
+        for (int bi = b0; bi < b1; bi++) if (sc.beats.get(bi).type == Story.Beat.DIRECTION) sb.append(" । ").append(sc.beats.get(bi).text);
+        String s = sb.toString(), noRound = s;
+        for (String w : ROUNDABOUT) noRound = noRound.replace(w, " ");
+        boolean swing = Txt.has(noRound, SWING_NOUN), slide = Txt.has(s, SLIDE_NOUN);
+        if (!swing && !slide) return;
+        Film.Actor kid = null;
+        for (Film.Actor a : seg.actors) {
+            if (a.look == null || !a.look.isHumanoid()) continue;
+            if (kid == null || (a.look.isChild() && !kid.look.isChild()) || (a.look.isChild() == kid.look.isChild() && heightOf(a) < heightOf(kid))) kid = a;
+        }
+        if (kid == null) return;
+        float h = heightOf(kid);
+        if (slide) {
+            slideGeo = PlayPics.slide(art);
+            float ax = 100 - slideGeo.footX * h;
+            if (!swing) ax = Math.max(ax, 360);
+            slideProp = fx(Film.FX_SLIDE, seg.t0, 1e6f, ax, 0, kid, null);
+            slideProp.kind = 1;
+            playProps++;
+        }
+        if (swing) {
+            float sx = slide ? slideProp.x + (slideGeo.landX + 0.6f) * h + 0.6f * h : 860;
+            sx = Math.min(1280 - 0.62f * h - 30, sx);
+            swingProp = fx(Film.FX_SWING, seg.t0, 1e6f, sx, 0, kid, null);
+            swingProp.kind = sx > 640 ? -1 : 1;           // on it one faces toward the middle of the place
+            playProps++;
+        }
+        film.notes.add("  ↳ the playground: " + (slide ? "the slide" + (slideGeo.pic != null ? " (your picture)" : "") : "") + (slide && swing ? " and " : "")
+                + (swing ? "the swing" + (PlayPics.seat(art) != null ? " (your picture of its seat)" : "") : "") + " stand in the place from the first frame");
+    }
+
+    /**
+     * v41: one on the playground at t — how far up they are (stage px: on the ladder, the platform, the chute) and
+     * how much they move there (the swing's reach in degrees; sliding down counts as fast); null when not on it.
+     */
+    private float[] playAt(Film.Actor a, float t) {
+        // still on the swing or up on the slide (its act is made longer when the story goes on with it)
+        Film.Act open = onSwing.get(a);
+        if (open != null && open.prop != null && t >= open.t0) return new float[]{0, Math.max(Math.abs(open.a0), Math.abs(open.a1))};
+        open = onSlide.get(a);
+        if (open != null && open.prop != null && t >= open.t0) {
+            Props.SlideGeo g = slideGeo != null ? slideGeo : PlayPics.slide(art);
+            return new float[]{g.deckY * heightOf(open.prop.a != null ? open.prop.a : a), 0};
+        }
+        for (Film.Act x : a.acts) {
+            if (x.type != Film.G_PLAYGROUND || x.prop == null || t < x.t0 || t >= x.t1) continue;
+            float hs = heightOf(x.prop.a != null ? x.prop.a : a);
+            if (x.prop.type == Film.FX_SWING) return new float[]{0, Math.max(Math.abs(x.a0), Math.abs(x.a1))};
+            Props.SlideGeo g = slideGeo != null ? slideGeo : PlayPics.slide(art);
+            float u = Math.max(0, Math.min(1, (t - x.t0) / Math.max(0.05f, x.t1 - x.t0)));
+            if ((x.how & Film.PL_CLIMB) != 0) return new float[]{g.deckY * hs * u, 0};
+            if ((x.how & Film.PL_TOP) != 0) return new float[]{g.deckY * hs * ((x.how & Film.PL_SIT) != 0 ? 0.8f : 1f), 0};
+            return new float[]{g.deckY * hs * (1 - u) * 0.8f, 30};
+        }
+        return null;
+    }
+
+    /**
+     * v41: no close shot of one swinging high or sliding down — a close frame loses them in the swing's arc: every cut
+     * on them (the line's close-ups, the cut-ins that keep shots short) becomes a medium shot of the swing or the slide
+     * with them in it.
+     */
+    private void playFrames() {
+        Film.Seg keepSeg = seg;
+        float keepGround = ground;
+        for (Film.Seg sg : film.segs) {
+            if (sg.type != Film.S_SCENE) continue;
+            seg = sg; ground = sg.ground;
+            for (Film.Cam c : sg.cams) {
+                if (c.zoom <= 1.12f) continue;
+                Film.Actor who = nearestTo(sg, c.cx, c.t + 0.1f);
+                if (who == null) continue;
+                Film.Fx prop = null;
+                for (float dt = 0.1f; dt < 2.6f && prop == null; dt += 0.5f) {
+                    float tt = c.t + dt;
+                    for (Film.Act x : who.acts) if (x.type == Film.G_PLAYGROUND && x.prop != null && tt >= x.t0 && tt < x.t1) {
+                        boolean fast = x.prop.type == Film.FX_SWING ? Math.max(Math.abs(x.a0), Math.abs(x.a1)) > 6 : (x.how & Film.PL_DOWN) != 0;
+                        if (fast) prop = x.prop;
+                    }
+                }
+                if (prop == null) continue;
+                float h = heightOf(prop.a != null ? prop.a : who);
+                c.zoom = 1.1f;
+                float hw = 640f / c.zoom, hh = 360f / c.zoom;
+                float cx = prop.type == Film.FX_SWING ? prop.x : prop.x + prop.kind * h * 0.5f;
+                c.cx = Math.max(hw, Math.min(1280 - hw, cx));
+                c.cy = Math.max(hh, Math.min(720 - hh, ground - 0.7f * h));
+                playFramed++;
+            }
+        }
+        seg = keepSeg; ground = keepGround;
+    }
+    int playFramed;
+
+    /** v41: the end of the part: one still on the swing or at the top of the slide stays there until the cut. */
+    private void playUntil(float tEnd) {
+        for (Film.Act x : onSwing.values()) if (x.t1 < tEnd) x.t1 = tEnd;
+        for (Film.Act x : onSlide.values()) if (x.t1 < tEnd) x.t1 = tEnd;
+    }
+
+    /** v41: the sentence takes this one somewhere else (a walk, a run, standing up, lying down, another play). */
+    private static boolean movesOff(String s) {
+        return Txt.has(s, GO_TO) || running(s) || Txt.hasWord(s, WALK_VERBS) || leaving(s) || Txt.has(s, STAND_UP) || Txt.has(s, LIE_DOWN)
+                || Txt.has(s, GET_OFF) || Txt.has(s, CROSS) || Txt.has(s, "चल", "जाता", "जाती", "जाते", "walks", "leaves");
+    }
+
+    /**
+     * v41: the swing and the slide as things one goes to, gets on, plays on for as long as the story says and gets off.
+     * On the swing the swinging goes on through the lines spoken on it, faster or slower as the story says; the feet
+     * push off, the face turns up to the sky, the hands let go for a moment, the feet drag to stop it and one hops off.
+     * The slide is climbed rung by rung, sat on at the top, slid down sitting (or on the belly, head first, the arms up)
+     * and left at its end on the grass. Returns the sentence's time (0 when it is not about them).
+     */
+    private float playFrom(String s, float t, Film.Actor subj, List<Film.Actor> group) {
+        playStaged = false;
+        int kind = playKind(s, subj);
+        if (kind == 0) return 0;
+        boolean onS = onSwing.containsKey(subj), swingS = (kind & 1) != 0, slideS = (kind & 2) != 0;
+        float d = 0, tt = t;
+        if ((kind & 4) != 0) {
+            // the sentence takes them elsewhere: off the swing first (their walk, if any, after the hop)
+            float off = leaveSwing(subj, tt, true);
+            tt += off; d += off;
+            playStaged = slideS;
+            if (!swingS && !slideS) playDelay = off;
+        }
+        if (swingS) {
+            float sd = swingFrom(s, tt, subj);
+            if (sd > 0) { d += sd; tt += sd; playStaged = true; }
+        }
+        if (slideS) {
+            float ld = slideFrom(s, tt, subj);
+            if (ld > 0) { d += ld; playStaged = true; }
+        }
+        return d;
+    }
+
+    /** v41: what the sentence does on the playground for this one: 1 on the swing, 2 on the slide, 4 off the swing first; 0 nothing. */
+    private int playKind(String s, Film.Actor subj) {
+        if (subj == null || subj.look == null || !subj.look.isHumanoid() || negated(s)) return 0;
+        if (swingProp == null && slideProp == null) return 0;
+        boolean onS = onSwing.containsKey(subj);
+        int st = slideAt.containsKey(subj) ? slideAt.get(subj) : 0;
+        boolean swingS = swingProp != null && (Txt.has(s, SWING_NOUN) || Txt.has(s, SWING_VERB) || onS && (Txt.has(s, STOP_SWING) || Txt.has(s, GET_OFF)
+                || Txt.has(s, "धक्का", "तेज", "धीरे", "ऊँचा", "ऊंचा", "हाथ छोड़", "बिना हाथ", "push", "faster", "higher", "no hands", "lets go")));
+        boolean slideS = slideProp != null && (Txt.has(s, SLIDE_NOUN) || slidePlay(s)
+                || (Txt.has(s, LADDER) && (Txt.has(s, CLIMB) || st == SL_FOOT || Txt.has(s, GO_TO) || running(s)))
+                || (st == SL_FOOT && Txt.has(s, CLIMB)) || ((st == SL_DECK || st == SL_SEATED) && (Txt.has(s, "बैठ", "sits", "sit down") || slidePlay(s)))
+                || (st == SL_OFF && Txt.has(s, TUMBLE)));
+        // both named ("झूले के पीछे वाली स्लाइड की तरफ भागता है"): the one the sentence ends on is where they go
+        if (swingS && slideS) {
+            if (lastAt(s, SLIDE_NOUN) >= lastAt(s, SWING_NOUN)) swingS = false; else slideS = false;
+        }
+        boolean leave = onS && !swingS && (slideS || movesOff(s));
+        return (swingS ? 1 : 0) | (slideS ? 2 : 0) | (leave ? 4 : 0);
+    }
+
+    /** v41: how far the swing goes for these words (degrees): slowly 12, a plain swing 22, fast 30, faster still 38. */
+    static float swingLevel(String s, float now) {
+        if (Txt.has(s, "और तेज", "और ऊँचा", "और ऊंचा", "और ऊपर", "और जोर", "ज्यादा तेज", "ज़्यादा तेज", "higher", "faster", "even more")) return Math.min(40, Math.max(now + 8, 36));
+        if (Txt.has(s, "धीरे", "slowly", "gently", "हल्के")) return 12;
+        if (Txt.has(s, "तेज", "ऊँचा", "ऊंचा", "जोर", "fast", "high", "hard")) return Math.max(now, 30);
+        return now > 4 ? now : 22;
+    }
+
+    private float swingFrom(String s, float t, Film.Actor a) {
+        Film.Fx sw = swingProp;
+        float h = heightOf(a), f = sw.kind;
+        Film.Act cur = onSwing.get(a);
+        boolean play = Txt.has(s, SWING_VERB);
+        boolean sitOn = Txt.has(s, SWING_GO_ON) && !Txt.has(s, "के पास बैठ", "near the swing", "beside the swing", "next to the swing");
+        boolean stop = Txt.has(s, STOP_SWING), off = Txt.has(s, GET_OFF);
+        boolean go = Txt.has(s, GO_TO) || running(s) || Txt.hasWord(s, WALK_VERBS);
+        int how = 0;
+        if (Txt.has(s, "धक्का", "पैरों से", "push", "pushes", "kicks off")) how |= Film.PL_PUSH;
+        if (Txt.has(s, "आसमान", "आकाश", "ऊपर की तरफ देख", "ऊपर देख", "sky", "looks up")) how |= Film.PL_LOOK_UP;
+        if (Txt.has(s, "हाथ छोड़", "बिना हाथ", "हाथ ऊपर", "दोनों हाथ", "no hands", "lets go", "let go", "hands up", "arms up", "hands in the air")) how |= Film.PL_HANDS_FREE;
+        float d = 0;
+        if (cur == null && !(go || sitOn || play) && Txt.has(s, "हिल", "डोल", "झूल रहा", "sway", "moving", "moves", "rocking") && onSwing.isEmpty()) {
+            // v41: "झूला अभी भी हवा में हिल रहा है": the empty seat, swaying, seen close — a breath of wind sets it going
+            float hp = heightOf(sw.a);
+            sw.t2 = t; sw.color = 6;
+            Film.Cam c = new Film.Cam(t + 0.1f, Math.min(1280 - 640 / 1.3f, Math.max(640 / 1.3f, sw.x)), Math.max(360 / 1.3f, Math.min(720 - 360 / 1.3f, ground - hp * 0.95f)), 1.3f, 0);
+            c.place = true; c.keep = true;
+            seg.cams.add(c);
+            emptySwingShots++;
+            return 2.8f;
+        }
+        if (cur == null) {
+            if (!(go || sitOn || play)) return 0;          // only named or looked at: nobody gets on
+            float x = xAt(a, t), tt = t + 0.1f;
+            Film.Key k0 = a.stateAt(t);
+            if ((k0.body == Pose.SIT || k0.body == Pose.LIE) && Math.abs(x - sw.x) > 12) {
+                Film.Key up = keyAt(a, tt); up.body = Pose.STAND; up.seat = -1; spread(a, up);
+                tt += k0.body == Pose.LIE ? 1.4f : 0.8f;
+            }
+            float to = sitOn || play ? sw.x : sw.x - f * 0.62f * h;          // beside it when they only go to it
+            if (Math.abs(to - x) > 12) {
+                boolean run = running(s) || (a.look.isChild() && !Txt.has(s, "धीरे", "slowly", "चलकर", "चलते"));
+                float dur = Math.min(3.6f, Math.max(0.7f, Math.abs(to - x) / ((run ? 260f : 170f) * weightSpeed(a))));
+                Film.Key k = keyAt(a, tt); k.x = to; k.moveDur = dur; k.run = run; k.facing = to > x ? 1 : -1;
+                tt += dur;
+            }
+            Film.Key kf = keyAt(a, tt + 0.02f); kf.facing = f;
+            if (!(sitOn || play)) { camOn(a, t, 1.0f); return tt - t + 0.6f; }
+            // the hop onto the seat: the back to it, a little jump, the seat takes the weight
+            Film.Act m = new Film.Act(tt + 0.1f, tt + 4.1f, Film.G_PLAYGROUND);
+            m.item = Film.PG_SWING; m.prop = sw; m.since = tt + 0.9f; m.a0 = 0;
+            m.a1 = play ? swingLevel(s, 0) : 3;
+            m.how = Film.PL_MOUNT | Film.PL_CONT | (play ? how : 0);
+            a.acts.add(m);
+            onSwing.put(a, m);
+            film.sfx.add(sfxAt(Film.SFX_CREAK, tt + 0.7f, 1.4f, 0.2f, a));
+            swingRides++;
+            camOn(a, tt, 1.05f);
+            d = tt - t + 1.0f + (play ? 2.4f : 0.4f);
+            if (!(stop || off)) return d;
+            return d + leaveSwing(a, t + d, off);
+        }
+        if (stop || off) return leaveSwing(a, t, off);
+        // a change in the swinging: faster, slower, pushing off, the sky, the hands let go
+        float tn = t + 0.15f;
+        Film.Act n = new Film.Act(tn, tn + 4.0f, Film.G_PLAYGROUND);
+        n.item = Film.PG_SWING; n.prop = sw; n.since = cur.since; n.a0 = cur.a1;
+        n.a1 = play || how != 0 ? swingLevel(s, cur.a1) : cur.a1;
+        n.how = how | Film.PL_CONT;
+        cur.t1 = tn;
+        cur.how |= Film.PL_CONT;
+        a.acts.add(n);
+        onSwing.put(a, n);
+        if ((how & Film.PL_HANDS_FREE) != 0) { Film.Key k = keyAt(a, tn + 0.6f); k.emotion = Pose.LAUGH; Film.Key k2 = keyAt(a, tn + 3.0f); k2.emotion = Pose.HAPPY; }
+        else if (n.a1 > 20) { Film.Key k = keyAt(a, tn); k.emotion = Pose.HAPPY; }
+        swingChanges++;
+        camOn(a, tn, n.a1 > 25 ? 0.95f : 1.1f);
+        return 3.4f;
+    }
+
+    /** v41: the swing slows (the shoes scuff the ground) and, getting off, they hop off forward onto their feet; the time it takes. */
+    private float leaveSwing(Film.Actor a, float t, boolean off) {
+        Film.Act cur = onSwing.get(a);
+        if (cur == null) return 0;
+        float h = heightOf(a), f = swingProp != null ? swingProp.kind : a.stateAt(t).facing;
+        float amp = Math.max(0, cur.a1), ts = Math.max(t + 0.1f, cur.t0 + 0.5f);
+        float dur = amp < 4 ? 0.4f : Math.max(1.2f, Math.min(2.6f, amp / 13f));
+        cur.t1 = ts;
+        cur.how |= Film.PL_CONT;
+        Film.Act stop = new Film.Act(ts, ts + dur, Film.G_PLAYGROUND);
+        stop.item = Film.PG_SWING; stop.prop = cur.prop; stop.since = cur.since; stop.a0 = amp; stop.a1 = 0;
+        stop.how = Film.PL_STOP;
+        a.acts.add(stop);
+        if (amp >= 4) film.sfx.add(sfxAt(Film.SFX_SWEEP, ts + 0.2f, dur * 0.8f, 0.16f, a));
+        if (!off) {
+            // stopped, and still sitting on it
+            stop.how |= Film.PL_CONT;
+            stop.t1 = ts + dur + 3f;
+            onSwing.put(a, stop);
+            return dur + 0.4f;
+        }
+        onSwing.remove(a);
+        float th = ts + dur;
+        Film.Key k = keyAt(a, th + 0.02f); k.body = Pose.STAND; k.seat = -1; k.x = xAt(a, th) + f * 0.42f * h; k.moveDur = 0.4f; k.facing = f; k.run = false;
+        spread(a, k);
+        a.acts.add(new Film.Act(th, th + 0.45f, Film.G_JUMP));
+        film.sfx.add(sfxAt(Film.SFX_THUD, th + 0.4f, 0.3f, 0.2f, a));
+        if (swingProp != null) { swingProp.t2 = th; swingProp.color = 7; }      // the empty seat swings on a little after the hop
+        return dur + 0.9f;
+    }
+
+    private float slideFrom(String s, float t, Film.Actor a) {
+        Props.SlideGeo g = slideGeo;
+        Film.Fx sl = slideProp;
+        float h = heightOf(sl.a), f = sl.kind, X = sl.x;
+        int st = slideAt.containsKey(a) ? slideAt.get(a) : 0;
+        boolean go = Txt.has(s, GO_TO) || running(s) || Txt.hasWord(s, WALK_VERBS);
+        boolean climb = Txt.has(s, CLIMB);
+        boolean sit = Txt.has(s, "बैठ", "sits", "sit down", "sat down");
+        boolean down = slidePlay(s);
+        boolean belly = Txt.has(s, "पेट के बल", "belly", "tummy", "head first", "headfirst", "लेट कर फिसल", "लेटकर फिसल", "लेट कर नीचे");
+        boolean arms = Txt.has(s, "हाथ ऊपर", "हाथों को ऊपर", "हाथ उठा", "hands up", "arms up", "hands in the air", "arms in the air");
+        boolean count = Txt.has(s, "गिन", "counting", "counts", "एक-एक", "one by one");
+        if (st == SL_OFF && Txt.has(s, TUMBLE) && !down && !climb) {
+            // off the end and onto the grass: down on the back, laughing
+            Film.Key k = keyAt(a, t + 0.25f); k.body = Pose.LIE; k.seat = Film.SEAT_FLOOR; k.emotion = Pose.LAUGH;
+            spread(a, k);
+            film.sfx.add(sfxAt(Film.SFX_THUD, t + 0.5f, 0.3f, 0.22f, a));
+            slideAt.put(a, 0);
+            camOn(a, t, 1.2f);
+            return 1.5f;
+        }
+        if (!(go || climb || sit || down)) return 0;          // only named or looked at
+        float tt = t + 0.1f;
+        if (st == SL_OFF || st == 0) {
+            // to the foot of the ladder (up from the grass first)
+            Film.Key k0 = a.stateAt(tt);
+            if (k0.body == Pose.SIT || k0.body == Pose.LIE) { Film.Key up = keyAt(a, tt); up.body = Pose.STAND; up.seat = -1; spread(a, up); tt += k0.body == Pose.LIE ? 1.4f : 0.8f; }
+            float x = xAt(a, tt), to = X + g.footX * h * f;
+            if (Math.abs(to - x) > 10) {
+                boolean run = running(s) || (a.look.isChild() && !Txt.has(s, "धीरे", "slowly", "चलकर", "चलते"));
+                float dur = Math.min(3.6f, Math.max(0.6f, Math.abs(to - x) / ((run ? 260f : 170f) * weightSpeed(a))));
+                Film.Key k = keyAt(a, tt); k.x = to; k.moveDur = dur; k.run = run; k.facing = to > x ? 1 : -1;
+                camOn(a, tt, 1.0f);
+                tt += dur;
+            }
+            Film.Key kf = keyAt(a, tt + 0.02f); kf.facing = f;
+            st = SL_FOOT;
+            slideAt.put(a, st);
+            if (!(climb || sit || down)) return tt - t + 0.4f;
+            tt += 0.25f;
+        }
+        if (st == SL_FOOT) {
+            // up the ladder, rung by rung (counted aloud: slower)
+            int rungs = Math.max(4, Math.round(g.deckY / 0.14f));
+            float dur = rungs * (count ? 0.6f : 0.4f);
+            Film.Act c = new Film.Act(tt, tt + dur, Film.G_PLAYGROUND);
+            c.item = Film.PG_SLIDE; c.prop = sl; c.how = Film.PL_CLIMB | (count ? Film.PL_COUNT : 0);
+            a.acts.add(c);
+            Film.Key k = keyAt(a, tt + 0.01f); k.x = X + g.deckX * h * f; k.moveDur = dur; k.facing = f; k.run = false;
+            for (int i = 0; i < rungs; i++) film.sfx.add(sfxAt(Film.SFX_TAP, tt + (i + 0.5f) * dur / rungs, 0.15f, 0.14f, a));
+            cam(tt, X + (g.footX + g.deckX) * 0.5f * h * f, ground - h * (0.62f + g.deckY * 0.55f), 0.95f, 0.8f);
+            slideClimbs++;
+            tt += dur;
+            st = SL_DECK;
+            slideAt.put(a, st);
+            Film.Act top = new Film.Act(tt, tt + 4f, Film.G_PLAYGROUND);
+            top.item = Film.PG_SLIDE; top.prop = sl; top.how = Film.PL_TOP | Film.PL_CONT;
+            a.acts.add(top);
+            onSlide.put(a, top);
+            if (!(sit || down)) return tt - t + 0.5f;
+        }
+        Film.Act top = onSlide.get(a);
+        if (st == SL_DECK && (sit || (down && !belly))) {
+            // sits down at the top of the chute
+            if (top != null) top.t1 = tt;
+            Film.Act seat = new Film.Act(tt, tt + 4f, Film.G_PLAYGROUND);
+            seat.item = Film.PG_SLIDE; seat.prop = sl; seat.how = Film.PL_TOP | Film.PL_SIT | Film.PL_CONT;
+            a.acts.add(seat);
+            Film.Key k = keyAt(a, tt + 0.01f); k.x = X + g.sitX * h * f; k.moveDur = 0.5f; k.facing = f; k.run = false;
+            onSlide.put(a, seat);
+            top = seat;
+            st = SL_SEATED;
+            slideAt.put(a, st);
+            cam(tt, X + g.sitX * h * f + f * 0.3f * h, ground - h * (0.5f + g.deckY * 0.6f), 1.15f, 0.6f);
+            tt += 0.8f;
+            if (!down) return tt - t + 0.6f;
+        }
+        if (!down) return tt - t;
+        // down the chute: sitting with the arms up, or on the belly head first; off its end onto the grass
+        if (top != null) top.t1 = tt;
+        onSlide.remove(a);
+        float len = (g.endX - g.sitX) * h;
+        float dur = Math.max(1.1f, Math.min(2.2f, len / 330f)) + 0.5f;
+        Film.Act dn = new Film.Act(tt, tt + dur, Film.G_PLAYGROUND);
+        dn.item = Film.PG_SLIDE; dn.prop = sl; dn.how = Film.PL_DOWN | (belly ? Film.PL_BELLY : 0) | (arms || !belly ? Film.PL_ARMS_UP : 0);
+        dn.a0 = st == SL_SEATED ? 1 : 0;          // already sitting at the top (else they sit, or lie down, first)
+        a.acts.add(dn);
+        Film.Key k = keyAt(a, tt + 0.01f); k.x = X + g.landX * h * f; k.moveDur = dur; k.facing = f; k.run = false;
+        // how they end up on the grass, set while the slide still decides the pose (lying down or sitting down takes
+        // a moment: done before they reach the end, so there is no pop when the slide lets go of them)
+        Film.Key kl = keyAt(a, tt + 0.05f);
+        kl.body = belly ? Pose.LIE : Pose.SIT; kl.seat = Film.SEAT_FLOOR; kl.facing = belly ? -f : f; kl.emotion = Pose.LAUGH;
+        spread(a, kl);
+        film.sfx.add(sfxAt(Film.SFX_WHOOSH, tt + 0.4f, dur - 0.5f, 0.4f, a));
+        film.sfx.add(sfxAt(Film.SFX_THUD, tt + dur - 0.1f, 0.3f, 0.18f, a));
+        cam(tt, X + (g.sitX + g.landX) * 0.5f * h * f, ground - h * (0.55f + g.deckY * 0.3f), 0.9f, 0.6f);
+        slideRuns++;
+        slideAt.put(a, SL_OFF);
+        return tt - t + dur + 0.3f;
+    }
+
     /**
      * v37: activities from a stage direction — riding and driving, the playground, exercise, make-up, a bath (always
      * behind a curtain, from the shoulders up), hugs and a peck on the cheek or the forehead. Returns their time.
@@ -4971,6 +5471,8 @@ public final class Director {
         // slid where she stood); the play needs its own verb ("फिसलती है", "झूलने लगता है")
         boolean goThere = Txt.has(s, GO_TO);
         if (goThere && (pg == Film.PG_SLIDE || pg == Film.PG_SWING) && !Txt.has(s, pg == Film.PG_SLIDE ? SLIDE_PLAY : SWING_PLAY)) pg = 0;
+        // v41: the place's own swing and slide are played on as sessions (playFrom), never a one-sentence play of v37
+        if ((pg == Film.PG_SWING && swingProp != null) || (pg == Film.PG_SLIDE && slideProp != null)) pg = 0;
         if (pg != 0) {
             float dur = pg == Film.PG_SLIDE ? 5.2f : 6.5f;
             List<Film.Actor> kids = new ArrayList<Film.Actor>(all);
@@ -5356,12 +5858,15 @@ public final class Director {
         float h = heightOf(a);
         Film.Key k = a.stateAt(t + 0.5f);
         float x = k.moveDur > 0 ? k.x : xAt(a, t);
-        float y = ground - h * (zoom > 1.6f ? 0.8f : 0.62f);
+        // v41: up on the slide the camera looks up with them; on a swing going high it stays a medium shot
+        float[] pl = playAt(a, t + 0.5f);
+        if (pl != null && pl[1] > 6) zoom = Math.min(zoom, 1.1f);
+        float y = ground - h * (zoom > 1.6f ? 0.8f : 0.62f) - (pl != null ? pl[0] : 0);
         // v34 (the situations guide): a seated character — in a wheelchair, on a chair — is framed at their own eye
         // level, not at a standing person's (the camera never looks down on them)
         if (k.body == Pose.SIT) { float fy = seatedFace(a, t + 0.5f); y = ground - h * (zoom > 1.6f ? fy : fy * 0.75f); eyeLevelShots++; }
         if (k.anchor == Film.A_BRANCH) y = ground - 450;
-        if (k.body == Pose.LIE) y = ground - 60;
+        if (k.body == Pose.LIE && pl == null) y = ground - 60;
         cam(t, x, y, zoom, 0);
     }
 

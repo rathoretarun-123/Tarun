@@ -308,13 +308,38 @@ public final class Props {
     public static final float SWING_TOP = 1.32f, SWING_SEAT = 0.42f;
 
     /** The swing's frame (an A of metal tubes each side, the top bar seen end-on); it does not move. */
-    public static void swingFrame(Gfx g, float h) {
+    public static void swingFrame(Gfx g, float h) { swingFrame(g, h, 0xFF1565C0); }
+
+    /** v41: a school bag lying on its back on the ground (h: the child's height): the body, the flap, the straps, a pocket. */
+    public static void schoolBag(Gfx g, float h) {
+        float w = 0.3f * h, d = 0.11f * h;
+        g.color(alpha(0xFF000000, 0.18f)); g.oval(0, 0.006f * h, w * 0.62f, 0.022f * h);
+        g.color(0xFF1A3A6B); g.roundRect(-w / 2, -d, w, d, 0.03f * h);
+        g.color(0xFF24508F); g.roundRect(-w / 2 + 0.01f * h, -d - 0.012f * h, w * 0.62f, d * 0.7f, 0.025f * h);
+        g.color(0xFFE53935); g.roundRect(w * 0.08f, -d * 0.8f, w * 0.3f, d * 0.55f, 0.015f * h);
+        g.color(0xFF0E2747); g.line(-w * 0.35f, -d * 0.2f, -w * 0.6f, -d * 0.05f, 0.012f * h); g.line(-w * 0.2f, -d * 0.15f, -w * 0.45f, 0.004f * h, 0.012f * h);
+        g.color(0xFFFFD54F); g.oval(-w * 0.05f, -d * 0.55f, 0.012f * h, 0.012f * h);
+    }
+
+    /** v41: a colour a share of the way to another. */
+    static int mix(int a, int b, float k) {
+        int r = Math.round(((a >> 16) & 255) * (1 - k) + ((b >> 16) & 255) * k), gg = Math.round(((a >> 8) & 255) * (1 - k) + ((b >> 8) & 255) * k);
+        int bl = Math.round((a & 255) * (1 - k) + (b & 255) * k);
+        return 0xFF000000 | (r << 16) | (gg << 8) | bl;
+    }
+
+    /** v41: the frame in a colour (the seat's own: a red seat hangs from a red frame). */
+    public static void swingFrame(Gfx g, float h, int col) {
         float top = -SWING_TOP * h;
-        g.color(0xFF90A4AE);
+        int far = mix(col, 0xFF607D8B, 0.55f), dark = mix(col, 0xFF000000, 0.35f);
+        g.color(far);
         g.line(-0.5f * h + 0.08f * h, 0, 0.08f * h, top - 0.03f * h, 0.03f * h); g.line(0.5f * h + 0.08f * h, 0, 0.08f * h, top - 0.03f * h, 0.03f * h);
-        g.color(0xFF1565C0);
+        g.color(col);
         g.line(-0.55f * h, 0, 0, top, 0.035f * h); g.line(0.55f * h, 0, 0, top, 0.035f * h);
-        g.color(0xFF0D47A1); g.oval(0, top, 0.035f * h, 0.035f * h);
+        // a light catching the front tubes (rounded metal)
+        g.color(mix(col, 0xFFFFFFFF, 0.35f));
+        g.line(-0.55f * h + 0.008f * h, -0.01f * h, -0.004f * h, top + 0.02f * h, 0.008f * h); g.line(0.55f * h - 0.004f * h, -0.01f * h, 0.006f * h, top + 0.02f * h, 0.008f * h);
+        g.color(dark); g.oval(0, top, 0.035f * h, 0.035f * h);
         g.color(alpha(0xFF000000, 0.15f)); g.oval(0, 0.005f * h, 0.6f * h, 0.03f * h);
     }
 
@@ -360,6 +385,42 @@ public final class Props {
         g.cubicTo(0.7f * h * f, end + 0.012f * h, 0.5f * h * f, top + 0.135f * h, 0.14f * h * f, top + 0.02f * h); g.close(); g.fillPath();
         g.color(0xFF90A4AE); g.line((len + 0.08f * h) * f, end + 0.04f * h, (len + 0.08f * h) * f, 0, 0.02f * h);
         g.color(alpha(0xFF000000, 0.14f)); g.oval(len * 0.5f * f, 0.005f * h, len * 0.6f, 0.03f * h);
+    }
+
+    /**
+     * v41: where a slide's parts are, as shares of the child's height h, along the chute's direction from the slide's
+     * anchor (x) and above the ground (y): where one waits at the foot of the ladder, the first rung, the platform, the
+     * top of the chute (where one sits), its surface down to its end, and where one lands on the grass past it. The
+     * drawn slide's (its ladder at the anchor), or one read from the user's own picture of their slide.
+     */
+    public static final class SlideGeo {
+        public float footX, rungX, deckX, deckY, sitX, endX, endY, landX;
+        /** The chute's surface height from sitX to endX, in 32 even steps. */
+        public final float[] surf = new float[33];
+        /** v41: the user's picture of the slide (null: drawn) and where it goes: its left, top, width and height in shares of h, x as above, mirrored when the chute runs the other way. */
+        public Object pic;
+        public float picX, picTop, picW, picH;
+        public boolean picFlip;
+
+        public float surfAt(float x) {
+            float u = (x - sitX) / Math.max(1e-3f, endX - sitX) * 32;
+            if (u <= 0) return surf[0];
+            if (u >= 32) return surf[32];
+            int i = (int) u;
+            return surf[i] + (surf[Math.min(32, i + 1)] - surf[i]) * (u - i);
+        }
+
+        /** The drawn slide (Props.slide): the ladder's rails at the anchor, the platform at SLIDE_TOP, the chute from 0.12. */
+        public static SlideGeo drawn() {
+            SlideGeo g = new SlideGeo();
+            g.footX = -0.38f; g.rungX = -0.15f; g.deckX = -0.05f; g.deckY = SLIDE_TOP; g.sitX = 0.1f;
+            g.endX = SLIDE_LEN + 0.12f; g.endY = SLIDE_END; g.landX = SLIDE_LEN + 0.48f;
+            for (int i = 0; i <= 32; i++) {
+                float x = g.sitX + (g.endX - g.sitX) * i / 32f;
+                g.surf[i] = x >= SLIDE_LEN ? SLIDE_END : slideHeight(x / SLIDE_LEN);
+            }
+            return g;
+        }
     }
 
     /** The height of the chute's sliding surface at a distance along it (0 at the top, SLIDE_LEN·h at the end), a share of h. */

@@ -181,6 +181,14 @@ public final class Film {
     /** v37: added to a G_RIDE act's vehicle when its rider is a passenger (a driver is drawn at the wheel). */
     public static final int V_PASSENGER = 100;
     public static final int PG_SWING = 1, PG_SLIDE = 2, PG_SEESAW = 3, PG_ROUND = 4;
+    /**
+     * v41: how a playground act goes (Act.how). On the swing: hops onto the seat, pushes off with the feet, looks up at
+     * the sky, lets go of the chains (the hands up for a moment), drags the feet to stop and hops off, goes on into the
+     * next act (no slowing at its end). On the slide: climbs the ladder (counting the rungs), is at the top (standing,
+     * or sitting), slides down (sitting, or on the belly head first, the arms up) and off the end onto the grass.
+     */
+    public static final int PL_MOUNT = 1, PL_PUSH = 2, PL_LOOK_UP = 4, PL_HANDS_FREE = 8, PL_STOP = 16, PL_CONT = 32,
+            PL_CLIMB = 64, PL_TOP = 128, PL_SIT = 256, PL_DOWN = 512, PL_BELLY = 1024, PL_ARMS_UP = 2048, PL_COUNT = 4096;
     public static final int EX_DUMBBELL = 1, EX_SKIP = 2, EX_SQUAT = 3, EX_YOGA = 4, EX_PUSHUP = 5;
     public static final int MK_KAJAL = 1, MK_LIPSTICK = 2, MK_BINDI = 3, MK_MEHNDI = 4, MK_POWDER = 5, MK_FACEPAINT = 6, MK_NAILS = 7;
 
@@ -190,6 +198,14 @@ public final class Film {
         public Actor target;
         /** v35: what the hands hold for it (Pose.I_*: the cup, the glass, the bottle, the plate). */
         public int item;
+        /**
+         * v41: on the swing — how far it swings (degrees) at the act's start and at its end (-1: the v37 swing that eases
+         * in and out by itself), when the swinging began (its phase runs on from act to act), how (PL_*), and the
+         * swing or slide of the place it is on.
+         */
+        public float a0 = -1, a1 = -1, since = -1;
+        public int how;
+        public Fx prop;
         public Act(float t0, float t1, int type) { this.t0 = t0; this.t1 = t1; this.type = type; }
     }
 
@@ -280,7 +296,7 @@ public final class Film {
             FX_WATER_HIT = 24,    // something falls into water at x, y (color = size 1..3)
             FX_THROW = 25,        // a: thrower, b: target (or x, y); kind: what flies
             FX_FALL = 26,         // something falls from above at x (kind) and bounces
-            FX_SEAT = 27,         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a
+            FX_SEAT = 27,         // a throne / stool / rock at x (kind = SEAT_*), sized for actor a; y: how far below (+) or above (-) the ground line (0 = on it)
             FX_SHADOW_PASS = 28,  // Gunn: one scary shadow sweeping over the ground in a funny scene (x = where it starts)
             // the cues of any script (Cues): light, machines, little things that fly or spark
             FX_GLOW_AREA = 29,    // lights come on across the stage (a garden of lamps or flowers lighting up); color = their colour
@@ -293,7 +309,11 @@ public final class Film {
             FX_NOTIFY = 36,       // a glowing notification card pops up above actor a
             FX_DATA = 37,         // a stream of light particles flows from x, y away (data leaving)
             FX_SPARKS = 38,       // electric sparks at x, y (near actor a's hands)
-            FX_STEAM = 39;        // steam or smoke rising at x, y
+            FX_STEAM = 39,        // steam or smoke rising at x, y
+            // v41: the playground as part of the place, there from the first frame (sized for actor a, y as FX_SEAT)
+            FX_SWING = 40,        // a swing: its frame at x; the seat hangs empty and sways in the air when no one is on it
+            FX_SLIDE = 41,        // a slide: its ladder at x, the chute running toward kind (+1 right, -1 left)
+            FX_THING = 42;        // v41: a thing lying on the ground at x (kind 1: a school bag), sized for actor a
 
     public static final class Fx {
         public float t0, t1;
@@ -316,6 +336,8 @@ public final class Film {
         public boolean keep;                  // a cut the protocol needs (a new group of at most six words): never dropped
         /** A reverse shot (the listener's face, over the speaker's shoulder): the place's reverse angle is behind it when the user gave one. */
         public boolean reverse;
+        /** v41: a shot of the place itself (the empty swing swaying): the framing passes that keep a character in the frame leave it as it is. */
+        public boolean place;
         public Cam(float t, float cx, float cy, float zoom, float ease) { this.t = t; this.cx = cx; this.cy = cy; this.zoom = zoom; this.ease = ease; }
     }
 

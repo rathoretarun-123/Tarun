@@ -515,10 +515,53 @@ public final class Angles {
             if (!alpha) {
                 // a cell's own background: its border is background (the gap around the figure), the figure is not
                 try { Cutout.removeBackground(p.px, p.w, p.h, true, bg); } catch (RuntimeException e) { /* kept as it is */ }
+                try { unframe(p); } catch (RuntimeException e) { /* kept as it is */ }
             }
             out.add(p);
         }
         return out;
+    }
+
+    /**
+     * v41: a panel whose thin frame shut its own studio background in (a light grey, not the sheet's white): the
+     * flood from the sheet's border stopped at the frame and the piece came out as a solid rectangle (three of the
+     * user's six slide pictures kept their grey card). Inside the frame the background is plain: it is taken away from
+     * there, the frame with it. A piece that does not fill its box, or whose inside border is not one plain light
+     * colour (a photo, a figure), is left as it is.
+     */
+    static void unframe(Piece p) {
+        int w = p.w, h = p.h, n = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if ((p.px[y * w + x] >>> 24) > 100) { n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (x1 < 0) return;
+        int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+        if (bw < 40 || bh < 40 || n < bw * bh * 0.9f) return;
+        int ix = x0 + Math.max(6, Math.round(bw * 0.015f)), iy = y0 + Math.max(6, Math.round(bh * 0.015f));
+        int jx = x1 - Math.max(6, Math.round(bw * 0.015f)), jy = y1 - Math.max(6, Math.round(bh * 0.015f));
+        if (jx - ix < 20 || jy - iy < 20) return;
+        // the ring just inside the frame: one plain, light colour?
+        List<Integer> ring = new ArrayList<Integer>();
+        int samples = 0;
+        for (int x = ix; x <= jx; x += Math.max(1, (jx - ix) / 60)) for (int c : new int[]{p.px[iy * w + x], p.px[jy * w + x]}) { samples++; if ((c >>> 24) > 100) ring.add(c); }
+        for (int y = iy; y <= jy; y += Math.max(1, (jy - iy) / 60)) for (int c : new int[]{p.px[y * w + ix], p.px[y * w + jx]}) { samples++; if ((c >>> 24) > 100) ring.add(c); }
+        if (ring.size() < samples * 0.6f) return;          // the inside border is mostly see-through already: not a solid card
+        int[] ch = new int[ring.size()];
+        int[] med = new int[3];
+        for (int c = 0; c < 3; c++) {
+            for (int i = 0; i < ch.length; i++) ch[i] = (ring.get(i) >> (16 - 8 * c)) & 255;
+            java.util.Arrays.sort(ch);
+            med[c] = ch[ch.length / 2];
+        }
+        int bgIn = 0xFF000000 | (med[0] << 16) | (med[1] << 8) | med[2];
+        if (Math.min(med[0], Math.min(med[1], med[2])) < 170) return;
+        int near = 0;
+        for (int c : ring) if (Cutout.dist(c, bgIn) <= 28) near++;
+        if (near < ring.size() * 0.8f) return;
+        // the frame and what is outside it become that colour; then the plain background goes from the border in
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int i = y * w + x;
+            if (x < ix || x > jx || y < iy || y > jy || (p.px[i] >>> 24) <= 100) p.px[i] = bgIn;
+        }
+        Cutout.removeBackground(p.px, w, h, true, bgIn);
     }
 
     /**

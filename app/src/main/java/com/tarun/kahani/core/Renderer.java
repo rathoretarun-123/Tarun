@@ -1638,7 +1638,7 @@ public final class Renderer {
         // a passenger inside a car, a bus or an auto is inside it (not drawn over its side)
         if (ride != null && ride.item < 0 && (-ride.item) % Film.V_PASSENGER >= Film.V_CAR) { g.restore(); return; }
         float hip = Puppet.seatHeight(p.seat) * h * seatScale(a);
-        float swingDeg = 0, vS = h;
+        float swingDeg = 0, vS = h, swingTopH = h, seatH = h;
         if (ride != null) {
             int v = Math.abs(ride.item) % Film.V_PASSENGER;
             vS = v == Film.V_BICYCLE ? h : (a.look.isChild() ? h / 0.78f : h);
@@ -1652,7 +1652,22 @@ public final class Renderer {
             float uu = t - play.t0, dur = play.t1 - play.t0, ph = uu / dur;
             float base = Director.xAt(a, play.t0), f = a.stateAt(play.t0 + 0.05f).facing >= 0 ? 1 : -1;
             mo.rot = 0;
-            if (kind == Film.PG_SWING) {
+            if (kind == Film.PG_SWING && play.prop != null) {
+                // v41: the place's swing (its frame drawn with the place): the seat hangs from its top bar, the swinging
+                // goes on from act to act, and the hop onto the seat lifts the body from the feet to it
+                float hs = propHeight(s, play.prop);
+                x = play.prop.x;
+                swingTopH = hs; seatH = hs;
+                swingDeg = swingDeg(play, t);
+                float m = mountAmount(play, t);
+                mo.dx = 0;
+                mo.dy = -(Props.SWING_SEAT * hs - hip) * m - 0.06f * h * (float) Math.sin(Math.PI * m);
+            } else if (kind == Film.PG_SLIDE && play.prop != null) {
+                // v41: the place's slide: up the ladder, on the platform, down the chute and off its end (playOnSlide)
+                float[] at = slidePlace(s, play, t, hip, h);
+                x = at[0];
+                mo.dx = 0; mo.dy = at[1]; mo.rot = at[2];
+            } else if (kind == Film.PG_SWING) {
                 float amp = 26 * Rig.smooth(0, 1.6f, uu) * Rig.smooth(dur, dur - 1.3f, uu);
                 swingDeg = amp * (float) Math.sin(uu * 2 * Math.PI / 1.9f);
                 mo.dx = 0; mo.dy = -(Props.SWING_SEAT * h - hip);
@@ -1731,8 +1746,10 @@ public final class Renderer {
         }
         if (swingDeg != 0 || (play != null && Math.abs(play.item) == Film.PG_SWING)) {
             // the swinging frame: the rider, the seat and the chains turn together about the top bar
-            float top = Props.SWING_TOP * h + mo.dy;
+            float top = Props.SWING_TOP * swingTopH + mo.dy;
             g.translate(0, -top); g.rotate(swingDeg); g.translate(0, top);
+            // v41: the seat and its chains behind the rider (sitting on it, the hands up on the chains)
+            if (play != null && play.prop != null) { g.save(); g.translate(0, -mo.dy); drawSwingSeat(g, seatH); g.restore(); }
         }
         g.save();
         // v27: the director's choice for this shot — the user's own picture of this angle, pose and feeling, drawn as
@@ -1861,7 +1878,7 @@ public final class Renderer {
         if (scr != null) { g.save(); g.setAlpha(fadeIn(scr, t)); Props.screen(g, h, chin - 0.03f * h, scr.item, t); g.restore(); }
         if (p.towel > 0.01f && bath == null) Props.towel(g, chin + (sp != null ? 0.04f * h : 0.01f * h), (sp != null ? 0.15f : 0.13f) * h, h, p.towel);
         if (ropeL != null) Props.rope(g, ropeL[0], ropeL[1], ropeR[0], ropeR[1], h, (t - exer.t0) * 2 * Math.PI / 0.55f + Math.PI, true);
-        if (play != null && Math.abs(play.item) == Film.PG_SWING) { g.save(); g.translate(0, -mo.dy); Props.swingSeat(g, h); g.restore(); }
+        if (play != null && play.prop == null && Math.abs(play.item) == Film.PG_SWING) { g.save(); g.translate(0, -mo.dy); Props.swingSeat(g, h); g.restore(); }
         if (sp != null && sp.faceKnown && p.bindi > 0.01f && p.sit < 0.05f && p.body == Pose.STAND && ride == null && play == null) {
             // v37: a bindi put on stays on a picture's forehead, between the brows
             float sw = sp.w * (h / sp.h), fl = p.facing < 0 ? -1 : 1;
@@ -2045,7 +2062,9 @@ public final class Renderer {
                 case Film.G_PLAYGROUND: {
                     float dur = act.t1 - act.t0, ph = u / dur;
                     int kind = Math.abs(act.item);
-                    if (kind == Film.PG_SWING) {
+                    if (kind == Film.PG_SWING && act.prop != null) swingPose(p, act, t, u);
+                    else if (kind == Film.PG_SLIDE && act.prop != null) slidePose(p, act, u);
+                    else if (kind == Film.PG_SWING) {
                         p.body = Pose.SIT; p.sit = 1; p.seat = Film.SEAT_STOOL; p.walkAmt = 0;
                         p.armL = p.armR = 168; p.elbowL = p.elbowR = 6;         // holding the chains
                         p.emotion = Pose.HAPPY;
@@ -3720,6 +3739,215 @@ public final class Renderer {
 
     private float actorScreenX(Film.Actor a, float t) { return a == null ? 640 : Director.xAt(a, t); }
 
+    // ================================================================== v41: the playground of the place
+
+    /**
+     * v41: on the place's swing — seated with the hands on the chains (they let go for a moment when the story says
+     * so); leaning back on the way forward and forward on the way back as a child pumps; the feet push off the ground
+     * at the start and drag along it to stop; the face turned up to the sky.
+     */
+    private void swingPose(Pose p, Film.Act act, float t, float u) {
+        float m = mountAmount(act, t), f = act.prop.kind >= 0 ? 1 : -1;
+        p.facing = f;
+        p.walkAmt = 0;
+        p.seat = Film.SEAT_STOOL;
+        p.body = m > 0.02f ? Pose.SIT : Pose.STAND;
+        p.sit = m;
+        p.armL = p.armR = 40 + 128 * m; p.elbowL = p.elbowR = 40 - 34 * m;     // reaching up to the chains as they sit
+        float deg = swingDeg(act, t), vel = swingDeg(act, t + 0.05f) - deg;
+        // the seat moves toward the facing when -facing·d(deg) > 0 (x_seat = -L·sin deg)
+        float fwd = Math.max(-1, Math.min(1, -f * vel * 2f));
+        p.tilt -= fwd * Math.min(12, Math.abs(deg) * 0.4f);
+        if ((act.how & Film.PL_PUSH) != 0 && u < 1.8f) { p.walk = u * 8; p.walkAmt = 0.45f * (1 - u / 1.8f); }
+        if ((act.how & Film.PL_STOP) != 0) { p.walk = u * 11; p.walkAmt = 0.3f * (1 - Rig.smooth(0, act.t1 - act.t0, u)); }
+        if ((act.how & Film.PL_LOOK_UP) != 0) p.nod -= 0.3f * Rig.smooth(0.3f, 1.2f, u);
+        if ((act.how & Film.PL_HANDS_FREE) != 0) {
+            // the chains let go: the arms up and out, the mouth open with the thrill — then caught again
+            float k = Rig.smooth(0.6f, 1.0f, u) * (1 - Rig.smooth(2.4f, 2.9f, u));
+            p.armL = p.armR = 168 - 38 * k; p.elbowL = p.elbowR = 6 + 8 * k;
+            p.mouth = Math.max(p.mouth, 0.35f * k);
+        }
+        if (p.emotion == Pose.NEUTRAL) p.emotion = Pose.HAPPY;
+    }
+
+    /** v41: on the place's slide — climbing (the legs step up in turn, the hands on the rails), at the top, and down. */
+    private void slidePose(Pose p, Film.Act act, float u) {
+        float dur = Math.max(0.05f, act.t1 - act.t0);
+        float f = act.prop.kind >= 0 ? 1 : -1;
+        p.facing = f;
+        if ((act.how & Film.PL_CLIMB) != 0) {
+            float q = u / dur;
+            p.body = Pose.STAND; p.sit = 0; p.lie = 0;
+            if (q < 0.12f) { p.walk = u * 9; p.walkAmt = 0.6f; return; }
+            Props.SlideGeo geo = PlayPics.slide(art);
+            int n = Math.max(4, Math.round(geo.deckY / 0.14f));
+            float r = (q - 0.12f) / 0.88f * n;
+            p.walk = (float) (r * Math.PI); p.walkAmt = 0.7f;
+            float sw = (float) Math.sin(r * Math.PI);
+            p.armL = 135 + 22 * sw; p.armR = 135 - 22 * sw; p.elbowL = p.elbowR = 35;
+            if ((act.how & Film.PL_COUNT) != 0) p.nod += 0.06f * (float) Math.sin(r * 2 * Math.PI);    // a nod with each number
+            return;
+        }
+        p.walkAmt = 0;
+        if ((act.how & Film.PL_TOP) != 0) {
+            if ((act.how & Film.PL_SIT) != 0) {
+                p.body = Pose.SIT; p.sit = Rig.smooth(0, 0.5f, u); p.seat = Film.SEAT_STOOL;
+                p.armL = p.armR = 28; p.elbowL = p.elbowR = 20;          // the hands on the chute's sides
+            } else { p.body = Pose.STAND; p.sit = 0; }
+            p.nod += 0.18f;                                               // looking down the chute at the grass
+            return;
+        }
+        boolean belly = (act.how & Film.PL_BELLY) != 0;
+        float pre = act.a0 > 0 ? 0 : 0.45f, off = 0.5f, ride = Math.max(0.4f, dur - pre - off);
+        if (belly) {
+            p.body = Pose.LIE; p.lie = u < pre ? Rig.smooth(0, pre, u) : 1; p.sit = 0; p.seat = Film.SEAT_FLOOR;
+            p.facing = -f;                                               // head first: the head toward the chute's end
+            p.armL = p.armR = 165; p.elbowL = p.elbowR = 8;
+        } else {
+            p.body = Pose.SIT; p.sit = u < pre ? Rig.smooth(0, pre, u) : 1;
+            p.seat = u > pre + ride + off * 0.5f ? Film.SEAT_FLOOR : Film.SEAT_STOOL;
+            if ((act.how & Film.PL_ARMS_UP) != 0 && u > pre + 0.15f && u < pre + ride + 0.15f) { p.armL = p.armR = 165; p.elbowL = p.elbowR = 10; }
+            else { p.armL = p.armR = 28; p.elbowL = p.elbowR = 20; }
+            p.tilt -= 7;                                                  // leaning back on the way down
+        }
+        if (u > pre && u < pre + ride + 0.2f) { p.emotion = Pose.LAUGH; p.mouth = Math.max(p.mouth, 0.45f); }
+    }
+
+    /** v41: the size a swing or a slide of the place is drawn for (its child's height). */
+    private float propHeight(Film.Seg s, Film.Fx f) { return f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a) : 300; }
+
+    /** v41: how far the swing is out on this act at t (degrees, signed: the way it swings now). */
+    static float swingDeg(Film.Act x, float t) {
+        float uu = t - x.t0, dur = x.t1 - x.t0;
+        if (x.a0 < 0) return 26 * Rig.smooth(0, 1.6f, uu) * Rig.smooth(dur, dur - 1.3f, uu) * (float) Math.sin(uu * 2 * Math.PI / 1.9f);
+        if ((x.how & Film.PL_MOUNT) != 0) { uu -= 0.8f; if (uu < 0) return 0; }
+        float amp;
+        if ((x.how & Film.PL_STOP) != 0) amp = x.a0 * (1 - Rig.smooth(0, Math.max(0.3f, dur), uu));
+        else {
+            float ramp = Math.min(2.6f, Math.max(0.8f, Math.abs(x.a1 - x.a0) / 9f));
+            amp = x.a0 + (x.a1 - x.a0) * Rig.smooth(0, ramp, uu);
+            if ((x.how & Film.PL_CONT) == 0) amp *= Rig.smooth(dur, dur - 1.4f, uu);
+        }
+        float since = x.since >= 0 ? x.since : x.t0;
+        return amp * (float) Math.sin((t - since) * 2 * Math.PI / SWING_PERIOD);
+    }
+
+    /** v41: a swing of a child's size goes to and fro in about two seconds whatever its reach (a pendulum). */
+    static final float SWING_PERIOD = 2.0f;
+
+    /** v41: how far the hop onto the swing's seat is (0 standing in front of it .. 1 seated); 1 after the first act. */
+    static float mountAmount(Film.Act x, float t) {
+        if ((x.how & Film.PL_MOUNT) == 0 || x.a0 < 0) return 1;
+        return Rig.smooth(0.08f, 0.7f, t - x.t0);
+    }
+
+    /** v41: the seat and its chains — the user's picture of the seat seen from the side, else the drawn one. */
+    private void drawSwingSeat(Gfx g, float h) {
+        Art.Thing pic = PlayPics.seat(art);
+        if (pic == null || pic.img == null) { Props.swingSeat(g, h); return; }
+        // the picture's chains run from its top edge to the seat at its bottom: from the top bar to the seat's height
+        float top = -Props.SWING_TOP * h, bottom = -Props.SWING_SEAT * h + 0.035f * h;
+        float ph = (pic.by1 - pic.by0) * pic.h, pw = (pic.bx1 - pic.bx0) * pic.w;
+        float k = (bottom - top) / Math.max(1, ph), wDraw = pw * k;
+        g.imageRect(pic.img, pic.bx0 * pic.w, pic.by0 * pic.h, pw, ph, -wDraw / 2, top, wDraw, bottom - top);
+    }
+
+    /** v41: the place's swing — its frame, and its seat hanging empty (swaying in the air) when no one is on it. */
+    private void drawSwingProp(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        float hh = propHeight(s, f), ps = perspective(s, f.y);
+        g.save();
+        g.translate(f.x, s.ground + f.y);
+        if (ps != 1f) g.scale(ps, ps);
+        Art.Thing seat = PlayPics.seat(art);
+        Props.swingFrame(g, hh, seat != null && seat.color != 0 ? seat.color : 0xFF1565C0);
+        boolean ridden = false;
+        for (Film.Actor a : s.actors) for (Film.Act x : a.acts) if (x.prop == f && t >= x.t0 && t < x.t1) ridden = true;
+        if (!ridden) {
+            // the empty seat: a breath of air moves it (more in the wind), and it swings on after one hops off
+            float wind = film == null ? 0 : Math.min(1, Math.abs(film.wind(t)));
+            float kick = f.t2 > 0 && t > f.t2 ? f.color * (float) Math.exp(-(t - f.t2) / 2.6f) : 0;
+            float deg = (1.6f + 5f * wind + kick) * (float) Math.sin(t * 2 * Math.PI / SWING_PERIOD + 0.7f) + 0.5f * (float) Math.sin(t * 1.3f);
+            float top = -Props.SWING_TOP * hh;
+            g.translate(0, top); g.rotate(deg); g.translate(0, -top);
+            drawSwingSeat(g, hh);
+        }
+        g.restore();
+    }
+
+    /** v41: the place's slide — the user's side view of their slide when there is one, else the drawn slide. */
+    private void drawSlideProp(Gfx g, Film.Seg s, Film.Fx f) {
+        float hh = propHeight(s, f), ps = perspective(s, f.y), dir = f.kind >= 0 ? 1 : -1;
+        Props.SlideGeo geo = PlayPics.slide(art);
+        g.save();
+        g.translate(f.x, s.ground + f.y);
+        if (ps != 1f) g.scale(ps, ps);
+        if (geo.pic != null) {
+            // the picture drawn so the chute runs the way of the slide (+x below is along the chute); a picture whose
+            // chute runs to its left is mirrored
+            g.scale(dir, 1);
+            g.color(Puppet.alpha(0xFF000000, 0.16f)); g.oval((geo.picX + geo.picW / 2) * hh, 0.01f * hh, geo.picW * hh * 0.45f, 0.035f * hh);
+            if (geo.picFlip) { g.scale(-1, 1); g.image(geo.pic, -(geo.picX + geo.picW) * hh, -geo.picTop * hh, geo.picW * hh, geo.picH * hh); }
+            else g.image(geo.pic, geo.picX * hh, -geo.picTop * hh, geo.picW * hh, geo.picH * hh);
+        } else Props.slide(g, hh, dir);
+        g.restore();
+    }
+
+    /**
+     * v41: where one playing on the place's slide is at t: x on the stage, how far up from the feet (dy, negative is
+     * up) and the body's turn (degrees) — the climb rung by rung, the platform, the seat at the top of the chute, the
+     * ride down it (faster and faster), and the hop off its end onto the grass.
+     */
+    private float[] slidePlace(Film.Seg s, Film.Act x, float t, float hip, float h) {
+        Props.SlideGeo geo = PlayPics.slide(art);
+        float hs = propHeight(s, x.prop), dir = x.prop.kind >= 0 ? 1 : -1, X = x.prop.x;
+        float u = t - x.t0, dur = Math.max(0.05f, x.t1 - x.t0);
+        float xc, lift, rot = 0;
+        if ((x.how & Film.PL_CLIMB) != 0) {
+            float q = Math.min(1, u / dur);
+            if (q < 0.12f) { xc = geo.footX + (geo.rungX - geo.footX) * Rig.smooth(0, 0.12f, q); lift = 0; }
+            else {
+                int n = Math.max(4, Math.round(geo.deckY / 0.14f));
+                float r = (q - 0.12f) / 0.88f * n, step = (float) Math.floor(r), fr = r - step;
+                float c = Math.min(1, (step + Rig.smooth(0.2f, 0.8f, fr)) / n);
+                xc = geo.rungX + (geo.deckX - geo.rungX) * c;
+                lift = geo.deckY * hs * c;
+            }
+            return new float[]{X + dir * xc * hs, -lift, 0};
+        }
+        if ((x.how & Film.PL_TOP) != 0) {
+            if ((x.how & Film.PL_SIT) != 0) {
+                float m = Rig.smooth(0, 0.5f, u);
+                xc = geo.deckX + (geo.sitX - geo.deckX) * m;
+                lift = geo.deckY * hs * (1 - m) + (geo.surf[0] * hs - hip) * m;
+            } else { xc = geo.deckX; lift = geo.deckY * hs; }
+            return new float[]{X + dir * xc * hs, -lift, 0};
+        }
+        // down the chute
+        boolean belly = (x.how & Film.PL_BELLY) != 0;
+        float pre = x.a0 > 0 ? 0 : 0.45f, off = 0.5f, ride = Math.max(0.4f, dur - pre - off);
+        if (u < pre) {
+            float m = Rig.smooth(0, pre, u);
+            xc = geo.deckX + (geo.sitX - geo.deckX) * m;
+            lift = geo.deckY * hs * (1 - m) + (geo.surf[0] * hs - (belly ? 0 : hip)) * m;
+            return new float[]{X + dir * xc * hs, -lift, belly ? dir * 20 * m : 0};
+        }
+        if (u < pre + ride) {
+            float v = (u - pre) / ride, e = v * v * (1.6f - 0.6f * v);          // gathering speed down the slope
+            xc = geo.sitX + (geo.endX - geo.sitX) * e;
+            float sh = geo.surfAt(xc) * hs;
+            lift = sh - (belly ? -0.04f * hs : hip);
+            float dx = 0.04f, slope = (geo.surfAt(xc - dx) - geo.surfAt(xc + dx)) / (2 * dx);
+            rot = belly ? dir * (float) Math.toDegrees(Math.atan(slope)) : 0;
+            return new float[]{X + dir * xc * hs, -lift, rot};
+        }
+        // off the end: a short drop onto the grass, the seat (or the belly) on the ground
+        float v = Math.min(1, (u - pre - ride) / off);
+        xc = geo.endX + (geo.landX - geo.endX) * v;
+        float from = geo.endY * hs - (belly ? -0.04f * hs : hip), to = belly ? 0 : -hip * 0;
+        lift = from + (to - from) * v * v + 0.05f * hs * (float) Math.sin(Math.PI * v) * (1 - v);
+        return new float[]{X + dir * xc * hs, -lift, 0};
+    }
+
     private void drawFxLayer(Gfx g, Film.Seg s, float t, boolean behind) {
         for (Film.Fx f : s.fx) {
             if (t < f.t0 || t >= f.t1) continue;
@@ -3739,6 +3967,12 @@ public final class Renderer {
                     sparkles(g, t, x - 120, f.y - 120, 240, 240, 14, f.color == 0 ? 0xFFFFF59D : f.color);
                 } break;
                 case Film.FX_SPLASH: if (!behind) splash(g, f, u); break;
+                case Film.FX_SWING: if (behind) drawSwingProp(g, s, f, t); break;
+                case Film.FX_THING: if (behind) {
+                    float hh = propHeight(s, f), ps = perspective(s, f.y);
+                    g.save(); g.translate(f.x, s.ground + f.y); if (ps != 1f) g.scale(ps, ps); Props.schoolBag(g, hh); g.restore();
+                } break;
+                case Film.FX_SLIDE: if (behind) drawSlideProp(g, s, f); break;
                 case Film.FX_SEAT: if (behind) {
                     float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) * seatScale(f.a) : 400;
                     float fc = f.a != null ? f.a.stateAt(t).facing : 1;

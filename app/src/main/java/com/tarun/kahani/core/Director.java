@@ -3277,7 +3277,7 @@ public final class Director {
     private static final int EV_NONE = 0, EV_NEAR = 1, EV_FALL = 2, EV_HIDE = 3, EV_KNEEL = 4, EV_FLOOR = 5, EV_STAND = 6,
             EV_EYES = 7, EV_WAKE = 8, EV_UMBRELLA = 9, EV_WALK = 10, EV_READ = 12, EV_SWEEP = 13, EV_WASH = 14,
             EV_COOK = 15, EV_LOOK_ROUND = 16, EV_THUD = 17, EV_DOOR = 18, EV_GIVE = 19, EV_RUN = 20, EV_KNOCK = 21,
-            EV_SWEAT = 22, EV_KICK = 23;
+            EV_SWEAT = 22, EV_KICK = 23, EV_TV = 24;
     /**
      * v41: the everyday words, each row: its words (Hindi stems, spellings, English), the face (-1: the face the feeling
      * words give), the gesture (-1: none), how long, and what else it does. The first row that fits is the action.
@@ -3361,7 +3361,7 @@ public final class Director {
         {new String[]{"दरवाज़ा", "दरवाजा", "दरवाज़े", "दरवाजे", "किवाड़", "गेट खोल", "गेट बंद", "the door", "the gate"}, -1, Film.G_REACH, 1.4f, EV_DOOR},
         {new String[]{"जलाता", "जलाती", "जलाते", "बुझा", "बत्ती", "स्विच", "पंखा", "lights the", "lights a", "switches", "turns on", "turns off", "blows out"}, -1, Film.G_REACH, 1.4f, EV_NONE},
         {new String[]{"ताला", "चाबी", "locks", "unlocks"}, -1, Film.G_REACH, 1.4f, EV_NONE},
-        {new String[]{"कार्टून", "cartoon", "on tv", "on the tv", "टीवी देख", "watches tv", "watching tv"}, Pose.HAPPY, -1, 2.4f, EV_NONE},
+        {new String[]{"कार्टून", "cartoon", "on tv", "on the tv", "टीवी देख", "watches tv", "watching tv"}, Pose.HAPPY, -1, 2.8f, EV_TV},
         {new String[]{"वीडियो गेम", "video game", "मोबाइल", "mobile", "टीवी", "television", "watches the tv"}, Pose.CURIOUS, Film.G_REACH, 2.4f, EV_NONE},
         {new String[]{"फोटो", "फ़ोटो", "तस्वीर खींच", "सेल्फ़ी", "सेल्फी", "photo", "selfie"}, Pose.HAPPY, Film.G_REACH, 1.8f, EV_NONE},
         {new String[]{"घड़ी", "समय देख", "the time", "his watch", "her watch"}, Pose.CURIOUS, Film.G_LOOK_AWAY, 1.4f, EV_NONE},
@@ -3630,9 +3630,30 @@ public final class Director {
                     gesture = -1; d = 2.7f;
                     break;
                 }
-                case EV_HIDE: if (human && now.body == Pose.STAND) { Film.Key k = keyAt(a, t0 + 0.2f); k.body = Pose.CROUCH; Film.Key k2 = keyAt(a, t0 + dur); k2.body = Pose.STAND; } break;
+                case EV_HIDE:
+                    if (human && now.body == Pose.STAND) { Film.Key k = keyAt(a, t0 + 0.2f); k.body = Pose.CROUCH; Film.Key k2 = keyAt(a, t0 + dur); k2.body = Pose.STAND; }
+                    else if (human && now.body == Pose.SIT) {
+                        // v44: from a chair (or the sofa): up and down into hiding
+                        Film.Key up = keyAt(a, t0); up.body = Pose.STAND; up.seat = -1;
+                        Film.Key k = keyAt(a, t0 + 0.6f); k.body = Pose.CROUCH; Film.Key k2 = keyAt(a, t0 + 0.6f + dur); k2.body = Pose.STAND;
+                    }
+                    break;
                 case EV_KNEEL: if (human && now.body == Pose.STAND) { Film.Key k = keyAt(a, t0); k.body = Pose.KNEEL; } break;
-                case EV_FLOOR: if (human && now.body != Pose.SIT) { Film.Key k = keyAt(a, t0); k.body = Pose.SIT; k.seat = Film.SEAT_FLOOR; } break;
+                case EV_TV: {
+                    // v44: watching television — settled on the sofa (on the floor outside a room with one), eyes on the
+                    // screen, a laugh at the funny bit, the show heard
+                    if (human && now.body == Pose.STAND) { Film.Key k = keyAt(a, t0); k.body = Pose.SIT; k.seat = seg.set == Sets.ROOM ? Film.SEAT_SOFA : Film.SEAT_FLOOR; }
+                    a.acts.add(new Film.Act(t0 + 1.0f, t0 + 2.2f, Film.G_LAUGH));
+                    break;
+                }
+                case EV_FLOOR:
+                    if (human && now.body != Pose.SIT) { Film.Key k = keyAt(a, t0); k.body = Pose.SIT; k.seat = Film.SEAT_FLOOR; }
+                    else if (human && now.seat != Film.SEAT_FLOOR) {
+                        // v44: from the sofa (or a chair) down onto the floor: up first, then down cross-legged
+                        Film.Key up = keyAt(a, t0); up.body = Pose.STAND; up.seat = -1;
+                        Film.Key k = keyAt(a, t0 + 0.6f); k.body = Pose.SIT; k.seat = Film.SEAT_FLOOR;
+                    }
+                    break;
                 case EV_STAND: if (now.body == Pose.SIT || now.body == Pose.LIE || now.body == Pose.KNEEL) { Film.Key k = keyAt(a, t0); k.body = Pose.STAND; k.seat = -1; k.eyesShut = false; } break;
                 case EV_EYES: { Film.Key k = keyAt(a, t0 + 0.2f); k.eyesShut = true; Film.Key k2 = keyAt(a, t0 + dur); k2.eyesShut = false; break; }
                 case EV_WAKE: if (now.eyesShut) { Film.Key k = keyAt(a, t0); k.eyesShut = false; } break;
@@ -3701,6 +3722,13 @@ public final class Director {
                     a.acts.add(new Film.Act(at, at + 1.0f, Film.G_REACH));
                     gesture = -1;
                     d = Math.max(d, wd + 1.5f);
+                    // v44: "दरवाज़ा खोलकर बाहर चला जाता है", "opens the door and goes out": through it and gone
+                    if (!shut && (leaving(w) || Txt.has(w, "बाहर चला", "बाहर चली", "बाहर चले", "बाहर जा", "बाहर निकल", "goes out", "walks out", "steps out", "leaves"))) {
+                        Film.Key ok = keyAt(a, at + 1.05f); ok.x = dx + side * 170; ok.moveDur = 0.8f; ok.run = false; ok.facing = side; ok.backTurned = false;
+                        Film.Key gone = keyAt(a, at + 1.9f); gone.visible = false;
+                        leftFrom.put(a, dx + side * 170); goneAt.put(a, at + 1.9f);
+                        d = Math.max(d, wd + 2.3f);
+                    }
                     doorsSeen++;
                     break;
                 }
@@ -5973,6 +6001,17 @@ public final class Director {
             }
             d = Math.max(d, 1.2f);
         }
+        // v44: the hands over the head (from the hail, the rain, a falling thing) — said outright
+        if (Txt.has(s, "सिर ढक", "सिर को ढक", "सिर छुपा", "सिर छिपा", "हाथों से सिर", "सिर पर हाथ रख", "covers his head", "covers her head", "covers their heads",
+                "cover their heads", "shields his head", "shields her head", "hands over his head", "hands over her head") && !negated(s) && !birdLike) {
+            for (Film.Actor a : who) {
+                if (a.look == null || !a.look.isHumanoid()) continue;
+                boolean has = false;
+                for (Film.Act x : a.acts) if (x.type == Film.G_COVER_HEAD && x.t1 > t) has = true;
+                if (!has) a.acts.add(new Film.Act(t + 0.2f, t + 2.2f, Film.G_COVER_HEAD));
+            }
+            d = Math.max(d, 2.2f);
+        }
         // v35: waking — the eyes open; one lying sits up (0.9 s) and stretches with a yawn
         if (Txt.has(s, WAKE) && !birdLike) {
             for (Film.Actor a : who) {
@@ -6708,7 +6747,9 @@ public final class Director {
         float x = xAt(a, t);
         // where the mark is: a target or the animal already there, else on the side with more room
         Film.Fx tg = null;
-        for (Film.Fx o : seg.fx) if (o.t1 > t && ((mark == Film.ARCH_HUNT && o.type == Film.FX_ANIMAL) || (mark == Film.ARCH_TARGET && o.type == Film.FX_TARGET && o.kind == 0))) tg = o;
+        // (a hunt's quarry is game — a deer, a rabbit — never the dog or the cat that walked by earlier)
+        for (Film.Fx o : seg.fx) if (o.t1 > t && ((mark == Film.ARCH_HUNT && o.type == Film.FX_ANIMAL && (o.kind == Look.SP_DEER || o.kind == Look.SP_RABBIT) && o.t2 > t)
+                || (mark == Film.ARCH_TARGET && o.type == Film.FX_TARGET && o.kind == 0))) tg = o;
         float dir = tg != null ? (tg.x >= x ? 1 : -1) : (x < 640 ? 1 : -1);
         float mx = tg != null ? tg.x : Math.max(210, Math.min(1070, x + dir * 470));
         if (Math.abs(mx - x) < 240) { dir = -dir; mx = Math.max(210, Math.min(1070, x + dir * 470)); }
@@ -7564,7 +7605,9 @@ public final class Director {
         if (Txt.has(s, "से उतर", "gets off", "gets out of", "got off", "got out of", "steps off", "steps out of", "climbs out of", "hops off", "hops out of")) {
             int gv = vehicleIn(s + " से आ comes by", subj.look.isChild());
             boolean rodeHere = false;
-            for (Film.Act x : subj.acts) if (x.type == Film.G_RIDE && x.t1 > seg.t0 && x.t0 <= t) rodeHere = true;
+            // (v44: on that very vehicle still — not one ridden earlier and left: after "बस में चढ़ जाता है" and the bus
+            // gone with him, "स्कूल बस से उतरता है" brings it back with him in it)
+            for (Film.Act x : subj.acts) if (x.type == Film.G_RIDE && x.t1 > Math.max(seg.t0, t - 0.3f) && x.t0 <= t && Math.abs(x.item) % Film.V_PASSENGER == gv) rodeHere = true;
             if (gv != 0 && !rodeHere && !Txt.has(s, "सीढ़ी", "सीढ़ियों", "stairs", "steps down", "पेड़", "tree", "झूले", "swing", "slide")) {
                 String arrival = s.replaceAll("से उतर[^\\s।.,!?]*", "से आता").replaceAll("(?i)(gets|got|steps|climbs|hops) (off|out of) (the |a |an |his |her |their )?", "comes by ");
                 if (!arrival.equals(s)) { arrivalsByRide++; return activityFrom(arrival, t, subj, who, group); }

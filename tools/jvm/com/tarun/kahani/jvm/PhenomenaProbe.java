@@ -349,7 +349,9 @@ public class PhenomenaProbe {
     static List<Film.Fx> windowFx(Run r) {
         List<Film.Fx> out = new ArrayList<Film.Fx>();
         for (Film.Fx x : r.seg.fx) {
-            if (!in(r, x.t0)) continue;
+            // (a wreck or an animal standing there from the scene's start counts by its event: the crash, the bolt)
+            boolean byEvent = (x.type == Film.FX_WRECK || x.type == Film.FX_ANIMAL) && x.t2 > 0 && x.t2 < 1e5f && in(r, x.t2);
+            if (!in(r, x.t0) && !byEvent) continue;
             boolean old = false;
             if (r.baseSeg != null && r.baseSeg != r.seg) for (Film.Fx b : r.baseSeg.fx) if (b.type == x.type && Math.abs(b.t0 - x.t0) < 0.002f) { old = true; break; }
             if (!old) out.add(x);
@@ -461,7 +463,12 @@ public class PhenomenaProbe {
                 for (Film.Act x : r.main.acts) if (x.type == Film.G_RIDE && x.mounted == g && x.t0 + x.mountedAt < r.tB && x.t0 + x.mountedTo > r.tA) return true;
                 return false;
             }
-            case "ARCH": return act(r, Film.G_ARCHERY, film("ARCH_", arg), 0, false);
+            case "ARCH": {
+                if (act(r, Film.G_ARCHERY, film("ARCH_", arg), 0, false)) return true;
+                // ("the arrow strikes the centre" after the shots: the close of the arrow in the gold is that hit)
+                if (film("ARCH_", arg) == Film.ARCH_TARGET) for (Film.Fx x : windowFx(r)) if (x.type == Film.FX_INSERT && x.kind == Film.INS_ARROW) return true;
+                return false;
+            }
             case "SNOW": return act(r, Film.G_SNOW_PLAY, film("SNOW_", arg), 0, false);
             case "INSERT": {
                 int k = film("INS_", arg);

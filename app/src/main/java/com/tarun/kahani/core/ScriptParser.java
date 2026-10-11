@@ -806,7 +806,8 @@ public final class ScriptParser {
             {"माता", "मम्मी", "माँ", "मां", "mummy", "mom", "mother"},
             {"मम्मी", "माँ", "मां", "माता", "mummy", "mom", "mother"},
             {"mother", "mummy", "mom", "माँ", "मम्मी"},
-            {"दादी", "दादी माँ", "grandma", "granny"}, {"दादा", "दादाजी", "grandpa"}, {"नानी", "नानी माँ", "nani"}, {"नाना", "नानाजी", "nana"}};
+            {"दादी", "दादी माँ", "grandma", "granny"}, {"दादा", "दादाजी", "grandpa"}, {"नानी", "नानी माँ", "nani"}, {"नाना", "नानाजी", "nana"},
+            {"grandmother", "grandma", "granny", "दादी"}, {"grandfather", "grandpa", "दादा"}};
 
     /** The first relation word named in a header or role ("42 साल, पिता" → "पिता"), or "". */
     static String relationIn(String s) {
@@ -820,7 +821,8 @@ public final class ScriptParser {
     static List<String> relationAliases(String rel) {
         List<String> out = new ArrayList<String>();
         if (rel.length() == 0 || rel.equals("_")) return out;
-        for (String[] r : RELATIONS) if (r[0].equals(rel)) for (int i = 1; i < r.length; i++) out.add(r[i]);
+        // (v44: the relation word itself too — "Pallavi - 41 years, mother" is "Mother" in the directions)
+        for (String[] r : RELATIONS) if (r[0].equals(rel)) for (int i = 0; i < r.length; i++) if (!out.contains(r[i])) out.add(r[i]);
         return out;
     }
 

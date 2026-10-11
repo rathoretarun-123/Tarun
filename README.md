@@ -45,7 +45,7 @@ stories with unknown scenes — new modern and old situations — rechecked and 
   * a death said twice making two deaths;
   * प्रिया driving the parked car in the rainy-Sunday story;
   * kneeling in a saree looking like standing.
-* Checked on the final code: ROBO_LINE. Details: [`docs/testing-v45.md`](docs/testing-v45.md).
+* Checked on the final code: the phone emulator ran 86 tests — 85 passed, 1 skipped by design, 0 failed. Details: [`docs/testing-v45.md`](docs/testing-v45.md).
 * **Sorry — said plainly:** still not Pixar or Disney, and I cannot make it so: flat pictures on a mesh, drawn places,
   a director of rules, not understanding. And no promise of "no bug at all" — tell me any sentence that goes wrong.
 

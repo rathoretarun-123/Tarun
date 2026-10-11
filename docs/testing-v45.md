@@ -145,7 +145,7 @@ What the runs found, and what was fixed (each in many stories at once):
 
 * Sentences: v43 405 of 405, v44 118 of 118, v45 229 of 229.
 * The 100,000 new stories (final run): 0 crashed; 97.0 % staged as asked, 2.7 % context, 0.3 % not staged.
-* The app on the phone emulator (Robolectric): ROBO_LINE
+* The app on the phone emulator (Robolectric): 86 tests — 85 passed, 1 skipped (the long 20-story soak, skipped by design), 0 failed; the v44 and v45 tests run again on the very last code: 8 of 8.
 * Version 45.0; the APK is `release/KahaniFilm.apk`.
 
 ## 7. Still not right

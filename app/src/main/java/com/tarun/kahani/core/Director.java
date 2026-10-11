@@ -1000,6 +1000,7 @@ public final class Director {
     private int dlgCount;
     /** v41: lines and reaction shots in the part being staged (one reaction at least where someone listens). */
     private int dlgInPart, partReactions, forcedReactions, partEnd;
+    private boolean momentNoted;
     private Film.Actor lastSpeaker;
 
     private boolean leading;
@@ -3087,6 +3088,13 @@ public final class Director {
         // v41: the swing or the slide is in the place itself (played on, swaying in the wind): no picture of it over the scene
         if (shot != null && shot.object && shot.keys != null) for (String key : shot.keys)
             if ((swingProp != null && Txt.has(key, PlayPics.SWING_KEYS)) || (slideProp != null && Txt.has(key, PlayPics.SLIDE_KEYS))) { shot = null; break; }
+        // v41: an uploaded picture of a moment is a reference, never shown in place of the moment: the rig acts it (the
+        // picture stays in the library; its look and staging were read from it)
+        if (shot != null && !shot.object) {
+            if (!momentNoted) film.notes.add("  ↳ pictures of moments are kept as reference: the characters act those moments");
+            momentNoted = true;
+            shot = null;
+        }
         // an object's picture is an insert of the thing itself, once — when the story first brings it in
         if (shot != null && shot.object && !usedInserts.add(shot)) shot = null;
         // a picture of the moment headwear changes hands shows the old state (the owner still wearing it): the

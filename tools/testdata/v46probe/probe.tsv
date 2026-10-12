@@ -1,0 +1,46 @@
+# v46 probe: the village of the user's सुंदरपुर गाँव scripts — a fruit picked from the tree (and run off with), a thing
+# handed over, things fetched (a water pot, grass, a broom), water carried from the well, flags hung for a fair, rubbish
+# on the road picked up and swept, someone called over, sitting under a tree, a race, a search of the fields, shelter
+# from the rain under the thatch. (The lines said and then done, the mud, the cap and the calf need more than one
+# character and an animal: tools/jvm/.../Sundar46Check checks them in the user's own ten scripts.)
+#@ cat=fruit
+hi	राहुल पेड़ से आम तोड़ता है।	HOLD:MANGO
+hi	राहुल पेड़ से आम तोड़कर भाग जाता है।	HOLD:MANGO&RUN
+en	Rahul picks a mango from the tree.	HOLD:MANGO
+en	Rahul picks a mango from the tree and runs off.	HOLD:MANGO&RUN
+hi	राहुल माँ को आम देता है।	ACT:GIVE&HOLD:MANGO
+en	Rahul gives Mother a mango.	ACT:GIVE&HOLD:MANGO
+#@ cat=fetch
+hi	राहुल घड़ा लाता है।	HOLD:POT&MOVE
+hi	राहुल घास लाता है।	HOLD:GRASS&MOVE
+hi	राहुल झाड़ू लाता है।	HOLD:BROOM&MOVE
+en	Rahul fetches a water pot.	HOLD:POT&MOVE
+en	Rahul brings grass for the cow.	HOLD:GRASS&MOVE
+#@ cat=well age=adult
+hi	राहुल कुएँ से पानी लाता है।	HOLD:POT&MOVE&SWEAT
+en	Rahul brings water from the well.	HOLD:POT&MOVE&SWEAT
+#@ cat=fair
+hi	राहुल झंडियाँ लगाता है।	FX:BUNTING&HOLD:FLAGS
+hi	मेले के लिए राहुल रंग-बिरंगी झंडियाँ टांगता है।	FX:BUNTING&HOLD:FLAGS
+en	Rahul hangs little flags for the fair.	FX:BUNTING&HOLD:FLAGS
+en	Rahul puts up bunting.	FX:BUNTING&HOLD:FLAGS
+#@ cat=clean place=street
+hi	सड़क पर कचरा पड़ा है।	FX:LITTER
+hi	सड़क पर कचरा पड़ा है और राहुल कचरा उठाता है।	FX:LITTER&BODY:CROUCH
+en	Rubbish is lying on the road and Rahul picks up the rubbish.	FX:LITTER&BODY:CROUCH
+hi	सड़क पर कूड़ा फैला है और राहुल झाड़ू लगाता है।	FX:LITTER&TASK:SWEEP
+#@ cat=call
+hi	राहुल माँ को बुलाता है।	ACT:WAVE
+hi	राहुल ज़ोर से माँ को बुलाता है।	ACT:WAVE
+#@ cat=tree
+hi	राहुल पीपल के पेड़ के नीचे बैठ जाता है।	BODY:SIT
+en	Rahul sits under the tree.	BODY:SIT
+#@ cat=race
+hi	राहुल और माँ दौड़ लगाते हैं।	RUN&MOVE
+en	Rahul and Mother run a race.	RUN&MOVE
+#@ cat=search
+hi	राहुल खेतों में ढूंढता है।	ACT:SHIELD_EYES&MOVE
+en	Rahul searches the fields.	ACT:SHIELD_EYES&MOVE
+#@ cat=shelter
+hi	तेज़ बारिश हो रही है, सब घर में हैं।	FX:SHED&W:RAIN
+en	It is raining hard and everyone is under the shelter.	FX:SHED&W:RAIN

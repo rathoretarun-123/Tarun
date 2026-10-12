@@ -742,7 +742,7 @@ public final class DirectorsManual {
             if (l == null) continue;
             if (l.sword || l.katar) owner.put(Pose.I_SWORD, c.shown());
             if (l.wand) owner.put(Pose.I_BOTTLE, owner.containsKey(Pose.I_BOTTLE) ? owner.get(Pose.I_BOTTLE) : c.shown());
-            if (l.headwear == Look.HW_TURBAN && !owner.containsKey(Pose.I_TURBAN)) owner.put(Pose.I_TURBAN, c.shown());
+            if (Look.takeable(l.headwear) && !owner.containsKey(Pose.I_TURBAN)) owner.put(Pose.I_TURBAN, c.shown());
         }
         for (Film.Seg sg : film.segs) {
             if (sg.type != Film.S_SCENE) continue;
@@ -935,7 +935,7 @@ public final class DirectorsManual {
     static String headwearName(int hw) {
         switch (hw) {
             case Look.HW_TURBAN: return "a turban"; case Look.HW_WITCH_HAT: return "a witch's hat"; case Look.HW_PALLU: return "a pallu"; case Look.HW_HORNS: return "horns";
-            case Look.HW_CROWN: return "a crown"; case Look.HW_HOOD: return "a hood"; default: return "nothing";
+            case Look.HW_CROWN: return "a crown"; case Look.HW_HOOD: return "a hood"; case Look.HW_CAP: return "a cap"; default: return "nothing";
         }
     }
 

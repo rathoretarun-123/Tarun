@@ -438,7 +438,10 @@ public final class Nature {
     }
 
     /** Rain streaks falling with the wind; far drops are thinner and fainter. */
-    public static void rain(Gfx g, float w, float h, float t, float amount, float wind) {
+    public static void rain(Gfx g, float w, float h, float t, float amount, float wind) { rain(g, w, h, t, amount, wind, 0, 0, 0); }
+
+    /** v46: rain with a dry span (a roof): drops falling between x0 and x1 stop at y (screen coordinates). */
+    public static void rain(Gfx g, float w, float h, float t, float amount, float wind, float dryX0, float dryX1, float dryY) {
         int n = (int) (900 * Math.min(1.6f, amount));     // dense, fine rain
         float slant = wind * 0.35f;
         float sc = h / 720f;
@@ -458,6 +461,7 @@ public final class Nature {
             float age = (t + rnd(i, 2) * period) % period;
             float y = -len + age * speed;
             float x = rnd(i, 3) * (w + h * Math.abs(slant)) - (slant > 0 ? h * slant : 0) + y * slant;
+            if (dryX1 > dryX0 && x > dryX0 && x < dryX1 && y - len > dryY) continue;      // under the roof: dry
             g.color(alpha(0xFFE4ECF4, 0.28f + depth * 0.37f));
             g.line(x, y, x - len * slant, y - len, (0.7f + depth * 1.4f) * sc);
         }

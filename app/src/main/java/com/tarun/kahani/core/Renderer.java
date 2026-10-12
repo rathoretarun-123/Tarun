@@ -593,7 +593,16 @@ public final class Renderer {
         boolean out = Sets.outdoorSet(s.set);
         float wind = film.wind(t);
         float rain = Math.max(film.weather(Film.W_RAIN, t), film.weather(Film.W_STORM, t) * 1.3f);
-        if (rain > 0 && out) Nature.rain(g, vw, vh, t, rain, wind);
+        if (rain > 0 && out) {
+            // v46: under a thatched shelter of the place it is dry
+            float dx0 = 0, dx1 = 0, dy = 0;
+            for (Film.Fx f : s.fx) if (f.type == Film.FX_SHED && t >= f.t0 && t < f.t1) {
+                float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 330, w = f.color > 0 ? f.color : 380;
+                dx0 = vw / 2 + (f.x - w / 2 - camX) * camZ; dx1 = vw / 2 + (f.x + w / 2 - camX) * camZ;
+                dy = vh / 2 + (s.ground - hh * 1.05f - camY) * camZ;
+            }
+            Nature.rain(g, vw, vh, t, rain, wind, dx0, dx1, dy);
+        }
         else if (rain > 0) {
             // indoors: only the grey light and rain beyond the windows
             g.color(Puppet.alpha(0xFF40506A, 0.1f * Math.min(1, rain)));
@@ -1481,7 +1490,8 @@ public final class Renderer {
         else if (p.sit > 0 && p.sit < 1 && k.body != Pose.SIT) p.body = Pose.STAND;
         p.turbanColor = 0xFF2F5DB5;
         p.turbanBand = 0xFFC62828;
-        for (Film.Actor o : s.actors) if (o != a && o.look.headwear == Look.HW_TURBAN && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; p.turbanOwner = o.c.id; }
+        p.turbanCap = false;
+        for (Film.Actor o : s.actors) if (o != a && Look.takeable(o.look.headwear) && o.stateAt(t).noHeadwear) { p.turbanColor = o.look.headColor; p.turbanBand = o.look.headBand; p.turbanOwner = o.c.id; p.turbanCap = o.look.headwear == Look.HW_CAP; }
         if (p.sit > 0.02f && p.sit < 0.98f && p.lie < 0.01f && a.look.isHumanoid() && seat != Film.SEAT_WHEELCHAIR) {
             // v35: sitting down and getting up — the weight goes forward over the feet (most at half way), from a low
             // seat the hands push on the knees; the seat creaks (Director)
@@ -3503,6 +3513,8 @@ public final class Renderer {
         // v41: walking across, a rigged person takes its steps in the user's own side picture (its own rig, drawn
         // facing the way of the walk); standing, talking or turning to someone, the front picture
         if (sideWalks(sp, k, speaking, a, t) && p.walkAmt > 0.35f) return sp.view(1);
+        // v46: pulling on a rope (the cow stuck in the mud): side-on to it, in the user's own side picture
+        if (sp.view(1) != null && pulling(a, t)) return sp.view(1);
         // v40: a rigged person turns through its own mesh, to the one it talks to and into each walk — no other picture
         // swaps in for it (a swap popped from one picture to another, and a side picture facing the wrong way walked
         // backwards)
@@ -4188,6 +4200,12 @@ public final class Renderer {
                     g.oval(mx, cy, ow, oh);
                 }
             }
+            // v46: a cap the script gives its owner ("दादाजी की टोपी") that the picture does not have: drawn on the head
+            if (look != null && look.headwear == Look.HW_CAP && !p.noHeadwear && !p.wearsTurban && sp.faceKnown) {
+                float d = Math.max(4, Math.abs(sp.eyeRX - sp.eyeLX) * w);
+                float ex = left + (sp.eyeLX + sp.eyeRX) / 2 * w, ey = top + (sp.eyeLY + sp.eyeRY) / 2 * h;
+                Village.cap(g, ex, ey - d * 1.02f, d * 1.18f, look.headColor, p.facing);
+            }
             if (p.wearsTurban && !drawRealHat(g, sp, p, left, top, w, h)) {
                 float tx = left + sp.mouthX * w;
                 drawTurbanAt(g, tx, top + h * 0.035f, w * 0.3f, p);
@@ -4286,6 +4304,7 @@ public final class Renderer {
     }
 
     private void drawTurbanAt(Gfx g, float x, float y, float r, Pose p) {
+        if (p.turbanCap) { Village.cap(g, x, y + r * 0.25f, r * 0.8f, p.turbanColor, p.facing); return; }
         Puppet.drawTurbanShape(g, x, y, r, p.turbanColor, p.turbanBand, false);
     }
 
@@ -4376,7 +4395,8 @@ public final class Renderer {
             case Pose.I_WINE: case Pose.I_BEER: case Pose.I_WHISKY: case Pose.I_SNOWBALL: ActionProps.drink(g, item, 0, 0, 1f); break;
             default:
                 // v36: the tools of everyday tasks (the floor is at the feet: y = 0 before this item's own scale)
-                if (item >= Pose.I_LADLE && item <= Pose.I_ROPE) Puppet.drawTool(g, item, 0, 0, 1f, p.facing, p.time, -y / (s * 1.6f));
+                if (item >= Pose.I_MANGO && item <= Pose.I_SACK) Village.item(g, item, p.time, p.facing);
+                else if (item >= Pose.I_LADLE && item <= Pose.I_ROPE) Puppet.drawTool(g, item, 0, 0, 1f, p.facing, p.time, -y / (s * 1.6f));
         }
         g.restore();
     }
@@ -4619,9 +4639,15 @@ public final class Renderer {
                 case Film.FX_ARROW: if (!behind) arrowFx(g, s, f, t); break;
                 case Film.FX_SNOWMAN: if (behind) { float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 300; ActionProps.snowman(g, f.x, s.ground, hh, (t - f.t0) / Math.max(0.1f, f.t2 - f.t0), t); } break;
                 case Film.FX_WRECK: wreck(g, s, f, t, behind); break;
-                case Film.FX_ANIMAL: if (behind) animalFx(g, s, f, t); break;
+                case Film.FX_ANIMAL: if (behind != (f.y == 3)) animalFx(g, s, f, t); break;     // (v46: the found calf in front, by its mother's legs)
                 case Film.FX_BLOOD: if (!behind) bloodFx(g, s, f, t); break;
                 case Film.FX_SHROUD: if (!behind) shroudFx(g, s, f, t); break;
+                // v46: the village — mud, flags for the fair, rubbish on the road, a rope, a thatched shelter
+                case Film.FX_MUD: mudFx(g, s, f, t, behind); break;
+                case Film.FX_BUNTING: if (behind) Village.bunting(g, f.x, f.y, 70, f.t2 > f.t0 ? (t - f.t0) / (f.t2 - f.t0) : 1, t); break;
+                case Film.FX_LITTER: if (behind) Village.litter(g, f.x, s.ground + f.y, f.kind, perspective(s, f.y)); break;
+                case Film.FX_ROPE: if (!behind && f.a != null && f.b != null) ropeFx(g, s, f, t); break;
+                case Film.FX_SHED: if (behind) { float hh = f.a != null ? actorHeight(f.a.look, f.a.c, art, s) : 330; Village.shed(g, f.x, s.ground, f.color > 0 ? f.color : 380, hh * 1.05f, t); } break;
                 case Film.FX_VEHICLE: if (behind && f.a != null) hiredVehicle(g, s, f, t); break;
                 case Film.FX_KITCHEN: if (!behind && f.a != null && currentKitchen(s, f, t)) kitchen(g, s, f, t); break;
                 case Film.FX_DOOR: if (f.kind == 0) roomDoor(g, s, f, t, !behind); break;
@@ -4891,6 +4917,27 @@ public final class Renderer {
         float fade = Math.min(1, (t - f.t0) / 0.5f);
         float x = f.x, walk = 0, amt = 0, y = s.ground;
         boolean graze = true;
+        if (f.y == 3) {
+            // v46: a calf, found: smaller than its mother; it walks up to her (b) and stays at her side
+            if (f.b != null) H = actorHeight(f.b.look, f.b.c, art, s) * 0.62f; else H *= 0.6f;
+            graze = false;
+            if (t >= f.t2 && f.b != null) {
+                float bx = actorScreenX(f.b, t), dest = bx - face * H * 1.25f, w = t - f.t2;
+                float dist = Math.abs(dest - f.x), go = Math.min(dist, w * 120);
+                x = f.x + Math.signum(dest - f.x) * go;
+                walk = w * 7; amt = go < dist ? 0.8f : 0;
+            }
+            g.save(); g.setAlpha(fade);
+            // the mother's own picture, smaller, when there is one (a drawn calf beside the user's cow would not match)
+            Art.Sprite msp = f.b != null && art != null ? art.sprites.get(f.b.c.id) : null;
+            if (msp != null && msp.img != null && msp.h > 0) {
+                float w = H * msp.w / msp.h, bob = amt > 0 ? Math.abs((float) Math.sin(walk * 1.6f)) * H * 0.02f : 0;
+                g.color(Puppet.alpha(0xFF000000, 0.18f)); g.oval(x, y - 2, w * 0.42f, H * 0.04f);
+                g.image(msp.img, x - w / 2, y - H - bob, w, H);
+            } else ActionProps.animal(g, f.kind, x, y, H, face, walk, amt, t, false);
+            g.restore();
+            return;
+        }
         if (t >= f.t2) {
             float w = t - f.t2;
             if (f.y == 2) { x = f.x + face * Math.min(w, 4f) * 80; walk = w * 6; amt = w < 4f ? 0.7f : 0; graze = false; }
@@ -5394,6 +5441,47 @@ public final class Renderer {
         Props.vehicle(g, f.kind, vS, f.color, x, t, col, false);
         Props.vehicle(g, f.kind, vS, f.color, x, t, col, true);
         g.restore();
+    }
+
+    /** v46: pulling on a rope at t. */
+    static boolean pulling(Film.Actor a, float t) {
+        for (Film.Act x : a.acts) if (x.type == Film.G_PULL && t >= x.t0 && t < x.t1) return true;
+        return false;
+    }
+
+    /** v46: half the width a character takes on the ground (its picture's own shape, else a person's or an animal's). */
+    private float halfWidth(Film.Actor a, Film.Seg s) {
+        float H = actorHeight(a.look, a.c, art, s);
+        Art.Sprite sp = art == null || a.c == null ? null : art.sprites.get(a.c.id);
+        float asp = sp != null && sp.h > 0 ? sp.w / (float) sp.h : a.look != null && a.look.isHumanoid() ? 0.42f : 1.5f;
+        return H * asp * 0.5f;
+    }
+
+    /** v46: mud on the ground and, in front, the legs of the one stuck in it sunk to the knees until pulled out (t2). */
+    private void mudFx(Gfx g, Film.Seg s, Film.Fx f, float t, boolean behind) {
+        float len = f.a != null ? halfWidth(f.a, s) * 0.92f : 120;
+        float w = Math.max(f.color > 0 ? f.color : 260, len * 2.6f);
+        float mx = f.a != null && (f.t2 < 0 || t < f.t2) ? actorScreenX(f.a, t) : f.x;
+        if (behind) { Village.mudPatch(g, f.x, s.ground + f.y, w, t); return; }
+        if (f.a == null) return;
+        float sink = Rig.smooth(f.t0, f.t0 + 0.7f, t) * (f.t2 > 0 ? 1 - Rig.smooth(f.t2, f.t2 + 0.6f, t) : 1);
+        float H = actorHeight(f.a.look, f.a.c, art, s);
+        Village.mudFront(g, mx, s.ground + f.y + 2, len, H, sink, t);
+    }
+
+    /** v46: the rope from the puller's hands to the animal's neck — taut while they pull. */
+    private void ropeFx(Gfx g, Film.Seg s, Film.Fx f, float t) {
+        float ha = actorHeight(f.a.look, f.a.c, art, s), hb = actorHeight(f.b.look, f.b.c, art, s);
+        float ax = actorScreenX(f.a, t), bx = actorScreenX(f.b, t);
+        float dir = Math.signum(ax - bx);
+        if (dir == 0) dir = 1;
+        // from the animal's neck, through the hands of the one in front, on to the last one holding it
+        float far = ax;
+        for (Film.Actor o : s.actors) if (o != f.a && o != f.b && pulling(o, t) && (Director.xAt(o, t) - ax) * dir > 0 && Math.abs(Director.xAt(o, t) - ax) < 600) far = dir > 0 ? Math.max(far, Director.xAt(o, t)) : Math.min(far, Director.xAt(o, t));
+        float x0 = ax - dir * ha * 0.12f, y0 = s.ground - ha * 0.48f;
+        float x1 = bx + dir * halfWidth(f.b, s) * 0.62f, y1 = s.ground - hb * 0.66f;
+        Village.rope(g, x0, y0, x1, y1, 4);
+        if (Math.abs(far - ax) > 20) Village.rope(g, x0, y0, far + dir * 30, y0 + 6, 3);
     }
 
     private void puddle(Gfx g, Film.Seg s, Film.Fx f, float t) {

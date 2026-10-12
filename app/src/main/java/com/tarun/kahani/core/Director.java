@@ -1109,6 +1109,9 @@ public final class Director {
                 if (c != null) for (Story.CharacterDef m : b.chorus) if (!m.voiceOnly && !order.contains(m)) order.add(m);
                 // characters named in the manner (e.g. "वृंदा की तलवार को रोकते हुए") are on stage too
                 for (Story.CharacterDef m : ScriptParser.mentions(story, b.manner)) if (!order.contains(m)) { order.add(m); soft.add(m); }
+                // v46: an animal spoken of as being there now ("पर गौरी बाहर भीग रही है!") is there, in the picture
+                for (Story.CharacterDef m : ScriptParser.mentions(story, b.text))
+                    if (m.look != null && !m.look.isHumanoid() && !m.voiceOnly && !order.contains(m) && Txt.has(b.text, "रही है", "रहा है", "रहे हैं", " is ", "'s ")) { order.add(m); soft.add(m); }
                 // ...and so is anyone addressed by name ("और कृपा, तुम्हारी चतुराई...")
                 for (Story.CharacterDef m : vocatives(b.text)) if (!order.contains(m)) { order.add(m); soft.add(m); }
                 if (c != null) soft.remove(c);
@@ -1159,6 +1162,20 @@ public final class Director {
         float narrow = "9:16".equals(opt.aspect) ? 0.42f : "1:1".equals(opt.aspect) ? 0.7f : 1f;
         left = 0.5f - (0.5f - left) * narrow;
         right = 0.5f + (right - 0.5f) * narrow;
+        // v46: a big animal (a cow, a horse) takes more room in the line than a person: its neighbours stand clear of it
+        float[] slotW = new float[n];
+        float wSum = 0;
+        for (int i = 0; i < n; i++) { slotW[i] = layoutWidth(lineup.get(i).look); if (i > 0) wSum += (slotW[i - 1] + slotW[i]) / 2; }
+        float[] slotX = new float[n];
+        // (the animal at an end of the line is drawn whole: its body clear of the edge of the picture)
+        float lx = 1280 * left, rx = 1280 * right;
+        if (n > 1 && slotW[0] > 1.5f) lx = Math.max(lx, 40 + slotW[0] * 100);
+        if (n > 1 && slotW[n - 1] > 1.5f) rx = Math.min(rx, 1240 - slotW[n - 1] * 100);
+        for (int i = 0; i < n; i++) {
+            float before = 0;
+            for (int j = 1; j <= i; j++) before += (slotW[j - 1] + slotW[j]) / 2;
+            slotX[i] = n == 1 ? 640 : lx + (rx - lx) * (wSum > 0 ? before / wSum : i / (float) (n - 1));
+        }
         for (int i = 0; i < n; i++) {
             Story.CharacterDef c = lineup.get(i);
             Film.Actor a = new Film.Actor();
@@ -1167,7 +1184,7 @@ public final class Director {
             a.order = i;
             Film.Key k = new Film.Key();
             k.t = seg.t0;
-            k.x = n == 1 ? 640 : 1280 * (left + (right - left) * i / (float) (n - 1));
+            k.x = slotX[i];
             k.depth = (n > 5 && i % 2 == 1) ? 1 : 0;
             k.facing = k.x < 640 ? 1 : -1;
             k.noHeadwear = bool(pNoHead.get(c));
@@ -1294,7 +1311,7 @@ public final class Director {
                     tc = enter(a, tc, sent, far);
                 }
             }
-            if (b.type == Story.Beat.DIALOGUE) { leading = false; tc = dialogue(si, bi, b, tc); }
+            if (b.type == Story.Beat.DIALOGUE) { leading = false; Film.Actor prevSp = lastSpeaker; tc = dialogue(si, bi, b, tc); tc = spokenDeed(si, bi, b, tc, prevSp); }
             else tc = direction(si, bi, b, tc, bi == b0 && pi == 0, where);
             for (Film.Actor a : seg.actors) orderKeys(a);
             unstack(tc);
@@ -3029,7 +3046,7 @@ public final class Director {
      * (or the monkey in the scene) is - even when the script never showed it being taken.
      */
     private void headwearFromWords(Film.Actor sp, Film.Actor to, String text, float t) {
-        if (text == null || sp.look.headwear != Look.HW_TURBAN || sp.stateAt(t).noHeadwear) return;
+        if (text == null || !Look.takeable(sp.look.headwear) || sp.stateAt(t).noHeadwear) return;
         if (!Txt.has(text, "टोपी", "पगड़ी", "साफ़ा", "cap", "turban", "topi", "pagdi")) return;
         if (!Txt.has(text, "वापस", "लौटा", "दे दे", "दे दो", "लाओ", "return", "give it back", "wapas", "lauta")) return;
         if (!Txt.has(text, "मेरी", "मेरा", "my", "meri")) return;
@@ -3247,6 +3264,8 @@ public final class Director {
                 }
             }
         }
+        // v46: the village's places first (the shelter the rain finds them under, the mud, the rubbish on the road)
+        villageBefore(s, t);
         int before = stagedCount(), sfx0 = film.sfx.size();
         // v43: the one the sentence is about — when all they got was a turn of the head to a sound in it ("धड़ाम से
         // ज़मीन पर गिरता है" startled everyone, and the fall itself was lost), the everyday words still stage them
@@ -3940,6 +3959,10 @@ public final class Director {
             storyGroup.addAll(lastGroup);
         }
 
+        // ---- v46: the village's moments, staged as themselves
+        float vd = village(s, t, subj, group, target);
+        if (vd > 0) return Math.max(d, vd);
+
         // ---- actions
         if (Txt.has(s, "तितली") && subj != null) {
             if (Txt.has(s, "पीछे दौड़", "पकड़")) {
@@ -4000,7 +4023,7 @@ public final class Director {
         }
         if (Txt.has(s, "पगड़ी", "टोपी", "साफ़ा", "turban", "cap", "pagdi", "topi") && Txt.has(s, "छीन", "उड़ा", "झपट", "ले भाग", "उतार", "snatch", "grab", "took", "chheen") && subj != null) {
             Film.Actor victim = target;
-            if (victim == null) for (Film.Actor a : seg.actors) if (a.look.headwear == Look.HW_TURBAN && a != subj) { victim = a; break; }
+            if (victim == null) for (Film.Actor a : seg.actors) if (Look.takeable(a.look.headwear) && a != subj) { victim = a; break; }
             if (victim != null && victim.stateAt(t).noHeadwear) victim = null;      // already taken
             if (victim != null) {
                 float vx = xAt(victim, t);
@@ -5908,7 +5931,7 @@ public final class Director {
             Look lk = lookAt(a, t);
             a.acts.add(new Film.Act(t + 0.25f, t + 1.05f, Film.G_LOOK_UP));
             if (snow) a.acts.add(new Film.Act(t + 1.05f, t + 2.6f, Film.G_SHIVER));
-            else if (!a.umbrellaAt(lk, t)) a.acts.add(new Film.Act(t + 1.05f, t + 2.8f, Film.G_COVER_HEAD));
+            else if (!a.umbrellaAt(lk, t) && !underShed(a, t)) a.acts.add(new Film.Act(t + 1.05f, t + 2.8f, Film.G_COVER_HEAD));
             n++;
         }
         skyReactions += n;
@@ -7308,6 +7331,736 @@ public final class Director {
         return t + 1.6f;
     }
     public int walkedOn;
+
+    // ================================================================== v46: what is said is done; the village
+
+    /** v46: a pull waiting for its count ("एक, दो, तीन!"): the stuck one, the pullers, the mud, the rope. */
+    private Film.Actor pullStuck;
+    private List<Film.Actor> pullers = new ArrayList<Film.Actor>();
+    private Film.Fx pullMud, pullRope;
+    private float pullFrom;
+    /** v46: the last deed said in the first person (for "मैं भी!"): its words after the doer, and the verb's stem. */
+    private String lastDeedObj, lastDeedStem;
+    public int spokenDeeds, villageStaged;
+
+    /** v46: a count before a pull or a lift ("एक, दो, तीन!", "one, two, three", "ज़ोर लगा के हईशा"). */
+    static boolean isCount(String s) {
+        return Txt.has(s, "एक, दो, तीन", "एक दो तीन", "एक-दो-तीन", "1, 2, 3", "1 2 3", "one, two, three", "one two three", "जोर लगा", "ज़ोर लगा", "हईशा", "हैया", "heave");
+    }
+
+    static final String[] DEED_STEMS = {"ला", "लगा", "बना", "उठा", "कर", "दे", "भर", "खिला", "ढूंढ", "ढूँढ", "सजा", "रख", "बुला", "खींच", "पकड़", "निकाल", "बाँट", "बांट", "साफ़ कर", "साफ कर"};
+    static final String[] LETS_STEMS = {"ला", "खींच", "ढूंढ", "ढूँढ", "कर", "बना", "लगा", "उठा", "बुला", "खिला", "सजा", "भर", "निकाल", "पकड़", "दौड़", "चल"};
+    private static final java.util.regex.Pattern ME_DO = java.util.regex.Pattern.compile("(?:^|[,!।.]\\s*|\\s)(?:मैं|मै)\\s+(भी\\s+)?(.{0,40}?)\\s*(\\S+?)(ता|ती)\\s+(?:हूँ|हूं|हु)");
+    private static final java.util.regex.Pattern LETS = java.util.regex.Pattern.compile("(?:^|[,!।.\\s])(?:चलो|आओ|चलिए|आइए)[,!\\s]+(.{0,60}?)\\s*(\\S+?)ते\\s+(?:हैं|है)");
+    private static final java.util.regex.Pattern CALL = java.util.regex.Pattern.compile("(\\S+)\\s+को\\s+(?:बुलाते|बुलाओ|बुला लाते|बुलाता|बुलाती)");
+
+    private static String stemOf(String verb, String[] stems) {
+        for (String st : stems) if (verb.equals(st) || verb.endsWith(" " + st)) return st;
+        return null;
+    }
+
+    /**
+     * v46: a line that says what the speaker (or all of them) does now — "मैं छाता लाता हूँ!", "चलो, सब मिलकर खींचते हैं",
+     * "लो चिंकी, ये रहा आम", "भागो!" in a race, "मैं भी!" — is done after it is said: the words become a stage direction
+     * ("आरव छाता लाता है।") and are staged like one. A question, a refusal or a line about others does nothing.
+     */
+    private float spokenDeed(int si, int bi, Story.Beat b, float tc, Film.Actor prev) {
+        if (b.speaker == null || seg == null) return tc;
+        Film.Actor sp = actor(b.speaker);
+        if (sp == null) return tc;
+        if (pullStuck != null) { tc = releasePull(tc); }
+        String text = Txt.clean(b.text).trim();
+        String deed = deedSentence(si, bi, b, sp, prev, text);
+        if (deed == null) return tc;
+        Story.Scene keepScene = dirScene;
+        int keepBeat = dirBeat;
+        dirScene = story.scenes.get(si);
+        dirBeat = bi;
+        float d = staged(deed, tc, false);
+        dirScene = keepScene;
+        dirBeat = keepBeat;
+        spokenDeeds++;
+        film.notes.add("  ↳ said and done: " + deed);
+        return tc + Math.max(0.6f, d);
+    }
+
+    private String deedSentence(int si, int bi, Story.Beat b, Film.Actor sp, Film.Actor prev, String text) {
+        if (text.contains("?") || text.contains("？") || Txt.has(text, "नहीं", "मत ", "न करो", "don't", "not ")) return null;
+        String name = sp.c.displayName;
+        boolean fem = sp.look != null && (sp.look.female || sp.look.kind == Look.GIRL || sp.look.kind == Look.WOMAN);
+        String end = fem ? "ती है।" : "ता है।";
+        // the one spoken to: named in the line, else the one who spoke before
+        Film.Actor to = null;
+        for (Story.CharacterDef m : ScriptParser.mentions(story, text)) { Film.Actor a = actor(m); if (a != null && a != sp) { to = a; break; } }
+        if (to == null && prev != null && prev != sp) to = prev;
+        String bare = text.replaceAll("[!！।.…\"“”]+", " ").replaceAll("\\s+", " ").trim();
+        // "मैं भी!": the deed said just before, by this one too
+        if (bare.matches("(?:मैं|मै|हम)\\s+भी") && lastDeedStem != null) return name + " भी " + lastDeedObj + " " + lastDeedStem + end;
+        // "लो चिंकी, ये रहा आम": a thing handed over
+        java.util.regex.Matcher gm = java.util.regex.Pattern.compile("(?:ये|यह|ये लो|यह लो)\\s+(?:रहा|रही|रहे|लो)\\s+(?:तुम्हारा\\s+|तुम्हारी\\s+|तेरा\\s+|तेरी\\s+)?(\\S+)").matcher(bare);
+        if (gm.find() && to != null) return name + " " + to.c.displayName + " को " + gm.group(1) + " दे" + end;
+        // "भागो!" when a race was just proposed
+        if (Txt.hasWord(bare, "भागो", "दौड़ो", "दौड़ो", "go", "run") && to != null && recentHas(si, bi, 3, "दौड़", "रेस", "मुकाबला", "race")) return name + " और " + to.c.displayName + " दौड़ लगाते हैं।";
+        // "ऊँ ऊँ! यहाँ है!" when something was being looked for: found
+        if (Txt.has(bare, "यहाँ है", "यहां है", "मिल गया", "मिल गई", "here it is", "found it") && recentHas(si, bi, 4, "बछड़", "calf")) {
+            boolean already = false;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_ANIMAL && f.y == 3) already = true;
+            if (!already) return name + " को बछड़ा मिल जाता है।";
+        }
+        // "जल्दी दादाजी को बुलाते हैं!"
+        java.util.regex.Matcher cm = CALL.matcher(bare);
+        if (cm.find()) {
+            for (Story.CharacterDef m : ScriptParser.mentions(story, cm.group(1))) if (actor(m) != null && actor(m) != sp) return name + " " + m.displayName + " को बुला" + end;
+        }
+        // "मैं झाड़ू लाती हूँ", "मैं भी छोटा घड़ा लाती हूँ", "लाओ मैं मदद करता हूँ"
+        java.util.regex.Matcher mm = ME_DO.matcher(bare);
+        if (mm.find()) {
+            String obj = mm.group(2).trim(), verb = mm.group(3).trim();
+            String stem = stemOf(verb, DEED_STEMS);
+            if (stem == null && obj.length() > 0) { String[] w = obj.split("\\s+"); String two = w[w.length - 1] + " " + verb; stem = stemOf(two, DEED_STEMS); if (stem != null) obj = obj.substring(0, obj.length() - w[w.length - 1].length()).trim(); }
+            if (stem != null) {
+                if (stem.equals("कर") && obj.length() == 0) return null;
+                lastDeedObj = obj; lastDeedStem = stem;
+                return name + (mm.group(1) != null ? " भी " : " ") + (obj.length() > 0 ? obj + " " : "") + stem + end;
+            }
+        }
+        // "चलो, सब मिलकर खींचते हैं", "चलो उसे छप्पर के नीचे लाते हैं", "चलो खेतों में ढूंढते हैं"
+        java.util.regex.Matcher lm = LETS.matcher(bare);
+        if (lm.find()) {
+            String obj = lm.group(1).trim(), verb = lm.group(2).trim();
+            String stem = stemOf(verb, LETS_STEMS);
+            if (stem == null) return null;
+            boolean all = Txt.has(" " + obj + " ", " सब ", " सभी ", "मिलकर", "मिल कर");
+            obj = (" " + obj + " ").replaceAll("\\s(?:सब|सभी|मिलकर|मिल कर|साथ में|साथ|हम|हम दोनों|दोनों)(?=\\s)", " ").replaceAll("\\s+", " ").trim();
+            // "उसे" is the one spoken of just before
+            if (obj.matches("(?:उसे|उसको|इसे|इसको)(\\s.*)?")) {
+                Film.Actor it = spokenOf(si, bi, sp, to);
+                if (it == null) return null;
+                obj = it.c.displayName + " को" + obj.replaceFirst("^(?:उसे|उसको|इसे|इसको)", "");
+            }
+            if (stem.equals("खींच") && !obj.contains(" को") && stuckOne() != null) obj = (stuckOne().c.displayName + " को " + obj).trim();
+            // "हम दोनों … साथ में": the one they were together with just now (the race), not whoever spoke last
+            if (Txt.has(bare, "हम दोनों", "दोनों", "साथ में", "साथ-साथ", "both of us", "together")) {
+                for (Story.CharacterDef g : lastGroup) { Film.Actor ga = actor(g); if (ga != null && ga != sp && human(ga) && lastGroup.contains(sp.c)) { to = ga; break; } }
+            }
+            String who = all || to == null ? "सब मिलकर" : name + " और " + to.c.displayName;
+            if (stem.equals("कर") && obj.length() == 0) return null;
+            return who + " " + (obj.length() > 0 ? obj + " " : "") + stem + "ते हैं।";
+        }
+        return null;
+    }
+
+    /** v46: the words appear in the few beats before this one (what was proposed, what is looked for). */
+    private boolean recentHas(int si, int bi, int n, String... words) {
+        Story.Scene sc = story.scenes.get(si);
+        for (int k = Math.max(0, bi - n); k < bi; k++) if (Txt.has(sc.beats.get(k).text, words)) return true;
+        return false;
+    }
+
+    /** v46: the one spoken of just before ("पर गौरी बाहर भीग रही है!" … "चलो उसे … लाते हैं"): not the speaker, not the one spoken to. */
+    private Film.Actor spokenOf(int si, int bi, Film.Actor sp, Film.Actor to) {
+        Story.Scene sc = story.scenes.get(si);
+        for (int k = bi - 1; k >= Math.max(0, bi - 4); k--) {
+            for (Story.CharacterDef m : ScriptParser.mentions(story, sc.beats.get(k).text)) {
+                Film.Actor a = actor(m);
+                if (a != null && a != sp && a != to) return a;
+            }
+        }
+        return null;
+    }
+
+    /** v46: the one stuck in the mud now, if anyone is. */
+    private Film.Actor stuckOne() {
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_MUD && f.a != null && f.t2 < 0) return f.a;
+        return null;
+    }
+
+    private static boolean human(Film.Actor a) { return a != null && a.look != null && a.look.isHumanoid() && !a.c.voiceOnly; }
+
+    /** v46: walks (or runs) to x from t; returns when they are there. One seated gets up first. */
+    private float goTo(Film.Actor a, float x, float t, boolean run) {
+        Film.Key st = a.stateAt(t);
+        float tm = t;
+        if ((st.body == Pose.SIT || st.body == Pose.LIE || st.body == Pose.KNEEL || st.body == Pose.CROUCH) && st.anchor == Film.A_GROUND) {
+            Film.Key up = a.at(t); up.body = Pose.STAND; up.seat = -1; up.eyesShut = false;
+            tm = t + 0.5f;
+        }
+        float from = xAt(a, tm), dist = Math.abs(x - from);
+        if (dist < 8) return tm;
+        float slow = a.look != null && (a.look.kind == Look.OLD_MAN || a.look.aid != Look.AID_NONE) ? 0.7f : 1f;
+        float dur = Math.max(0.5f, Math.min(4.5f, dist / ((run ? 420f : 230f) * slow)));
+        Film.Key k = a.at(tm);
+        k.x = x; k.moveDur = dur; k.run = run; k.facing = x > from ? 1 : -1; k.visible = true;
+        if (k.anchor != Film.A_GROUND) k.anchor = Film.A_GROUND;
+        return tm + dur;
+    }
+
+    private void face(Film.Actor a, float t, float towardX) { Film.Key k = a.at(t); k.facing = towardX >= xAt(a, t) ? 1 : -1; }
+
+    /**
+     * v46: a free place beside someone (on the side given first, else the other), clear of everyone by their widths —
+     * the animals too (दादाजी, called over, stopped on आरव and half on the cow); NaN when there is none.
+     */
+    private float beside(Film.Actor by, Film.Actor who, float t, float dir) {
+        float bx = xAt(by, t), ww = widthOf(who);
+        for (float d : new float[]{dir, -dir})
+            for (int k = 0; k < 10; k++) {
+                float cand = bx + d * ((widthOf(by) + ww) * 0.42f + 10 + k * 45);
+                if (cand < 90 + ww * 0.3f || cand > 1190 - ww * 0.3f) break;
+                boolean free = true;
+                for (Film.Actor o : seg.actors) {
+                    if (o == who || o.look == null || !o.stateAt(t).visible) continue;
+                    float ox = Math.max(xAt(o, t), 0), later = o.stateAt(t + 3f).x;
+                    float need = (widthOf(o) + ww) * 0.4f;
+                    if (Math.abs(ox - cand) < need || Math.abs(later - cand) < need) { free = false; break; }
+                }
+                if (free) return cand;
+            }
+        return Float.NaN;
+    }
+
+    /** v46: the thing a word names, held in the hand. */
+    static int villageItem(String s) {
+        if (Txt.has(s, "आम", "mango")) return Pose.I_MANGO;
+        if (Txt.has(s, "घड़ा", "घड़े", "मटका", "मटकी", "गगरी", "water pot", "pitcher")) return Pose.I_POT;
+        if (Txt.has(s, "घास", "चारा", "grass", "fodder", "hay")) return Pose.I_GRASS;
+        if (Txt.has(s, "झंडी", "झंडियाँ", "झंडियां", "bunting", "little flags")) return Pose.I_FLAGS;
+        if (Txt.has(s, "झाड़ू", "broom")) return Pose.I_BROOM;
+        if (Txt.has(s, "बोरी", "थैला", "sack")) return Pose.I_SACK;
+        for (Object[] r : CARRIED) if (Txt.has(s, (String[]) r[0])) return (Integer) r[1];
+        return Pose.I_NONE;
+    }
+
+    private void hold(Film.Actor a, float t, int item) { Film.Key k = keyAt(a, t); k.holdR = item; spread(a, k); }
+
+    /**
+     * v46: things done before the sentence is read for its weather (so the rain finds them under the roof): the
+     * thatched shelter of "बारिश … सब घर में हैं", the mud, the rubbish on the road.
+     */
+    private void villageBefore(String s, float t) {
+        if (seg == null || !Sets.outdoorSet(seg.set) || negated(s)) return;
+        if (Txt.has(s, RAIN) && Txt.has(s, "घर में", "घर के अंदर", "छप्पर के नीचे", "बरामदे में", "छत के नीचे", "under the roof", "under the shelter", "on the veranda", "indoors", "inside the house")) {
+            Film.Fx shed = shed(t);
+            // the family close together at the back of the shelter: room in front of them for the animal brought in
+            float x0 = shed.x - shed.color / 2f + 60;
+            List<Film.Actor> in = new ArrayList<Film.Actor>();
+            for (Film.Actor a : seg.actors) if (human(a) && a.stateAt(t).visible) in.add(a);
+            for (int i = 0; i < in.size(); i++) {
+                Film.Key k = in.get(i).at(t);
+                k.x = x0 + i * 72; k.moveDur = 0; k.facing = 1;
+                if (in.get(i).keys.get(0).t >= t - 0.8f) in.get(i).keys.get(0).x = k.x;      // so from the first frame
+            }
+            // the animals are out in the rain
+            for (Film.Actor a : seg.actors) if (!human(a) && a.look != null && a.stateAt(t).visible) {
+                Film.Key k = a.at(t); k.x = 1000; k.moveDur = 0; k.facing = -1; k.emotion = Pose.SAD;
+                if (a.keys.get(0).t >= t - 0.8f) a.keys.get(0).x = k.x;
+            }
+            villageStaged++;
+        }
+        // the fair: the hum of the crowd and a drum somewhere in it
+        if (Txt.has(s, "मेला", "मेले", "मेले की", "the fair", "a fair", "village fair", "mela") && !Txt.has(s, "मेला नहीं", "no fair")) {
+            boolean have = false;
+            for (Film.Sfx x : film.sfx) if (x.type == Film.SFX_CROWD && Math.abs(x.t - t) < 30) have = true;
+            if (!have) { film.sfx.add(new Film.Sfx(Film.SFX_CROWD, t, 12f, 0.22f)); film.sfx.add(new Film.Sfx(Film.SFX_DRUMS, t + 1f, 8f, 0.15f)); villageStaged++; }
+        }
+        if (Txt.has(s, LITTER)) {
+            boolean have = false;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_LITTER) have = true;
+            if (!have) {
+                for (int i = 0; i < 9; i++) {
+                    // (on the road just behind the line of their feet, in the picture — below it the frame cuts them off)
+                    Film.Fx f = fx(Film.FX_LITTER, t, 1e6f, 250 + i * 95 + (i % 3) * 17, -10 - (i * 7) % 28, null, null);
+                    f.kind = i;
+                }
+                villageStaged++;
+            }
+        }
+    }
+
+    /** v46: rubbish lying about (the road to be cleaned). */
+    static final String[] LITTER = {"कचरा पड़ा", "कचरा फैला", "कूड़ा पड़ा", "कूड़ा फैला", "कूड़ा-कचरा", "गंदगी", "rubbish lying", "rubbish is lying", "rubbish on the",
+            "litter", "trash lying", "trash is lying", "trash on the", "garbage"};
+
+    /** v46: the thatched shelter of the place (made at the left the first time it is wanted). */
+    private Film.Fx shed(float t) {
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_SHED) return f;
+        Film.Actor tall = null;
+        for (Film.Actor a : seg.actors) if (human(a) && (tall == null || heightOf(a) > heightOf(tall))) tall = a;
+        Film.Fx f = fx(Film.FX_SHED, Math.min(t, seg.t0), 1e6f, 470, 0, tall, null);
+        f.color = 900;
+        return f;
+    }
+
+    /** v46: under the thatch at t (out of the rain). */
+    boolean underShed(Film.Actor a, float t) {
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_SHED && f.t0 <= t && Math.abs(xAt(a, t) - f.x) < f.color / 2f) return true;
+        return false;
+    }
+
+    /** v46: frees the one stuck in the mud at t: out of the mud towards the pullers, the pullers stagger back and cheer. */
+    private float releasePull(float t) {
+        Film.Actor cow = pullStuck;
+        pullStuck = null;
+        if (cow == null) return t;
+        float dir = 1;
+        if (!pullers.isEmpty()) dir = Math.signum(xAt(pullers.get(0), t) - xAt(cow, t));
+        if (dir == 0) dir = 1;
+        float H = heightOf(cow);
+        Film.Key k = cow.at(t + 0.1f); k.x = xAt(cow, t) + dir * H * 0.4f; k.moveDur = 0.8f; k.facing = dir; k.emotion = Pose.HAPPY;
+        if (pullMud != null) pullMud.t2 = t + 0.1f;
+        if (pullRope != null) pullRope.t1 = t + 0.6f;
+        for (Film.Actor a : pullers) {
+            for (Film.Act x : a.acts) if (x.type == Film.G_PULL && x.t1 > t) x.t1 = Math.max(x.t0 + 0.2f, t);
+            float back = xAt(a, t) + dir * 50;
+            Film.Key s = a.at(t + 0.15f); s.x = Math.max(120, Math.min(1160, back)); s.moveDur = 0.4f;
+            a.acts.add(new Film.Act(t + 0.15f, t + 0.7f, Film.G_STEP_BACK));
+            Film.Key h = a.at(t + 0.7f); h.emotion = Pose.HAPPY;
+            a.acts.add(new Film.Act(t + 0.8f, t + 2.0f, Film.G_CLAP));
+        }
+        film.sfx.add(new Film.Sfx(Film.SFX_SPLASH, t + 0.1f, 0.6f, 0.4f));
+        film.sfx.add(new Film.Sfx(Film.SFX_MOO, t + 0.5f, 1.2f, 0.6f));
+        film.sfx.add(new Film.Sfx(Film.SFX_CLAP, t + 0.8f, 1.2f, 0.5f));
+        pullers = new ArrayList<Film.Actor>();
+        pullMud = null; pullRope = null;
+        villageStaged++;
+        return t + 2.2f;
+    }
+
+    /**
+     * v46: the village's moments, staged as themselves: an animal stuck in the mud and pulled out together, a fruit
+     * picked from the tree and run off with, a cap snatched by the monkey and given back, the cow brought in out of the
+     * rain, things fetched (an umbrella, a pot, grass, a broom), help with a heavy pot, a thing handed over, the cow fed,
+     * someone called over, flags hung for the fair, the road cleaned, a search of the fields, the lost calf found, a
+     * race, everyone sitting under the tree. Returns how long it takes (0: not one of these).
+     */
+    private float village(String s, float t, Film.Actor subj, List<Film.Actor> group, Film.Actor target) {
+        if (seg == null || negated(s)) return 0;
+        // ---- the rubbish lying about is what the sentence is about (not someone "lying" there)
+        if (Txt.has(s, LITTER) && !Txt.has(s, "उठा", "सफाई", "साफ", "झाड़ू", "picks", "clean", "sweep") && ScriptParser.mentions(story, s).isEmpty()) return 1.4f;
+        // ---- stuck in the mud
+        if (subj != null && Txt.has(s, "कीचड़ में फंस", "कीचड़ में फँस", "दलदल में फंस", "दलदल में फँस", "stuck in the mud", "stuck in mud", "stuck in the swamp")) {
+            float x = xAt(subj, t), H = heightOf(subj);
+            Film.Fx mud = fx(Film.FX_MUD, t, 1e6f, x, 4, subj, null);
+            mud.color = (int) Math.max(240, H * (subj.look.isHumanoid() ? 0.8f : 2.3f));
+            mud.t2 = -1;
+            Film.Key k = subj.at(t + 0.3f); k.emotion = Pose.SCARED;
+            for (int i = 0; i < 3; i++) subj.acts.add(new Film.Act(t + 0.4f + i * 1.3f, t + 1.2f + i * 1.3f, Film.G_TREMBLE));
+            if (!subj.look.isHumanoid()) { film.sfx.add(new Film.Sfx(Film.SFX_MOO, t + 0.6f, 1.2f, 0.6f)); film.sfx.add(new Film.Sfx(Film.SFX_MOO, t + 2.4f, 1.2f, 0.5f)); }
+            film.sfx.add(new Film.Sfx(Film.SFX_SPLASH, t + 0.3f, 0.6f, 0.35f));
+            frameCut(t, x);
+            villageStaged++;
+            return 3.0f;
+        }
+        // ---- out of the mud by itself (or the pull's end said as a direction)
+        if (Txt.has(s, "कीचड़ से बाहर", "कीचड़ से निकल", "out of the mud")) {
+            Film.Actor st = stuckOne();
+            if (st != null) {
+                if (pullStuck == null) { pullStuck = st; pullMud = null; for (Film.Fx f : seg.fx) if (f.type == Film.FX_MUD && f.a == st) pullMud = f; }
+                return releasePull(t) - t;
+            }
+        }
+        // ---- pulled out together
+        Film.Actor stuck = stuckOne();
+        if (stuck != null && Txt.has(s, "खींच", "pull")) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            boolean everyone = Txt.has(" " + s + " ", " सब ", " सभी ", "मिलकर", "मिल कर", "together", "everyone", " all ");
+            for (Film.Actor a : group) if (human(a) && a != stuck && a.stateAt(t).visible) who.add(a);
+            if (who.size() < 2 || everyone) for (Film.Actor a : seg.actors) if (human(a) && a != stuck && a.stateAt(t).visible && !who.contains(a)) who.add(a);
+            if (who.isEmpty()) return 0;
+            float cx = xAt(stuck, t), len = widthOf(stuck) * 0.46f;
+            float roomR = 1160 - cx, roomL = cx - 120;
+            float side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL) - len - 40;
+            // side-on, one behind the other on the rope: each a little more than half a front picture's width apart
+            float need = 0;
+            for (Film.Actor a : who) need += widthOf(a) * 0.62f;
+            float squeeze = need > room ? room / need : 1;
+            // the nearest goes first on the rope
+            final float fcx = cx; final float ft = t;
+            java.util.Collections.sort(who, new java.util.Comparator<Film.Actor>() {
+                public int compare(Film.Actor a, Film.Actor b) { return Float.compare(Math.abs(xAt(a, ft) - fcx), Math.abs(xAt(b, ft) - fcx)); }
+            });
+            float there = t;
+            float[] at = new float[who.size()];
+            float run = len + 30;
+            for (int i = 0; i < who.size(); i++) {
+                Film.Actor a = who.get(i);
+                run += widthOf(a) * 0.31f * squeeze;
+                at[i] = cx + side * run;
+                run += widthOf(a) * 0.31f * squeeze;
+                float arr = goTo(a, at[i], t + i * 0.12f, false);
+                face(a, arr + 0.05f, cx);
+                there = Math.max(there, arr + 0.1f);
+            }
+            Film.Key ck = stuck.at(t + 0.2f); ck.facing = side;
+            pullRope = fx(Film.FX_ROPE, there, 1e6f, 0, 0, who.get(0), stuck);
+            float end = there + 3.0f;
+            for (Film.Actor a : who) {
+                for (float u = there; u < end - 0.2f; u += 1.25f) a.acts.add(new Film.Act(u, Math.min(end, u + 1.25f), Film.G_PULL));
+                Film.Key e = a.at(there); e.emotion = Pose.DETERMINED;
+            }
+            film.sfx.add(new Film.Sfx(Film.SFX_ROPE, there, 2.5f, 0.45f));
+            pullStuck = stuck; pullers = who; pullFrom = there;
+            pullMud = null;
+            for (Film.Fx f : seg.fx) if (f.type == Film.FX_MUD && f.a == stuck && f.t2 < 0) pullMud = f;
+            float[] xs = new float[who.size() + 1];
+            for (int i = 0; i < who.size(); i++) xs[i] = at[i];
+            xs[who.size()] = cx;
+            frameCut(t, xs);
+            villageStaged++;
+            // a count said next ("एक, दो, तीन!") is said while they pull: out it comes after it; else out it comes now
+            boolean count = false;
+            if (dirScene != null && dirBeat + 1 < dirScene.beats.size()) {
+                Story.Beat nb = dirScene.beats.get(dirBeat + 1);
+                count = nb.type == Story.Beat.DIALOGUE && isCount(nb.text);
+            }
+            if (count) return there + 0.8f - t;
+            return releasePull(there + 2.4f) - t;
+        }
+        // ---- a fruit picked from the tree (and run off with)
+        if (subj != null && Txt.has(s, "तोड़", "तोड़कर", "तोड़ कर", "picks a", "plucks") && Txt.has(s, FRUIT) && Txt.has(s, "पेड़", "डाल", "tree", "branch")) {
+            int item = villageItem(s);
+            if (item == Pose.I_NONE) item = Pose.I_MANGO;
+            subj.acts.add(new Film.Act(t + 0.1f, t + 1.0f, subj.look.kind == Look.MONKEY ? Film.G_JUMP : Film.G_REACH));
+            hold(subj, t + 0.9f, item);
+            Film.Key k = subj.at(t + 0.9f); k.emotion = Pose.HAPPY;
+            float d = 1.4f;
+            if (Txt.has(s, "भाग", "runs off", "runs away", "dashes off")) {
+                float x = xAt(subj, t), dir = x < 640 ? 1 : -1;
+                Film.Key r = subj.at(t + 1.2f); r.x = Math.max(160, Math.min(1120, x + dir * 360)); r.moveDur = 1.2f; r.run = true; r.facing = dir;
+                Film.Key b = subj.at(t + 2.5f); b.facing = -dir;
+                film.sfx.add(new Film.Sfx(subj.look.kind == Look.MONKEY ? Film.SFX_MONKEY : Film.SFX_STEPS_RUN, t + 1.2f, 1.2f, 0.5f));
+                d = 2.7f;
+            }
+            villageStaged++;
+            return d;
+        }
+        // ---- the cap snatched and run off with
+        if (subj != null && Txt.has(s, "टोपी", "cap", "topi") && Txt.has(s, "ले भाग", "लेकर भाग", "ले कर भाग", "छीन", "झपट", "उड़ा ले", "snatch", "runs off with", "grabs")) {
+            Film.Actor victim = target != null && Look.takeable(target.look.headwear) ? target : null;
+            if (victim == null) for (Film.Actor a : seg.actors) if (a != subj && a.look != null && a.look.headwear == Look.HW_CAP) { victim = a; break; }
+            if (victim != null && !victim.stateAt(t).noHeadwear) {
+                float vx = xAt(victim, t), side = xAt(subj, t) < vx ? -1 : 1;
+                float arr = goTo(subj, vx + side * 75, t + 0.1f, true);
+                subj.acts.add(new Film.Act(arr, arr + 0.6f, Film.G_JUMP));
+                Film.Key kv = victim.at(arr + 0.35f); kv.noHeadwear = true; kv.emotion = Pose.SURPRISED;
+                Film.Key km = subj.at(arr + 0.35f); km.wearsTurban = true; km.emotion = Pose.LAUGH;
+                pTurbanColor.put(subj.c, victim.look.headColor);
+                victim.acts.add(new Film.Act(arr + 0.4f, arr + 2.4f, Film.G_HOLD_HEAD));
+                // (off to the open side: from the edge of the picture he runs across, past the one he robbed)
+                if (vx + side * 300 < 160 || vx + side * 300 > 1120) side = -side;
+                float away = Math.max(160, Math.min(1120, vx + side * 360));
+                Film.Key r = subj.at(arr + 0.7f); r.x = away; r.moveDur = 1.1f; r.run = true; r.facing = side;
+                Film.Key b = subj.at(arr + 1.9f); b.facing = -side;
+                subj.acts.add(new Film.Act(arr + 2.0f, arr + 3.0f, Film.G_BOUNCE));
+                film.sfx.add(new Film.Sfx(Film.SFX_WHOOSH, arr + 0.3f, 0.6f, 0.6f));
+                film.sfx.add(new Film.Sfx(Film.SFX_MONKEY, arr + 0.8f, 1.6f, 0.55f));
+                for (Film.Actor o : seg.actors) if (o != subj && o.stateAt(t).visible && o.look != null && !o.look.cannotSee()) film.watches.add(new Film.Watch(o, subj, arr + 0.5f, arr + 3f));
+                frameCut(arr, vx, away);
+                villageStaged++;
+                return arr + 3.0f - t;
+            }
+        }
+        // ---- the cap given back
+        if (subj != null && Txt.has(s, "टोपी", "cap", "topi") && Txt.has(s, "वापस", "लौटा", "return", "gives back", "puts it back", "back on")) {
+            Film.Actor owner = null;
+            for (Film.Actor a : seg.actors) if (a != subj && a.look != null && Look.takeable(a.look.headwear) && a.stateAt(t).noHeadwear) { owner = a; break; }
+            if (owner != null) {
+                float ox = xAt(owner, t), side = xAt(subj, t) < ox ? -1 : 1;
+                float arr = goTo(subj, ox + side * 70, t + 0.1f, false);
+                face(subj, arr + 0.05f, ox);
+                subj.acts.add(new Film.Act(arr, arr + 1.0f, subj.look.kind == Look.MONKEY ? Film.G_JUMP : Film.G_REACH));
+                Film.Key km = subj.at(arr + 0.6f); km.wearsTurban = false; km.emotion = Pose.HAPPY;
+                Film.Key ko = owner.at(arr + 0.6f); ko.noHeadwear = false; ko.emotion = Pose.HAPPY;
+                owner.acts.add(new Film.Act(arr + 0.8f, arr + 1.8f, Film.G_PAT));
+                film.sfx.add(new Film.Sfx(Film.SFX_POP, arr + 0.6f, 0.3f, 0.4f));
+                frameCut(arr, ox, ox + side * 70);
+                villageStaged++;
+                return arr + 1.9f - t;
+            }
+        }
+        // ---- someone called over ("दादाजी को बुलाती है")
+        if (subj != null && target != null && Txt.has(s, "को बुला", "calls ") && !Txt.has(s, "फ़ोन", "फोन", "phone")) {
+            subj.acts.add(new Film.Act(t + 0.1f, t + 1.4f, Film.G_WAVE));
+            Film.Key k = subj.at(t + 0.1f); k.facing = xAt(target, t) >= xAt(subj, t) ? 1 : -1;
+            float arr;
+            if (!target.stateAt(t).visible) arr = walkOn(target, t + 0.8f);
+            else {
+                float tx = xAt(target, t), sx = xAt(subj, t);
+                float spot = Math.abs(tx - sx) > widthOf(target) * 0.9f + 60 ? beside(subj, target, t + 0.8f, tx > sx ? 1 : -1) : Float.NaN;
+                // (no room beside the caller among the others: they hear, turn and answer from where they are)
+                arr = Float.isNaN(spot) ? t + 1.2f : goTo(target, spot, t + 0.8f, false);
+            }
+            face(target, arr + 0.05f, xAt(subj, arr));
+            villageStaged++;
+            return Math.max(1.6f, arr - t);
+        }
+        // ---- a thing handed over ("सीता चिंकी को आम देती है")
+        int item = villageItem(s);
+        if (subj != null && target != null && item != Pose.I_NONE && Txt.has(s, "देता", "देती", "देते", "थमा", "gives", "hands")) {
+            float tx = xAt(target, t), side = xAt(subj, t) < tx ? -1 : 1;
+            float arr = goTo(subj, tx + side * 110, t + 0.05f, false);
+            face(subj, arr + 0.05f, tx);
+            if (subj.stateAt(arr).holdR != item) hold(subj, Math.max(t + 0.05f, arr - 0.3f), item);
+            Film.Act g = new Film.Act(arr + 0.1f, arr + 1.3f, Film.G_GIVE); g.target = target; g.item = item; subj.acts.add(g);
+            hold(subj, arr + 1.0f, Pose.I_NONE);
+            hold(target, arr + 1.0f, item);
+            Film.Key kt = target.at(arr + 1.0f); kt.emotion = Pose.HAPPY;
+            if (target.look.kind == Look.MONKEY) { film.sfx.add(new Film.Sfx(Film.SFX_MONKEY, arr + 1.1f, 1.0f, 0.45f)); target.acts.add(new Film.Act(arr + 1.2f, arr + 2.0f, Film.G_BOUNCE)); }
+            frameCut(arr, tx, tx + side * 110);
+            villageStaged++;
+            return arr + 1.6f - t;
+        }
+        // ---- an animal fed ("गौरी को घास खिलाता है")
+        if (subj != null && target != null && !human(target) && Txt.has(s, "खिला", "feeds")) {
+            if (item == Pose.I_NONE) item = Pose.I_GRASS;
+            float tx = xAt(target, t), side = xAt(subj, t) < tx ? -1 : 1;
+            float arr = goTo(subj, tx + side * heightOf(target) * 0.85f, t + 0.05f, false);
+            face(subj, arr + 0.05f, tx);
+            Film.Key tk = target.at(arr); tk.facing = -side;
+            if (subj.stateAt(arr).holdR != item) hold(subj, Math.max(t + 0.05f, arr - 0.3f), item);
+            subj.acts.add(new Film.Act(arr + 0.1f, arr + 2.2f, Film.G_OFFER));
+            target.acts.add(new Film.Act(arr + 0.6f, arr + 2.4f, Film.G_EAT));
+            hold(subj, arr + 2.2f, Pose.I_NONE);
+            Film.Key h = target.at(arr + 2.3f); h.emotion = Pose.HAPPY;
+            film.sfx.add(new Film.Sfx(Film.SFX_MOO, arr + 2.4f, 1.0f, 0.4f));
+            villageStaged++;
+            return arr + 2.6f - t;
+        }
+        // ---- help with a heavy pot ("रमेश मदद करता है" while she carries it)
+        if (subj != null && Txt.has(s, "मदद", "help")) {
+            Film.Actor carrier = null;
+            for (Film.Actor a : seg.actors) if (a != subj && a.stateAt(t).holdR == Pose.I_POT) { carrier = a; break; }
+            if (carrier != null) {
+                float cx = xAt(carrier, t), side = xAt(subj, t) < cx ? -1 : 1;
+                float arr = goTo(subj, cx + side * 105, t + 0.05f, false);
+                face(subj, arr + 0.05f, cx);
+                face(carrier, arr + 0.05f, cx + side * 105);
+                Film.Act g = new Film.Act(arr + 0.1f, arr + 1.2f, Film.G_GIVE); g.target = subj; g.item = Pose.I_POT; carrier.acts.add(g);
+                hold(carrier, arr + 0.9f, Pose.I_NONE);
+                hold(subj, arr + 0.9f, Pose.I_POT);
+                Film.Key kc = carrier.at(arr + 1.0f); kc.emotion = Pose.HAPPY; kc.sweat = false;
+                villageStaged++;
+                return arr + 1.5f - t;
+            }
+        }
+        // ---- brought in out of the rain ("गौरी को छप्पर के नीचे लाते हैं")
+        Film.Actor beast = target != null && !human(target) ? target : null;
+        if (beast == null) for (Film.Actor a : group) if (!human(a) && a.look != null) { beast = a; break; }
+        if (beast != null && Txt.has(s, "छप्पर के नीचे", "छत के नीचे", "अंदर ला", "घर में ला", "under the roof", "under the shelter", "out of the rain", "inside")) {
+            target = beast;
+            Film.Fx shed = shed(t);
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            for (Film.Actor a : group) if (human(a) && a != target) who.add(a);
+            if (who.isEmpty() && subj != null && human(subj)) who.add(subj);
+            float ax = xAt(target, t), side = shed.x < ax ? -1 : 1, there = t;
+            for (int i = 0; i < who.size(); i++) there = Math.max(there, goTo(who.get(i), ax + side * (heightOf(target) * 0.8f + 20 + i * 70), t + i * 0.1f, false));
+            for (Film.Actor a : who) face(a, there, ax);
+            Film.Key tk = target.at(there); tk.facing = side;
+            float len = heightOf(target) * 0.95f;
+            // the animal at the open end of the shelter; those who brought it back to where they stood under it
+            float dest = shed.x - side * (shed.color / 2f - len * 0.85f);
+            float back = there + 0.5f, arr = back;
+            for (int i = 0; i < who.size(); i++) {
+                float home = xAt(who.get(i), t);
+                if (Math.abs(home - shed.x) > shed.color / 2f - 40) home = dest + side * (len + 40 + i * 70);
+                arr = Math.max(arr, goTo(who.get(i), home, back, false));
+            }
+            Film.Key go = target.at(back + 0.3f); go.x = dest; go.moveDur = Math.max(1.0f, arr - back); go.facing = side;
+            Film.Key ok = target.at(arr + 0.4f); ok.emotion = Pose.HAPPY;
+            for (Film.Actor a : who) face(a, arr + 0.1f, dest);
+            film.sfx.add(new Film.Sfx(Film.SFX_MOO, arr + 0.5f, 1.0f, 0.4f));
+            villageStaged++;
+            return arr + 1.0f - t;
+        }
+        // ---- the lost calf found ("चिंकी को बछड़ा मिल जाता है")
+        if (Txt.has(s, "बछड़ा मिल", "बछड़ा मिला", "बछड़े को ढूंढ", "बछड़े को ढूँढ", "finds the calf", "calf is found")) {
+            Film.Actor finder = subj != null ? subj : group.isEmpty() ? null : group.get(0);
+            Film.Actor mother = null;
+            for (Film.Actor a : seg.actors) if (a.look != null && a.look.kind == Look.ANIMAL && a.look.species == Look.SP_COW) { mother = a; break; }
+            float fxp = finder != null ? xAt(finder, t) : 900, dir = fxp < 640 ? 1 : -1;
+            Film.Fx calf = fx(Film.FX_ANIMAL, t + 0.2f, 1e6f, Math.max(130, Math.min(1150, fxp + dir * 110)), 3, finder, mother);
+            calf.kind = Look.SP_COW; calf.color = mother != null && xAt(mother, t) < calf.x ? -1 : 1; calf.t2 = t + 1.6f;
+            if (finder != null) { finder.acts.add(new Film.Act(t, t + 1.4f, Film.G_POINT)); if (finder.look.kind == Look.MONKEY) finder.acts.add(new Film.Act(t + 0.2f, t + 1.0f, Film.G_JUMP)); }
+            if (mother != null) { Film.Key k = mother.at(t + 1.6f); k.emotion = Pose.HAPPY; k.facing = calf.x >= xAt(mother, t) ? 1 : -1; }
+            for (Film.Actor o : seg.actors) if (o != finder && o.stateAt(t).visible && o.look != null && !o.look.cannotSee()) { Film.Key k = o.at(t + 0.4f); k.emotion = Pose.SURPRISED; k.facing = calf.x >= xAt(o, t) ? 1 : -1; }
+            film.sfx.add(new Film.Sfx(Film.SFX_MOO, t + 0.6f, 1.0f, 0.5f));
+            film.sfx.add(new Film.Sfx(Film.SFX_MOO, t + 1.8f, 1.2f, 0.5f));
+            frameCut(t, calf.x, mother != null ? xAt(mother, t) : calf.x);
+            villageStaged++;
+            return 3.2f;
+        }
+        // ---- a search of the fields
+        if (Txt.has(s, "ढूंढ", "ढूँढ", "खोज", "searches", "search the", "look for") && Txt.has(s, "खेत", "मैदान", "field", "around")) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            for (Film.Actor a : group) if (human(a) && a.stateAt(t).visible) who.add(a);
+            if (who.isEmpty() && subj != null) who.add(subj);
+            float end = t;
+            for (int i = 0; i < who.size(); i++) {
+                Film.Actor a = who.get(i);
+                float x0 = xAt(a, t), dest = Math.max(170, Math.min(1110, x0 + (i % 2 == 0 ? 220 : -220)));
+                float arr = goTo(a, dest, t + i * 0.2f, false);
+                a.acts.add(new Film.Act(arr, arr + 1.6f, Film.G_SHIELD_EYES));
+                Film.Key k = a.at(arr + 0.8f); k.facing = -k.facing;
+                end = Math.max(end, arr + 1.7f);
+            }
+            villageStaged++;
+            return end - t;
+        }
+        // ---- a race ("आरव और अनाया दौड़ लगाते हैं")
+        if ((Txt.has(s, "दौड़ लगा", "दौड़ लगाते", "रेस लगा", "दौड़ का मुकाबला") || Txt.hasWord(s, "race", "races", "racing")) && !Txt.has(s, "लगाएँ", "लगाएं")) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            for (Film.Actor a : group) if (human(a)) who.add(a);
+            if (who.size() >= 1) {
+                float startX = 190, finish = 1010, end = t;
+                for (Film.Actor o : seg.actors) if (!who.contains(o) && o.stateAt(t).visible && xAt(o, t) > startX + 300) finish = Math.min(finish, xAt(o, t) - 130 - (who.size() - 1) * 95 + (who.size() - 1) * 40);
+                for (int i = 0; i < who.size(); i++) {
+                    Film.Actor a = who.get(i);
+                    float lane = i * 95;
+                    float ready = goTo(a, startX + lane, t, false);
+                    face(a, ready + 0.05f, 1280);
+                    end = Math.max(end, ready);
+                }
+                float go = end + 0.6f, fin = go;
+                for (int i = 0; i < who.size(); i++) {
+                    Film.Actor a = who.get(i);
+                    Film.Key k = a.at(go); k.x = finish + i * 95 - (who.size() - 1) * 40; k.moveDur = 2.4f; k.run = true; k.facing = 1;
+                    Film.Key h = a.at(go + 2.5f); h.emotion = Pose.HAPPY; h.sweat = true; h.facing = -1;
+                    fin = go + 2.5f;
+                }
+                film.sfx.add(new Film.Sfx(Film.SFX_STEPS_RUN, go, 2.4f, 0.55f));
+                cam(go, 640, ground - 160, 0.95f, 2.4f);
+                villageStaged++;
+                return fin + 0.5f - t;
+            }
+        }
+        // ---- flags hung for the fair ("झंडियाँ लगाता है")
+        if (subj != null && Txt.has(s, "झंडी", "झंडियाँ", "झंडियां", "bunting", "little flags") && Txt.has(s, "लगा", "टांग", "टाँग", "सजा", "hang", "puts up")) {
+            hold(subj, t + 0.1f, Pose.I_FLAGS);
+            float x0 = xAt(subj, t), dir = x0 < 640 ? 1 : -1;
+            float x1 = Math.max(170, Math.min(1110, x0 + dir * 360));
+            Film.Key k = subj.at(t + 0.3f); k.x = x1; k.moveDur = 3.4f; k.facing = dir;
+            for (int i = 0; i < 3; i++) subj.acts.add(new Film.Act(t + 0.4f + i * 1.15f, t + 1.4f + i * 1.15f, Film.G_REACH));
+            Film.Fx f = fx(Film.FX_BUNTING, t + 0.4f, 1e6f, Math.min(x0, x1) - 260, 0, subj, null);
+            f.y = Math.max(x0, x1) + 260; f.t2 = t + 3.8f;
+            if (dir < 0) { f.x = Math.min(x0, x1) - 260; }
+            hold(subj, t + 3.9f, Pose.I_NONE);
+            Film.Key h = subj.at(t + 3.9f); h.emotion = Pose.PROUD;
+            villageStaged++;
+            return 4.1f;
+        }
+        // ---- the road cleaned ("सब मिलकर सफाई करते हैं", "कचरा उठाता है", "झाड़ू लगाती है" with rubbish lying)
+        boolean litter = false;
+        for (Film.Fx f : seg.fx) if (f.type == Film.FX_LITTER && f.t1 > t) litter = true;
+        if (litter && Txt.has(s, "सफाई", "साफ़ कर", "साफ कर", "कचरा उठा", "कूड़ा उठा", "कचरा उठाता", "झाड़ू", "cleans", "picks up the", "sweeps")) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            if (groupSubject || Txt.has(" " + s + " ", " सब ", "मिलकर")) { for (Film.Actor a : group) if (human(a)) who.add(a); }
+            else if (subj != null && human(subj)) who.add(subj);
+            if (who.isEmpty()) return 0;
+            boolean fetchBroom = Txt.has(s, "झाड़ू ला", "broom") && !Txt.has(s, "झाड़ू लगा", "sweeps");
+            boolean sweep = Txt.has(s, "झाड़ू", "sweep");
+            float end = t;
+            for (Film.Actor a : who) {
+                float ta = t;
+                // (the work is shared: together each takes one; the one who sweeps or gathers it alone, three; the
+                // grandfather shows where, his hands free)
+                boolean elder = a.look.kind == Look.OLD_MAN || a.c.age >= 60;
+                if (elder && who.size() > 1) { a.acts.add(new Film.Act(t + 0.3f, t + 1.6f, Film.G_POINT)); continue; }
+                if (fetchBroom || (sweep && a.stateAt(t).holdR != Pose.I_BROOM)) ta = fetch(a, Pose.I_BROOM, t) ;
+                else if (!sweep && a.stateAt(t).holdR == Pose.I_NONE) hold(a, t + 0.1f, Pose.I_SACK);
+                int picks = who.size() > 1 ? 1 : 3;
+                for (int n = 0; n < picks; n++) {
+                    Film.Fx near = null;
+                    for (Film.Fx f : seg.fx) if (f.type == Film.FX_LITTER && f.t1 > ta + 0.5f && (near == null || Math.abs(f.x - xAt(a, ta)) < Math.abs(near.x - xAt(a, ta)))) near = f;
+                    if (near == null) break;
+                    float arr = goTo(a, near.x + (xAt(a, ta) < near.x ? -45 : 45), ta, false);
+                    face(a, arr + 0.05f, near.x);
+                    if (sweep) {
+                        Film.Act w = new Film.Act(arr, arr + 1.4f, Film.G_TASK); w.item = Film.T_SWEEP; a.acts.add(w);
+                        film.sfx.add(new Film.Sfx(Film.SFX_SWEEP, arr, 1.4f, 0.45f));
+                        near.t1 = arr + 1.2f;
+                        ta = arr + 1.5f;
+                    } else {
+                        Film.Key c = a.at(arr); c.body = Pose.CROUCH;
+                        a.acts.add(new Film.Act(arr + 0.1f, arr + 0.8f, Film.G_REACH));
+                        near.t1 = arr + 0.6f;
+                        Film.Key u = a.at(arr + 0.9f); u.body = Pose.STAND;
+                        ta = arr + 1.0f;
+                    }
+                }
+                Film.Key h = a.at(ta); h.emotion = Pose.HAPPY;
+                end = Math.max(end, ta);
+            }
+            villageStaged++;
+            return end + 0.3f - t;
+        }
+        // ---- water from the well ("सीता कुएँ से पानी ला रही है")
+        if (subj != null && human(subj) && Txt.has(s, "कुएँ से", "कुएं से", "कुआँ", "from the well") && Txt.has(s, "पानी ला", "पानी भरकर ला", "पानी भर कर ला", "पानी लेकर आ", "carries water", "brings water", "carrying water")
+                && !Txt.has(s, "निकाल", "खींच", "draws", "pulls")) {
+            hold(subj, t, Pose.I_POT);
+            float x = xAt(subj, t);
+            Film.Key k0 = subj.at(t); k0.x = -120; k0.moveDur = 0; k0.visible = true; k0.facing = 1;
+            Film.Key k1 = subj.at(t + 0.05f); k1.x = Math.max(300, Math.min(900, x)); k1.moveDur = 3.2f; k1.facing = 1;
+            Film.Key k2 = subj.at(t + 3.3f); k2.sweat = true; k2.emotion = Pose.PAIN;
+            film.sfx.add(new Film.Sfx(Film.SFX_STEPS, t, 3.2f, 0.4f));
+            villageStaged++;
+            return 3.5f;
+        }
+        // ---- a thing fetched ("आरव छाता लाता है", "अनाया भी छोटा घड़ा लाती है", "घास लाते हैं")
+        if (Txt.has(" " + s, " लाता है", " लाती है", " लाते हैं", " ले आता", " ले आती", " ले आते", "brings", "fetches") && !Txt.has(s, "छाता", "छतरी", "umbrella") && item != Pose.I_NONE) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            for (Film.Actor a : group) if (human(a)) who.add(a);
+            if (who.isEmpty() && subj != null && human(subj)) who.add(subj);
+            if (who.isEmpty()) return 0;
+            float end = t;
+            for (Film.Actor a : who) end = Math.max(end, fetch(a, item, t));
+            villageStaged++;
+            return end - t;
+        }
+        // ---- everyone sitting under the tree ("पीपल के नीचे सब बैठे हैं")
+        if (Txt.has(s, "के नीचे", "की छाँव", "की छांव", "under the") && Txt.has(s, "पेड़", "पीपल", "बरगद", "नीम", "tree") && Txt.has(s, "बैठे", "बैठी", "बैठ", "sit", "sitting")) {
+            List<Film.Actor> who = new ArrayList<Film.Actor>();
+            for (Film.Actor a : group) if (human(a) && a.stateAt(t).visible) who.add(a);
+            if (who.isEmpty()) for (Film.Actor a : seg.actors) if (human(a) && a.stateAt(t).visible) who.add(a);
+            if (who.isEmpty()) return 0;
+            boolean now = Txt.has(s, "बैठे हैं", "बैठी हैं", "बैठा है", "बैठी है", "are sitting", "is sitting", "sit under") || estab;
+            for (Film.Actor a : who) {
+                boolean elder = a.look.kind == Look.OLD_MAN || a.c.age >= 60;
+                Film.Key k = now ? a.at(t) : a.at(t + 0.4f);
+                k.body = Pose.SIT; k.seat = elder ? Film.SEAT_STOOL : Film.SEAT_FLOOR;
+                if (elder) { Film.Fx st = fx(Film.FX_SEAT, now && estab ? Math.min(t, a.keys.get(0).t) : t, 1e6f, xAt(a, t), 0, a, null); st.kind = Film.SEAT_STOOL; }
+                // as the part opens: seated from its first frame
+                if (now && estab && a.keys.get(0).t >= t - 0.8f) { Film.Key k0 = a.keys.get(0); k0.body = Pose.SIT; k0.seat = k.seat; }
+            }
+            // the elder in the middle, the others facing them
+            Film.Actor elder = null;
+            for (Film.Actor a : who) if (a.look.kind == Look.OLD_MAN || a.c.age >= 60) elder = a;
+            if (elder != null) for (Film.Actor a : who) if (a != elder) face(a, now ? t : t + 0.4f, xAt(elder, t));
+            villageStaged++;
+            return now ? 1.2f : 1.6f;
+        }
+        return 0;
+    }
+
+    /** v46: goes off to the nearer side and comes back with the thing in the hand; returns when they are back. */
+    private float fetch(Film.Actor a, int item, float t) {
+        float x = xAt(a, t), off = x < 640 ? -140 : 1420;
+        float gone = goTo(a, off, t + 0.05f, false);
+        Film.Key out = a.at(gone); out.visible = false;
+        Film.Key in = a.at(gone + 0.7f); in.visible = true; in.x = off; in.moveDur = 0;
+        hold(a, gone + 0.7f, item);
+        Film.Key back = a.at(gone + 0.75f); back.x = x; back.moveDur = Math.max(0.8f, Math.abs(x - off) / 230f); back.facing = off < x ? 1 : -1;
+        return gone + 0.75f + back.moveDur;
+    }
+
+    /** v46: how much room a character takes in the line-up (a person 1; a cow, a horse, an elephant more). */
+    static float layoutWidth(Look l) {
+        if (l == null || l.kind != Look.ANIMAL) return 1f;
+        switch (l.species) {
+            case Look.SP_COW: case Look.SP_HORSE: case Look.SP_ELEPHANT: case Look.SP_BEAR: case Look.SP_LION: case Look.SP_TIGER: case Look.SP_DEER: return 2.4f;
+            case Look.SP_DOG: case Look.SP_GOAT: case Look.SP_WOLF: case Look.SP_FOX: return 1.4f;
+            default: return 1f;
+        }
+    }
 
     /** v45: the sentence names this actor (by name, relation or alias). */
     private boolean namedIn(String s, Film.Actor a) {
@@ -9370,6 +10123,13 @@ public final class Director {
     private void cam(float t, float cx, float cy, float zoom, float ease, float roll) { Film.Cam c = new Film.Cam(t, cx, cy, zoom, ease); c.roll = roll; seg.cams.add(c); }
 
     private float heightOf(Film.Actor a) { return Renderer.actorHeight(a.look, a.c, art, seg); }
+
+    /** v46: how wide a character stands (its own picture's shape, else a person's or an animal's). */
+    private float widthOf(Film.Actor a) {
+        Art.Sprite sp = art == null || a.c == null ? null : art.sprites.get(a.c.id);
+        float asp = sp != null && sp.h > 0 ? sp.w / (float) sp.h : a.look != null && a.look.isHumanoid() ? 0.42f : 1.6f;
+        return heightOf(a) * asp;
+    }
 
     private void camOn(Film.Actor a, float t, float zoom) {
         float h = heightOf(a);

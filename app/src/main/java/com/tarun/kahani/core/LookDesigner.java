@@ -294,6 +294,38 @@ public final class LookDesigner {
             }
             if (c.look.outfit == Look.O_UNIFORM) c.look.variant = guardIdx++;
         }
+        capsFromStory(story);
+    }
+
+    /**
+     * v46: a cap the story gives someone their description does not ("चिंकी दादाजी की टोपी ले भागा", "अरे मेरी टोपी!" said
+     * by him): they wear a white cap (or the colour the story names) from the start, so it can be snatched and given back.
+     */
+    static void capsFromStory(Story story) {
+        StringBuilder all = new StringBuilder();
+        for (Story.Scene sc : story.scenes) for (Story.Beat b : sc.beats) {
+            if (b.type == Story.Beat.DIALOGUE && b.speaker != null && Txt.has(b.text, "मेरी टोपी", "my cap", "meri topi"))
+                all.append(' ').append(b.speaker.displayName).append(" की टोपी ।");
+            all.append(' ').append(b.text).append(" ।");
+        }
+        String txt = all.toString();
+        if (!Txt.has(txt, "टोपी", "cap", "topi")) return;
+        for (Story.CharacterDef c : story.characters) {
+            if (c.look == null || c.look.headwear != Look.HW_NONE || !c.look.isHumanoid()) continue;
+            boolean his = false;
+            for (String a : c.aliases) {
+                if (a == null || a.length() < 2) continue;
+                if (Txt.has(txt, a + " की टोपी", a + " की सफ़ेद टोपी", a + " की सफेद टोपी", a + "'s cap", a + " ki topi")) his = true;
+            }
+            if (!his) continue;
+            c.look.headwear = Look.HW_CAP;
+            c.look.headColor = 0xFFF4F1EA;
+            int at = Txt.firstIndex(txt, c.displayName + " की");
+            if (at >= 0) {
+                List<Integer> cols = colorsIn(txt.substring(at, Math.min(txt.length(), at + 40)));
+                if (!cols.isEmpty()) c.look.headColor = cols.get(0);
+            }
+        }
     }
 
     static int speciesOf(String t) {
@@ -536,10 +568,13 @@ public final class LookDesigner {
                 "लहंगा", "घाघरा", "चोली", "सिंदूर", "चूड़ि", "princess", "queen", "girl", "woman", "mother", "lady", "aunt", "आंटी", "she ", " her ",
                 "गोरी", "दुबली", "मोटी", "सुंदरी", "बहादुर लड़की", "sister", "daughter", "grandmother", "बुआ", "मौसी", "चाची", "मैडम", "madam", "miss ",
                 // v34: what she wears says it when no word does ("two ponytails with yellow ribbons")
-                "ponytails", "pigtails", "ribbons", "ribbon", "रिबन", "frock", "फ्रॉक", "skirt", "स्कर्ट", "a dress", "her dress", "gown", "earrings", "झुमके", "hair clip", "hairband"};
+                "ponytails", "pigtails", "ribbons", "ribbon", "रिबन", "frock", "फ्रॉक", "skirt", "स्कर्ट", "a dress", "her dress", "gown", "earrings", "झुमके", "hair clip", "hairband",
+                // v46: "सीता (औरत, 40 साल): लाल सलवार कमीज…, लंबी काली चोटी" was a man
+                "औरत", "महिला", "पत्नी", "wife", "सलवार", "चोटी", "braid"};
         String[] malW = {"राजा", "राजकुमार", "लड़का", "बेटा", "पिता", "दादा", "भाई", "भैया", "गार्ड", "सिपाही", "सैनिक", "मूँछ", "मूंछ", "देवता", " god ",
                 "दाढ़ी", "पगड़ी", "अचकन", "king", "prince", "boy", "man ", "father", "guard", "soldier", " he ", " his ",
-                "गोरा ", "दुबला", "मोटा", "mister", "मिस्टर", "sir ", "uncle", "अंकल", "चाचा", "मामा", "grandfather", "brother", "son "};
+                "गोरा ", "दुबला", "मोटा", "mister", "मिस्टर", "sir ", "uncle", "अंकल", "चाचा", "मामा", "grandfather", "brother", "son ",
+                "आदमी", "पुरुष", "husband"};
         for (String w : femW) if (Txt.has(all, w)) fem++;
         for (String w : malW) if (noPrincess.contains(Txt.norm(w))) mal++;
         // the script's own verbs decide a tie ("निकालती है" is a she, "दौड़ता है" a he)

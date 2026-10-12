@@ -371,6 +371,8 @@ final class SheetSaver {
         boolean beast = c != null && c.look != null && (c.look.kind == Look.ANIMAL || c.look.kind == Look.BIRD || c.look.kind == Look.MONSTER || c.look.kind == Look.MONKEY);   // v32/v33: fur reads like a beast
         // 1. every picture; a sheet of several figures split into them
         List<Object[]> pics = new ArrayList<Object[]>();     // {px, w, h, cutOut, cameraPhoto}
+        List<int[]> sheets = new ArrayList<int[]>();          // v46: the figures split from one sheet: {first, count}
+        List<Integer> pieceY = new ArrayList<Integer>();      // v46: where each figure stood on its sheet (its top), -1 for a whole picture
         int split = 0;
         int unreadable = 0, files = 0;
         for (byte[] d : datas) {
@@ -412,11 +414,12 @@ final class SheetSaver {
                 } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             } catch (Throwable e) { parts = new ArrayList<com.tarun.kahani.core.Angles.Piece>(); }
             if (parts.size() >= 2) camera = false;
-            if (parts.size() >= 2) { split += parts.size(); for (com.tarun.kahani.core.Angles.Piece pc : parts) pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); }
+            if (parts.size() >= 2) { split += parts.size(); sheets.add(new int[]{pics.size(), parts.size()}); for (com.tarun.kahani.core.Angles.Piece pc : parts) { pics.add(new Object[]{pc.px, pc.w, pc.h, Boolean.TRUE, camera}); pieceY.add(pc.y0); } }
             else {
                 // v39: a single picture is kept at up to 1400 px (a hundred of them read at the sheet size would fill the phone's memory)
                 Object[] sm = shrinkPixels(px, w, h, 1400);
                 pics.add(new Object[]{sm[0], sm[1], sm[2], Boolean.FALSE, camera});
+                pieceY.add(-1);
             }
             px = null;
             if (pics.size() >= 100) break;
@@ -462,6 +465,42 @@ final class SheetSaver {
                     hRatios[i] = cut && standH > 0 ? Math.max(0.2f, Math.min(1.5f, r.h / (float) standH)) : 1f;
                 } catch (Throwable e) { tags[i] = null; }
             }
+            // v46: a turnaround sheet — three whole standing figures of about one height in a row — is the front, the side
+            // and the back, left to right: when the first is read as a face and the last as a back, the middle one is the
+            // side and the first the front, whatever their faces said (रमेश's profile was read as a back, गौरी's front as
+            // a three-quarter, and she had no front)
+            boolean[] canon = new boolean[pics.size()];
+            int[] sheetOf = new int[pics.size()];
+            java.util.Arrays.fill(sheetOf, -1);
+            for (int k = 0; k < sheets.size(); k++) for (int j = sheets.get(k)[0]; j < sheets.get(k)[0] + sheets.get(k)[1] && j < pics.size(); j++) sheetOf[j] = k;
+            for (int[] gr : sheets) {
+                // (the sheet's first row: three whole standing figures side by side, of about one height)
+                if (gr[1] < 3 || gr[0] + 3 > pics.size()) continue;
+                boolean ok = true;
+                int h0 = (Integer) pics.get(gr[0])[2], y0 = pieceY.get(gr[0]);
+                for (int j = gr[0]; j < gr[0] + 3; j++) {
+                    if (tags[j] != null && (tags[j].pose == com.tarun.kahani.core.PoseSense.SIT || tags[j].pose == com.tarun.kahani.core.PoseSense.LIE
+                            || tags[j].pose == com.tarun.kahani.core.PoseSense.CROUCH)) ok = false;
+                    int hj = (Integer) pics.get(j)[2], wj = (Integer) pics.get(j)[1];
+                    if (hj < h0 * 0.9f || hj > h0 * 1.11f || wj > hj * 0.8f || cuts[j] == null) ok = false;
+                    if (gr[1] > 3 && Math.abs(pieceY.get(j) - y0) > h0 * 0.3f) ok = false;
+                }
+                if (!ok) continue;
+                // a face in the first two and none seen in the third (or the third read as a back): the front, the
+                // profile and the back — whatever the faces said (दादाजी's bald head from behind was read as a front
+                // and became his picture; चिंकी's front in his red cap was read as a side)
+                float g0 = guessed[gr[0]], g2 = guessed[gr[0] + 2];
+                boolean turn = g0 != com.tarun.kahani.core.Angles.BACK && cuts[gr[0]].eyesSeen
+                        && (g2 == com.tarun.kahani.core.Angles.BACK && (gr[1] == 3 || cuts[gr[0] + 1].eyesSeen) || (!cuts[gr[0] + 2].eyesSeen && cuts[gr[0] + 1].eyesSeen));
+                if (!turn) continue;
+                guessed[gr[0]] = com.tarun.kahani.core.Angles.FRONT;
+                if (guessed[gr[0] + 1] == com.tarun.kahani.core.Angles.BACK || guessed[gr[0] + 1] == com.tarun.kahani.core.Angles.FRONT
+                        || Math.abs(Math.abs(guessed[gr[0] + 1]) - Math.abs(com.tarun.kahani.core.Angles.THREE_QUARTER)) < 1) guessed[gr[0] + 1] = com.tarun.kahani.core.Angles.SIDE;
+                guessed[gr[0] + 2] = com.tarun.kahani.core.Angles.BACK;
+                // (a figure as tall as its two neighbours on the sheet is whole, not a half figure: रमेश's narrow profile
+                // was taken for one cut off, and left out of the side's place)
+                for (int j = gr[0]; j < gr[0] + 3; j++) { if (tags[j] != null) { tags[j].angle = guessed[j]; tags[j].cut = false; } canon[j] = true; }
+            }
             // v26: every slot (front, three-quarter, side, back) takes the best real picture guessed at that angle —
             // the largest one; the others of that angle go to the library as more pictures of the same thing.
             // A slot the user gave nothing for stays empty: no drawn view is ever put there.
@@ -473,13 +512,30 @@ final class SheetSaver {
             long maxArea = 1;
             for (Object[] o : pics) maxArea = Math.max(maxArea, (long) (Integer) o[1] * (Integer) o[2]);
             int mainI = -1; float mainS = -1e9f;
-            for (int pass = 0; pass < 2 && mainI < 0; pass++) {
+            // (v46: a whole standing figure first — the cow's only "front" was her sitting on the grass)
+            for (int pass = 0; pass < 4 && mainI < 0; pass++) {
                 for (int i = 0; i < pics.size(); i++) {
-                    float want = pass == 0 ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.THREE_QUARTER;
+                    float want = pass % 2 == 0 ? com.tarun.kahani.core.Angles.FRONT : com.tarun.kahani.core.Angles.THREE_QUARTER;
                     if (Math.abs(Math.abs(guessed[i]) - Math.abs(want)) > 1) continue;
+                    if (pass < 2 && tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
+                            || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
+                    // (an animal with its head down, grazing, is no main picture: its eyes low in the figure)
+                    if (pass < 2 && beast && cuts[i] != null && cuts[i].faceFound && cuts[i].eyeY > 0.42f) continue;
                     float sc = mainScore(cuts[i], tags[i], guessed[i], (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2], maxArea, hRatios[i]);
+                    if (canon[i]) sc += 1000;      // v46: a turnaround's own front before any face of an expressions sheet
                     if (sc > mainS) { mainS = sc; mainI = i; }
                 }
+            }
+            // v46: none read as a front or a three-quarter (an animal's face the face finder cannot read): the first
+            // whole standing figure given is the front — a turnaround sheet begins with it
+            if (mainI < 0) {
+                for (int i = 0; i < pics.size() && mainI < 0; i++) {
+                    if (tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
+                            || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
+                    mainI = i;
+                }
+                if (mainI < 0) mainI = 0;
+                guessed[mainI] = com.tarun.kahani.core.Angles.FRONT;
             }
             if (mainI >= 0) angles[mainI] = com.tarun.kahani.core.Angles.FRONT;
             // v41: a view is the front's figure turned, so about as tall for its width as the front (a close-up or a
@@ -490,6 +546,9 @@ final class SheetSaver {
                 int best = -1; long bestArea = -1; int bestRank = -1;
                 for (int i = 0; i < pics.size(); i++) {
                     if (i == mainI || guessed[i] != sa) continue;
+                    // v46: a front from a turnaround takes its three-quarter from the same sheet, or none (the rig turns the
+                    // front): दादाजी's was him eating a mango, from his sheet of actions
+                    if (sa == com.tarun.kahani.core.Angles.THREE_QUARTER && mainI >= 0 && canon[mainI] && sheetOf[i] != sheetOf[mainI]) continue;
                     // v39: a view turns the rigged figure: a whole standing figure only (never half-length or seated)
                     if (tags[i] != null && (tags[i].cut || tags[i].pose == com.tarun.kahani.core.PoseSense.SIT || tags[i].pose == com.tarun.kahani.core.PoseSense.LIE
                             || tags[i].pose == com.tarun.kahani.core.PoseSense.CROUCH)) continue;
@@ -502,6 +561,15 @@ final class SheetSaver {
                         float off = com.tarun.kahani.core.Art.facingOffset(r);
                         rank = (!r.eyesSeen ? 2 : 0) + (Float.isNaN(off) || Math.abs(off) < 0.1f ? 1 : 0);
                     }
+                    // v46: a whole figure standing as tall as the tallest (a turnaround's) before a sitting or bending one
+                    if (hRatios[i] >= 0.85f) rank += 4;
+                    if (canon[i]) rank += 8;        // the turnaround's own side and back first
+                    // (then a calm standing figure, from the same sheet as the front: the same clothes, the same cap —
+                    // दादाजी's three-quarter was him eating a mango, चिंकी's was in another hat)
+                    if (tags[i] != null && tags[i].pose == com.tarun.kahani.core.PoseSense.STAND) rank += 2;
+                    if (tags[i] != null && (tags[i].emotion == com.tarun.kahani.core.PoseSense.NEUTRAL || tags[i].emotion == com.tarun.kahani.core.PoseSense.HAPPY)) rank += 1;
+                    if (tags[i] != null && tags[i].m != null && tags[i].m.handAtFace > 0.4f) rank -= 6;     // eating, thinking: a hand at the face
+                    if (mainI >= 0 && sheetOf[i] >= 0 && sheetOf[i] == sheetOf[mainI]) rank += 3;
                     long area = (long) (Integer) pics.get(i)[1] * (Integer) pics.get(i)[2];
                     if (rank > bestRank || (rank == bestRank && area > bestArea)) { bestRank = rank; bestArea = area; best = i; }
                 }

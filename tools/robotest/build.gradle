@@ -4,6 +4,8 @@ repositories { mavenCentral() }
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 sourceSets {
     main { java { srcDirs = ['../../app/src/main/java'] } }
+    // v46: the desktop tools' checkers (Sundar46Check) are used by the tests too
+    test { java { srcDirs = ['src/test/java', '../jvm'] } }
 }
 dependencies {
     compileOnly files("${System.getProperty('user.home')}/.cache/kahani/android-all-14.jar")

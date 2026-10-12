@@ -6598,6 +6598,120 @@ public class AppTest {
      * lies still, the princess and the queen weep, the queen draws a white sheet over him; in the second story the
      * grandfather ill in bed passes away (no stagger, already lying), a white sheet, a cut finger bleeds and is bandaged.
      */
+    /**
+     * v46 (the user: ten short scripts for their Pixar-style characters of सुंदरपुर गाँव, with sixteen pictures — a
+     * turnaround and a pose sheet for each of रमेश, सीता, आरव, अनाया, दादाजी, चिंकी the monkey and गौरी the cow, and two
+     * pictures of the village; "retest all with new scripts and characters"): every picture uploaded as on the phone,
+     * split into its figures and given to its character, the village used as the place; each of the ten scripts read
+     * (the "Script N: title" heading, the cast and the place lists) and directed with these pictures, and every film
+     * checked for what its script says happens (Sundar46Check).
+     */
+    @Test
+    public void v46SundarpurTenScriptsWithTheUsersPictures() throws Exception {
+        android.content.Context ctx = RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("kahani", 0).edit().putString("online", "0").putString("skipLogin", "1").commit();
+        File root = ASSETS.getParentFile().getParentFile().getParentFile().getParentFile();
+        File dir = new File(root, "tools/testdata/sheets46"), stories = new File(root, "tools/testdata/v46stories");
+        String script = new String(Files.readAllBytes(new File(stories, "s01.txt").toPath()), "UTF-8");
+        Story st = ScriptParser.parse(script);
+        assertEquals("गौरी की मदद", st.title);
+        assertEquals("seven characters", 7, st.characters.size());
+        Project p = Project.create(ctx);
+        p.write("script.txt", script);
+        ActivityController<MainActivity> ac = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity a = ac.get();
+        java.lang.reflect.Field pf = MainActivity.class.getDeclaredField("project");
+        pf.setAccessible(true);
+        pf.set(a, p);
+        Method keyFor = MainActivity.class.getDeclaredMethod("keyFor", Story.CharacterDef.class);
+        keyFor.setAccessible(true);
+        Method onResult = MainActivity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+        onResult.setAccessible(true);
+        java.lang.reflect.Field tf = MainActivity.class.getDeclaredField("anglesTarget");
+        tf.setAccessible(true);
+        String[][] who = {
+                {"रमेश", "09_ramesh_turn.jpg,14_ramesh_poses.jpg"}, {"सीता", "10_sita_turn.jpg,12_sita_poses.jpg"},
+                {"आरव", "16_aarav_turn.jpg,03_aarav_poses.jpg"}, {"अनाया", "11_anaya_turn.jpg,15_anaya_poses.jpg"},
+                {"दादाजी", "04_dadaji_turn.jpg,07_dadaji_poses.jpg"}, {"चिंकी", "13_chinki_turn.jpg,05_chinki_poses.jpg"},
+                {"गौरी", "06_gauri_turn.jpg,08_gauri_poses.jpg"}};
+        StringBuilder rep = new StringBuilder();
+        for (String[] w : who) {
+            Story.CharacterDef c = null;
+            for (Story.CharacterDef x : st.characters) if (x.displayName.equals(w[0])) c = x;
+            assertNotNull(w[0], c);
+            rep.append(w[0]).append(": ").append(upload(a, onResult, tf, "angles:char:" + keyFor.invoke(a, c) + ":" + c.shown(), dir, w[1].split(","))).append('\n');
+        }
+        rep.append("village: ").append(upload(a, onResult, tf, "angles:scene:1:सुंदरपुर गाँव", dir, new String[]{"02_village_street.jpg", "01_village_aerial.jpg"})).append('\n');
+        System.out.println(rep);
+        String cast = p.read("cast.txt");
+        System.out.println(cast);
+        Art art = Art.fromManifest(cast, st, p.loader());
+        for (Story.CharacterDef c : st.characters) {
+            Art.Sprite sp = art.sprites.get(c.id);
+            assertNotNull(c.displayName + " has a picture", sp);
+            int views = 0;
+            for (int i = 0; i < 3; i++) if (sp.view(i) != null) views++;
+            assertTrue(c.displayName + " has its turned views too (" + views + ")", views >= 1);
+            if (c.look.isHumanoid()) assertTrue(c.displayName + "'s face is found", sp.faceKnown);
+        }
+        // the user's second batch: three more sheets of दादाजी (his faces, a second turnaround, his actions), three of
+        // चिंकी in a red cap (poses in a beanie, a turnaround, his faces), the mango sacks with the brass pot and the stick
+        rep.setLength(0);
+        String[][] more = {{"दादाजी", "19_dadaji_expressions.jpg,22_dadaji_turn_b.jpg,23_dadaji_actions.jpg"},
+                {"चिंकी", "20_chinki_beanie_poses.jpg,24_chinki_cap_faces.jpg,21_chinki_cap_turn.jpg"}};
+        for (String[] w : more) {
+            Story.CharacterDef c = null;
+            for (Story.CharacterDef x : st.characters) if (x.displayName.equals(w[0])) c = x;
+            rep.append(w[0]).append(": ").append(upload(a, onResult, tf, "angles:char:" + keyFor.invoke(a, c) + ":" + c.shown(), dir, w[1].split(","))).append('\n');
+        }
+        rep.append("mangoes: ").append(upload(a, onResult, tf, "angles:obj:आम:आम", dir, new String[]{"17_props_mango_pot_stick.jpg"})).append('\n');
+        System.out.println(rep);
+        cast = p.read("cast.txt");
+        art = Art.fromManifest(cast, st, p.loader());
+        for (Story.CharacterDef c : st.characters) assertNotNull(c.displayName + " still has a picture", art.sprites.get(c.id));
+        File keep = new File(OUT.getParentFile(), "v46sundar");
+        deleteTree(keep);
+        keep.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile()) Files.copy(f.toPath(), new File(keep, f.getName()).toPath());
+        // and the rainy mango tree as the place (for the mango and the rain stories): a copy of the project with it
+        // alone as the place (the village's pictures left out of that copy: two places would take turns behind the shots)
+        java.util.Set<String> village = new java.util.HashSet<String>();
+        for (String l : cast.split("\n")) { String[] f = l.split("\\|"); if (f.length >= 3 && f[0].equals("scene")) village.add(f[f.length - 1]); }
+        String placeRep = upload(a, onResult, tf, "angles:scene:1:सुंदरपुर गाँव", dir, new String[]{"18_place_mango_tree_rain.jpg"});
+        System.out.println("mango tree: " + placeRep + "\n" + p.read("cast.txt"));
+        File keep2 = new File(OUT.getParentFile(), "v46mango");
+        deleteTree(keep2);
+        keep2.mkdirs();
+        for (File f : p.dir.listFiles()) if (f.isFile() && !f.getName().equals("cast.txt")) Files.copy(f.toPath(), new File(keep2, f.getName()).toPath());
+        StringBuilder mangoCast = new StringBuilder();
+        // (the sheet's first panel, the orchard from the air, is taken as the wide view; for people standing in it the
+        // second, at eye level, is the right one — the user would put that one first: here it is swapped in)
+        String wide = null, rev = null;
+        for (String l : p.read("cast.txt").split("\n")) { String[] f = l.split("\\|"); if (f.length >= 3 && f[0].equals("scene") && f[1].equals("1")) wide = f[2]; if (f.length >= 3 && f[0].equals("scene") && f[1].equals("1r")) rev = f[2]; }
+        for (String l : p.read("cast.txt").split("\n")) {
+            String[] f = l.split("\\|");
+            if (f.length >= 3 && f[0].equals("scene") && village.contains(f[f.length - 1])) continue;
+            if (f.length >= 3 && f[0].equals("scene") && f[1].equals("1") && rev != null) l = "scene|1|" + rev;
+            else if (f.length >= 3 && f[0].equals("scene") && f[1].equals("1r") && wide != null) l = "scene|1r|" + wide;
+            mangoCast.append(l).append('\n');
+        }
+        Files.write(new File(keep2, "cast.txt").toPath(), mangoCast.toString().getBytes("UTF-8"));
+        // the ten scripts, each directed with these pictures and checked
+        StringBuilder bad = new StringBuilder();
+        for (int i = 1; i <= 10; i++) {
+            Story s = ScriptParser.parse(new String(Files.readAllBytes(new File(stories, String.format(java.util.Locale.US, "s%02d.txt", i)).toPath()), "UTF-8"));
+            Art sa = Art.fromManifest(cast, s, p.loader());
+            Director d = new Director(s, new Director.Options());
+            d.prepare();
+            Film film = d.direct(sa);
+            List<String> b = com.tarun.kahani.jvm.Sundar46Check.check(i, s, film);
+            System.out.println("v46 s" + i + " " + s.title + ": " + (b.isEmpty() ? "staged as written" : b));
+            if (!b.isEmpty()) bad.append("s").append(i).append(' ').append(b).append('\n');
+        }
+        assertEquals("every script staged as written", "", bad.toString());
+        ac.pause().stop().destroy();
+    }
+
     @Test
     public void v45WoundsBloodBandagesAndDeaths() throws Exception {
         Film f = v45Film("s01_battle_death.txt");

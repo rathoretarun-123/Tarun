@@ -1,4 +1,4 @@
-# Kahani Film — v45
+# Kahani Film — v46
 
 An Android app that turns your story into an animated family film.
 Paste a story — in **Hindi, English or Hinglish** — optionally add pictures and voices, and tap **🎬 Make film**.
@@ -6,6 +6,36 @@ The studio prepares the voices, music, natural sounds, scenes, camera and lip mo
 All screens and instructions in the app are in English; the story, dialogue and voices can be Hindi, English or Hinglish.
 
 **APK:** [`release/KahaniFilm.apk`](release/KahaniFilm.apk) (Android 8.0 or newer)
+
+## New in v46
+
+You sent ten short scripts for your Pixar-style characters of सुंदरपुर गाँव — रमेश, सीता, आरव, अनाया, दादाजी, चिंकी the
+monkey and गौरी the cow — with 24 pictures, and asked to retest everything with them.
+
+* **Your script format is read:**
+  * "Script 1: गौरी की मदद" is the title (it was read as a character speaking);
+  * "पात्र:" and "जगह:" are the cast and the place;
+  * "(बंदर)" is a monkey and "(गाय)" a cow;
+  * "(औरत)" is a woman;
+  * a cap the story gives someone ("दादाजी की टोपी") is on their head.
+* **What is said is done:** "मैं छाता लाता हूँ!", "चलो, सब मिलकर खींचते हैं", "लो चिंकी, ये रहा आम", "भागो!", "मैं भी!"
+  — the speaker (or everyone) does it after saying it.
+* **The village, staged:** the cow stuck in the mud and pulled out on a rope by all five; the monkey's mango; sitting
+  under the tree (दादाजी on a stool); rain with a dry thatched shelter and the cow brought in; the lost calf found;
+  a race; flags for the fair and a rangoli; the heavy water pot and the help with it; the cap snatched and given back;
+  rubbish picked up and swept.
+* **Your pictures, through the app's own upload:** every sheet split; front, side and back from your turnarounds.
+  Five real bugs found and fixed:
+  * the cow had no front picture;
+  * her grazing pose became her main picture;
+  * दादाजी's back was taken for his front;
+  * रमेश's profile was taken for a back;
+  * a three-quarter came from another outfit.
+* **Checked:** your ten scripts 10 of 10 staged as written; all 783 test sentences pass; 100,000 generated stories;
+  the phone-emulator suite. Details and frames: [`docs/testing-v46.md`](docs/testing-v46.md).
+* **Sorry — said plainly:** still not Pixar or Disney. Your pose and expression pictures are kept but the rig moves your
+  front, side and back pictures instead. The mud, the shelter and the props are drawn, simpler than your pictures. And
+  no promise of "no bug at all".
 
 ## New in v45
 

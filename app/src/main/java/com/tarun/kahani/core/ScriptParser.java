@@ -217,6 +217,8 @@ public final class ScriptParser {
             if (start < 0) story.warnings.add("No 'Scene 1' / 'दृश्य 1' heading found — the whole story is treated as one scene.");
             parsePreamble(story, pre);
             if (start >= 0) buildAliases(story);
+            String named = start >= 0 ? scriptTitle(Txt.clean(lines[start])) : null;
+            if (named != null && named.length() > 0 && story.title.length() == 0) story.title = named;
             Story.Scene sc = new Story.Scene();
             sc.number = 1; sc.heading = "दृश्य 1";
             story.scenes.add(sc);
@@ -444,12 +446,24 @@ public final class ScriptParser {
             if (l.length() == 0) continue;
             if (isCharHeader(l) || isPlaceHeader(l)) { lists = true; continue; }
             String h = l.replaceAll("[#*:：\\-–—=_\\s]+$", "").replaceAll("^[#*\\s]+", "").trim();
-            if (!lists || h.length() > 30) continue;
+            if (!lists) continue;
+            if (scriptTitle(l) != null) return i;
+            if (h.length() > 30) continue;
             if (h.matches("^(पटकथा|स्क्रिप्ट|स्क्रीनप्ले|कहानी शुरू|स्क्रिप्ट शुरू|पटकथा शुरू|कहानी आरंभ|स्क्रिप्ट आरंभ|पटकथा आरंभ|संवाद|संवाद और दृश्य|कहानी)$")
                     || h.toLowerCase(java.util.Locale.ROOT).matches("^(the )?(script|screenplay|story|dialogues?)( (starts|begins))?$") || h.toLowerCase(java.util.Locale.ROOT).matches("^fade in[:.]?$")) return i;
         }
         return -1;
     }
+
+    /** v46: "Script 1: गौरी की मदद", "स्क्रिप्ट 2 - चिंकी और आम", "कहानी 3: …" after the lists: the script's title; else null. */
+    static String scriptTitle(String l) {
+        Matcher m = SCRIPT_N.matcher(l);
+        if (!m.matches()) return null;
+        String t = Txt.stripQuotes(m.group(2).trim()).replaceAll("[:：\\-–—\\s]+$", "").trim();
+        return t.length() <= 60 && !t.contains("\"") && !t.contains("“") ? t : null;
+    }
+    static final Pattern SCRIPT_N = Pattern.compile("^[#*\\s]*(?:script|screenplay|story|स्क्रिप्ट|पटकथा|कहानी)\\s*(?:no\\.?|नं\\.?|#)?\\s*([0-9]{1,3})\\s*[:：.\\-–—)]+\\s*(.*)$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     /** v40: "समय - रात 11 बजे, ठंड वाली रात" / "Time: night" before the script: the time it states, else null. */
     static String timeLine(String l) {

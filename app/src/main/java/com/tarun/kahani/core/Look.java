@@ -19,7 +19,10 @@ public final class Look {
     // hair
     public static final int H_NONE = 0, H_BRAID = 1, H_PIGTAILS = 2, H_BUN = 3, H_SHORT = 4, H_LONG = 5, H_PONYTAIL = 6;
     // headwear
-    public static final int HW_NONE = 0, HW_TURBAN = 1, HW_WITCH_HAT = 2, HW_PALLU = 3, HW_HORNS = 4, HW_CROWN = 5, HW_HOOD = 6;
+    public static final int HW_NONE = 0, HW_TURBAN = 1, HW_WITCH_HAT = 2, HW_PALLU = 3, HW_HORNS = 4, HW_CROWN = 5, HW_HOOD = 6,
+            HW_CAP = 7;     // v46: a white cap (गांधी टोपी) the script gives its owner ("दादाजी की टोपी")
+    /** v46: headwear that can be snatched off and worn by another (a turban, a cap). */
+    public static boolean takeable(int hw) { return hw == HW_TURBAN || hw == HW_CAP; }
     // gadgets held when nothing else is in the hands
     public static final int GD_NONE = 0, GD_PHONE = 1, GD_CONTROLLER = 2, GD_LAPTOP = 3;
 

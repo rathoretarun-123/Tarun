@@ -2194,8 +2194,12 @@ public final class Puppet {
 
     static void drawHeadwear(Gfx g, Look l, Pose p, float r) {
         int hw = l.headwear;
-        if (p.wearsTurban) { drawTurbanShape(g, 0, -r * 0.75f, r * 1.2f, p.turbanColor, p.turbanBand, false); return; }
-        if (p.noHeadwear && hw == Look.HW_TURBAN) return;
+        if (p.wearsTurban) {
+            if (p.turbanCap) Village.cap(g, 0, -r * 0.62f, r * 0.95f, p.turbanColor, p.facing);
+            else drawTurbanShape(g, 0, -r * 0.75f, r * 1.2f, p.turbanColor, p.turbanBand, false);
+            return;
+        }
+        if (p.noHeadwear && Look.takeable(hw)) return;
         if (p.disguised && l.kind == Look.WITCH) {
             // front edge of the shawl over the hair line
             g.color(0xFFC9772E);
@@ -2214,6 +2218,9 @@ public final class Puppet {
         switch (hw) {
             case Look.HW_TURBAN:
                 drawTurbanShape(g, 0, -r * 0.62f, r, l.headColor, l.headBand, l.kalgi);
+                break;
+            case Look.HW_CAP:
+                Village.cap(g, 0, -r * 0.55f, r * 0.95f, l.headColor, p.facing);
                 break;
             case Look.HW_HOOD: {
                 // the front edge of the hood over the hair line

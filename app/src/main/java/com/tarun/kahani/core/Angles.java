@@ -879,7 +879,9 @@ public final class Angles {
         // side, a back's "face" (the neck, the ears) is in the middle
         float side0 = beast ? Float.NaN : Art.facingOffset(r);
         boolean profile = !Float.isNaN(side0) && Math.abs(side0) >= 0.12f;
-        if (beast) { if (dark > 0.42f || faceW > 1.0f || (hairAbove > 2.2f && skin < 0.3f)) return BACK; }
+        // (v46: an animal whose pair of eyes is seen is no back, though its eyes are big and dark and its face wide — the
+        // user's cow, every one of her six figures, and the monkey's profile were read as backs: the cow had no front)
+        if (beast) { if ((!r.eyesSeen && (dark > 0.42f || faceW > 1.0f)) || dark > 0.9f || faceW > 1.4f || (hairAbove > 2.2f && skin < 0.3f)) return BACK; }
         // (v40: a profile has half the face box empty and an eye no darker than its shadowed cheek: not a back —
         // अर्जुन's and कबीर's profiles, a girl's profile and सिया's turned view were read as backs)
         // (and the forehead: a face found with skin right above its eyes is a face, whatever its "eyes" landed on — a

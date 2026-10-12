@@ -382,8 +382,15 @@ public final class Film {
                                   //      on its side, the car's crumpled bumper and smoke from its bonnet, the dust
             FX_ANIMAL = 54,
             FX_BLOOD = 55,        // v45: a wound bleeding on actor a (kind: BLOOD_*), from t0 until t1 (bandaged, or the scene's end)
-            FX_SHROUD = 56;       // v45: a white sheet over the one lying dead (a), from t0       // v44: an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2
-                                  //      it lifts its head and bolts off the edge of the picture (hunting), or stays
+            FX_SHROUD = 56,       // v45: a white sheet over the one lying dead (a), from t0
+            // v46: the village
+            FX_MUD = 57,          // a patch of mud at x (color: its width); a (stuck in it) sunk to the knees until t2
+            FX_BUNTING = 58,      // strings of little flags hung across the top of the place, from x (y: to x) — put up from t0 to t2
+            FX_LITTER = 59,       // one piece of rubbish lying at x (y: below the ground line, kind: what it is) until t1 (picked up, swept)
+            FX_ROPE = 60,         // a rope from the hands of a to the neck of b (an animal), t0 to t1
+            FX_SHED = 61;         // a thatched shelter (छप्पर) on posts at x (color: its width), sized for actor a
+    // FX_ANIMAL (v44): an animal of the place at x (kind: Look.SP_*; color: facing): grazing, then at t2 it lifts its
+    // head and bolts off the edge of the picture (hunting), or stays; v46: y = 3 is a calf, found, that walks to its mother (b)
     /** v44: FX_INSERT kinds and the moves of a driver's feet and hands (FX_INSERT.color bits). */
     public static final int INS_STEER = 0, INS_PEDALS = 1, INS_CYCLE_FEET = 2, INS_ARROW = 3, INS_BOW = 4;
     public static final int INS_MOVE_GO = 1, INS_MOVE_BRAKE = 2, INS_MOVE_TURN_L = 4, INS_MOVE_TURN_R = 8, INS_MOVE_HARD = 16;

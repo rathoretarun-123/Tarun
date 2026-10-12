@@ -19,7 +19,9 @@ public final class Pose {
             // v43: the kitchen's knife and rolling pin (belan)
             I_KNIFE = 33, I_ROLLER = 34,
             // v44: the bow (an arrow on it while drawn), a wine glass, a beer mug, a whisky glass, a snowball, a spear
-            I_BOW = 35, I_WINE = 36, I_BEER = 37, I_WHISKY = 38, I_SNOWBALL = 39, I_SPEAR = 40, I_SHIELD = 41;
+            I_BOW = 35, I_WINE = 36, I_BEER = 37, I_WHISKY = 38, I_SNOWBALL = 39, I_SPEAR = 40, I_SHIELD = 41,
+            // v46: a mango, a clay water pot (घड़ा), a bundle of grass, a string of little flags (झंडियाँ), a sack for rubbish
+            I_MANGO = 42, I_POT = 43, I_GRASS = 44, I_FLAGS = 45, I_SACK = 46;
 
     /** v37/v44: a make-up tool (it goes to its place on the face), not a drink or a weapon. */
     public static boolean makeup(int item) { return item >= I_KAJAL && item <= I_ROPE && item != I_MUG && item != I_ROPE; }
@@ -54,6 +56,8 @@ public final class Pose {
     /** v45: dead — still, no breath. */
     public boolean dead;
     public int turbanColor = 0xFF2F5DB5, turbanBand = 0;
+    /** v46: the headwear another wears (wearsTurban) is a cap, not a turban. */
+    public boolean turbanCap;
     public boolean carrying;           // arms up holding something on shoulder
     public float time;                 // seconds, for idle motion (hair, cloak)
     public float wind;                 // wind on hair and clothes (+ blows to the right)
@@ -96,7 +100,7 @@ public final class Pose {
         q.armL = armL; q.armR = armR; q.elbowL = elbowL; q.elbowR = elbowR; q.walk = 0; q.walkAmt = 0; q.tilt = tilt; q.headTilt = headTilt;
         q.bob = 0; q.squash = 1f; q.mountMouth = mountMouth; q.holdR = holdR; q.holdL = holdL; q.holdColor = holdColor;
         q.disguised = disguised; q.noHeadwear = noHeadwear; q.wearsTurban = wearsTurban; q.redFace = redFace; q.tears = tears; q.sweat = sweat;
-        q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.carrying = carrying;
+        q.eyesClosed = eyesClosed; q.fist = fist; q.glowWand = glowWand; q.turbanColor = turbanColor; q.turbanBand = turbanBand; q.turbanCap = turbanCap; q.carrying = carrying;
         q.time = time; q.wind = wind; q.wet = wet; q.sit = bodyState == SIT ? 1f : sit; q.nod = nod; q.wave = wave; q.twirl = twirl; q.swing = swing;
         q.turbanOwner = turbanOwner; q.seed = seed; q.umbrellaOpen = umbrellaOpen; q.umbrellaAmt = umbrellaAmt; q.lie = lie; q.seat = seat; q.toMouth = toMouth; q.toMouthItem = toMouthItem;
         q.gazeX = gazeX; q.gazeY = gazeY; q.gazeHeld = gazeHeld; q.turnBody = turnBody; q.turnHead = turnHead;

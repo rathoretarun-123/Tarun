@@ -35,6 +35,10 @@ public final class Art {
         public float turbanY;       // bottom of turban (0 = none / unknown)
         public int skin = 0xFFD9A074, lip = 0xFF9C4A3E, lid = 0xFFC88A66;
         public boolean faceKnown;
+        /** v47: the mouth point was moved onto the line where the lips meet (Cutout.lipLine). */
+        public boolean lipLine;
+        /** v47: the mouth point is surely on the lips (else the inside of the mouth is never painted: the mesh alone parts them). */
+        public boolean lipSure = true;
         /** v38: the picture's own mouth is open (teeth or the dark inside show between the lips): it is never painted open further. */
         public boolean mouthOpen;
         /** v40: the mouth point was moved onto the lips found by their colour (it had no lips under it). */
@@ -281,6 +285,16 @@ public final class Art {
             }
         }
         if (m > 20 && dark > m * 0.2f) s.mouthOpen = true;
+        // v47: a closed mouth's point onto the line where the lips meet, when it lies off it (on the chin under a
+        // closed smile, or on the nose)
+        float eyeD = Math.abs(s.eyeRX - s.eyeLX) * r.w;
+        if (!s.mouthOpen && eyeD >= 8 && Math.abs(s.eyeLY - s.eyeRY) * r.h < eyeD * 0.25f) {
+            float line = Cutout.lipLine(r.px, r.w, r.h, s.mouthX * r.w, s.mouthY * r.h, s.mouthHW * r.w, eyeD, (s.eyeLY + s.eyeRY) / 2 * r.h);
+            if (!Float.isNaN(line)) { s.mouthY = line / r.h; s.mouthMoved = true; s.lipLine = true; }
+        }
+        // v47: the lips are sure where the mouth is open in the picture, or on the line where they meet (lip colour alone is not enough: stubble on a chin reads as lip colour)
+        s.lipSure = s.mouthOpen || s.lipLine
+                || (eyeD >= 8 && Cutout.lineStrength(r.px, r.w, r.h, s.mouthX * r.w, s.mouthY * r.h, s.mouthHW * r.w, eyeD) >= 12);
     }
 
     /**

@@ -1801,6 +1801,18 @@ public final class Renderer {
             }
         }
         if (bath != null || scr != null) { mo.dx = 0; mo.dy = 0; mo.rot = 0; }
+        // v47: a sofa shared by a grown-up and children is one sofa, at the grown-up's height: a child sits up on its
+        // cushion (lifted, the legs hanging), not sunk in a smaller sofa of its own in front of the others
+        float sofaH = h * seatScale(a), sofaLift = 0;
+        if (seat == Film.SEAT_SOFA && p.sit > 0 && p.body != Pose.LIE && ride == null && play == null) {
+            for (Film.Fx f : s.fx) {
+                if (f.type != Film.FX_SEAT || f.a != a || f.kind != Film.SEAT_SOFA) continue;
+                float[] sp2 = sofaSpan(s, f, sofaH);
+                if (sp2 != null && sp2[4] > sofaH) { sofaLift = (sp2[4] - sofaH) * seatTopOf(Film.SEAT_SOFA) * Math.min(1, p.sit); sofaH = sp2[4]; }
+                break;
+            }
+            mo.dy -= sofaLift * scale;
+        }
         float px = x + mo.dx, py = y + mo.dy;
         if (camStill && pixelStep > 0) { px = Math.round(px / pixelStep) * pixelStep; py = Math.round(py / pixelStep) * pixelStep; }
         g.translate(px, py);
@@ -1990,6 +2002,7 @@ public final class Renderer {
             g.save();
             g.setAlpha(Math.min(1, (p.sit - 0.35f) / 0.4f));
             seatSpan = null;
+            if (sofaLift > 0) g.translate(0, sofaLift);          // v47: the sofa stays on the floor under a lifted child
             if (seat == Film.SEAT_SOFA) for (Film.Fx f : s.fx) {
                 if (f.type != Film.FX_SEAT || f.a != a || f.kind != Film.SEAT_SOFA) continue;
                 float[] sp2 = sofaSpan(s, f, h * seatScale(a));
@@ -2000,7 +2013,7 @@ public final class Renderer {
                 }
                 break;
             }
-            drawSeat(g, seat, h * seatScale(a), true, p.facing, sp != null);
+            drawSeat(g, seat, seat == Film.SEAT_SOFA ? sofaH : h * seatScale(a), true, p.facing, sp != null);
             seatSpan = null;
             g.restore();
         }
@@ -3401,6 +3414,9 @@ public final class Renderer {
         // is already open (teeth showing) opens only half as far
         float open = p.mouth;
         if (sp != null && sp.mouthOpen) open *= 0.5f;
+        // v47: a mouth point not surely on the lips (on a chin, a cheek) moves the face only a little: the user's
+        // phone film opened a mouth on a smiling man's chin
+        else if (sp != null && !sp.lipSure) open *= 0.35f;
         st.jaw = open > 0.04f ? open : 0;
         st.mountJaw = Math.min(1, p.mountMouth * 1.3f);          // v34: the rider's animal speaks with its own jaw
         st.lipWide = Math.max(0, Math.min(1, (p.mouthWide - 0.5f) * 2.2f));
@@ -4187,7 +4203,7 @@ public final class Renderer {
             // (v38: only with the voice, and never inside a mouth the picture already shows open — that was a second
             // mouth under the real one: the "new lips")
             float m = p.mouth;
-            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown && !sp.mouthOpen) {
+            if (m > 0.06f && rigged && !rig.animal && rig.face && rig.faceImg != null && st.jaw > 0.02f && sp.faceKnown && !sp.mouthOpen && sp.lipSure) {
                 // the fine face mesh has parted the real lips: only the inside of the mouth shows between them
                 float mx = left + (sp.mouthX + (turns ? rig.yawShift(st, sp.mouthX, sp.mouthY) : 0)) * w, my = top + sp.mouthY * h, hw = sp.mouthHW * w;
                 float gap = Rig.jawDrop(hw) * st.jaw;
@@ -4666,7 +4682,7 @@ public final class Renderer {
                     float fc = f.a != null ? f.a.stateAt(t).facing : 1;
                     seatSpan = f.kind == Film.SEAT_SOFA ? sofaSpan(s, f, hh) : null;
                     float ps = perspective(s, f.y);
-                    g.save(); g.translate(f.x, s.ground + f.y); if (ps != 1f) g.scale(ps, ps); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, false, fc); drawSeat(g, f.kind, hh, true, fc); g.restore();
+                    g.save(); g.translate(f.x, s.ground + f.y); if (ps != 1f) g.scale(ps, ps); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, false, fc); drawSeat(g, f.kind, seatSpan != null ? seatSpan[4] : hh, true, fc); g.restore();
                     seatSpan = null;
                 } break;
                 case Film.FX_STONE: if (!behind) {

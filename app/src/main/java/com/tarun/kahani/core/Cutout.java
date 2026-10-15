@@ -536,6 +536,14 @@ public final class Cutout {
      * the eyes, or further toward the face's side when the patch is clearly lips (a three-quarter face). Pixels
      * {x, y, half width} to use instead, or null to keep the point as it is.
      */
+    /** v47: the point lies on lip colour (the test betterMouth keeps a point by). */
+    public static boolean onLipColour(int[] px, int w, int h, float mx, float my, float mhw, float d, int skin) {
+        if (px == null) return false;
+        float skinHue = PicSense.hsv(skin)[0];
+        if (skinHue < 4 || skinHue > 45) return false;
+        return lipDensity(px, w, h, mx - Math.max(2, mhw * 0.8f), my - 0.12f * d, mx + Math.max(2, mhw * 0.8f), my + 0.12f * d, skinHue) >= 0.12f;
+    }
+
     public static float[] betterMouth(int[] px, int w, int h, float exL, float exR, float ey, float mx, float my, float mhw, int skin) {
         if (px == null) return null;
         float skinHue = PicSense.hsv(skin)[0];
@@ -548,6 +556,88 @@ public final class Cutout {
         float off = Math.abs(L[0] - (exL + exR) / 2) / d;
         if (off > 0.5f && (L[3] < 0.3f || off > 1.1f)) return null;
         return new float[]{L[0], L[1], L[2]};
+    }
+
+    /**
+     * v47: the line where the lips meet — the thin dark line (darker than just above and just below it) under the
+     * mouth point's column, from a little above the point to well below it — or the point itself when that is already
+     * on the strongest such line. The user's phone film opened a second, painted mouth on a smiling man's chin: his
+     * point lay under the lips, where the stubble still read as lip colour. Returns the row (pixels) to use, or NaN
+     * to keep the point. d: the distance between the eyes; ey: the eyes' row.
+     */
+    public static float lipLine(int[] px, int w, int h, float mx, float my, float hw, float d, float ey) {
+        if (px == null || d < 8) return Float.NaN;
+        int x0 = Math.max(0, Math.round(mx - Math.max(2, Math.min(hw, 0.3f * d) * 0.6f))), x1 = Math.min(w - 1, Math.round(mx + Math.max(2, Math.min(hw, 0.3f * d) * 0.6f)));
+        int y0 = Math.max(Math.round(ey + 0.5f * d), Math.round(my - 0.3f * d)), y1 = Math.min(h - 1, Math.round(my + 0.4f * d));
+        if (y1 - y0 < 6 || x1 - x0 < 2) return Float.NaN;
+        float[] L = new float[y1 - y0 + 1];
+        for (int y = y0; y <= y1; y++) {
+            float s = 0; int n = 0;
+            for (int x = x0; x <= x1; x++) {
+                int c = px[y * w + x];
+                if ((c >>> 24) < 128) continue;
+                s += ((c >> 16 & 255) * 77 + (c >> 8 & 255) * 150 + (c & 255) * 29) >> 8; n++;
+            }
+            L[y - y0] = n > (x1 - x0) / 2 ? s / n : Float.NaN;
+        }
+        int dd = Math.max(1, Math.round(0.06f * d));
+        float best = 0, at = Float.NaN, here = 0;
+        int myI = Math.round(my);
+        for (int i = dd; i < L.length - dd; i++) {
+            float a = L[i - dd], b = L[i], c = L[i + dd];
+            if (Float.isNaN(a) || Float.isNaN(b) || Float.isNaN(c)) continue;
+            float sc = Math.min(a, c) - b;
+            if (sc > best) { best = sc; at = y0 + i; }
+            if (Math.abs(y0 + i - myI) <= Math.max(1, Math.round(0.05f * d))) here = Math.max(here, sc);
+        }
+        // a clear line (in a picture's 0..255 brightness), clearly stronger than whatever is at the point now
+        if (Float.isNaN(at) || best < 14 || here >= best * 0.55f) return Float.NaN;
+        // lips meet along a line, not at a spot (a nostril, a dimple): the line goes on to both sides of the middle
+        // (a smile's ends curve up a little: a few rows higher is still the line)
+        int ext = Math.max(2, Math.round(Math.min(hw, 0.3f * d) * 0.9f));
+        for (int side = -1; side <= 1; side += 2) {
+            int a0 = side < 0 ? Math.round(mx) - ext : Math.round(mx) + ext / 3, a1 = side < 0 ? Math.round(mx) - ext / 3 : Math.round(mx) + ext;
+            a0 = Math.max(0, a0); a1 = Math.min(w - 1, a1);
+            if (a1 - a0 < 1) return Float.NaN;
+            float sideBest = 0;
+            for (int y = Math.round(at) - 3 * dd; y <= Math.round(at) + dd; y++) {
+                if (y - dd < 0 || y + dd >= h) continue;
+                float la = colLum(px, w, a0, a1, y - dd), lb = colLum(px, w, a0, a1, y), lc = colLum(px, w, a0, a1, y + dd);
+                if (Float.isNaN(la) || Float.isNaN(lb) || Float.isNaN(lc)) continue;
+                sideBest = Math.max(sideBest, Math.min(la, lc) - lb);
+            }
+            if (sideBest < best * 0.4f) return Float.NaN;
+        }
+        return at;
+    }
+
+    /**
+     * v47: how clearly the point lies on a line where lips meet: the strongest "darker than just above and below" in
+     * the mouth's middle within a twentieth of the eye distance of the point (0..255; 12 and more is a line).
+     */
+    public static float lineStrength(int[] px, int w, int h, float mx, float my, float hw, float d) {
+        if (px == null || d < 8) return 0;
+        int a = Math.max(0, Math.round(mx - Math.max(2, Math.min(hw, 0.3f * d) * 0.6f))), b = Math.min(w - 1, Math.round(mx + Math.max(2, Math.min(hw, 0.3f * d) * 0.6f)));
+        int dd = Math.max(1, Math.round(0.06f * d)), r = Math.max(1, Math.round(0.05f * d));
+        float best = 0;
+        for (int y = Math.round(my) - r; y <= Math.round(my) + r; y++) {
+            if (y - dd < 0 || y + dd >= h) continue;
+            float la = colLum(px, w, a, b, y - dd), lb = colLum(px, w, a, b, y), lc = colLum(px, w, a, b, y + dd);
+            if (Float.isNaN(la) || Float.isNaN(lb) || Float.isNaN(lc)) continue;
+            best = Math.max(best, Math.min(la, lc) - lb);
+        }
+        return best;
+    }
+
+    /** v47: the mean brightness of row y between columns a and b (NaN when mostly see-through). */
+    private static float colLum(int[] px, int w, int a, int b, int y) {
+        float s = 0; int n = 0;
+        for (int x = a; x <= b; x++) {
+            int c = px[y * w + x];
+            if ((c >>> 24) < 128) continue;
+            s += ((c >> 16 & 255) * 77 + (c >> 8 & 255) * 150 + (c & 255) * 29) >> 8; n++;
+        }
+        return n > (b - a) / 2 ? s / n : Float.NaN;
     }
 
     private static double rect(double[] ii, int W1, int x0, int y0, int x1, int y1) {

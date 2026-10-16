@@ -1,0 +1,170 @@
+# v44 probe: the family car, two on a bike or a cycle, accidents, the royal stories (the sword, the bow, the horse,
+# the throne, the hunt), drinks, snow and hail, animals of the place, walking and talking.
+# Run by tools/jvm/com/tarun/kahani/jvm/PhenomenaProbe.java — the row format and the codes are in its header (v44 codes:
+# MISHAP: SEATNO: MOUNTED: ARCH: SNOW: INSERT:, and the context flag fam=1 putting Father (पापा) in the scene too).
+
+# ============================================================ the family car
+
+#@ cat=car-family place=road fam=1
+hi	पापा कार चलाते हैं, माँ उनके बगल वाली सीट पर बैठती हैं और राहुल पीछे की सीट पर बैठता है।	RIDE:CAR&SEATNO:BACK
+hi	माँ गाड़ी चलाती हैं और राहुल आगे की सीट पर उनके बगल में बैठता है।	RIDE:CAR&SEATNO:FRONT
+hi	राहुल पापा के साथ कार में आगे वाली सीट पर बैठता है।	RIDE:CAR&SEATNO:FRONT
+hi	सब कार में बैठते हैं; राहुल पीछे की सीट पर खिड़की के पास बैठता है।	RIDE:CAR&SEATNO:BACK
+hi	पापा ड्राइव करते हैं और राहुल पिछली सीट पर बैठकर खिड़की से बाहर देखता है।	RIDE:CAR&SEATNO:BACK
+en	Father drives the car; Mother sits beside him in the front and Rahul sits in the back seat.	RIDE:CAR&SEATNO:BACK
+en	Rahul sits in the front passenger seat while Mother drives.	RIDE:CAR&SEATNO:FRONT
+en	The family gets into the car: Father at the wheel, Rahul in the back.	RIDE:CAR&SEATNO:BACK
+
+#@ cat=car-driving place=road age=adult
+hi	राहुल कार स्टार्ट करता है, स्टीयरिंग घुमाता है और गाड़ी आगे बढ़ाता है।	RIDE:CAR&INSERT:STEER
+hi	राहुल कार चलाते हुए अचानक ज़ोर से ब्रेक दबाता है।	RIDE:CAR&INSERT:PEDALS&SFX:SCREECH
+hi	राहुल एक्सीलेरेटर दबाकर कार तेज़ चलाता है।	RIDE:CAR&INSERT:PEDALS
+hi	राहुल गाड़ी मोड़ने के लिए स्टीयरिंग व्हील घुमाता है।	RIDE:CAR&INSERT:STEER
+en	Rahul starts the car, turns the steering wheel and drives off.	RIDE:CAR&INSERT:STEER
+en	Rahul is driving when he slams on the brakes.	RIDE:CAR&INSERT:PEDALS&SFX:SCREECH
+en	Rahul steps on the accelerator and speeds away in his car.	RIDE:CAR&INSERT:PEDALS
+
+# ============================================================ two on a bike or a cycle, pedalling
+
+#@ cat=two-wheels place=street age=adult
+hi	राहुल स्कूटर चलाता है और माँ पीछे बैठती हैं।	RIDE:SCOOTER
+hi	राहुल माँ को मोटरसाइकिल पर पीछे बैठाकर बाज़ार ले जाता है।	RIDE:MOTORBIKE
+en	Rahul rides the scooter with Mother sitting behind him.	RIDE:SCOOTER
+en	Rahul takes Mother to the market on his motorbike, she sits behind him.	RIDE:MOTORBIKE
+
+#@ cat=two-wheels place=street fam=1
+hi	पापा साइकिल चलाते हैं और राहुल आगे डंडे पर बैठता है।	RIDE:BICYCLE
+hi	राहुल पापा की साइकिल के पीछे कैरियर पर बैठता है।	RIDE:BICYCLE
+en	Father rides the bicycle with Rahul sitting on the carrier behind him.	RIDE:BICYCLE
+
+#@ cat=pedalling place=street
+hi	राहुल पैडल मारते हुए तेज़ी से साइकिल चलाता है।	RIDE:BICYCLE&INSERT:CYCLE_FEET
+hi	राहुल खड़े होकर ज़ोर-ज़ोर से साइकिल के पैडल मारता है।	RIDE:BICYCLE&INSERT:CYCLE_FEET
+en	Rahul pedals his bicycle hard up the road.	RIDE:BICYCLE&INSERT:CYCLE_FEET
+
+# ============================================================ accidents
+
+#@ cat=accident place=road age=adult
+hi	राहुल की बाइक फिसल जाती है और वह सड़क पर गिर पड़ता है।	MISHAP:SKID&ACT:FALL
+hi	साइकिल चलाते हुए राहुल का संतुलन बिगड़ता है और वह साइकिल समेत गिर जाता है।	RIDE:BICYCLE&MISHAP:SKID
+hi	राहुल का स्कूटर गड्ढे में फँसकर उलट जाता है।	MISHAP:SKID
+hi	राहुल की कार एक पेड़ से टकरा जाती है।	MISHAP:CRASH&SFX:CRASH
+hi	राहुल की गाड़ी खंभे से जा टकराती है और बोनट से धुआँ निकलने लगता है।	MISHAP:CRASH&FX:WRECK
+hi	अचानक एक कुत्ता सामने आ जाता है; राहुल ज़ोर से ब्रेक लगाता है और कार बाल-बाल बचती है।	MISHAP:SWERVE&SFX:SCREECH
+en	Rahul's bike skids on the wet road and he falls off.	MISHAP:SKID&ACT:FALL
+en	Rahul's car crashes into a pole.	MISHAP:CRASH&SFX:CRASH
+en	A dog runs in front of Rahul's car; he brakes hard and swerves just in time.	MISHAP:SWERVE&SFX:SCREECH
+en	Rahul loses his balance on the bicycle and falls.	RIDE:BICYCLE&MISHAP:SKID
+
+#@ cat=accident place=out
+hi	राहुल पत्थर से ठोकर खाकर गिर जाता है।	ACT:FALL
+hi	राहुल का पैर फिसलता है और वह धड़ाम से गिरता है।	ACT:FALL
+en	Rahul trips over a stone and falls.	ACT:FALL
+
+# ============================================================ the royal stories
+
+#@ cat=royal place=arena age=adult
+hi	राहुल तलवारबाज़ी का अभ्यास करता है।	ACT:SWORD
+hi	राहुल तलवार घुमाकर पुतले पर वार करता है।	ACT:SWORD
+hi	राहुल धनुष पर तीर चढ़ाकर निशाना साधता है और तीर छोड़ता है।	ARCH:TARGET&SFX:ARROW
+hi	राहुल का तीर सीधा निशाने के बीच में जा लगता है।	ARCH:TARGET
+hi	राहुल घोड़े पर सवार होता है।	RIDE:HORSE
+hi	राहुल घोड़े पर चढ़कर उसे सरपट दौड़ाता है।	RIDE:HORSE&SFX:HOOVES
+hi	राहुल घोड़े पर बैठे-बैठे तलवार चलाता है।	RIDE:HORSE&MOUNTED:SWORD
+hi	राहुल दौड़ते घोड़े से तीर चलाता है।	RIDE:HORSE&MOUNTED:ARCHERY
+hi	राहुल ढाल और तलवार उठाकर लड़ने को तैयार होता है।	HOLD:SHIELD|HOLD:SWORD
+hi	राहुल भाला फेंकता है।	HOLD:SPEAR|ACT:THROW
+hi	प्रिया घोड़े पर सवार होकर अखाड़े में आती है।	RIDE:HORSE
+hi	प्रिया तलवार घुमाकर वार करती है।	ACT:SWORD
+hi	प्रिया धनुष उठाती है और एक के बाद एक तीन तीर चलाती है।	ARCH:TARGET
+en	Rahul practises sword fighting.	ACT:SWORD
+en	Rahul draws his bow and shoots an arrow at the target.	ARCH:TARGET&SFX:ARROW
+en	Rahul mounts his horse and gallops away.	RIDE:HORSE&SFX:HOOVES
+en	Rahul swings his sword from the saddle of his horse.	RIDE:HORSE&MOUNTED:SWORD
+en	Rahul shoots an arrow from his galloping horse.	RIDE:HORSE&MOUNTED:ARCHERY
+en	Priya rides into the training ground on her horse.	RIDE:HORSE
+
+#@ cat=royal place=palace age=adult
+hi	राहुल सिंहासन पर बैठता है।	BODY:SIT&SEAT:THRONE
+hi	राजकुमारी प्रिया दरबार में आकर सिंहासन पर बैठती है।	BODY:SIT&SEAT:THRONE
+hi	राहुल घुटनों के बल बैठकर प्रणाम करता है।	BODY:KNEEL|ACT:BOW
+en	Rahul sits down on the throne.	BODY:SIT&SEAT:THRONE
+
+#@ cat=royal place=palace age=adult start=throne
+hi	राहुल सिंहासन से उठकर खड़ा होता है।	BODY:STAND
+hi	प्रिया सिंहासन से उठती है।	BODY:STAND
+en	Rahul rises from the throne.	BODY:STAND
+
+#@ cat=hunt place=forest age=adult
+hi	राहुल शिकार पर निकलता है और एक हिरण पर निशाना साधता है।	ARCH:HUNT
+hi	राहुल तीर चलाता है पर हिरण छलाँग लगाकर भाग जाता है।	ARCH:HUNT&FX:ANIMAL
+hi	राहुल घोड़े पर बैठकर हिरण का पीछा करता है।	RIDE:HORSE
+hi	राहुल हाथी पर सवार होकर जंगल में जाता है।	RIDE:ELEPHANT
+en	Rahul goes hunting and aims his bow at a deer.	ARCH:HUNT
+en	Rahul rides an elephant through the forest.	RIDE:ELEPHANT
+
+# ============================================================ drinks (grown-ups)
+
+#@ cat=drinks place=room age=adult
+hi	राहुल गिलास में व्हिस्की डालकर पीता है।	DRINK:WHISKY
+hi	राहुल बीयर पीता है।	DRINK:BEER
+hi	राहुल वाइन का गिलास उठाकर चुस्की लेता है।	DRINK:WINE
+hi	राहुल शराब का पैग बनाकर पीता है।	DRINK:WHISKY
+hi	नशे में राहुल लड़खड़ाता हुआ चलता है।	ACT:STAGGER
+hi	राहुल और माँ गिलास टकराकर "चीयर्स" कहते हैं।	SFX:CLINK
+en	Rahul pours himself a whisky and drinks it.	DRINK:WHISKY
+en	Rahul sips red wine.	DRINK:WINE
+en	Rahul drinks a beer.	DRINK:BEER
+en	Rahul staggers drunkenly towards the door.	ACT:STAGGER
+en	Rahul and Mother clink their glasses.	SFX:CLINK
+
+# ============================================================ snow and hail
+
+#@ cat=snow place=snow
+hi	बर्फ़ गिरने लगती है।	W:SNOW
+hi	आसमान से बर्फ़ के फाहे गिर रहे हैं।	W:SNOW
+hi	रुई जैसी बर्फ़ गिरती है।	W:SNOW
+hi	बर्फ़बारी शुरू हो जाती है।	W:SNOW
+hi	बर्फ़ पड़ने लगती है।	W:SNOW
+hi	राहुल बर्फ़ का गोला बनाकर माँ पर फेंकता है।	SNOW:BALL
+hi	राहुल बर्फ़ का पुतला बनाता है।	SNOW:MAN
+hi	राहुल स्नोमैन बनाता है और उसे गाजर की नाक लगाता है।	SNOW:MAN
+hi	राहुल हथेलियों पर बर्फ़ के फाहे पकड़ता है।	SNOW:CATCH
+hi	राहुल बर्फ़ की ढलान पर फिसलता है।	SNOW:SLIDE
+hi	राहुल ठंड से काँपता है।	ACT:SHIVER
+en	Snow starts to fall.	W:SNOW
+en	Rahul makes a snowball and throws it at Mother.	SNOW:BALL
+en	Rahul builds a snowman.	SNOW:MAN
+en	Rahul catches snowflakes in his hands.	SNOW:CATCH
+en	Rahul slides down the snowy slope.	SNOW:SLIDE
+
+#@ cat=hail place=out
+hi	अचानक ओले पड़ने लगते हैं।	W:SNOW
+hi	ओलावृष्टि होने लगती है।	W:SNOW
+hi	आसमान से बड़े-बड़े ओले गिरते हैं।	W:SNOW
+hi	ओलों की बौछार से बचने के लिए राहुल सिर ढकता है।	W:SNOW&ACT:COVER_HEAD
+hi	ज़ोरदार ओलावृष्टि होती है और राहुल भागकर अंदर जाता है।	W:SNOW&MOVE
+en	A hailstorm begins.	W:SNOW
+en	Hailstones pound the ground.	W:SNOW
+
+# ============================================================ animals of the place
+
+#@ cat=animals place=out
+hi	राहुल कुत्ते को रोटी खिलाता है।	FX:ANIMAL
+hi	राहुल गाय का दूध दुहता है।	FX:ANIMAL
+hi	राहुल मुर्गियों को दाना डालता है।	FX:ANIMAL
+hi	एक बिल्ली दीवार पर चलती है।	FX:ANIMAL
+hi	आँगन में कुत्ता भौंकता है।	FX:ANIMAL
+hi	राहुल बकरी को चारा खिलाता है।	FX:ANIMAL
+en	Rahul feeds the dog.	FX:ANIMAL
+en	Rahul milks the cow.	FX:ANIMAL
+en	A cat walks along the wall.	FX:ANIMAL
+en	Rahul pats his horse.	FX:ANIMAL
+
+# ============================================================ walking and talking
+
+#@ cat=walk-talk place=room age=adult
+hi	राहुल फ़ोन पर बात करते हुए कमरे में टहलता है।	TASK:PHONE&MOVE
+hi	राहुल धीरे-धीरे दरवाज़े तक चलता है।	MOVE
+hi	राहुल लंगड़ाते हुए चलता है।	MOVE
+en	Rahul walks slowly across the room while talking on the phone.	TASK:PHONE&MOVE

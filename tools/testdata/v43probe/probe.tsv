@@ -1,0 +1,507 @@
+# v43 probe: everyday activities and natural phenomena, one stage direction per row.
+# Run by tools/jvm/com/tarun/kahani/jvm/PhenomenaProbe.java (its header lists every expectation code).
+#
+# Row:     lang<TAB>sentence<TAB>expect
+#          lang hi or en; expect = code groups split by '|' (at least one must hold), codes inside a group joined by '&'
+#          (all of them must hold); "!CODE" must not hold (a wrong side effect: "ACT:WAVE&!W:SEA").
+#          Codes name constants of Film / Pose: W: WEND: FX: SFX: ACT: TASK: RIDE: PG: EX: MK: DRINK: BODY: SEAT: EMO:
+#          HOLD:, and MOVE RUN EYES AWAKE TEARS SWEAT COSTUME HIDE UMBRELLA ANY.
+#          ANY (anything staged at all) is used only where the core has no constant or act for the thing.
+# Context: a "#@" line sets the story the rows after it are staged in —
+#          cat=<category of the report> place=<out (the courtyard) | room | bedroom | kitchen | bathroom | street | park |
+#          terrace | garden | shore> start=<stand | chair | sofa | floor | bed (asleep) | rain | fog | wind> tod=<day | night |
+#          evening | morning> age=<kid (राहुल 10, प्रिया 12) | adult (राहुल 32, प्रिया 28)>; anything left out is the default
+#          (place=out start=stand tod=day age=kid). A row that names प्रिया / Priya and not राहुल / Rahul is about her.
+
+# ============================================================ everyday activities
+
+#@ cat=morning place=bedroom start=bed
+hi	राहुल की नींद खुलती है और वह आँखें मलते हुए उठ बैठता है।	AWAKE&BODY:SIT&SEAT:BED
+hi	सुबह होते ही राहुल जाग जाता है।	AWAKE
+hi	माँ की आवाज़ सुनकर राहुल की आँख खुल जाती है।	AWAKE
+en	Rahul wakes up and rubs his eyes.	AWAKE
+
+#@ cat=morning place=bedroom
+hi	राहुल ज़ोर से जम्हाई लेता है।	ACT:STRETCH
+hi	राहुल उबासी लेते हुए आँखें मलता है।	ACT:STRETCH|ACT:RUB_EYES
+hi	राहुल दोनों हाथ ऊपर उठाकर अंगड़ाई लेता है।	ACT:STRETCH
+hi	राहुल हाथ-पैर फैलाकर बदन सीधा करता है।	ACT:STRETCH
+en	Rahul yawns loudly.	ACT:STRETCH
+en	Rahul stretches his arms above his head.	ACT:STRETCH
+
+#@ cat=morning place=bathroom
+hi	राहुल ब्रश पर टूथपेस्ट लगाकर दाँत साफ़ करता है।	TASK:BRUSH
+hi	राहुल वॉश-बेसिन के सामने खड़ा होकर ब्रश कर रहा है।	TASK:BRUSH
+hi	राहुल मंजन करके कुल्ला करता है।	TASK:BRUSH
+hi	राहुल बाल्टी से मग भर-भरकर नहाता है।	ACT:BATHE
+hi	राहुल शॉवर चलाकर नहाने लगता है।	ACT:BATHE
+hi	राहुल ठंडे पानी से स्नान करता है।	ACT:BATHE
+en	Rahul brushes his teeth at the sink.	TASK:BRUSH
+en	Rahul takes a quick bath.	ACT:BATHE
+
+#@ cat=morning place=room
+hi	राहुल स्कूल की यूनिफ़ॉर्म पहनता है।	COSTUME|ACT:SCREEN
+hi	राहुल नहाकर नीला कुर्ता पहन लेता है।	COSTUME|ACT:SCREEN
+hi	राहुल शीशे के सामने खड़ा होकर कंघी करता है।	TASK:COMB
+hi	राहुल बालों में तेल लगाकर बाल सँवारता है।	TASK:COMB
+hi	राहुल जूते पहनकर फीते बाँधता है।	ACT:BOW|BODY:CROUCH|BODY:KNEEL|BODY:SIT
+hi	राहुल पैरों में चप्पल पहनता है।	ANY
+hi	प्रिया आईने के सामने बैठकर आँखों में काजल लगाती है।	MK:KAJAL
+hi	प्रिया होंठों पर लिपस्टिक लगाती है।	MK:LIPSTICK
+hi	प्रिया माथे पर बिंदी लगाती है।	MK:BINDI
+hi	प्रिया चेहरे पर पाउडर लगाती है।	MK:POWDER
+hi	प्रिया हाथों में मेहंदी लगाती है।	MK:MEHNDI
+en	Rahul puts on his school uniform.	COSTUME|ACT:SCREEN
+en	Rahul combs his hair in front of the mirror.	TASK:COMB
+en	Rahul puts on his shoes and ties the laces.	ACT:BOW|BODY:CROUCH|BODY:KNEEL|BODY:SIT
+en	Priya applies kajal to her eyes.	MK:KAJAL
+en	Priya puts on red lipstick.	MK:LIPSTICK&!COSTUME
+en	Priya puts a bindi on her forehead.	MK:BINDI
+
+#@ cat=morning place=bathroom age=adult
+hi	राहुल शीशे के सामने दाढ़ी बनाता है।	ANY
+hi	राहुल गालों पर झाग लगाकर रेज़र से शेव करता है।	ANY
+en	Rahul shaves in front of the mirror.	ANY
+
+#@ cat=meals place=room
+hi	राहुल थाली में से रोटी-सब्ज़ी खाता है।	ACT:EAT
+hi	राहुल चम्मच से दाल-चावल खा रहा है।	ACT:EAT
+hi	राहुल ज़मीन पर बैठकर खाना खाता है।	ACT:EAT&BODY:SIT
+hi	राहुल डाइनिंग टेबल पर बैठकर नाश्ता करता है।	ACT:EAT&BODY:SIT
+hi	राहुल आइसक्रीम चाटता है।	ACT:EAT
+hi	राहुल बिस्किट चाय में डुबोकर खाता है।	ACT:EAT
+hi	राहुल गिलास से पानी पीता है।	DRINK:GLASS
+hi	राहुल एक साँस में पूरा गिलास पानी पी जाता है।	DRINK:GLASS
+hi	राहुल बोतल से पानी गटागट पीता है।	DRINK:BOTTLE
+hi	राहुल गरम चाय की चुस्की लेता है।	DRINK:TEA
+hi	राहुल कप में चाय पीता है।	DRINK:TEA
+hi	राहुल दूध का गिलास उठाकर पी लेता है।	DRINK:GLASS
+hi	राहुल माँ को थाली में खाना परोसता है।	ACT:GIVE|ACT:OFFER
+hi	राहुल सबके लिए ट्रे में चाय लेकर आता है।	HOLD:TEA|HOLD:CUP|HOLD:PLATE
+en	Rahul eats his breakfast at the table.	ACT:EAT
+en	Rahul takes a bite of his sandwich.	ACT:EAT
+en	Rahul munches on an apple.	ACT:EAT
+en	Rahul drinks a glass of water.	DRINK:GLASS
+en	Rahul sips hot tea from a cup.	DRINK:TEA
+en	Rahul gulps down a glass of milk.	DRINK:GLASS
+en	Rahul serves hot rotis to Mother.	ACT:GIVE|ACT:OFFER
+
+#@ cat=kitchen place=kitchen
+hi	राहुल गैस पर दाल बनाता है।	TASK:COOK
+hi	राहुल माँ के लिए अदरक वाली चाय बनाता है।	TASK:COOK
+hi	राहुल चाकू से सब्ज़ी काटता है।	TASK:COOK
+hi	राहुल प्याज़ काटते-काटते आँसू पोंछता है।	TASK:COOK
+hi	राहुल करछी से कड़ाही में सब्ज़ी चलाता है।	TASK:COOK
+hi	राहुल सिंक में बर्तन धोता है।	TASK:WASH
+en	Rahul makes tea for everyone.	TASK:COOK
+en	Rahul chops onions for the curry.	TASK:COOK
+en	Rahul washes the dishes after dinner.	TASK:WASH
+
+#@ cat=kitchen place=kitchen age=adult
+hi	प्रिया कड़ाही में सब्ज़ी छौंकती है।	TASK:COOK
+hi	प्रिया परात में आटा गूँधती है।	TASK:COOK
+hi	प्रिया चकले पर रोटी बेलती है।	TASK:COOK
+hi	प्रिया तवे पर रोटियाँ सेंकती है।	TASK:COOK
+hi	प्रिया दाल में तड़का लगाती है।	TASK:COOK
+hi	प्रिया खाना बना रही है।	TASK:COOK
+hi	प्रिया बर्तन माँजती है।	TASK:WASH
+en	Priya rolls out rotis on the board.	TASK:COOK
+en	Priya stirs the dal in the pot.	TASK:COOK
+
+#@ cat=chores place=room
+hi	राहुल झाड़ू से कमरे का कचरा बाहर निकालता है।	TASK:SWEEP
+hi	राहुल गीले कपड़े से पोंछा लगाता है।	TASK:SWEEP
+hi	राहुल अपनी शर्ट पर इस्त्री करता है।	ANY
+en	Rahul sweeps the floor with a broom.	TASK:SWEEP
+en	Rahul mops the floor.	TASK:SWEEP
+en	Rahul irons his school shirt.	ANY
+
+#@ cat=chores place=out age=adult
+hi	प्रिया आँगन में झाड़ू लगा रही है।	TASK:SWEEP
+hi	प्रिया फ़र्श पर पोंछा मारती है।	TASK:SWEEP
+hi	प्रिया बाल्टी में कपड़े धोती है।	TASK:WASH
+hi	प्रिया कपड़ों पर साबुन लगाकर उन्हें रगड़-रगड़कर धोती है।	TASK:WASH
+en	Priya washes clothes in a bucket.	TASK:WASH
+
+#@ cat=chores place=terrace age=adult
+hi	प्रिया छत पर रस्सी पर गीले कपड़े सुखाती है।	TASK:WASH|ACT:REACH
+en	Priya hangs the wet clothes on the line.	TASK:WASH|ACT:REACH
+
+#@ cat=chores place=garden
+hi	राहुल पौधों को पानी देता है।	TASK:WATER
+hi	राहुल गमलों में पानी डालता है।	TASK:WATER
+en	Rahul waters the plants.	TASK:WATER
+
+#@ cat=study place=room
+hi	राहुल किताब पढ़ता है।	TASK:READ
+hi	राहुल ज़ोर-ज़ोर से कविता पढ़ता है।	TASK:READ
+hi	राहुल कॉपी में कुछ लिखता है।	TASK:WRITE
+hi	राहुल दादाजी को चिट्ठी लिखता है।	TASK:WRITE
+hi	राहुल मेज़ पर बैठकर पढ़ाई करता है।	TASK:READ|TASK:WRITE
+hi	राहुल परीक्षा की तैयारी कर रहा है।	TASK:READ|TASK:WRITE
+hi	राहुल अपना होमवर्क कर रहा है।	TASK:WRITE
+hi	राहुल फ़ोन पर पापा से बात करता है।	TASK:PHONE
+hi	राहुल मोबाइल उठाकर दादी को फ़ोन लगाता है।	TASK:PHONE
+hi	फ़ोन की घंटी बजती है और राहुल फ़ोन उठाता है।	TASK:PHONE
+hi	राहुल लैपटॉप पर टाइप करता है।	SFX:TYPING
+hi	राहुल सोफ़े पर बैठकर टीवी देखता है।	BODY:SIT&SEAT:SOFA
+hi	राहुल टीवी पर कार्टून देख रहा है।	ANY
+en	Rahul reads a storybook.	TASK:READ
+en	Rahul writes in his notebook.	TASK:WRITE
+en	Rahul studies for his exam.	TASK:READ|TASK:WRITE
+en	Rahul does his homework at the table.	TASK:WRITE
+en	Rahul talks to his father on the phone.	TASK:PHONE
+en	Rahul's phone rings and he answers it.	TASK:PHONE
+en	Rahul types on his laptop.	SFX:TYPING
+en	Rahul watches cartoons on TV.	ANY
+
+#@ cat=study place=room age=adult
+hi	राहुल चाय पीते हुए अख़बार पढ़ता है।	TASK:PAPER
+
+#@ cat=posture place=bedroom
+hi	राहुल बिस्तर पर लेटकर सो जाता है।	BODY:LIE&EYES
+hi	राहुल चादर ओढ़कर सो जाता है।	BODY:LIE&EYES
+hi	राहुल पलंग पर लेटा हुआ है।	BODY:LIE
+hi	राहुल बिस्तर के किनारे बैठ जाता है।	BODY:SIT&SEAT:BED
+en	Rahul goes to bed and falls asleep.	BODY:LIE&EYES
+en	Rahul sits on the edge of the bed.	BODY:SIT&SEAT:BED
+
+#@ cat=posture place=room
+hi	राहुल थककर सोफ़े पर ही सो जाता है।	BODY:LIE&EYES&SEAT:SOFA
+hi	राहुल दरी पर लेट जाता है।	BODY:LIE
+hi	राहुल कुर्सी पर बैठ जाता है।	BODY:SIT&SEAT:CHAIR
+hi	राहुल सोफ़े पर धम्म से बैठ जाता है।	BODY:SIT&SEAT:SOFA
+hi	राहुल ज़मीन पर पालथी मारकर बैठता है।	BODY:SIT&SEAT:FLOOR
+en	Rahul lies down on the sofa.	BODY:LIE&SEAT:SOFA
+en	Rahul sits down on a chair.	BODY:SIT&SEAT:CHAIR
+en	Rahul flops down on the sofa.	BODY:SIT&SEAT:SOFA
+en	Rahul sits cross-legged on the floor.	BODY:SIT&SEAT:FLOOR
+
+#@ cat=posture place=room start=chair
+hi	राहुल कुर्सी से उठ खड़ा होता है।	BODY:STAND
+en	Rahul stands up.	BODY:STAND
+
+#@ cat=posture place=room start=floor
+hi	राहुल ज़मीन से उठकर खड़ा हो जाता है।	BODY:STAND
+
+#@ cat=movement place=out
+hi	राहुल धीरे-धीरे आँगन में टहलता है।	MOVE
+hi	राहुल माँ की तरफ़ चलकर आता है।	MOVE
+hi	राहुल तेज़ी से दौड़ता है।	MOVE&RUN
+hi	राहुल भागकर माँ के पास जाता है।	MOVE&RUN
+hi	राहुल खुशी से उछल पड़ता है।	ACT:JUMP
+hi	राहुल ऊँची छलाँग लगाता है।	ACT:JUMP
+hi	राहुल दबे पाँव माँ के पीछे जाता है।	MOVE
+hi	राहुल पंजों के बल चलकर दरवाज़े तक जाता है।	MOVE
+hi	राहुल सीढ़ियाँ चढ़कर छत पर जाता है।	MOVE
+hi	राहुल धीरे-धीरे सीढ़ियाँ उतरता है।	MOVE
+hi	राहुल पेड़ के पीछे छिप जाता है।	BODY:CROUCH|HIDE
+hi	राहुल अपनी खोई हुई गेंद ढूँढता है।	ACT:TURN|EMO:CURIOUS
+hi	राहुल दरवाज़े की ओट से झाँकता है।	HIDE|BODY:CROUCH|EMO:CURIOUS
+hi	राहुल माँ के पीछे-पीछे भागता है।	MOVE&RUN
+en	Rahul walks across the courtyard.	MOVE
+en	Rahul runs to Mother.	MOVE&RUN
+en	Rahul jumps with joy.	ACT:JUMP
+en	Rahul tiptoes across the courtyard.	MOVE
+en	Rahul climbs the stairs to the terrace.	MOVE
+en	Rahul hides behind the tree.	BODY:CROUCH|HIDE
+en	Rahul searches for his lost ball.	ACT:TURN|EMO:CURIOUS
+en	Rahul peeks out from behind the door.	HIDE|BODY:CROUCH|EMO:CURIOUS
+
+#@ cat=movement place=room
+hi	राहुल पलंग के नीचे छुप जाता है।	BODY:CROUCH|HIDE|BODY:LIE
+hi	राहुल अलमारी में अपनी किताब खोजता है।	ACT:TURN|EMO:CURIOUS
+hi	राहुल खिड़की से बाहर झाँकता है।	EMO:CURIOUS|ACT:TURN
+
+#@ cat=movement place=park
+hi	राहुल पार्क में जॉगिंग करता है।	MOVE&RUN
+hi	राहुल सुबह-सुबह पार्क में धीरे-धीरे दौड़ लगाता है।	MOVE&RUN
+en	Rahul goes jogging in the park.	MOVE&RUN
+
+#@ cat=movement place=garden
+hi	राहुल तितली के पीछे भागता है।	MOVE&RUN
+en	Rahul chases a butterfly in the garden.	MOVE&RUN
+
+#@ cat=gestures place=out
+hi	राहुल गाने पर नाचता है।	ACT:DANCE
+hi	राहुल ढोल की थाप पर भांगड़ा करता है।	ACT:DANCE
+hi	राहुल गुनगुनाता है।	ANY
+hi	राहुल ज़ोर-ज़ोर से गाना गाता है।	ANY
+hi	राहुल ताली बजाता है।	ACT:CLAP
+hi	राहुल दौड़कर माँ को गले लगा लेता है।	ACT:HUG
+hi	राहुल माँ से लिपट जाता है।	ACT:HUG
+hi	राहुल हाथ हिलाकर माँ को बाय करता है।	ACT:WAVE
+hi	राहुल उँगली से आसमान की ओर इशारा करता है।	ACT:POINT
+hi	राहुल पेड़ की तरफ़ उँगली उठाकर दिखाता है।	ACT:POINT
+hi	राहुल हाँ में सिर हिलाता है।	ACT:NOD
+hi	राहुल ना में सिर हिलाता है।	ACT:SHAKE_HEAD
+hi	राहुल सिर खुजाता है।	ACT:HEAD_SCRATCH
+hi	राहुल कुछ सोचने लगता है।	EMO:CURIOUS|ACT:HEAD_SCRATCH
+hi	राहुल ठोड़ी पर हाथ रखकर सोचता है।	EMO:CURIOUS|ACT:HEAD_SCRATCH
+hi	राहुल माँ के कान में कुछ फुसफुसाता है।	ACT:WHISPER
+hi	राहुल गुस्से में ज़ोर से चिल्लाता है।	EMO:ANGRY
+hi	राहुल डरकर चीख़ पड़ता है।	EMO:SCARED
+hi	राहुल माँ को एक फूल देता है।	ACT:GIVE|ACT:OFFER
+hi	राहुल माँ के हाथ से थैला ले लेता है।	ACT:REACH
+hi	राहुल माँ को अपना रिपोर्ट कार्ड दिखाता है।	ACT:GIVE|ACT:OFFER
+en	Rahul dances to the music.	ACT:DANCE
+en	Rahul sings a song.	ANY
+en	Rahul claps his hands.	ACT:CLAP
+en	Rahul hugs Mother tightly.	ACT:HUG
+en	Rahul waves goodbye to Mother.	ACT:WAVE&!W:SEA
+en	Rahul points at the sky.	ACT:POINT
+en	Rahul nods.	ACT:NOD
+en	Rahul shakes his head.	ACT:SHAKE_HEAD
+en	Rahul scratches his head.	ACT:HEAD_SCRATCH
+en	Rahul thinks for a moment.	EMO:CURIOUS|ACT:HEAD_SCRATCH
+en	Rahul whispers something to Mother.	ACT:WHISPER
+en	Rahul shouts angrily.	EMO:ANGRY
+en	Rahul gives Mother a flower.	ACT:GIVE|ACT:OFFER
+en	Rahul takes the bag from Mother.	ACT:REACH
+
+#@ cat=emotions place=out
+hi	राहुल ठहाका मारकर हँसता है।	ACT:LAUGH|EMO:LAUGH
+hi	राहुल पेट पकड़कर हँसने लगता है।	ACT:LAUGH|EMO:LAUGH
+hi	राहुल फूट-फूटकर रोने लगता है।	ACT:CRY
+hi	राहुल की आँखों में आँसू आ जाते हैं।	ACT:CRY|TEARS|EMO:SAD
+hi	राहुल माँ को देखकर मुस्कुराता है।	EMO:HAPPY
+hi	राहुल को गुस्सा आ जाता है।	EMO:ANGRY
+hi	राहुल ग़ुस्से से पैर पटकता है।	EMO:ANGRY
+hi	राहुल डर जाता है।	EMO:SCARED
+hi	अजीब सी आवाज़ सुनकर राहुल सहम जाता है।	EMO:SCARED
+en	Rahul bursts out laughing.	ACT:LAUGH|EMO:LAUGH
+en	Rahul starts crying.	ACT:CRY
+en	Rahul smiles at Mother.	EMO:HAPPY
+en	Rahul stamps his foot in anger.	EMO:ANGRY
+en	Rahul gets frightened and steps back.	EMO:SCARED
+
+#@ cat=doors place=room
+hi	राहुल दरवाज़ा खटखटाता है।	SFX:KNOCK|SFX:TAP|SFX:CLACK|SFX:THUD
+hi	कोई दरवाज़े पर दस्तक देता है।	SFX:KNOCK|SFX:TAP|SFX:CLACK|SFX:THUD
+hi	राहुल दरवाज़ा खोलता है।	SFX:DOOR
+hi	राहुल दरवाज़ा बंद कर देता है।	SFX:DOOR
+hi	राहुल दरवाज़ा खोलकर बाहर चला जाता है।	SFX:DOOR&MOVE
+hi	राहुल खिड़की खोलता है।	ACT:REACH|ACT:PUSH|ACT:PULL
+hi	राहुल खिड़की बंद कर देता है।	ACT:REACH|ACT:PUSH|ACT:PULL
+en	Rahul knocks on the door.	SFX:KNOCK|SFX:TAP|SFX:CLACK|SFX:THUD
+en	Rahul opens the door and goes out.	SFX:DOOR&MOVE
+en	Rahul slams the door shut.	SFX:DOOR
+en	Rahul opens the window.	ACT:REACH&!W:WIND|ACT:PUSH&!W:WIND|ACT:PULL&!W:WIND
+
+#@ cat=vehicles place=street
+hi	राहुल साइकिल पर बैठता है और पैडल मारता है।	RIDE:BICYCLE
+hi	राहुल साइकिल चलाता हुआ स्कूल जाता है।	RIDE:BICYCLE
+hi	राहुल साइकिल चलाते हुए घंटी बजाता है।	RIDE:BICYCLE&SFX:CYCLE_BELL
+hi	राहुल कार में पीछे की सीट पर बैठ जाता है।	RIDE:CAR
+hi	राहुल बस में चढ़ जाता है।	RIDE:BUS
+hi	राहुल स्कूल बस से उतरता है।	RIDE:BUS
+hi	राहुल ऑटो में बैठकर स्टेशन जाता है।	RIDE:AUTO
+hi	राहुल रिक्शे से उतरता है।	RIDE:AUTO
+en	Rahul rides his bicycle down the road.	RIDE:BICYCLE
+en	Rahul gets into the car.	RIDE:CAR
+en	Rahul gets on the bus.	RIDE:BUS
+en	Rahul gets off the school bus.	RIDE:BUS
+en	Rahul hops into an auto-rickshaw.	RIDE:AUTO
+
+#@ cat=vehicles place=street age=adult
+hi	राहुल बाइक स्टार्ट करता है और चला जाता है।	RIDE:MOTORBIKE
+hi	राहुल मोटरसाइकिल पर बैठकर बाज़ार जाता है।	RIDE:MOTORBIKE
+hi	प्रिया स्कूटी पर बैठकर कॉलेज जाती है।	RIDE:SCOOTER
+hi	राहुल कार चलाता है।	RIDE:CAR
+hi	राहुल गाड़ी चलाकर घर से निकलता है।	RIDE:CAR
+hi	राहुल ड्राइविंग सीट पर बैठकर कार स्टार्ट करता है।	RIDE:CAR
+hi	राहुल कार से उतरता है।	RIDE:CAR|FX:PARKED
+en	Rahul rides his motorbike to the market.	RIDE:MOTORBIKE
+en	Rahul starts his scooter and rides off.	RIDE:SCOOTER
+en	Rahul drives the car to the office.	RIDE:CAR
+en	Rahul gets out of the car.	RIDE:CAR|FX:PARKED
+
+#@ cat=carry place=out
+hi	राहुल कंधे पर स्कूल का बस्ता टाँगकर निकलता है।	ANY
+hi	राहुल फूलों की टोकरी लेकर माँ के पास आता है।	HOLD:BASKET
+hi	राहुल हाथ में किताब लिए खड़ा है।	HOLD:BOOK
+en	Rahul carries his school bag on his back.	ANY
+
+#@ cat=play place=park
+hi	राहुल माँ की ओर गेंद फेंकता है।	ACT:THROW
+hi	माँ गेंद फेंकती है और राहुल उसे लपक लेता है।	ACT:REACH
+hi	राहुल गेंद को दोनों हाथों से पकड़ लेता है।	ACT:REACH
+hi	राहुल फ़ुटबॉल को ज़ोर से किक मारता है।	FX:THROW|ACT:PLAY
+hi	राहुल बल्ला उठाकर क्रिकेट खेलता है।	ACT:PLAY
+hi	राहुल ज़ोरदार शॉट मारता है और गेंद दूर चली जाती है।	ACT:PLAY|FX:THROW
+hi	राहुल झूले पर बैठकर झूलता है।	PG:SWING
+hi	राहुल झूला झूल रहा है।	PG:SWING
+hi	राहुल फिसलपट्टी से नीचे फिसलता है।	PG:SLIDE
+hi	राहुल माँ के साथ सी-सॉ पर खेलता है।	PG:SEESAW
+hi	राहुल अपने कुत्ते के साथ खेलता है।	ACT:PLAY|ACT:PAT
+hi	राहुल पिल्ले को प्यार से सहलाता है।	ACT:PAT
+hi	राहुल चिड़ियों को दाना डालता है।	ACT:THROW
+hi	राहुल कबूतरों को दाना खिलाता है।	ACT:THROW
+en	Rahul throws the ball to Mother.	ACT:THROW
+en	Rahul catches the ball.	ACT:REACH
+en	Rahul kicks the football hard.	FX:THROW|ACT:PLAY
+en	Rahul plays cricket in the park.	ACT:PLAY
+en	Rahul swings on the swing.	PG:SWING
+en	Rahul goes down the slide.	PG:SLIDE
+en	Rahul plays on the see-saw with Mother.	PG:SEESAW
+en	Rahul plays with his dog.	ACT:PLAY|ACT:PAT
+en	Rahul feeds the birds.	ACT:THROW
+
+#@ cat=play place=terrace
+hi	राहुल छत पर पतंग उड़ाता है।	ACT:PULL_ROPE
+hi	राहुल चरखी पकड़कर पतंग की डोर खींचता है।	ACT:PULL_ROPE
+en	Rahul flies a kite on the terrace.	ACT:PULL_ROPE
+
+#@ cat=exercise place=park
+hi	राहुल सुबह-सुबह पुश-अप करता है।	EX:PUSHUP
+hi	राहुल चटाई बिछाकर योग करता है।	EX:YOGA
+hi	राहुल सूर्य नमस्कार करता है।	EX:YOGA
+hi	प्रिया रस्सी कूदती है।	EX:SKIP
+hi	राहुल कसरत करता है।	ACT:EXERCISE
+en	Rahul does push-ups.	EX:PUSHUP
+en	Rahul does yoga on a mat.	EX:YOGA
+en	Priya skips rope.	EX:SKIP
+
+#@ cat=festive place=out
+hi	राहुल हाथ जोड़कर भगवान से प्रार्थना करता है।	ACT:BOW
+hi	राहुल पूजा की थाली से आरती उतारता है।	W:CANDLES
+hi	राहुल दीया जलाता है।	W:CANDLES
+hi	राहुल दिवाली पर आँगन में दीये जलाता है।	W:CANDLES
+hi	प्रिया आँगन में रंगोली बनाती है।	TASK:RANGOLI
+hi	राहुल ईज़ल पर पेंटिंग बनाता है।	TASK:PAINT
+hi	राहुल ड्रॉइंग कॉपी में घर का चित्र बनाता है।	TASK:PAINT|TASK:WRITE
+hi	राहुल पेंसिल से स्केच बनाता है।	TASK:PAINT|TASK:WRITE
+en	Rahul folds his hands and prays.	ACT:BOW
+en	Rahul lights a diya.	W:CANDLES
+en	Priya draws a rangoli at the door.	TASK:RANGOLI
+en	Rahul paints a picture.	TASK:PAINT
+en	Rahul draws a picture of the house.	TASK:PAINT|TASK:WRITE
+
+#@ cat=mishaps place=out
+hi	राहुल फिसलकर गिर जाता है।	ACT:FLAIL|EMO:PAIN
+hi	राहुल धड़ाम से ज़मीन पर गिरता है।	ACT:FLAIL|EMO:PAIN
+hi	राहुल पत्थर से ठोकर खाकर लड़खड़ा जाता है।	ACT:FLAIL|EMO:PAIN
+hi	राहुल के घुटने में चोट लग जाती है।	EMO:PAIN|ACT:CLUTCH
+hi	राहुल दर्द से कराहता है।	EMO:PAIN
+hi	माँ फिसल जाती हैं और राहुल उनका हाथ पकड़कर उन्हें उठाता है।	ACT:HOLD_HAND|ACT:REACH|ACT:PULL
+hi	राहुल को ज़ोर से छींक आती है।	ACT:COUGH
+hi	राहुल खाँसने लगता है।	ACT:COUGH
+en	Rahul slips and falls.	ACT:FLAIL|EMO:PAIN
+en	Rahul trips over a stone.	ACT:FLAIL|EMO:PAIN
+en	Rahul hurts his knee.	EMO:PAIN|ACT:CLUTCH
+en	Rahul helps Mother get up.	ACT:HOLD_HAND|ACT:REACH|ACT:PULL
+en	Rahul sneezes loudly.	ACT:COUGH
+en	Rahul coughs.	ACT:COUGH
+
+#@ cat=raingear place=out start=rain
+hi	राहुल छाता खोलता है।	UMBRELLA
+hi	राहुल छतरी लेकर बाहर निकलता है।	UMBRELLA
+hi	राहुल रेनकोट पहनता है।	COSTUME
+en	Rahul opens his umbrella.	UMBRELLA
+en	Rahul puts on his raincoat.	COSTUME
+
+# ============================================================ natural phenomena
+
+#@ cat=weather place=out
+hi	अचानक तेज़ बारिश शुरू हो जाती है।	W:RAIN
+hi	आसमान से बूँदें गिरने लगती हैं।	W:RAIN
+hi	बारिश होने लगती है।	W:RAIN
+hi	झमाझम बारिश होने लगती है।	W:RAIN
+hi	मूसलाधार बारिश हो रही है।	W:RAIN
+hi	हल्की-हल्की बूँदाबाँदी होने लगती है।	W:RAIN
+hi	रिमझिम बारिश होने लगती है।	W:RAIN
+hi	तेज़ तूफ़ान आ जाता है।	W:STORM
+hi	तूफ़ानी हवाएँ चलने लगती हैं और पेड़ झूमने लगते हैं।	W:STORM|W:WIND
+hi	बादल ज़ोर से गरजते हैं।	SFX:THUNDER
+hi	दूर कहीं बादलों की गड़गड़ाहट सुनाई देती है।	SFX:THUNDER
+hi	आसमान में बिजली कड़कती है।	FX:LIGHTNING&SFX:THUNDER
+hi	आसमान में बिजली चमकती है।	FX:LIGHTNING
+hi	तेज़ हवा चलने लगती है।	W:WIND
+hi	ज़ोर की हवा से पेड़ की डालियाँ हिलने लगती हैं।	W:WIND
+hi	ठंडी-ठंडी हवा चल रही है।	W:WIND
+hi	मंद-मंद हवा बहती है।	W:WIND
+hi	आसमान से बर्फ़ गिरने लगती है।	W:SNOW
+hi	चारों तरफ़ बर्फ़बारी हो रही है।	W:SNOW
+hi	अचानक ओले गिरने लगते हैं।	W:SNOW|W:RAIN|W:STORM
+hi	सुबह चारों तरफ़ घना कोहरा छाया है।	W:FOG
+hi	धुंध में कुछ भी साफ़ दिखाई नहीं देता।	W:FOG
+en	It starts to rain.	W:RAIN
+en	Suddenly it begins to pour.	W:RAIN
+en	A light drizzle begins.	W:RAIN
+en	A storm breaks over the village.	W:STORM
+en	Thunder rumbles in the distance.	SFX:THUNDER
+en	Lightning flashes across the sky.	FX:LIGHTNING
+en	A strong wind starts blowing.	W:WIND
+en	A cool breeze blows through the courtyard.	W:WIND
+en	Snow begins to fall.	W:SNOW
+en	Hailstones start falling.	W:SNOW|W:RAIN|W:STORM
+en	Thick fog covers the village.	W:FOG
+
+#@ cat=weather place=out start=rain
+hi	बारिश रुक जाती है।	WEND:RAIN
+hi	धीरे-धीरे बारिश थम जाती है और धूप निकल आती है।	WEND:RAIN
+en	The rain stops.	WEND:RAIN
+
+#@ cat=weather place=out start=fog
+hi	कोहरा छँट जाता है।	WEND:FOG
+en	The mist slowly clears.	WEND:FOG
+
+#@ cat=sky place=out
+hi	सूरज उग रहा है और आसमान लाल हो गया है।	ANY
+hi	पूरब में सूरज निकलता है।	ANY
+hi	सूरज ढल रहा है।	ANY
+hi	शाम होने लगती है और आसमान नारंगी हो जाता है।	ANY
+hi	रात हो जाती है और आसमान में तारे चमकने लगते हैं।	W:STARS
+hi	चारों तरफ़ अँधेरा छा जाता है।	FX:LIGHTS_OFF
+hi	आसमान में काले बादल घिर आते हैं।	W:CLOUDS
+hi	बादल छाने लगते हैं।	W:CLOUDS
+hi	बारिश के बाद आसमान में इंद्रधनुष निकलता है।	W:RAINBOW&!W:RAIN
+hi	राहुल इंद्रधनुष देखकर ख़ुश हो जाता है।	W:RAINBOW&EMO:HAPPY
+hi	तेज़ धूप है और राहुल पसीने से तर है।	SWEAT|ACT:SHIELD_EYES
+hi	चिलचिलाती धूप में राहुल आँखों पर हाथ रखकर ऊपर देखता है।	ACT:SHIELD_EYES
+en	The sun rises over the village.	ANY
+en	The sun sets behind the trees.	ANY
+en	Night falls and the stars come out.	W:STARS
+en	Dark clouds gather in the sky.	W:CLOUDS
+en	A rainbow appears in the sky.	W:RAINBOW&!W:RAIN
+en	The sun is blazing and Rahul is sweating.	SWEAT|ACT:SHIELD_EYES
+
+#@ cat=sky place=out tod=night
+hi	आसमान में तारे टिमटिमा रहे हैं।	W:STARS&!FX:LADDOO_GLOW
+hi	आसमान में पूरा चाँद चमक रहा है।	ANY
+en	A full moon shines in the sky.	ANY
+
+#@ cat=nature place=out
+hi	अचानक आँधी चलने लगती है।	W:DUST
+hi	धूल भरी आँधी से सब कुछ ढक जाता है।	W:DUST
+hi	पेड़ से सूखे पत्ते गिर रहे हैं।	W:LEAVES
+hi	हवा में पत्ते उड़ने लगते हैं।	W:LEAVES
+hi	आसमान से फूलों की पंखुड़ियाँ बरसती हैं।	W:PETALS
+hi	राहुल माँ पर फूल बरसाता है।	W:PETALS&!W:RAIN
+hi	पेड़ों पर चिड़ियाँ चहचहा रही हैं।	SFX:BIRDS
+hi	पक्षियों का झुंड आसमान में उड़ता है।	W:BIRDS
+hi	आँगन से कबूतर फुर्र से उड़ जाते हैं।	W:BIRDS
+hi	अचानक धरती काँपने लगती है।	W:QUAKE
+hi	भूकंप आता है और सब कुछ हिलने लगता है।	W:QUAKE
+hi	चिमनी से धुआँ उठ रहा है।	FX:SMOKE|FX:STEAM
+hi	कहीं कुछ जल रहा है, चारों तरफ़ धुआँ फैल जाता है।	FX:SMOKE|FX:STEAM
+hi	राहुल लकड़ियाँ इकट्ठी करके आग जलाता है।	W:FIRE
+en	A dust storm sweeps across the village.	W:DUST&!SFX:SWEEP
+en	Dry leaves fall from the trees.	W:LEAVES
+en	Flower petals rain down on Rahul.	W:PETALS&!W:RAIN
+en	Birds chirp in the trees.	SFX:BIRDS
+en	A flock of birds flies across the sky.	W:BIRDS
+en	Suddenly the ground shakes.	W:QUAKE
+en	Smoke rises from the chimney.	FX:SMOKE|FX:STEAM
+en	Rahul lights a bonfire.	W:FIRE
+
+#@ cat=nature place=out tod=night
+hi	सब अलाव के पास बैठकर हाथ सेंकते हैं।	W:FIRE
+hi	रात को अलाव जल रहा है और उसकी लपटें ऊपर उठ रही हैं।	W:FIRE
+hi	अँधेरे में जुगनू चमक रहे हैं।	W:FIREFLIES
+en	Fireflies glow in the dark.	W:FIREFLIES
+
+#@ cat=nature place=shore
+hi	समुद्र की लहरें किनारे से टकरा रही हैं।	W:SEA
+hi	राहुल समुद्र की लहरों में खेलता है।	W:SEA
+en	Waves crash against the shore.	W:SEA&!FX:GLITCH

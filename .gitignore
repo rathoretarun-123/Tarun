@@ -1,0 +1,7 @@
+build/
+tools/robotest/build/
+tools/robotest/.gradle/
+.gradle/
+*.class
+javac.*.args
+release/*.idsig
